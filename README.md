@@ -4,6 +4,14 @@ Online multiplayer golf in the browser, played from behind the ball. Five
 courses of nine holes each, up to eight players, turn-based stroke play over a
 shared link.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/owenweaver7477-dotcom/links-and-legends)
+
+**Play it now:** click the button. Render reads `render.yaml`, builds it, and
+gives you a permanent `https://` link on the free tier — no laptop left running,
+no commands, just send the link to whoever you want to play with.
+
+Or run it yourself:
+
 ```bash
 npm install && npm start
 ```
