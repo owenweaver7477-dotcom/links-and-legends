@@ -558,3 +558,29 @@ h1 em { font-style: normal; color: #7ed492; }
   .wind { top: 128px; left: 50%; transform: translateX(-50%); }
   .board { top: 232px; }
 }
+
+
+/* ------------------------------------------------------- identity chip */
+.identity { display: flex; align-items: center; gap: 13px; padding: 13px 15px;
+  margin-bottom: 16px; border-radius: 14px;
+  background: linear-gradient(135deg, rgba(46,125,67,.28), rgba(20,60,34,.14));
+  border: 1px solid rgba(140,230,160,.28); }
+.id-face { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+  font-size: 22px; background: linear-gradient(160deg,#3a9553,#1a4a2b);
+  border: 1px solid rgba(140,230,160,.35); flex: 0 0 auto; }
+.id-txt { flex: 1; min-width: 0; }
+.id-txt b { display: block; font-size: 15.5px; }
+.id-txt b span { color: #8fe07a; }
+.id-txt > span { display: block; font-size: 11.5px; color: #93ad99; margin-top: 2px; line-height: 1.4; }
+.identity .btn { font-size: 12px; padding: 8px 12px; }
+
+/* ------------------------------------------- readability pass: bigger */
+.d-big span { font-size: 30px; }
+.h-title #hNum { font-size: 22px; }
+.turnbar { font-size: 15px; }
+.rrow-live { font-size: 13px; }
+.prow { font-size: 13.5px; }
+.cinfo b { font-size: 15px; }
+.walkbar { font-size: 13px; }
+.m-label { font-size: 12px; }
+input[type=text] { font-size: 16px; padding: 12px 14px; }

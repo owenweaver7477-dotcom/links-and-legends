@@ -132,7 +132,15 @@
         <p class="sub">Online multiplayer golf — five courses, nine holes, up to eight friends</p>
       </div>
     </div>
-    <label class="field"><span>Your name</span>
+    <div class="identity" id="identityChip" hidden>
+      <div class="id-face">⛳</div>
+      <div class="id-txt">
+        <b>Playing as <span id="idName">—</span></b>
+        <span>Your career, coins and gear are remembered on this browser — no sign-in needed.</span>
+      </div>
+      <button class="btn" id="btnNotYou">Change</button>
+    </div>
+    <label class="field" id="nameField"><span>Your name</span>
       <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
     <div class="split">
       <div class="split-col">

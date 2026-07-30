@@ -12,7 +12,9 @@ import { mulberry32, clamp, lerp, fbm, smoothstep } from '../shared/rng.js';
 import { BALL_RADIUS } from '../shared/ballistics.js';
 import { sharedBlobTexture } from './avatar.js';
 
-const GRID_STEP = 2.6;          // metres between terrain vertices
+const GRID_STEP = 1.8;          // metres between terrain vertices.  2.6 read
+                                // as polygonal on every mound; 1.8 is the
+                                // point where silhouettes become curves.
 const _fwd = new THREE.Vector3();
 
 export class GolfScene {
@@ -452,16 +454,16 @@ export class GolfScene {
     // What grows where.  [kind, colours, count, sizes, surfaces]
     const P = {
       parkland: {
-        bush: { c: ['#2e6b33', '#39793b'], n: 70, s: [0.7, 1.5] },
+        bush: { c: ['#2e6b33', '#39793b'], n: 95, s: [0.7, 1.5] },
         bloom: { c: ['#e86fa4', '#f2f2ee', '#d4548a'], per: 4 },
-        tuft: { c: ['#4d8a3d', '#5f9c48'], n: 180, s: [0.35, 0.7] },
+        tuft: { c: ['#4d8a3d', '#5f9c48'], n: 250, s: [0.35, 0.7] },
         rock: { c: ['#8d8a82'], n: 10, s: [0.4, 0.9] },
         reed: { c: ['#5d8f4a'], ring: 26 }
       },
       links: {
         bush: { c: ['#6d6b3f', '#7c7a48'], n: 46, s: [0.5, 1.1] },     // heather-gorse scrub
         bloom: { c: ['#b088c9', '#caa3de'], per: 3 },                  // heather purple
-        tuft: { c: ['#a89c58', '#8f8f4e', '#b3a763'], n: 260, s: [0.4, 0.9] },  // marram
+        tuft: { c: ['#a89c58', '#8f8f4e', '#b3a763'], n: 360, s: [0.4, 0.9] },  // marram
         rock: { c: ['#7d7f82', '#6e7073'], n: 26, s: [0.5, 1.4] },
         reed: { c: ['#9a915a'], ring: 20 }
       },
@@ -475,14 +477,14 @@ export class GolfScene {
       alpine: {
         bush: { c: ['#2f5e35', '#3a6b3e'], n: 52, s: [0.5, 1.1] },
         bloom: { c: ['#f2f0e6', '#e8c25a', '#7f9fd4'], per: 3 },       // wildflowers
-        tuft: { c: ['#43803c', '#549147'], n: 200, s: [0.35, 0.75] },
+        tuft: { c: ['#43803c', '#549147'], n: 280, s: [0.35, 0.75] },
         rock: { c: ['#8f9296', '#7b7f84'], n: 38, s: [0.6, 2.2] },     // granite
         reed: { c: ['#4d7a45'], ring: 18 }
       },
       tropical: {
         bush: { c: ['#1f7a3d', '#2a8a46'], n: 64, s: [0.7, 1.5] },
         bloom: { c: ['#e8452f', '#f2803d', '#e8377f'], per: 4 },       // hibiscus
-        tuft: { c: ['#2f9448', '#3aa653'], n: 190, s: [0.4, 0.9] },
+        tuft: { c: ['#2f9448', '#3aa653'], n: 270, s: [0.4, 0.9] },
         rock: { c: ['#b3a48c', '#c2b49b'], n: 16, s: [0.4, 1.0] },     // coral stone
         reed: { c: ['#3f8a4a'], ring: 30 }
       }
@@ -531,7 +533,7 @@ export class GolfScene {
     const pick = arr => arr[(rng() * arr.length) | 0];
 
     /* bushes: squashed icosahedra, sunk so they sit in the grass */
-    const bushGeo = cached('fol-bush', () => new THREE.IcosahedronGeometry(1, 0));
+    const bushGeo = cached('fol-bush', () => new THREE.IcosahedronGeometry(1, 1));
     const bushes = spots(P.bush.n, P.bush.s, ['rough', 'deep', 'waste']);
     for (const d of bushes) d.hex = pick(P.bush.c);
     put(bushes, bushGeo, P.bush.c[0], { sy: 0.72, sink: 0.10 });
@@ -576,7 +578,7 @@ export class GolfScene {
     }
 
     /* grass tufts: low cones, the cheapest possible "this is rough" signal */
-    const tuftGeo = cached('fol-tuft', () => new THREE.ConeGeometry(1, 1, 5));
+    const tuftGeo = cached('fol-tuft', () => new THREE.ConeGeometry(1, 1, 7));
     const tufts = spots(P.tuft.n, P.tuft.s, ['rough', 'deep', 'waste']);
     for (const d of tufts) d.hex = pick(P.tuft.c);
     put(tufts, tuftGeo, P.tuft.c[0], { sy: 1.6, tilt: 0.5, sink: 0.35 });

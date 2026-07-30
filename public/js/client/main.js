@@ -1436,7 +1436,25 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   const q = new URLSearchParams(location.search);
   const room = (q.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
   if (room) HUD.el.inpCode.value = room;
+  // Returning players are recognised, not interrogated: the same browser
+  // key that pins your career also pins your name, so the front door says
+  // hello instead of asking who you are.  "Change" brings the field back.
   try { const n = localStorage.getItem('lg_name'); if (n) HUD.el.inpName.value = n; } catch { /* ignore */ }
+  const chip = document.getElementById('identityChip');
+  const nameField = document.getElementById('nameField');
+  const known = (HUD.el.inpName.value || '').trim();
+  if (known) {
+    chip.hidden = false;
+    nameField.hidden = true;
+    document.getElementById('idName').textContent = known;
+  }
+  document.getElementById('btnNotYou').addEventListener('click', () => {
+    chip.hidden = true;
+    nameField.hidden = false;
+    HUD.el.inpName.select();
+    // a new name deserves a fresh career, so re-key the browser identity
+    try { localStorage.removeItem('lg_pid'); } catch { /* ignore */ }
+  });
   (HUD.el.inpName.value ? HUD.el.inpCode : HUD.el.inpName).focus();
 
   HUD.show('home');

@@ -151,30 +151,38 @@ export class CartManager {
     for (const [, r] of this.remote) {
       const dx = b.x - r.x, dz = b.z - r.z;
       const d2 = dx * dx + dz * dz;
-      const R = 2.1;                              // two cart half-lengths, roughly
+      const R = 2.4;                              // generous: a hit should FEEL like one
       if (d2 < R * R && d2 > 1e-9) {
         const d = Math.sqrt(d2);
         const nx = dx / d, nz = dz / d;           // away from them, toward me
         const mine = Math.abs(b.speed);
         const theirs = Math.abs(r.speed || 0);
-        // their share of the blame — and of the energy
-        const w = theirs / (mine + theirs + 0.001);
+        // KINETIC weighting — momentum squared — so whoever brings the speed
+        // utterly dominates the exchange: a 20 m/s cart against a 5 m/s cart
+        // holds 94% of the collision, not 80%.  The fast cart ploughs
+        // through; the slow one is launched.
+        const w = (theirs * theirs) / (mine * mine + theirs * theirs + 0.001);
 
-        // I always leave the overlap (I am the only cart I may move)…
-        b.x = r.x + nx * R;
-        b.z = r.z + nz * R;
+        // The DOMINANT cart barely yields position; the light one is fully
+        // expelled from the overlap.  Each client only ever moves its own
+        // cart, and both apply this same rule, so on both screens it is the
+        // lighter cart that gives way.
+        const yieldFrac = 0.2 + 0.8 * w;
+        const gap = R - d;
+        b.x += nx * gap * yieldFrac;
+        b.z += nz * gap * yieldFrac;
 
-        // …but what happens to my SPEED depends on who brought the momentum.
-        // Their velocity along the collision line becomes a shove on me.
+        // their velocity along the collision line becomes a shove on me,
+        // scaled by their share of the momentum
         const rvx = Math.sin(r.heading) * (r.speed || 0);
         const rvz = Math.cos(r.heading) * (r.speed || 0);
         const shove = (rvx * nx + rvz * nz);      // + = they are driving into me
-        const bvx = Math.sin(b.heading) * b.speed + Math.max(0, shove) * nx * w * 1.1;
-        const bvz = Math.cos(b.heading) * b.speed + Math.max(0, shove) * nz * w * 1.1;
+        const bvx = Math.sin(b.heading) * b.speed + Math.max(0.8, shove) * nx * w * 1.8;
+        const bvz = Math.cos(b.heading) * b.speed + Math.max(0.8, shove) * nz * w * 1.8;
         const newSpeed = Math.hypot(bvx, bvz);
         if (newSpeed > 0.3) {
           b.heading = Math.atan2(bvx, bvz);
-          b.speed = Math.min(newSpeed, 14) * (1 - 0.35 * (1 - w));   // rammer bleeds energy
+          b.speed = Math.min(newSpeed, 24) * (1 - 0.3 * (1 - w));    // rammer bleeds a little
         } else {
           b.speed *= -0.2;
         }
