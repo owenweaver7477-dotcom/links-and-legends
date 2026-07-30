@@ -73,6 +73,7 @@ function faceParts() {
 }
 
 const H = AVATAR_HEIGHT;          // 1.78 m
+const SEATED_LEG = 0.62;          // knee-less legs, tucked into the footwell
 const part = (mat, w, h, d, x, y, z) => {
   const m = new THREE.Mesh(box(), mat);
   m.scale.set(w, h, d);
@@ -328,6 +329,7 @@ export class Avatar {
   setSeated(on) {
     this.seated = !!on;
     if (this.seated) { this.cel = null; this.golf = null; this.club.visible = false; }
+    else { this.legL.scale.y = 1; this.legR.scale.y = 1; }   // stand back up
     this.blob.visible = !this.seated;
   }
 
@@ -489,11 +491,18 @@ export class Avatar {
   /** Static seat pose: knees up, hands forward on the wheel or the rail. */
   _applySeated() {
     const P = blankPose(this._pose);
-    P.legLx = -1.52; P.legRx = -1.52;      // thighs forward over the footwell
-    P.armLx = -1.05; P.armRx = -1.05;      // hands out to the wheel
+    // There is no knee joint, and a straight 0.84 m leg cannot fit the 0.6 m
+    // between the cushion and the dash at any angle: point it forward and it
+    // spears the bonnet, point it down and it goes through the floor.  So the
+    // leg is SHORTENED while seated — the shin reads as tucked into the
+    // footwell, which is exactly what a knee does.
+    P.legLx = -1.32; P.legRx = -1.32;      // shins level, feet on the floor pan
+    P.armLx = -1.30; P.armRx = -1.30;      // hands forward to the wheel
     P.armLz = 0.12; P.armRz = -0.12;
-    P.bodyY = -0.30;                       // knees bend: the torso drops onto the cushion
+    P.bodyY = -0.24;                       // the torso drops onto the cushion
     this._apply(P);
+    this.legL.scale.y = SEATED_LEG;
+    this.legR.scale.y = SEATED_LEG;
     this.phase = 0;
     this.swingAmp = 0;
   }

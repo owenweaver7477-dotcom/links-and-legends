@@ -77,6 +77,29 @@ head('signs — these decide whether anything else means anything');
      `z ${c3.z.toFixed(2)}`);
 }
 
+/* ================================================== aiming uses that frame too */
+head('aim — left must be the player’s left, on the buttons and the arrows');
+{
+  // The aim is a heading in the same frame as everything else, so "aim left"
+  // means INCREASING it.  The buttons shipped with the opposite sign, so ◄
+  // aimed right and ArrowRight aimed left; this pins the convention down.
+  const leftOf = h => ({ x: Math.cos(h), z: -Math.sin(h) });
+  const movedLeft = (a0, a1) => {
+    const d0 = { x: Math.sin(a0), z: Math.cos(a0) };
+    const d1 = { x: Math.sin(a1), z: Math.cos(a1) };
+    const L = leftOf(a0);
+    return (d1.x - d0.x) * L.x + (d1.z - d0.z) * L.z > 0;
+  };
+  for (const base of [0, 1.2, -2.4, Math.PI]) {
+    ok(`+aim is the player’s left (from ${base.toFixed(1)} rad)`, movedLeft(base, base + 0.2));
+    ok(`-aim is the player’s right (from ${base.toFixed(1)} rad)`, !movedLeft(base, base - 0.2));
+  }
+  // and the HUD reads out the same way: positive degrees = aimed right of target
+  const readout = (aim, target) => -(((aim - target) * 180 / Math.PI + 540) % 360 - 180);
+  ok('the HUD calls a right-of-target aim positive', readout(-0.2, 0) > 0, readout(-0.2, 0).toFixed(1) + '°');
+  ok('and a left-of-target aim negative', readout(0.2, 0) < 0, readout(0.2, 0).toFixed(1) + '°');
+}
+
 /* =============================================== walking uses the same frame */
 head('walking — D must strafe the same way the cart steers');
 {
@@ -416,6 +439,76 @@ head('the caddie crew — hired stats that actually do things');
   // prototype-chain names must not hire phantoms or charge for them
   ok('caddie:constructor is refused',
      !!crewPurchase('caddie:constructor', { coins: 99999, crew: { ...NO_CREW } }).blocked);
+}
+
+/* ================================================= the courses are not corridors */
+head('hole shapes — five courses must not be forty-five straight lines');
+{
+  const courses = allCourses();
+  const used = new Set();
+  let sum = 0, n = 0, flatLongHoles = 0, biggest = 0;
+  for (const c of courses) {
+    for (const h of c.holes) {
+      if (!h.shape) continue;                 // the hand-authored opener
+      used.add(h.shape);
+      // how far the centreline strays from the straight tee-to-green line,
+      // as a fraction of that line — this is what "dogleg" means to a player
+      const a = h.route[0], b = h.route[h.route.length - 1];
+      const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz);
+      let off = 0;
+      for (const p of h.route) {
+        const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (L * L);
+        off = Math.max(off, Math.hypot(p[0] - (a[0] + dx * t), p[1] - (a[1] + dz * t)));
+      }
+      const pct = off / L * 100;
+      sum += pct; n++;
+      biggest = Math.max(biggest, pct);
+      if (pct < 4 && h.par !== 3) flatLongHoles++;
+    }
+  }
+  const avg = sum / n;
+  ok('every shape in the catalogue actually gets built', used.size >= 5,
+     [...used].join(', '));
+  ok('the average hole bends meaningfully', avg > 8, `${avg.toFixed(1)}% of its length`);
+  ok('and some hole is a genuine dogleg', biggest > 20, `biggest ${biggest.toFixed(1)}%`);
+  ok('par 4s and 5s are almost never rulers', flatLongHoles <= 3,
+     `${flatLongHoles} of ${n} holes under 4%`);
+}
+
+/* ============================================ the golfer fits in the seat */
+head('seating — a rider must sit ON the bench, not through it');
+{
+  const { SEATS, WHEEL_R } = await import('../public/js/shared/cart.js');
+  const { AVATAR_HEIGHT } = await import('../public/js/shared/avatars.js');
+  // These mirror cart3d.js's CHASSIS_BOXES and avatar.js's seated pose.  The
+  // avatar has no knee, so the seated pose shortens the leg — without that a
+  // straight 0.84 m leg speared the bonnet, and the rider read as standing.
+  const CUSHION_TOP = WHEEL_R + 0.27;
+  const FLOOR_TOP = WHEEL_R + 0.10;
+  const ROOF_UNDER = WHEEL_R + 1.72 - 0.035;
+  const DASH_FRONT = 1.16;
+  const SEATED_LEG = 0.62, LEG_ANGLE = 1.32, BODY_DROP = 0.24;
+
+  const H = AVATAR_HEIGHT;
+  const rootY = SEATS.driver.y;                 // relative to the ground
+  const hipY = rootY + H * 0.47 - BODY_DROP;    // where the legs hang from
+  const legLen = (H * 0.42 + H * 0.05) * SEATED_LEG;
+  const footY = hipY - Math.cos(LEG_ANGLE) * legLen;
+  const footZ = SEATS.driver.z + Math.sin(LEG_ANGLE) * legLen;
+  const headTop = rootY + H * 0.7925 + H * 0.1595;
+
+  ok('the hips land on the cushion', Math.abs(hipY - CUSHION_TOP) < 0.06,
+     `hips ${hipY.toFixed(3)} m vs cushion ${CUSHION_TOP.toFixed(3)} m`);
+  ok('the feet reach the floor pan without going through it',
+     footY > FLOOR_TOP - 0.08 && footY < FLOOR_TOP + 0.14,
+     `feet ${footY.toFixed(3)} m vs floor ${FLOOR_TOP.toFixed(3)} m`);
+  ok('the knees stop short of the dashboard', footZ < DASH_FRONT,
+     `feet reach z ${footZ.toFixed(2)} m, dash at ${DASH_FRONT} m`);
+  ok('the head clears the canopy', headTop < ROOF_UNDER - 0.1,
+     `head ${headTop.toFixed(2)} m, roof ${ROOF_UNDER.toFixed(2)} m`);
+  ok('driver and passenger sit either side of the centreline',
+     SEATS.driver.x < 0 && SEATS.passenger.x > 0
+     && Math.abs(SEATS.driver.x + SEATS.passenger.x) < 1e-9);
 }
 
 /* ========================================================== overswing */

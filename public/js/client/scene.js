@@ -100,7 +100,9 @@ export class GolfScene {
     const skyBot = new THREE.Color(P.sky[1]);
 
     /* ---- atmosphere ---- */
-    this.scene.fog = new THREE.Fog(new THREE.Color(P.fog), 210, 1150);
+    // Fog starts well out and reaches far: pulled in tight it flattens the
+    // whole middle distance into one grey band and the world reads as a void.
+    this.scene.fog = new THREE.Fog(new THREE.Color(P.fog), 420, 2600);
     this.scene.background = skyBot.clone();
 
     const hemi = new THREE.HemisphereLight(skyTop.clone(), new THREE.Color(P.rough), bio.ambient);
@@ -313,7 +315,11 @@ export class GolfScene {
        a circle either overlaps it (z-fighting) or leaves a gap at the mid-edges
        — both of which show up as a bright seam along the horizon. Walking the
        boundary keeps the inner rim exactly on the terrain edge. */
-    const RINGS = 10, SEGS = 128, SPREAD = 7.5, OVERLAP = 0.97;
+    // SPREAD has to carry the ground PAST the horizon ridge (which sits at
+    // roughly 0.75 spans + 420 m).  At 7.5 the land ran out in front of the
+    // ridge, and wherever the ridge profile dipped you saw a slot of bare sky
+    // below the skyline — the "abyss" under the world.
+    const RINGS = 14, SEGS = 128, SPREAD = 26, OVERLAP = 0.97;
     const pos = [], idx = [];
 
     // a point on the terrain's boundary rectangle at perimeter fraction t
@@ -325,6 +331,17 @@ export class GolfScene {
       return [b.minX, lerp(b.maxZ, b.minZ, u - 3)];
     };
 
+    /* Vertex colours carry the distance haze.  A single flat colour under fog
+       reads as a dead grey band — an abyss with a course floating in it.  The
+       land instead starts as the course's own rough, drifts toward a cooler,
+       lighter far tone, and picks up per-vertex variation so it never looks
+       like one poured surface. */
+    const col = [];
+    const near = new THREE.Color(bio.palette.rough);
+    const mid = new THREE.Color(bio.palette.deep);
+    const far = new THREE.Color(bio.palette.fog).lerp(new THREE.Color(bio.palette.sky[0]), 0.35);
+    const _c = new THREE.Color();
+
     for (let r = 0; r <= RINGS; r++) {
       const t = r / RINGS;
       // start just INSIDE the terrain and a little below it: overlapping
@@ -334,9 +351,19 @@ export class GolfScene {
         const [ex, ez] = boundary(s / SEGS);
         const x = cx + (ex - cx) * scale, z = cz + (ez - cz) * scale;
         const edge = T.heightAt(ex, ez);                       // exact rim height
-        const far = fbm(x * 0.0016, z * 0.0016, hole.terrainSeed ^ 0x99, 3) * bio.relief * 3.2 - bio.relief * 0.6;
+        // Two octaves, the broad one strong: distant land should ROLL rather
+        // than lie flat, or the middle distance has nothing to read at all.
+        const roll = fbm(x * 0.0016, z * 0.0016, hole.terrainSeed ^ 0x99, 3) * bio.relief * 3.2
+          + fbm(x * 0.0052, z * 0.0052, hole.terrainSeed ^ 0x5c, 2) * bio.relief * 1.1;
+        const farY = roll - bio.relief * 0.6;
         // sink the ring a touch as it leaves the rim so the seam tucks under
-        pos.push(x, lerp(edge - 0.6, far, smoothstep(0.02, 0.5, t)), z);
+        pos.push(x, lerp(edge - 0.6, farY, smoothstep(0.02, 0.5, t)), z);
+
+        // colour by distance, with the local roll lightening the high ground
+        _c.copy(near).lerp(mid, smoothstep(0, 0.35, t));
+        _c.lerp(far, smoothstep(0.3, 1, t) * 0.82);
+        const lift = 1 + (roll / Math.max(1, bio.relief * 4) - 0.4) * 0.16;
+        col.push(_c.r * lift, _c.g * lift, _c.b * lift);
       }
     }
     for (let r = 0; r < RINGS; r++) {
@@ -347,49 +374,138 @@ export class GolfScene {
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
 
-    const col = new THREE.Color(bio.palette.deep);
-    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: col }));
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
     mesh.renderOrder = -0.5;
     grp.add(mesh);
+
+    // and something living out there: a band of distant trees so the middle
+    // distance is scenery rather than empty ground
+    const band = this._buildFarTrees(hole, bio, boundary, cx, cz);
+    if (band) grp.add(band);
     return grp;
+  }
+
+  /**
+   * Distant treeline.  One instanced cone-and-trunk pair scattered on the
+   * surrounding land between the course edge and the ridge, sized up with
+   * distance so they still read after the fog thins them.  One draw call.
+   */
+  _buildFarTrees(hole, bio, boundary, cx, cz) {
+    if ((bio.treeDensity ?? 0) < 0.12) return null;      // links has no trees
+    const rng = mulberry32((hole.terrainSeed ^ 0x7ee5) >>> 0);
+    const N = 420;
+    const geo = cached('fartree', () => {
+      // a rounded mass, not a spike: at this distance a tree is a blob of
+      // canopy, and a narrow cone reads as a grey obelisk
+      const g = new THREE.IcosahedronGeometry(1, 0);
+      g.scale(1, 1.15, 1);
+      g.translate(0, 1.0, 0);
+      return g;
+    });
+    const canopy = new THREE.Color(bio.palette.rough)
+      .lerp(new THREE.Color(bio.palette.deep), 0.5)
+      .lerp(new THREE.Color(bio.palette.fog), 0.12);
+    const mat = new THREE.MeshLambertMaterial({ color: canopy });
+    const inst = new THREE.InstancedMesh(geo, mat, N);
+    inst.frustumCulled = false;
+    const m = new THREE.Matrix4(), s = new THREE.Vector3();
+    let n = 0;
+    for (let i = 0; i < N; i++) {
+      const [ex, ez] = boundary(rng());
+      // Start well clear of the rim: close in they would compete with the real
+      // trees the ball can actually hit, and the player must never mistake
+      // scenery for a hazard.
+      const scale = 1.35 + rng() * rng() * 3.1;
+      const x = cx + (ex - cx) * scale + (rng() - 0.5) * 90;
+      const z = cz + (ez - cz) * scale + (rng() - 0.5) * 90;
+      const h = 11 + rng() * 9;                          // real tree height, honestly scaled
+      const y = fbm(x * 0.0016, z * 0.0016, hole.terrainSeed ^ 0x99, 3) * bio.relief * 3.2
+        + fbm(x * 0.0052, z * 0.0052, hole.terrainSeed ^ 0x5c, 2) * bio.relief * 1.1
+        - bio.relief * 0.6 - 1.5;
+      m.makeRotationY(rng() * 6.283);
+      m.scale(s.set(h * 0.52, h * 0.62, h * 0.52));
+      m.setPosition(x, y, z);
+      inst.setMatrixAt(n++, m);
+    }
+    inst.count = n;
+    inst.instanceMatrix.needsUpdate = true;
+    return inst;
   }
 
   /* ------------------------------------------------------------ water --- */
   _buildWater(w, level, bio) {
-    const geo = new THREE.CircleGeometry(1, 56);
+    /* A GRID, not a fan.  CircleGeometry is a triangle fan with a single
+       centre vertex, so a per-vertex swell moved the rim and nothing else —
+       the surface stayed mirror-flat.  A subdivided plane, clipped back to a
+       disc in the fragment shader, gives the wave something to move. */
+    const geo = cached('water-grid', () => new THREE.PlaneGeometry(2, 2, 48, 48));
     const col = new THREE.Color(bio.palette.water);
+    const sky = new THREE.Color(bio.palette.sky[0]);
+    const sun = this.sunDir || { x: 0.4, y: 0.7, z: 0.5 };
     const mat = new THREE.MeshPhongMaterial({
-      color: col, transparent: true, opacity: 0.86,
-      shininess: 140, specular: new THREE.Color(0xbfe9ff),
+      color: col, transparent: true, opacity: 0.9,
+      shininess: 220, specular: new THREE.Color(0xcfefff),
       side: THREE.DoubleSide
     });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = { value: 0 };
+      sh.uniforms.uSky = { value: new THREE.Vector3(sky.r, sky.g, sky.b) };
+      sh.uniforms.uSun = { value: new THREE.Vector3(sun.x, sun.y, sun.z) };
       mat.userData.sh = sh;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
-          uniform float uTime; varying vec2 vRip;`)
+          uniform float uTime; varying vec2 vRip; varying vec3 vWorld;`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
           vRip = position.xy;
           // two octaves of gentle swell: ~3 m wavelength riding an ~8 m one,
           // peaks a little under a decimetre — water, not geometry
           transformed.z += sin(position.x*2.1 + uTime*1.4)*0.05
                          + sin(position.y*1.6 - uTime*0.9)*0.05
-                         + sin((position.x+position.y)*0.75 + uTime*0.6)*0.035;`);
+                         + sin((position.x+position.y)*0.75 + uTime*0.6)*0.035;
+          vWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
-          uniform float uTime; varying vec2 vRip;`)
+          uniform float uTime; uniform vec3 uSky; uniform vec3 uSun;
+          varying vec2 vRip; varying vec3 vWorld;`)
         .replace('#include <dithering_fragment>', `#include <dithering_fragment>
-          float r = sin(vRip.x*26.0 + uTime*2.2) * sin(vRip.y*21.0 - uTime*1.7);
-          gl_FragColor.rgb += vec3(0.06,0.09,0.10) * smoothstep(0.55, 1.0, r);
-          // depth read: dark middle, paler shallows, a breathing foam line at the bank
           float rad = length(vRip);
-          gl_FragColor.rgb *= mix(0.72, 1.18, smoothstep(0.15, 1.0, rad));
-          float foam = smoothstep(0.965, 0.995, rad + sin(atan(vRip.y, vRip.x)*9.0 + uTime*0.8)*0.006);
-          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.92, 0.97, 0.98), foam * 0.55);`);
+          if (rad > 1.0) discard;              // the plane, clipped back to a pond
+
+          // Analytic wave normal: the derivative of the same swell the vertex
+          // shader applied, so the shading agrees with the geometry instead of
+          // being a texture pretending to be one.
+          float dhx = cos(vRip.x*2.1 + uTime*1.4)*2.1*0.05
+                    + cos((vRip.x+vRip.y)*0.75 + uTime*0.6)*0.75*0.035;
+          float dhy = cos(vRip.y*1.6 - uTime*0.9)*1.6*0.05
+                    + cos((vRip.x+vRip.y)*0.75 + uTime*0.6)*0.75*0.035;
+          // fine chop on top, so the surface has detail between the swells
+          dhx += cos(vRip.x*23.0 + uTime*2.4)*23.0*0.0022;
+          dhy += cos(vRip.y*19.0 - uTime*1.9)*19.0*0.0022;
+          vec3 N = normalize(vec3(-dhx, 1.0, dhy));
+          vec3 V = normalize(cameraPosition - vWorld);
+
+          // Fresnel is what makes water read as water: near-transparent when
+          // you look straight down into it, a bright sky mirror at a glancing
+          // angle across the pond.
+          float fres = pow(1.0 - clamp(dot(V, N), 0.0, 1.0), 4.0);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, uSky, clamp(fres, 0.0, 0.78));
+
+          // the sun's glitter path, tight and bright
+          vec3 H = normalize(normalize(uSun) + V);
+          float glint = pow(max(dot(N, H), 0.0), 420.0);
+          gl_FragColor.rgb += vec3(1.0, 0.98, 0.92) * glint * 0.85;
+
+          // depth read: dark in the middle, paler over the shallow margins
+          gl_FragColor.rgb *= mix(0.68, 1.16, smoothstep(0.15, 1.0, rad));
+          // a breathing foam line where the water meets the bank
+          float foam = smoothstep(0.955, 0.995, rad + sin(atan(vRip.y, vRip.x)*9.0 + uTime*0.8)*0.006);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.92, 0.97, 0.98), foam * 0.6);
+          // and it turns opaque as it deepens — you cannot see through a lake
+          gl_FragColor.a = mix(0.99, 0.82, smoothstep(0.55, 1.0, rad));`);
     };
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
@@ -416,11 +532,11 @@ export class GolfScene {
 
     // biome character: [amplitude, jaggedness, plateau clip 0-1, colour]
     const CHAR = {
-      alpine:   { amp: 300, jag: 0.9, clip: 1.0, col: '#5a6b78', snow: true },
-      desert:   { amp: 130, jag: 0.5, clip: 0.55, col: '#8a5844', snow: false },
-      links:    { amp: 55,  jag: 0.55, clip: 1.0, col: '#5d6b52', snow: false },
-      parkland: { amp: 95,  jag: 0.35, clip: 1.0, col: '#3d5a40', snow: false },
-      tropical: { amp: 70,  jag: 0.45, clip: 0.85, col: '#3f6b55', snow: false }
+      alpine:   { amp: 420, jag: 0.9, clip: 1.0, col: '#5a6b78', snow: true },
+      desert:   { amp: 210, jag: 0.5, clip: 0.55, col: '#8a5844', snow: false },
+      links:    { amp: 95,  jag: 0.55, clip: 1.0, col: '#5d6b52', snow: false },
+      parkland: { amp: 165, jag: 0.35, clip: 1.0, col: '#3d5a40', snow: false },
+      tropical: { amp: 130, jag: 0.45, clip: 0.85, col: '#3f6b55', snow: false }
     };
     const ch = CHAR[bio.id] || CHAR.parkland;
 
@@ -450,7 +566,9 @@ export class GolfScene {
       const r = baseR * (1 + prof((t + 0.37) % 1) * 0.25);
       let h = Math.min(prof(t), ch.clip) * ch.amp + 8;
       const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
-      pos.push(x, -6, z);  col.push(dark.r, dark.g, dark.b);
+      // the skirt runs well below ground so the ridge never floats above a
+      // slot of sky, whatever the land in front of it is doing
+      pos.push(x, -140, z);  col.push(dark.r, dark.g, dark.b);
       pos.push(x, h, z);
       // snowline on the alpine ridge
       const top = ch.snow && h > ch.amp * 0.62 ? snowC : base;

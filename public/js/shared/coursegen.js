@@ -31,31 +31,108 @@ const LENGTH_BY_PAR = {
 
 /* ---------------------------------------------------------------- route --- */
 /**
+ * The shapes a golf hole comes in.
+ *
+ * Each entry returns the TURN RATE along the hole as a function of t (0 at the
+ * tee, 1 at the green), which the router integrates into a heading.  Working
+ * in turn rate rather than absolute angle is what makes the shapes distinct:
+ * a dogleg is a burst of turning in one place, a sweep is a constant trickle,
+ * an S-curve changes sign.  The old router had a single sin() profile scaled
+ * by a gaussian, which meant most holes came out very nearly straight — the
+ * reason every hole looked the same.
+ *
+ * `amount` is the total heading change in radians; positive bends right.
+ */
+const HOLE_SHAPES = {
+  // The "straight" hole, which on a real course still drifts: a ruler-straight
+  // corridor is exactly what made every hole look identical, so even this one
+  // leans gently one way over its length.
+  straight: (rk, amount) => t => amount * Math.sin(Math.PI * t) * 1.57,
+
+  // one decisive corner: nothing, then a hard turn, then nothing
+  dogleg: (rk, amount) => {
+    const at = rk.f(0.36, 0.62);                 // where the corner sits
+    const w = rk.f(0.13, 0.2);                   // how abruptly it turns
+    return t => amount * Math.exp(-(((t - at) / w) ** 2)) / (w * Math.sqrt(Math.PI));
+  },
+
+  // a long continuous arc — the whole hole is the curve
+  sweep: (rk, amount) => t => amount * (1 + 0.6 * Math.sin(Math.PI * t)) / 1.38,
+
+  // out one way, back the other: the classic snake
+  s_curve: (rk, amount) => {
+    const at1 = rk.f(0.22, 0.34), at2 = rk.f(0.62, 0.78);
+    const w = rk.f(0.11, 0.16);
+    const back = rk.f(0.75, 1.15);               // rarely a perfect mirror
+    const g = (t, c) => Math.exp(-(((t - c) / w) ** 2)) / (w * Math.sqrt(Math.PI));
+    return t => amount * g(t, at1) - amount * back * g(t, at2);
+  },
+
+  // straight off the tee, then bends late — the green hides round the corner
+  late_bend: (rk, amount) => {
+    const at = rk.f(0.66, 0.8), w = rk.f(0.1, 0.15);
+    return t => amount * Math.exp(-(((t - at) / w) ** 2)) / (w * Math.sqrt(Math.PI));
+  },
+
+  // bends immediately off the tee, then runs dead straight to the green
+  early_bend: (rk, amount) => {
+    const at = rk.f(0.16, 0.28), w = rk.f(0.1, 0.15);
+    return t => amount * Math.exp(-(((t - at) / w) ** 2)) / (w * Math.sqrt(Math.PI));
+  }
+};
+
+/* How likely each shape is, by par.  Par 3s are mostly straight because you
+   are hitting at the green from the tee — but a slight angle is fair game. */
+const SHAPE_ODDS = {
+  3: [['straight', 6], ['sweep', 2], ['early_bend', 1]],
+  4: [['dogleg', 5], ['sweep', 3], ['late_bend', 3], ['early_bend', 2], ['s_curve', 2], ['straight', 1]],
+  5: [['dogleg', 4], ['s_curve', 4], ['sweep', 3], ['late_bend', 2], ['early_bend', 2]]
+};
+
+/** How much a hole of this shape and par turns, in radians. */
+function bendAmount(rk, shape, par) {
+  const sign = rk.bool(0.5) ? 1 : -1;
+  // A dogleg you can see round is not a dogleg.  These are deliberately
+  // BIG — 30 to 75 degrees — because the old holes bent by barely 15 and
+  // read as straight lines from the tee.  A sweep needs even more, since it
+  // spends its turn over the whole hole rather than in one corner.
+  const base = shape === 'straight' ? rk.f(0.12, 0.28)
+    : shape === 'sweep' ? rk.f(0.8, 1.5)
+      : shape === 's_curve' ? rk.f(0.6, 1.15)
+        : rk.f(0.62, 1.32);
+  return sign * base * (par === 5 ? 1.0 : par === 4 ? 0.92 : 0.5);
+}
+
+/**
  * Lay out the centreline of a hole: start at the origin heading up +Z, then
- * walk `length` metres while bending by a per-hole dogleg profile.
+ * walk `length` metres, turning at the rate this hole's shape asks for.
  */
 function buildRoute(rk, lengthM, par) {
-  const pts = [[0, 0]];
-  // dogleg: 0 = straight, +ve = bends right, -ve = left.  Par 3s are straight.
-  const bend = par === 3 ? 0 : rk.gauss() * (par === 5 ? 0.55 : 0.42);
-  const doubleDog = par === 5 && rk.bool(0.3);
-  const segs = par === 3 ? 2 : par === 4 ? 4 : 5;
-  const segLen = lengthM / segs;
+  const odds = SHAPE_ODDS[par] || SHAPE_ODDS[4];
+  const total = odds.reduce((a, o) => a + o[1], 0);
+  let roll = rk.f(0, total), shape = odds[0][0];
+  for (const [name, w] of odds) { roll -= w; if (roll <= 0) { shape = name; break; } }
 
+  const amount = bendAmount(rk, shape, par);
+  const rate = HOLE_SHAPES[shape](rk, amount);
+
+  // Integrate the turn rate finely, then keep every few samples as control
+  // points: a corner needs enough points to actually round off.
+  const STEPS = 48;
+  const keep = par === 3 ? 6 : 4;
+  const segLen = lengthM / STEPS;
+  const pts = [[0, 0]];
   let x = 0, z = 0, heading = 0;                 // heading: radians, 0 = +Z
-  for (let i = 1; i <= segs; i++) {
-    const t = i / segs;
-    // most of the bend happens in the middle of the hole
-    let turn = bend * Math.sin(Math.PI * t) * 0.55;
-    if (doubleDog && t > 0.6) turn = -bend * 0.5 * Math.sin(Math.PI * (t - 0.6) / 0.4);
-    turn += rk.gauss() * 0.05;                   // gentle wander
-    heading += turn;
-    heading = clamp(heading, -1.15, 1.15);       // never fold back on itself
+  for (let i = 1; i <= STEPS; i++) {
+    const t = i / STEPS;
+    // the shape, plus a little wander so no hole is mechanically perfect
+    heading += rate(t) / STEPS + rk.gauss() * 0.012;
+    heading = clamp(heading, -1.45, 1.45);       // never fold back on itself
     x += Math.sin(heading) * segLen;
     z += Math.cos(heading) * segLen;
-    pts.push([x, z]);
+    if (i % keep === 0 || i === STEPS) pts.push([x, z]);
   }
-  return { pts, bend, heading };
+  return { pts, bend: amount, heading, shape };
 }
 
 /** Resample a control polyline into a smooth, densely-sampled centreline. */
@@ -256,7 +333,7 @@ function makeHole(courseId, bio, number, seed) {
   const [lmin, lmax] = LENGTH_BY_PAR[par];
   const lengthM = rk.f(lmin, lmax);
 
-  const { pts } = buildRoute(rk, lengthM, par);
+  const { pts, shape } = buildRoute(rk, lengthM, par);
   const dense = smoothRoute(pts, 3);
   const { cum, total } = routeMetrics(dense);
 
@@ -299,7 +376,7 @@ function makeHole(courseId, bio, number, seed) {
   };
 
   const hole = {
-    courseId, number, par,
+    courseId, number, par, shape,
     lengthM: total,
     yards: Math.round(toYards(total)),
     seed,

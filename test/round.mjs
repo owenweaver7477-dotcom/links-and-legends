@@ -89,7 +89,7 @@ function maybePlay(c, st) {
     // distance follow the ROUTE — which is what makes a dogleg guarded by
     // trees playable at all.  Walk the centreline to the point one shot
     // ahead of wherever on the route we currently are.
-    let aim;
+    let aim, target = dist;
     if (dist <= 170 || !h.route) {
       aim = Math.atan2(h.pin.x - p.x, h.pin.z - p.z);
     } else {
@@ -104,10 +104,15 @@ function maybePlay(c, st) {
       while (ti < h.cum.length - 1 && h.cum[ti] < ahead) ti++;
       const t = h.route[ti];
       aim = Math.atan2(t[0] - p.x, t[1] - p.z);
+      // Hit to the CORNER, not through it.  Powering for the straight-line
+      // distance to the pin while aiming down a dogleg sends the ball miles
+      // past the turn and into the trees — which is what a real golfer is
+      // laying up to avoid.
+      target = Math.min(dist, Math.hypot(t[0] - p.x, t[1] - p.z));
     }
 
     // use the same caddie number the human player is shown
-    let power = suggestedPower(T, p.x, p.z, club.key, aim, cur.wind, dist + (club.putter ? 0.45 : 0));
+    let power = suggestedPower(T, p.x, p.z, club.key, aim, cur.wind, target + (club.putter ? 0.45 : 0));
     if (power == null) power = 1;
     const face = (Math.random() * 2 - 1) * 2.0 * SKILL;
     const pw = Math.min(1.05, power * (1 + (Math.random() * 2 - 1) * 0.04 * SKILL));

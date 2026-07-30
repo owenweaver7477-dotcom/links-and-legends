@@ -16,7 +16,12 @@ import { inEllipse, elevationAlongRoute, makeRouteDistanceFn } from './coursegen
    grab   = how much the surface kills forward speed and bites on backspin
    spinKeep = how much spin you can put on the ball from this lie */
 export const SURFACES = {
-  green:    { id: 'green',    label: 'Green',      roll: 0.065, bounce: 0.30, grab: 0.72, spinKeep: 0.55 },
+  // roll 0.070 puts a green at a Stimpmeter reading around 8 ft — a good club
+  // green.  Tour greens run 10-12, but paired with the slope term that breaks a
+  // 3 m putt more than half a metre, which needs AimPoint-grade reading to hole
+  // anything.  8 ft breaks about 35 cm: enough that the read matters, little
+  // enough that a player who trusts the caddie's line makes it.
+  green:    { id: 'green',    label: 'Green',      roll: 0.070, bounce: 0.30, grab: 0.72, spinKeep: 0.55 },
   fringe:   { id: 'fringe',   label: 'Fringe',     roll: 0.170, bounce: 0.26, grab: 0.80, spinKeep: 0.40 },
   fairway:  { id: 'fairway',  label: 'Fairway',    roll: 0.230, bounce: 0.30, grab: 0.70, spinKeep: 0.50 },
   tee:      { id: 'tee',      label: 'Tee',        roll: 0.230, bounce: 0.30, grab: 0.70, spinKeep: 0.50 },

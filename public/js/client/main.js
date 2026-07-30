@@ -426,9 +426,39 @@ function stepAim(dt) {
   const wind = Math.min(1, aimHeldFor / 2.0);
   let rate = AIM_RATE_TAP + (AIM_RATE_HELD - AIM_RATE_TAP) * wind * wind;
   if (keys.has('shift')) rate = AIM_RATE_TAP * 0.5;      // ultra fine, always
-  const d = (r ? 1 : 0) - (l ? 1 : 0);
+  // Forward is (sin h, cos h) and up is +Y, so the player's RIGHT is reached by
+  // DECREASING the heading — the same minus that swaps A and D on the cart.
+  // ArrowRight must therefore SUBTRACT, or the arrows aim the wrong way.
+  const d = (l ? 1 : 0) - (r ? 1 : 0);
   swing.nudgeAim(d * rate * dt);
   refreshAimPreview();
+}
+
+/* The aim buttons: press and HOLD to sweep, exactly like the arrow keys.
+   A click alone is one fine nudge, so a tap still places the aim precisely. */
+const AIM_BTN = { dir: 0, held: 0 };
+function stepAimButtons(dt) {
+  if (!AIM_BTN.dir) return;
+  if (!canSwing()) { AIM_BTN.dir = 0; return; }
+  AIM_BTN.held += dt;
+  const wind = Math.min(1, AIM_BTN.held / 2.0);
+  const rate = AIM_RATE_TAP + (AIM_RATE_HELD - AIM_RATE_TAP) * wind * wind;
+  swing.nudgeAim(AIM_BTN.dir * rate * dt);
+  refreshAimPreview();
+}
+function holdAim(el, dir) {
+  const start = e => {
+    e.preventDefault();
+    AIM_BTN.dir = dir; AIM_BTN.held = 0;
+    swing.nudgeAim(dir * 0.009);          // the tap: ~0.5 degrees
+    refreshAimPreview(true);
+  };
+  const stop = () => { AIM_BTN.dir = 0; AIM_BTN.held = 0; };
+  el.addEventListener('pointerdown', start);
+  el.addEventListener('pointerup', stop);
+  el.addEventListener('pointerleave', stop);
+  el.addEventListener('pointercancel', stop);
+  window.addEventListener('blur', stop);
 }
 
 /* A rolling average of real frame time. Averaged over a second so it reads
@@ -671,6 +701,7 @@ function frame(now) {
   }
 
   stepAim(dt);
+  stepAimButtons(dt);
   updateLandingDot(now);
   walker.update(dt, cameraYaw(), G.T, G.hole);
   carts.render(dt, G.T, G.myPid, tintOf, now);
@@ -835,7 +866,10 @@ function updateReadouts() {
   const elev = G.T.heightAt(G.hole.pin.x, G.hole.pin.z) - G.T.heightAt(b.x, b.z);
   HUD.setDistance(dist, lie.label, elev);
   HUD.setWind(G.wind, swing.aim);
-  HUD.setAim(((swing.aim - Math.atan2(G.hole.pin.x - b.x, G.hole.pin.z - b.z)) * 180 / Math.PI + 540) % 360 - 180);
+  // Negated: in this frame (forward = sin h, cos h) the player's RIGHT is
+  // reached by DECREASING the heading, so a raw difference reads backwards.
+  // Positive degrees must mean "aimed right of the flag".
+  HUD.setAim(-(((swing.aim - Math.atan2(G.hole.pin.x - b.x, G.hole.pin.z - b.z)) * 180 / Math.PI + 540) % 360 - 180));
   HUD.setMeter(swing.meter(), canSwing());
 }
 
@@ -877,10 +911,11 @@ canvas.addEventListener('pointerdown', ev => {
   canvas.setPointerCapture(ev.pointerId);
   // Hold ANY button and move the mouse to look around — walking, driving,
   // spectating, waiting on your turn.  The one exception is standing over
-  // your ball, where the left button is the swing itself; the right button
-  // (or Alt) still looks even there.
-  const leftIsFree = !canSwing();
-  if (ev.button === 2 || ev.button === 1 || ev.altKey || (ev.button === 0 && leftIsFree)) {
+  // your ball, where the left button is the swing itself; the right button,
+  // Alt, or SHIFT still looks even there, so you can study the hole without
+  // giving up the address.
+  const leftIsFree = !canSwing() || ev.shiftKey;
+  if (ev.button === 2 || ev.button === 1 || ev.altKey || ev.shiftKey || (ev.button === 0 && leftIsFree)) {
     looking = { x: ev.clientX, y: ev.clientY };
     canvas.classList.add('looking');
     return;
@@ -890,6 +925,7 @@ canvas.addEventListener('pointerdown', ev => {
   canvas.classList.add('swinging');
 });
 
+let shiftLook = null;
 window.addEventListener('pointermove', ev => {
   if (looking) {
     const dx = ev.clientX - looking.x, dy = ev.clientY - looking.y;
@@ -898,6 +934,18 @@ window.addEventListener('pointermove', ev => {
     rig.pitch = clamp(rig.pitch - dy * 0.0016, -0.25, 0.6);
     return;
   }
+  // Hold SHIFT and move the mouse — no button — to look around while standing
+  // still.  Gated on actually being still, so Shift+WASD stays the run key.
+  if (ev.shiftKey && G.screen === 'game' && !G.mapOpen && walker.speed < 0.2) {
+    if (shiftLook) {
+      const dx = ev.clientX - shiftLook.x, dy = ev.clientY - shiftLook.y;
+      rig.orbit = rig.orbit - dx * 0.005;
+      rig.pitch = clamp(rig.pitch - dy * 0.0016, -0.25, 0.6);
+    }
+    shiftLook = { x: ev.clientX, y: ev.clientY };
+    return;
+  }
+  shiftLook = null;
   if (swing.state !== SWING.IDLE && swing.state !== SWING.DONE) {
     swing.pointerMove(ev.clientX, ev.clientY);
     HUD.setMeter(swing.meter(), true);
@@ -1493,8 +1541,9 @@ document.getElementById('btnAgain').addEventListener('click', () => Net.again())
 document.getElementById('btnBackLobby').addEventListener('click', () => Net.lobby());
 document.getElementById('clubUp').addEventListener('click', () => stepClub(1));
 document.getElementById('clubDown').addEventListener('click', () => stepClub(-1));
-document.getElementById('aimL').addEventListener('click', () => { swing.nudgeAim(-0.009); refreshAimPreview(true); });   // ~0.5°
-document.getElementById('aimR').addEventListener('click', () => { swing.nudgeAim(0.009); refreshAimPreview(true); });
+// left is +heading in this frame (see stepAim), and both buttons repeat on hold
+holdAim(document.getElementById('aimL'), 1);
+holdAim(document.getElementById('aimR'), -1);
 document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
 /* ===================================================================== */

@@ -18,6 +18,8 @@ import { crewEffect } from './crew.js';
 
 /* ------------------------------------------------------------- constants */
 const G = 9.80665;
+// A rolling solid sphere climbs and falls at 5/7 g — see _stepGround.
+const ROLL_G = G * 5 / 7;
 const MASS = 0.0459;             // kg
 const RADIUS = 0.02135;          // m
 const AREA = Math.PI * RADIUS * RADIUS;
@@ -333,8 +335,15 @@ export class ShotSim {
     // so a slope RISING toward +x has nx < 0 and must accelerate the ball
     // toward -x.  The sign here was negated until 2026-07-30, which broke every
     // putt uphill: on a 4% fall a straight putt drifted 1.81 m the wrong way.
-    const gax = G * n[0] * n[1];
-    const gaz = G * n[2] * n[1];
+    //
+    // ROLL_G is the other half of the physics.  A rolling sphere does not
+    // accelerate down a slope at g·sinθ — some of the potential energy goes
+    // into spinning it up, and for a solid sphere (I = 2/5 m r²) the tangential
+    // acceleration is (5/7)·g·sinθ.  Using the full g made every green break
+    // 40% harder than a real one, and a 3 m putt on a 2 % slope moved 56 cm
+    // sideways where a real one moves about 20.
+    const gax = ROLL_G * n[0] * n[1];
+    const gaz = ROLL_G * n[2] * n[1];
 
     let sp = Math.hypot(v.x, v.z);
 

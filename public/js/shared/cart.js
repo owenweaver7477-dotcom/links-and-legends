@@ -25,8 +25,11 @@ export const BODY_LEN = 2.42;
    thighs rotate forward to sit, so it does not shorten; lifting the root to
    cushion height would push the golfer's head clean through the roof. */
 export const SEATS = {
-  driver:    { x: -0.40, y: 0.10, z: 0.545 },
-  passenger: { x:  0.40, y: 0.10, z: 0.545 }
+  // y sets the avatar root so the seated torso lands ON the cushion: the
+  // bench top sits WHEEL_R + 0.27 = 0.515 m up, and the seated pose puts the
+  // torso base 0.597 m above the root, so the root belongs just below ground
+  driver:    { x: -0.40, y: -0.06, z: 0.545 },
+  passenger: { x:  0.40, y: -0.06, z: 0.545 }
 };
 
 /* --------------------------------------------------------------- motion */

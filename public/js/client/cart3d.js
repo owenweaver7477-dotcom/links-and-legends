@@ -100,20 +100,22 @@ const CHASSIS_BOXES = [
   // bonnet and nose
   { w: TRACK, h: 0.30, d: 0.78, x: 0, y: RIDE + 0.26, z: FRONT - 0.10, c: PAINT },
   { w: TRACK - 0.06, h: 0.12, d: 0.16, x: 0, y: RIDE + 0.46, z: FRONT + 0.20, c: TRIM },
-  // bench seat: base and back
+  // bench seat: base and a LOW back — the back must stop at shoulder-blade
+  // height or the riders vanish behind it and the cart looks empty from behind
   { w: TRACK - 0.02, h: 0.14, d: 0.60, x: 0, y: RIDE + 0.20, z: 0.56, c: ROOF, tint: true },
-  { w: TRACK - 0.02, h: 0.58, d: 0.13, x: 0, y: RIDE + 0.54, z: 0.22, c: ROOF, tint: true },
+  { w: TRACK - 0.02, h: 0.42, d: 0.13, x: 0, y: RIDE + 0.46, z: 0.22, c: ROOF, tint: true },
   // dash and steering column
   { w: TRACK - 0.14, h: 0.40, d: 0.10, x: 0, y: RIDE + 0.52, z: 1.16, c: DARK },
   { w: 0.05, h: 0.05, d: 0.30, x: -0.40, y: RIDE + 0.72, z: 1.02, c: CHROME },
   { w: 0.30, h: 0.05, d: 0.05, x: -0.40, y: RIDE + 0.84, z: 0.90, c: DARK },
-  // roof posts
-  { w: 0.06, h: 1.30, d: 0.06, x: -T2 + 0.04, y: RIDE + 0.85, z: 1.18, c: CHROME },
-  { w: 0.06, h: 1.30, d: 0.06, x: T2 - 0.04, y: RIDE + 0.85, z: 1.18, c: CHROME },
-  { w: 0.06, h: 1.30, d: 0.06, x: -T2 + 0.04, y: RIDE + 0.85, z: -0.16, c: CHROME },
-  { w: 0.06, h: 1.30, d: 0.06, x: T2 - 0.04, y: RIDE + 0.85, z: -0.16, c: CHROME },
+  // roof posts — tall enough that a seated head (hat and all) clears the
+  // canopy instead of poking through it
+  { w: 0.06, h: 1.52, d: 0.06, x: -T2 + 0.04, y: RIDE + 0.96, z: 1.18, c: CHROME },
+  { w: 0.06, h: 1.52, d: 0.06, x: T2 - 0.04, y: RIDE + 0.96, z: 1.18, c: CHROME },
+  { w: 0.06, h: 1.52, d: 0.06, x: -T2 + 0.04, y: RIDE + 0.96, z: -0.16, c: CHROME },
+  { w: 0.06, h: 1.52, d: 0.06, x: T2 - 0.04, y: RIDE + 0.96, z: -0.16, c: CHROME },
   // roof
-  { w: TRACK + 0.16, h: 0.07, d: 1.62, x: 0, y: RIDE + 1.50, z: 0.52, c: ROOF, tint: true },
+  { w: TRACK + 0.16, h: 0.07, d: 1.62, x: 0, y: RIDE + 1.72, z: 0.52, c: ROOF, tint: true },
   // rear bag rack
   { w: TRACK - 0.10, h: 0.08, d: 0.44, x: 0, y: RIDE + 0.42, z: -0.34, c: TRIM },
   { w: 0.05, h: 0.34, d: 0.05, x: -T2 + 0.10, y: RIDE + 0.60, z: -0.50, c: CHROME },
