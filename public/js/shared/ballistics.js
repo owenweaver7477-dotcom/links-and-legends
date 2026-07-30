@@ -88,8 +88,14 @@ export class ShotSim {
       z: Math.cos(dir) * speed * Math.cos(lr)
     };
 
-    // spin: backspin about the axis perpendicular to travel, sidespin about vertical
-    const backspin = club.spin * (0.55 + 0.45 * power) * lieSpin;
+    // Spin: backspin about the axis perpendicular to travel, sidespin about
+    // vertical.  A PURE strike earns extra backspin, and the more loft on the
+    // club the more there is to earn — a flushed wedge checks up hard, a
+    // flushed driver barely differs, and nothing extra comes out of a mishit
+    // or an overswing.  This is why a good wedge player can attack pins.
+    const purity = clamp(1 - Math.abs(face) / 6 - Math.max(0, power - 1) * 2.5, 0, 1);
+    const spinReward = 1 + purity * (club.loft / 64) * 0.30;
+    const backspin = club.spin * (0.55 + 0.45 * power) * lieSpin * spinReward;
     const sidespin = face * club.curve * 260 * lieSpin;   // rpm per degree of face
     this.spinBack = backspin * RPM;
     this.spinSide = sidespin * RPM;

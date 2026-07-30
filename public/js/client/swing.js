@@ -6,10 +6,16 @@
      press and drag DOWN   -> backswing, power builds
      drag back UP and let go near the ball -> the strike
 
-   How far sideways you are when you cross the impact line is your strike:
-   dead straight is pure, off to one side opens or closes the face and the
-   ball draws or fades.  Overswinging past 100% costs you accuracy, which is
-   exactly the decision a real golfer makes on a long par 5.
+   The PATH of the drag is the shape of the shot, exactly like a swing plane:
+
+     pull straight back                    -> straight ball
+     pull back angled left or right       -> draw / fade that way; steeper
+                                              angle turns it into a hook / slice
+     drift sideways coming back through   -> strike error on top of the shape
+
+   So a deliberate fade is: pull back a little right, come through clean.
+   Overswinging past 100% costs accuracy, which is exactly the decision a
+   real golfer makes on a long par 5.
    ========================================================================= */
 
 import { clamp } from '../shared/rng.js';
@@ -24,6 +30,8 @@ export const SWING = {
 const BACKSWING_PX = 190;      // full power drag length
 const MAX_OVER = 1.12;         // you can overswing this far
 const FACE_MAX = 9.5;          // degrees of face angle at maximum miss
+const SHAPE_MAX = 7.0;         // degrees available from the backswing path
+const SHAPE_GAIN = 2.6;        // how fast path angle becomes shape
 
 export class SwingController {
   constructor() {
@@ -37,6 +45,8 @@ export class SwingController {
     this.state = SWING.IDLE;
     this.power = 0;
     this.faceDeg = 0;
+    this.shapeDeg = 0;
+    this.downX = 0;
     this.attackDeg = 0;
     this.startX = 0; this.startY = 0;
     this.curX = 0; this.curY = 0;
@@ -51,7 +61,8 @@ export class SwingController {
     this.state = SWING.BACK;
     this.startX = x; this.startY = y;
     this.curX = x; this.curY = y;
-    this.power = 0; this.peak = 0; this.faceDeg = 0;
+    this.power = 0; this.peak = 0; this.faceDeg = 0; this.shapeDeg = 0;
+    this.downX = x;
   }
 
   pointerMove(x, y) {
@@ -64,16 +75,31 @@ export class SwingController {
       // pulling down fills the backswing
       this.power = clamp(dy / BACKSWING_PX, 0, MAX_OVER);
       this.peak = Math.max(this.peak, this.power);
+
+      // The ANGLE of the pull is the shape of the shot.  Normalising by how
+      // far back you are makes it a direction, not a distance — a 15° pull
+      // is the same fade from a half swing as from a full one.  It only
+      // starts reading once the swing is properly under way, so the first
+      // wobble of the drag does not decide your shot.
+      if (this.power > 0.15) {
+        const pathAngle = dx / Math.max(dy, 30);
+        this.shapeDeg = clamp(pathAngle * SHAPE_MAX * SHAPE_GAIN, -SHAPE_MAX, SHAPE_MAX);
+      }
+      this.faceDeg = this.shapeDeg;      // so the meter and the ring show it live
+
       // once you start coming back up, you are into the downswing
       if (this.peak > 0.08 && dy < this.peak * BACKSWING_PX - 14) {
         this.state = SWING.DOWN;
-      }
+        this.downX = x;                  // drift is measured from HERE, so the
+      }                                  // shape you set going back is kept
     }
 
     if (this.state === SWING.DOWN) {
-      // lateral drift as you come through the ball is your strike quality
-      const drift = dx / BACKSWING_PX;
-      this.faceDeg = clamp(drift * FACE_MAX * 2.2, -FACE_MAX, FACE_MAX);
+      // drift sideways coming back through the ball is strike ERROR, layered
+      // on top of the shape you chose going back
+      const drift = (x - this.downX) / BACKSWING_PX;
+      const error = clamp(drift * FACE_MAX * 2.2, -FACE_MAX, FACE_MAX);
+      this.faceDeg = clamp(this.shapeDeg + error, -FACE_MAX * 1.5, FACE_MAX * 1.5);
       // coming through steeply or shallow trims the launch a touch
       this.attackDeg = clamp((this.peak - this.power) * 2.0 - 1.0, -2.5, 2.5);
     }
@@ -86,18 +112,17 @@ export class SwingController {
     const power = this.peak;
     if (power < 0.06) { this.reset(); return null; }
 
-    // Letting go at the top of the backswing PLAYS the shot — dead straight,
-    // with none of the shaping the through-stroke gives you.  Requiring the
-    // return stroke meant an early release silently threw the shot away, and
-    // a golf game where you pull back, let go and nothing happens simply
-    // reads as "I can't hit the ball".
-    const straight = this.state === SWING.BACK;
+    // Letting go at the top of the backswing PLAYS the shot with whatever
+    // shape the pull-back chose and no through-stroke error — the deliberate
+    // draw or fade, struck clean.  Requiring the return stroke meant an early
+    // release silently threw the shot away, which read as "I can't hit it".
+    const raw = this.state === SWING.BACK ? this.shapeDeg : this.faceDeg;
 
     // overswinging past full costs accuracy — the face gets harder to control
     const over = Math.max(0, power - 1);
     const facePenalty = over * 26;
-    const face = straight ? 0 : clamp(this.faceDeg * (1 + over * 2.5)
-      + Math.sign(this.faceDeg || 1) * facePenalty * 0.12, -FACE_MAX * 1.6, FACE_MAX * 1.6);
+    const face = clamp(raw * (1 + over * 2.5)
+      + Math.sign(raw || 1) * facePenalty * 0.12, -FACE_MAX * 1.6, FACE_MAX * 1.6);
 
     const shot = {
       power: Math.min(power, MAX_OVER),
@@ -124,6 +149,7 @@ export class SwingController {
       power: this.state === SWING.BACK ? this.power : this.peak,
       peak: this.peak,
       face: this.faceDeg,
+      shape: this.shapeDeg,
       over: Math.max(0, this.peak - 1)
     };
   }

@@ -345,10 +345,10 @@ function updateLandingDot(now) {
   G.landingOn = true;
 }
 
-const AIM_RATE = 0.48;              // radians per second
+const AIM_RATE = 0.20;              // radians per second — deliberate, not slewing
 function stepAim(dt) {
   if (G.screen !== 'game' || !canSwing()) return;
-  const fine = keys.has('shift') ? 0.22 : 1;
+  const fine = keys.has('shift') ? 0.12 : 1;
   let d = 0;
   if (keys.has('arrowleft')) d -= AIM_RATE * fine * dt;
   if (keys.has('arrowright')) d += AIM_RATE * fine * dt;
@@ -475,12 +475,9 @@ function stepAnim(dt, now) {
     pumpQueue();
     refreshTurnUi();
     if (myTurn()) { clubManual = false; autoClub(); aimAtPin(); rig.reset(); G.view = 'third'; }
-    // your golfer stays where they played from, so set off after the ball
-    if (a.pid === G.myPid && !s.holed) {
-      const aimAt = Math.atan2(G.hole.pin.x - s.x, G.hole.pin.z - s.z);
-      const spot = addressSpot({ x: s.x, z: s.z }, aimAt);
-      walker.goTo(spot.x, spot.z);
-    }
+    // Your golfer stays where they played from.  Deliberately NO auto-jog
+    // after the ball: whether to walk up now, wait for the others to hit, or
+    // fetch the cart is the player's call — F jogs you there whenever.
   }
 }
 
@@ -1181,8 +1178,8 @@ document.getElementById('btnAgain').addEventListener('click', () => Net.again())
 document.getElementById('btnBackLobby').addEventListener('click', () => Net.lobby());
 document.getElementById('clubUp').addEventListener('click', () => stepClub(1));
 document.getElementById('clubDown').addEventListener('click', () => stepClub(-1));
-document.getElementById('aimL').addEventListener('click', () => { swing.nudgeAim(-0.03); refreshAimPreview(true); });
-document.getElementById('aimR').addEventListener('click', () => { swing.nudgeAim(0.03); refreshAimPreview(true); });
+document.getElementById('aimL').addEventListener('click', () => { swing.nudgeAim(-0.009); refreshAimPreview(true); });   // ~0.5°
+document.getElementById('aimR').addEventListener('click', () => { swing.nudgeAim(0.009); refreshAimPreview(true); });
 document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
 /* ===================================================================== */

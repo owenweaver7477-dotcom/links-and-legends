@@ -276,6 +276,58 @@ head('spawning');
   ok('refuses when there is nowhere legal at all', nearestDrivable(all, 0, 0) === null);
 }
 
+/* ============================================================ the swing */
+head('shot shaping — the drag path is the shape');
+{
+  const { SwingController } = await import('../public/js/client/swing.js');
+  const sw = new SwingController();
+  const drag = pts => { sw.enabled = true; sw.reset(); sw.pointerDown(500, 300);
+    for (const [dx, dy] of pts) sw.pointerMove(500 + dx, 300 + dy); };
+
+  drag(Array.from({ length: 10 }, (_, i) => [0, (i + 1) * 17]));
+  ok('a straight pull back is a straight ball', sw.shapeDeg === 0);
+
+  drag(Array.from({ length: 10 }, (_, i) => [(i + 1) * 4, (i + 1) * 17]));
+  const fade = sw.shapeDeg;
+  ok('a gentle pull right is a fade', fade > 2 && fade < 6, fade.toFixed(1) + ' deg');
+
+  drag(Array.from({ length: 10 }, (_, i) => [(i + 1) * 12, (i + 1) * 17]));
+  ok('a hard pull right is a slice, capped', sw.shapeDeg === 7, sw.shapeDeg + ' deg');
+
+  drag(Array.from({ length: 10 }, (_, i) => [-(i + 1) * 12, (i + 1) * 15]));
+  ok('a hard pull left is a hook', sw.shapeDeg === -7, sw.shapeDeg + ' deg');
+
+  // shape chosen going back survives an early release at the top
+  drag(Array.from({ length: 10 }, (_, i) => [(i + 1) * 4, (i + 1) * 17]));
+  const early = sw.pointerUp();
+  ok('early release keeps the deliberate shape',
+     !!early && Math.abs(early.faceDeg - fade) < 0.5,
+     early ? early.faceDeg.toFixed(1) + ' deg' : 'no shot');
+
+  // and the through-stroke stacks error on top of the chosen shape
+  sw.enabled = true; sw.reset(); sw.pointerDown(500, 300);
+  for (let i = 1; i <= 10; i++) sw.pointerMove(500 + i * 4, 300 + i * 17);
+  for (let i = 9; i >= 4; i--) sw.pointerMove(500 + 40 + (9 - i) * 10, 300 + i * 17);
+  ok('through-stroke drift stacks on the shape', sw.faceDeg > sw.shapeDeg + 2,
+     sw.shapeDeg.toFixed(1) + ' -> ' + sw.faceDeg.toFixed(1) + ' deg');
+}
+
+/* ================================================= a pure strike spins more */
+head('spin — loft plus a pure strike earns backspin');
+{
+  const { ShotSim, makeFlatRange } = await import('../public/js/shared/ballistics.js');
+  const T2 = makeFlatRange();
+  const spinOf = (club, face) => new ShotSim(T2,
+    { x: 0, z: 0, clubKey: club, power: 1, aim: 0, faceDeg: face, attackDeg: 0,
+      wind: { speed: 0, dir: 0 } }).spinBack;
+  const lwGain = spinOf('LW', 0) / spinOf('LW', 5);
+  const drGain = spinOf('DR', 0) / spinOf('DR', 5);
+  ok('a flushed lob wedge spins much harder than a mishit', lwGain > 1.15,
+     'x' + lwGain.toFixed(2));
+  ok('the driver barely cares — loft is what earns it', drGain < 1.08,
+     'x' + drGain.toFixed(2));
+}
+
 /* ========================================================== celebrations */
 head('celebrations');
 {

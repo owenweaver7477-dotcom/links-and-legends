@@ -258,42 +258,63 @@ export class Avatar {
     const g = this.golf;
     this.club.visible = !!g;
     if (g && !moving) {
-      let armX, yaw, wrist;
+      // The swing is described by one phase value φ:
+      //   -1..0  backswing (φ = -k, straight off the power meter)
+      //    0..1  strike: hip-led downswing, impact, extension, high finish
+      // Each joint reads φ through its own curve, which is what makes it
+      // read as a body swinging rather than a hinge opening: the hips lead,
+      // the shoulders follow, the wrists release last, and the head stays
+      // down until well after the ball has gone.
+      let phi, wristLag = 0;
       if (g.strikeT == null) {
-        // address -> backswing, k straight off the power meter
-        const k = g.k;
-        armX = -0.60 - 1.80 * k;
-        yaw = -0.16 - 0.62 * k;
-        wrist = -1.05 * k;
+        phi = -g.k;
       } else {
         g.strikeT += dt;
         const t = g.strikeT;
-        const fromX = -0.60 - 1.80 * g.k, fromYaw = -0.16 - 0.62 * g.k, fromW = -1.05 * g.k;
-        if (t < 0.10) {                       // the hit: fast, accelerating
-          const u = (t / 0.10) ** 2;
-          armX = fromX + (0.85 - fromX) * u;
-          yaw = fromYaw + (0.78 - fromYaw) * u;
-          wrist = fromW + (0.35 - fromW) * u;
-        } else if (t < 0.55) {                // hold the follow-through
-          armX = 0.85; yaw = 0.78; wrist = 0.35;
-        } else if (t < 0.85) {                // settle back to address
-          const u = (t - 0.55) / 0.30, e = u * u * (3 - 2 * u);
-          armX = 0.85 + (-0.60 - 0.85) * e;
-          yaw = 0.78 + (-0.16 - 0.78) * e;
-          wrist = 0.35 * (1 - e);
+        const DOWN = 0.10, THRU = 0.16, HOLD = 0.62, SETTLE = 0.95;
+        if (t < DOWN) {                        // top -> impact, accelerating hard
+          const u = (t / DOWN) ** 2;
+          phi = -g.k + (0.12 + g.k) * u;       // arrives just past the ball
+          wristLag = -0.5 * (1 - u) * g.k;     // wrists release into impact
+        } else if (t < THRU) {                 // extension through the ball
+          phi = 0.12 + ((t - DOWN) / (THRU - DOWN)) * 0.55;
+        } else if (t < HOLD) {                 // ride up into the finish
+          const u = (t - THRU) / (HOLD - THRU), e = 1 - (1 - u) * (1 - u);
+          phi = 0.67 + e * 0.33;
+        } else if (t < SETTLE) {               // hold the pose, then settle
+          const u = (t - HOLD) / (SETTLE - HOLD), e = u * u * (3 - 2 * u);
+          phi = 1 - e;                         // back down to address
         } else {
           this.golf = { k: 0, strikeT: null, yawLock: g.yawLock };
-          armX = -0.60; yaw = -0.16; wrist = 0;
+          phi = 0;
         }
       }
-      P.armLx = armX; P.armRx = armX;
-      P.armLz = 0.16; P.armRz = -0.16;         // hands together on the grip
-      P.bodyRx = 0.14;                         // bent slightly over the ball
-      P.yaw = yaw;
-      P.legLx = -0.06; P.legRx = 0.06;
-      P.headRx = 0.32;                         // eyes on the ball
-      P.bodyY = 0;
-      this.club.rotation.x = 0.25 + wrist;
+
+      const b = Math.max(0, -phi);             // how far back
+      const f = Math.max(0, phi);              // how far through
+      // hips and shoulders: the turn away is modest, the turn through is full
+      P.yaw = -0.15 - 0.78 * b + 1.35 * f;
+      // arms: lift going back, sweep low through impact, wrap high to finish
+      const armBack = -0.60 - 1.72 * b;
+      const armThru = -0.60 + f * (f < 0.4 ? 2.2 : 2.2 + (f - 0.4) * 1.4);
+      P.armLx = b > 0 ? armBack : armThru;
+      P.armRx = P.armLx;
+      // the trailing elbow folds going back; both arms fold over the finish
+      P.armLz = 0.16 + 0.30 * b + 0.42 * Math.max(0, f - 0.55);
+      P.armRz = -0.16 - 0.14 * b - 0.42 * Math.max(0, f - 0.55);
+      // spine: tilted over the ball, rising to upright at the finish
+      P.bodyRx = 0.16 - 0.14 * Math.max(0, f - 0.5) * 2;
+      // weight: onto the trail foot going back, hard onto the lead foot through
+      P.bodyRz = 0.05 * b - 0.09 * f;
+      P.legLx = -0.06 - 0.10 * f;
+      P.legRx = 0.06 + 0.28 * f;               // trail heel comes up
+      // eyes on the ball until the ball is long gone
+      P.headRx = 0.32 - Math.max(0, f - 0.6) * 1.05;
+      P.headRy = 0.18 * b - 0.30 * Math.max(0, f - 0.6);
+      P.bodyY = -0.02 * b;                     // sits into the backswing a touch
+      // wrists: hinge going back, release through, rehinge over the shoulder
+      this.club.rotation.x = 0.25 - 1.15 * b + wristLag
+        + (f > 0.55 ? (f - 0.55) * 1.6 : f * 0.5);
       if (g.yawLock != null) this._yaw = g.yawLock;
     } else {
       this.club.rotation.x = 0.25;
