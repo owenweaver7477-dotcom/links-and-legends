@@ -137,6 +137,9 @@ export class GolfScene {
     /* ---- trees ---- */
     for (const mesh of this._buildTrees(hole, terrain, bio)) { g.add(mesh); this._trees.push(mesh); }
 
+    /* ---- foliage: bushes, blooms, grass, rocks, reeds ---- */
+    for (const mesh of this._buildFoliage(hole, terrain, bio)) g.add(mesh);
+
     /* ---- flag, cup, tee markers ---- */
     g.add(this._buildPin(hole, terrain, bio));
     g.add(this._buildTeeMarkers(hole, terrain, bio));
@@ -356,6 +359,183 @@ export class GolfScene {
     m.scale.set(w.rx, w.rz, 1);
     m.userData.mat = mat;
     return m;
+  }
+
+  /* ---------------------------------------------------------- foliage --- */
+  /**
+   * Dress the hole: bushes with blooms, grass tufts, rocks and water reeds,
+   * chosen per biome so a parkland hole reads like Georgia in April and a
+   * links hole like a Scottish shoreline.
+   *
+   * All of it is DECORATION — none of it exists on the server and none of it
+   * touches physics, which is why it can be generated client-side.  It is
+   * still seeded from the hole, so every player sees the identical scenery.
+   * Each decoration kind is one InstancedMesh: the whole dressing layer
+   * costs six to nine draw calls however dense it looks.
+   */
+  _buildFoliage(hole, T, bio) {
+    const rng = mulberry32((hole.terrainSeed ^ 0xf011a6e) >>> 0);
+    const rf = (a, b) => a + rng() * (b - a);
+    const b = hole.bounds;
+
+    // What grows where.  [kind, colours, count, sizes, surfaces]
+    const P = {
+      parkland: {
+        bush: { c: ['#2e6b33', '#39793b'], n: 70, s: [0.7, 1.5] },
+        bloom: { c: ['#e86fa4', '#f2f2ee', '#d4548a'], per: 4 },
+        tuft: { c: ['#4d8a3d', '#5f9c48'], n: 180, s: [0.35, 0.7] },
+        rock: { c: ['#8d8a82'], n: 10, s: [0.4, 0.9] },
+        reed: { c: ['#5d8f4a'], ring: 26 }
+      },
+      links: {
+        bush: { c: ['#6d6b3f', '#7c7a48'], n: 46, s: [0.5, 1.1] },     // heather-gorse scrub
+        bloom: { c: ['#b088c9', '#caa3de'], per: 3 },                  // heather purple
+        tuft: { c: ['#a89c58', '#8f8f4e', '#b3a763'], n: 260, s: [0.4, 0.9] },  // marram
+        rock: { c: ['#7d7f82', '#6e7073'], n: 26, s: [0.5, 1.4] },
+        reed: { c: ['#9a915a'], ring: 20 }
+      },
+      desert: {
+        bush: { c: ['#5d7042', '#6c7f4a'], n: 34, s: [0.5, 1.0] },     // sage scrub
+        bloom: { c: ['#e8c25a'], per: 2 },                             // brittlebush yellow
+        tuft: { c: ['#98915c', '#a89a62'], n: 140, s: [0.35, 0.8] },   // dry bunchgrass
+        rock: { c: ['#a4674a', '#8f5a41', '#b0755a'], n: 44, s: [0.6, 2.0] },  // red rock
+        reed: null                                                     // nothing grows by nothing
+      },
+      alpine: {
+        bush: { c: ['#2f5e35', '#3a6b3e'], n: 52, s: [0.5, 1.1] },
+        bloom: { c: ['#f2f0e6', '#e8c25a', '#7f9fd4'], per: 3 },       // wildflowers
+        tuft: { c: ['#43803c', '#549147'], n: 200, s: [0.35, 0.75] },
+        rock: { c: ['#8f9296', '#7b7f84'], n: 38, s: [0.6, 2.2] },     // granite
+        reed: { c: ['#4d7a45'], ring: 18 }
+      },
+      tropical: {
+        bush: { c: ['#1f7a3d', '#2a8a46'], n: 64, s: [0.7, 1.5] },
+        bloom: { c: ['#e8452f', '#f2803d', '#e8377f'], per: 4 },       // hibiscus
+        tuft: { c: ['#2f9448', '#3aa653'], n: 190, s: [0.4, 0.9] },
+        rock: { c: ['#b3a48c', '#c2b49b'], n: 16, s: [0.4, 1.0] },     // coral stone
+        reed: { c: ['#3f8a4a'], ring: 30 }
+      }
+    }[bio.id] || null;
+    if (!P) return [];
+
+    // where a decoration may stand: the rough bands, never the playing lanes
+    const spots = (n, sizes, kinds) => {
+      const out = [];
+      let guard = 0;
+      while (out.length < n && guard++ < n * 30) {
+        const x = rf(b.minX + 4, b.maxX - 4), z = rf(b.minZ + 4, b.maxZ - 4);
+        const id = T.surfaceAt(x, z).id;
+        if (!kinds.includes(id)) continue;
+        if (T.waterAt(x, z) !== null) continue;
+        out.push({ x, z, s: rf(sizes[0], sizes[1]), rot: rf(0, Math.PI * 2), tone: rng() });
+      }
+      return out;
+    };
+
+    const meshes = [];
+    const put = (list, geo, baseHex, opts = {}) => {
+      if (!list.length) return null;
+      const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+      const inst = new THREE.InstancedMesh(geo, mat, list.length);
+      inst.frustumCulled = true;
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), eul = new THREE.Euler();
+      const pos = new THREE.Vector3(), scl = new THREE.Vector3(), col = new THREE.Color();
+      for (let i = 0; i < list.length; i++) {
+        const d = list[i];
+        pos.set(d.x, T.heightAt(d.x, d.z) + (opts.sink ?? 0) * d.s, d.z);
+        scl.set(d.s * (opts.sx ?? 1), d.s * (opts.sy ?? 1), d.s * (opts.sz ?? 1));
+        eul.set(opts.tilt ? (d.tone - 0.5) * opts.tilt : 0, d.rot, 0);
+        q.setFromEuler(eul);
+        m4.compose(pos, q, scl);
+        inst.setMatrixAt(i, m4);
+        col.set(d.hex || baseHex).offsetHSL(0, (d.tone - 0.5) * 0.08, (d.tone - 0.5) * 0.10);
+        inst.setColorAt(i, col);
+      }
+      inst.instanceMatrix.needsUpdate = true;
+      if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+      inst.castShadow = this.quality === 'quality';
+      meshes.push(inst);
+      return inst;
+    };
+    const pick = arr => arr[(rng() * arr.length) | 0];
+
+    /* bushes: squashed icosahedra, sunk so they sit in the grass */
+    const bushGeo = cached('fol-bush', () => new THREE.IcosahedronGeometry(1, 0));
+    const bushes = spots(P.bush.n, P.bush.s, ['rough', 'deep', 'waste']);
+    for (const d of bushes) d.hex = pick(P.bush.c);
+    put(bushes, bushGeo, P.bush.c[0], { sy: 0.72, sink: 0.10 });
+
+    /* blooms: little tetrahedra scattered over the top of each bush */
+    if (P.bloom) {
+      const bloomGeo = cached('fol-bloom', () => new THREE.TetrahedronGeometry(1, 0));
+      const blooms = [];
+      for (const d of bushes) {
+        if (d.tone < 0.30) continue;              // some bushes stay plain
+        for (let k = 0; k < P.bloom.per; k++) {
+          const a = rng() * Math.PI * 2, r = rng() * d.s * 0.75;
+          blooms.push({
+            x: d.x + Math.cos(a) * r, z: d.z + Math.sin(a) * r,
+            s: 0.10 + rng() * 0.09, rot: rng() * Math.PI,
+            tone: rng(), hex: pick(P.bloom.c),
+            lift: 0.58 * d.s
+          });
+        }
+      }
+      // blooms ride at bush height, so place with their own y
+      if (blooms.length) {
+        const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+        const inst = new THREE.InstancedMesh(bloomGeo, mat, blooms.length);
+        const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), eul = new THREE.Euler();
+        const pos = new THREE.Vector3(), scl = new THREE.Vector3(), col = new THREE.Color();
+        for (let i = 0; i < blooms.length; i++) {
+          const d = blooms[i];
+          pos.set(d.x, T.heightAt(d.x, d.z) + d.lift, d.z);
+          scl.setScalar(d.s);
+          eul.set(d.tone * 2, d.rot, d.tone);
+          q.setFromEuler(eul);
+          m4.compose(pos, q, scl);
+          inst.setMatrixAt(i, m4);
+          col.set(d.hex);
+          inst.setColorAt(i, col);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+        meshes.push(inst);
+      }
+    }
+
+    /* grass tufts: low cones, the cheapest possible "this is rough" signal */
+    const tuftGeo = cached('fol-tuft', () => new THREE.ConeGeometry(1, 1, 5));
+    const tufts = spots(P.tuft.n, P.tuft.s, ['rough', 'deep', 'waste']);
+    for (const d of tufts) d.hex = pick(P.tuft.c);
+    put(tufts, tuftGeo, P.tuft.c[0], { sy: 1.6, tilt: 0.5, sink: 0.35 });
+
+    /* rocks: flattened dodecahedra half-buried in the ground */
+    const rockGeo = cached('fol-rock', () => new THREE.DodecahedronGeometry(1, 0));
+    const rocks = spots(P.rock.n, P.rock.s, ['deep', 'waste', 'rough']);
+    for (const d of rocks) d.hex = pick(P.rock.c);
+    put(rocks, rockGeo, P.rock.c[0], { sy: 0.55, sink: -0.18, tilt: 0.6 });
+
+    /* reeds: rings of tall thin cones hugging each water line */
+    if (P.reed && hole.waters.length) {
+      const reeds = [];
+      for (const w of hole.waters) {
+        for (let i = 0; i < P.reed.ring; i++) {
+          const a = rng() * Math.PI * 2;
+          const rr = 1.04 + rng() * 0.10;         // just outside the bank
+          const ca = Math.cos(w.rot || 0), sa = Math.sin(w.rot || 0);
+          const ex = Math.cos(a) * w.rx * rr, ez = Math.sin(a) * w.rz * rr;
+          const x = w.x + ex * ca - ez * sa, z = w.z + ex * sa + ez * ca;
+          if (T.waterAt(x, z) !== null) continue;                    // never in the drink
+          const id = T.surfaceAt(x, z).id;
+          if (id === 'green' || id === 'tee' || id === 'sand') continue;
+          reeds.push({ x, z, s: 0.5 + rng() * 0.6, rot: rng() * Math.PI, tone: rng(), hex: P.reed.c[0] });
+        }
+      }
+      put(reeds, tuftGeo, P.reed.c[0], { sx: 0.16, sy: 2.6, sz: 0.16, tilt: 0.7, sink: 0.2 });
+    }
+
+    return meshes;
   }
 
   /* ------------------------------------------------------------ trees --- */

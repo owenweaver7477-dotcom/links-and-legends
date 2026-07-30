@@ -1169,6 +1169,13 @@ async function copyLink() {
   HUD.toast(HUD.linkIsLocal()
     ? 'Link copied — but it only works on your network. Run  npm run share  for a public one.'
     : 'Invite link copied.', 'good', 3400);
+  const btn = document.getElementById('btnCopy');
+  if (btn) {
+    btn.classList.add('copied');
+    const was = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.classList.remove('copied'); btn.textContent = was; }, 1800);
+  }
 }
 document.getElementById('btnCopy').addEventListener('click', copyLink);
 document.getElementById('btnStart').addEventListener('click', () => Net.start());

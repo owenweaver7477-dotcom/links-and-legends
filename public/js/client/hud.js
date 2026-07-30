@@ -141,8 +141,11 @@ HUD.setMeter = (m, enabled) => {
   el.mFaceDot.style.left = `calc(${clamp(50 + m.face * 4.4, 2, 98)}% - 2px)`;
   if (!enabled) { el.mLabel.textContent = 'Waiting…'; el.mLabel.classList.remove('hot'); return; }
   if (m.state === 'back') {
-    el.mLabel.textContent = m.power > 1 ? 'Overswinging — accuracy is going' : 'Release up through the ball — the ring is where it lands';
-    el.mLabel.classList.toggle('hot', m.power > 1);
+    const sh = m.shape || 0, a = Math.abs(sh);
+    el.mLabel.textContent = m.power > 1 ? 'Overswinging — accuracy is going'
+      : a < 1.5 ? 'Straight — release up through the ball'
+      : (a < 4.5 ? (sh > 0 ? 'Fade ' : 'Draw ') : (sh > 0 ? 'SLICE ' : 'HOOK ')) + a.toFixed(0) + '°';
+    el.mLabel.classList.toggle('hot', m.power > 1 || a >= 4.5);
   } else if (m.state === 'down') {
     const q = Math.abs(m.face);
     el.mLabel.textContent = q < 1.2 ? 'Pure' : q < 4 ? (m.face < 0 ? 'Slight draw' : 'Slight fade') : (m.face < 0 ? 'Hook' : 'Slice');
@@ -210,7 +213,8 @@ HUD.renderCourses = (courses, selected, isHost, onPick) => {
   for (const c of courses) {
     const b = document.createElement('button');
     b.className = 'ccard' + (c.id === selected ? ' on' : '') + (isHost ? '' : ' locked');
-    b.innerHTML = `<b>${c.name}</b><span class="cr">${c.region}</span>
+    b.innerHTML = `<div class="c-art art-${c.id}"></div>
+      <b>${c.name}</b><span class="cr">${c.region}</span>
       <div class="cd">${c.blurb}</div>
       <div class="cstat">${HOLES_PER_COURSE} holes · par ${c.par} · ${c.yards} yds</div>`;
     if (isHost) b.addEventListener('click', () => onPick(c.id));
@@ -325,6 +329,14 @@ HUD.renderLobby = (room, myPid) => {
     chip.append(sw, nm);
     if (p.pid === room.hostPid) { const t = document.createElement('span'); t.className = 'tag host'; t.textContent = '★ host'; chip.appendChild(t); }
     el.lobbyPlayers.appendChild(chip);
+  }
+  // empty seats, so a lone host sees a lobby waiting for friends rather
+  // than a finished list
+  for (let i = room.players.length; i < Math.min(room.maxPlayers, 4); i++) {
+    const seat = document.createElement('div');
+    seat.className = 'pchip empty';
+    seat.textContent = i === room.players.length ? 'Waiting for a friend…' : 'Open seat';
+    el.lobbyPlayers.appendChild(seat);
   }
   const isHost = room.hostPid === myPid;
   const n = room.players.filter(p => p.connected).length;

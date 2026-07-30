@@ -113,63 +113,101 @@
 
 <!-- ═══════════════════════════════ OVERLAYS ═════════════════════════════ -->
 
-<div class="screen" id="screenHome">
-  <div class="card">
+<div class="screen home" id="screenHome">
+  <div class="scenery" aria-hidden="true">
+    <div class="sky-glow"></div>
+    <div class="hills far"></div>
+    <div class="hills mid"></div>
+    <div class="hills near"></div>
+  </div>
+  <div class="card home">
     <div class="brand">
       <div class="brand-mark">⛳</div>
-      <div><h1>Links &amp; Legends</h1><p class="sub">Five courses · nine holes · up to eight players</p></div>
+      <div>
+        <h1>Links <em>&amp;</em> Legends</h1>
+        <p class="sub">Online multiplayer golf — five courses, nine holes, up to eight friends</p>
+      </div>
     </div>
     <label class="field"><span>Your name</span>
       <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
     <div class="split">
       <div class="split-col">
-        <button class="btn primary big" id="btnCreate">Create room</button>
-        <p class="tiny">You'll be the host and pick the course.</p>
+        <button class="btn primary big" id="btnCreate">Host a round</button>
+        <p class="tiny">You pick the course, friends join with your link.</p>
       </div>
       <div class="or"><span>or</span></div>
       <div class="split-col">
         <label class="field"><span>Room code</span>
           <input id="inpCode" type="text" maxlength="5" placeholder="ABCD" autocomplete="off" spellcheck="false" class="code"></label>
-        <button class="btn big" id="btnJoin">Join room</button>
+        <button class="btn big" id="btnJoin">Join friends</button>
       </div>
     </div>
     <p class="err" id="homeErr"></p>
+    <div class="venues">
+      <span>Claude National</span><i>·</i><span>Cairnmoor Links</span><i>·</i><span>Red Mesa</span><i>·</i><span>Hochkar Alpine</span><i>·</i><span>Palmera Cay</span>
+    </div>
   </div>
 </div>
 
 <div class="screen" id="screenLobby" hidden>
-  <div class="card wide">
-    <div class="lobby-head">
-      <div><h2>Room <span class="codebig" id="lobbyCode">—</span></h2><p class="sub">Pick a course and tee it up</p></div>
-      <div class="linkrow"><input id="lobbyLink" type="text" readonly><button class="btn" id="btnCopy">Copy link</button></div>
-      <p class="tiny sharehint" id="shareHint"></p>
-    </div>
-    <h4 class="lbl">Course</h4>
-    <div class="courses" id="courseList"></div>
-    <h4 class="lbl">Tees</h4>
-    <div class="tees" id="teeList"></div>
+  <div class="card wide lobby">
 
-    <h4 class="lbl">Your ball</h4>
-    <div class="swatches" id="ballColours"></div>
-
-    <h4 class="lbl">Your golfer</h4>
-    <div class="looker" id="lookPicker"></div>
-
-    <h4 class="lbl">Your bag <span id="bagCount"></span></h4>
-    <div class="bag" id="bagList"></div>
-    <div class="bagbar">
-      <button class="btn" id="btnBagReset">Reset to standard</button>
-      <label class="unitsel"><input type="checkbox" id="optMetres"> distances in metres</label>
-      <label class="unitsel">graphics
-        <select id="optQuality">
-          <option value="perf">Performance</option>
-          <option value="quality">Quality</option>
-        </select>
-      </label>
+    <div class="invitehero">
+      <div class="ih-code">
+        <span>Room code</span>
+        <b id="lobbyCode">—</b>
+      </div>
+      <div class="ih-share">
+        <h3>Invite your friends</h3>
+        <p>Send them this link — they open it on their laptop and land straight in this lobby.</p>
+        <div class="linkrow">
+          <input id="lobbyLink" type="text" readonly>
+          <button class="btn primary" id="btnCopy">Copy link</button>
+        </div>
+        <p class="tiny sharehint" id="shareHint"></p>
+      </div>
     </div>
 
-    <h4 class="lbl">Players <span id="lobbyCount"></span></h4>
-    <div class="players" id="lobbyPlayers"></div>
+    <div class="section">
+      <h4 class="lbl">On the tee <span id="lobbyCount"></span></h4>
+      <div class="players" id="lobbyPlayers"></div>
+    </div>
+
+    <div class="section">
+      <h4 class="lbl">Course</h4>
+      <div class="courses" id="courseList"></div>
+      <div class="teerow">
+        <h4 class="lbl slim">Tees</h4>
+        <div class="tees" id="teeList"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4 class="lbl">Your golfer</h4>
+      <div class="kitgrid">
+        <div>
+          <h5 class="sublbl">Outfit</h5>
+          <div class="looker" id="lookPicker"></div>
+        </div>
+        <div>
+          <h5 class="sublbl">Ball</h5>
+          <div class="swatches" id="ballColours"></div>
+        </div>
+      </div>
+      <h5 class="sublbl">Your bag <span id="bagCount"></span></h5>
+      <div class="bag" id="bagList"></div>
+      <div class="bagbar">
+        <button class="btn" id="btnBagReset">Reset to standard</button>
+        <label class="unitsel"><input type="checkbox" id="optMetres"> distances in metres</label>
+        <label class="unitsel">graphics
+          <select id="optQuality">
+            <option value="perf">Performance</option>
+            <option value="quality">Quality</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
     <div class="lobby-actions">
       <button class="btn primary big" id="btnStart">Start round</button>
       <button class="btn big" id="btnLeave">Leave</button>

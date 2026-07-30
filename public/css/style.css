@@ -393,3 +393,125 @@ button.roomtag:active { transform: translateY(1px); }
 .perfhud b { color: #8fe07a; font-weight: 700; }
 .perfhud b.warn { color: #ffc06b; }
 .perfhud b.bad { color: #ff9c8f; }
+
+/* =========================================================================
+   POLISH PASS — the menus.
+   Appended last on purpose: everything here overrides the plainer rules
+   above, so the older styles keep working as fallbacks.
+   ========================================================================= */
+
+/* ------------------------------------------------------------- backdrop */
+.screen { background: linear-gradient(180deg, #0b1a12 0%, #0e2417 55%, #0a150e 100%); }
+.screen.home { overflow: hidden; }
+.scenery { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.sky-glow { position: absolute; left: 50%; top: -32%; width: 130%; height: 90%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at 50% 55%, rgba(255,214,120,.20), rgba(120,190,120,.07) 45%, transparent 70%); }
+.hills { position: absolute; left: -12%; right: -12%; border-radius: 48% 52% 0 0 / 100% 100% 0 0; }
+.hills.far { bottom: -28vh; height: 52vh; background: #12301d; opacity: .8;
+  transform: rotate(-1.6deg); }
+.hills.mid { bottom: -32vh; height: 50vh; background: #16402a; transform: rotate(1.2deg) translateX(4%); }
+.hills.near { bottom: -38vh; height: 52vh; background: #0d2617; transform: rotate(-.8deg) translateX(-3%); }
+
+/* ------------------------------------------------------------- the card */
+.card { background: linear-gradient(180deg, rgba(20,33,25,.97), rgba(11,19,14,.97));
+  border: 1px solid rgba(255,255,255,.10); border-radius: 24px; padding: 30px;
+  box-shadow: 0 40px 110px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.08); }
+.card.home { width: min(540px, 100%); }
+.card.wide { width: min(820px, 100%); }
+.card.lobby { padding: 0; overflow: hidden; }
+.card.lobby > .section, .card.lobby > .lobby-actions, .card.lobby > .tiny { padding-left: 30px; padding-right: 30px; }
+
+.brand { margin-bottom: 24px; gap: 16px; }
+.brand-mark { width: 58px; height: 58px; border-radius: 17px; font-size: 30px;
+  background: linear-gradient(160deg, #3a9553, #1a4a2b);
+  border: 1px solid rgba(140,230,160,.35);
+  box-shadow: 0 10px 26px rgba(30,120,60,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+h1 { font-size: 30px; letter-spacing: -.6px; }
+h1 em { font-style: normal; color: #7ed492; }
+.card.home .sub { font-size: 13px; margin-top: 5px; }
+
+.venues { margin-top: 22px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08);
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  font-size: 10.5px; letter-spacing: 1.6px; text-transform: uppercase; color: #6f8d78; font-weight: 700; }
+.venues i { color: #3d5546; font-style: normal; }
+
+.btn { border-radius: 11px; }
+.btn.primary { background: linear-gradient(180deg, #4cb466, #2e7d43);
+  border-color: rgba(140,230,160,.55); box-shadow: 0 6px 20px rgba(40,150,75,.35), inset 0 1px 0 rgba(255,255,255,.28); }
+.btn.primary:hover { background: linear-gradient(180deg, #58c473, #35904d); box-shadow: 0 8px 26px rgba(40,150,75,.5), inset 0 1px 0 rgba(255,255,255,.28); }
+.btn.big { padding: 13px 18px; font-size: 14.5px; font-weight: 700; letter-spacing: .2px; }
+
+/* --------------------------------------------------------- invite hero */
+.invitehero { display: grid; grid-template-columns: auto 1fr; gap: 26px; align-items: center;
+  padding: 26px 30px; margin: 0;
+  background: linear-gradient(135deg, rgba(46,125,67,.32), rgba(20,60,34,.20) 60%, transparent);
+  border-bottom: 1px solid rgba(255,255,255,.09); }
+.ih-code span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 1.6px;
+  color: #8fbf9c; font-weight: 700; margin-bottom: 6px; }
+.ih-code b { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 44px; letter-spacing: 11px; line-height: 1; color: #8fe07a; padding-right: -11px;
+  text-shadow: 0 0 26px rgba(120,220,150,.45); }
+.ih-share h3 { font-size: 16px; letter-spacing: -.2px; }
+.ih-share > p { font-size: 12.5px; color: #a9c2ae; margin: 3px 0 10px; }
+.ih-share .linkrow { min-width: 0; }
+.ih-share .linkrow input { flex: 1; min-width: 0; font-size: 12px; }
+.ih-share .linkrow .btn { white-space: nowrap; font-weight: 700; }
+.ih-share .linkrow .btn.copied { background: linear-gradient(180deg,#3a8a52,#2e6b41); }
+@media (max-width: 640px) { .invitehero { grid-template-columns: 1fr; gap: 14px; } }
+
+/* ------------------------------------------------------------ sections */
+.section { padding-top: 20px; padding-bottom: 4px; }
+.section + .section { border-top: 1px solid rgba(255,255,255,.06); margin-top: 14px; }
+.lbl { display: flex; align-items: baseline; gap: 8px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1.8px; color: #8fbf9c;
+  font-weight: 800; margin: 2px 0 12px; }
+.lbl.slim { margin-bottom: 8px; }
+.lbl::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(143,191,156,.25), transparent); }
+.sublbl { font-size: 10px; text-transform: uppercase; letter-spacing: 1.4px; color: #7fa088;
+  font-weight: 700; margin: 12px 0 8px; }
+.kitgrid { display: grid; grid-template-columns: 1fr auto; gap: 22px; align-items: start; }
+@media (max-width: 640px) { .kitgrid { grid-template-columns: 1fr; } }
+.teerow { margin-top: 12px; }
+
+/* ------------------------------------------------------- course cards */
+.courses { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.ccard { position: relative; text-align: left; padding: 0; overflow: hidden;
+  border-radius: 14px; border: 1.5px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.04); cursor: pointer; transition: .16s;
+  font: inherit; color: inherit; display: flex; flex-direction: column; }
+.ccard:hover { border-color: rgba(255,255,255,.28); transform: translateY(-2px); }
+.ccard.on { border-color: #6fd48a; box-shadow: 0 0 0 3px rgba(111,212,138,.22), 0 12px 30px rgba(0,0,0,.4); }
+.ccard.locked { cursor: default; }
+.ccard.locked:hover { transform: none; border-color: rgba(255,255,255,.10); }
+.ccard.on.locked { border-color: #6fd48a; }
+.c-art { height: 58px; position: relative; }
+.c-art::after { content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, transparent 40%, rgba(10,18,12,.85)); }
+.art-parkland { background: linear-gradient(180deg, #7db8e8 0%, #a8d4f0 45%, #3f8a4a 46%, #2e6b38 100%); }
+.art-links    { background: linear-gradient(180deg, #b8c4cc 0%, #d4dce0 40%, #8a9b5c 41%, #6d7b4a 100%); }
+.art-desert   { background: linear-gradient(180deg, #f0b878 0%, #f8d4a0 45%, #b07048 46%, #8f5a41 100%); }
+.art-alpine   { background: linear-gradient(180deg, #90b4d8 0%, #c8dce8 35%, #e8eef2 42%, #4a7850 50%, #35603c 100%); }
+.art-tropical { background: linear-gradient(180deg, #58b8d8 0%, #90d8e8 42%, #28a050 43%, #1f7a3d 100%); }
+.ccard b { display: block; padding: 8px 11px 0; font-size: 13.5px; letter-spacing: -.1px; position: relative; z-index: 1; margin-top: -24px; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+.ccard .cr { display: block; padding: 1px 11px 0; font-size: 10px; color: #9fb8a6; letter-spacing: .4px; text-transform: uppercase; font-weight: 700; }
+.ccard .cd { padding: 6px 11px 0; font-size: 11px; color: #a9c2ae; line-height: 1.45; flex: 1; }
+.ccard .cstat { padding: 8px 11px 10px; font-size: 10.5px; color: #7fa088; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------- players */
+.players { gap: 9px; }
+.pchip { display: flex; align-items: center; gap: 9px; padding: 9px 14px 9px 10px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.10); border-radius: 12px;
+  font-size: 13.5px; font-weight: 600; }
+.pchip .sw { width: 20px; height: 20px; border-radius: 7px; box-shadow: inset 0 0 0 2px rgba(0,0,0,.25), 0 0 10px -2px currentColor; }
+.pchip .tag.host { font-size: 9.5px; color: #ffd76b; letter-spacing: .8px; font-weight: 800; }
+.pchip.empty { color: #6f8d78; font-weight: 500; border-style: dashed; background: transparent; }
+
+.lobby-actions { padding-top: 18px; padding-bottom: 22px; display: flex; gap: 10px; }
+.card.lobby > .tiny { padding-bottom: 20px; }
+
+/* A centred flex child taller than the screen gets its top clipped off and
+   unreachable.  flex-start + margin:auto centres when it fits and scrolls
+   properly when it does not. */
+.screen { align-items: flex-start; }
+.card { margin: auto; }
