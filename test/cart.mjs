@@ -355,6 +355,57 @@ head('gear — bought upgrades change the flight, absence changes nothing');
      purchaseBlocked('ball_tour', { coins: 500, gear: { ...NO_GEAR } }) === null);
 }
 
+/* ============================================================== economy */
+head('the coin economy — the document numbers, exactly');
+{
+  const { holeCoins, roundCoins } = await import('../public/js/shared/economy.js');
+  ok('par pays 35', holeCoins(4, 4) === 35);
+  ok('birdie pays 50', holeCoins(3, 4) === 50);
+  ok('eagle pays 80', holeCoins(3, 5) === 80);
+  ok('an ace pays 170', holeCoins(1, 3) === 170);
+  ok('bogey pays 15', holeCoins(5, 4) === 15);
+  ok('a blow-up hole never goes negative', holeCoins(11, 4) === 0);
+  const par4 = { strokes: 4, par: 4 }, birdie = { strokes: 3, par: 4 };
+  const flat9 = roundCoins(Array(9).fill(par4));
+  ok('nine pars: holes + the 100 round bonus, no streak',
+     flat9.total === 9 * 35 + 100 && flat9.streakPct === 0, 'total ' + flat9.total);
+  const hot = roundCoins([par4, birdie, birdie, birdie, birdie, par4, par4, par4, par4]);
+  ok('4 birdies in a row pays a 40% streak bonus', hot.streakPct === 40,
+     hot.streakPct + '%');
+  const clear = roundCoins(Array(9).fill(par4), true);
+  ok('first clear of a course adds 500', clear.total === flat9.total + 500);
+}
+
+/* ================================================================= crew */
+head('the caddie crew — hired stats that actually do things');
+{
+  const { crewEffect, crewPurchase, cartBoost, NO_CREW, CADDIE_COSTS } = await import('../public/js/shared/crew.js');
+  const none = crewEffect(null, 0, 0, { power: 1 });
+  ok('no crew, wooden set: exact identity',
+     none.speed === 1 && none.faceDamp === 0 && none.windDamp === 0 && none.cupBonus === 0);
+  const ace10 = crewEffect({ ...NO_CREW, ace: 10 }, 0, 0, {});
+  ok('Ace at Legend damps 40% of mishit drift', Math.abs(ace10.faceDamp - 0.40) < 1e-9);
+  const br = crewEffect({ ...NO_CREW, bruiser: 10 }, 0, 0, { power: 1 });
+  const brSoft = crewEffect({ ...NO_CREW, bruiser: 10 }, 0, 0, { power: 0.7 });
+  ok('Bruiser only fires on full swings', br.speed > 1.09 && brSoft.speed === 1);
+  const sig = crewEffect(null, 6, 3, {});
+  ok('the Signature Set fully refined is +7.9% ball speed',
+     Math.abs(sig.speed - 1.079) < 1e-9, 'x' + sig.speed.toFixed(3));
+  ok('Pitstop at Legend is +60% cart', Math.abs(cartBoost({ pitstop: 10 }) - 1.6) < 1e-9);
+  // the till
+  const broke = crewPurchase('caddie:ace', { coins: 100, crew: { ...NO_CREW } });
+  ok('hiring needs 500 coins', !!broke.blocked);
+  const rich = crewPurchase('caddie:ace', { coins: 500, crew: { ...NO_CREW } });
+  ok('and 500 is exactly enough', rich.cost === 500 && !rich.blocked);
+  ok('maxing one caddie costs 39,500 total',
+     CADDIE_COSTS.reduce((a, b) => a + b, 0) === 39500);
+  const tier = crewPurchase('club:tier', { coins: 1500, clubTier: 0, crew: { ...NO_CREW } });
+  ok('the Rusty Iron Set costs 1,500', tier.cost === 1500);
+  const p = { coins: 5000, clubTier: 1, refine: 3, crew: { ...NO_CREW } };
+  crewPurchase('club:tier', p).apply(p);
+  ok('tier-up resets refinement, as designed', p.clubTier === 2 && p.refine === 0);
+}
+
 /* ========================================================== celebrations */
 head('celebrations');
 {

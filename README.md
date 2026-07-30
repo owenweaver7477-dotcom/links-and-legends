@@ -272,6 +272,33 @@ mid-round puts you in as a spectator until the next hole.
 
 ---
 
+## Swing Squad: the Caddie Crew and the club ladder
+
+Progression is people, not sliders. The shop in the lobby has two tabs:
+
+**The Caddie Crew** — eight caddies, each governing one stat, hired and
+levelled 1–10 with coins. Ace tightens your mishit drift, Bruiser adds yards
+to full swings, Steady forgives overswings, Roller reads the greens (his
+contour overlay and run-out line are HIS perk), Pitstop tunes the cart, Lucky
+makes the cup grab harder and the rough sit kinder, Gale leans on the wind,
+and Grit steadies your first shot after a bogey. Levelling one caddie to
+Legend costs 39,500 coins across ten levels — a season goal, not a Tuesday.
+
+**The Pro Shop** — a seven-tier club ladder from the Wooden Starter Set to
+the Signature Set, each with its own look on the club in your hands (rope-
+gripped wood, rusty steel, chrome, carbon, tour white, glowing titanium,
+holographic). Three refinements smooth the cost curve inside each tier and
+are deliberately lost on tier-up. The design document's headline percentages
+are scaled to keep golf being golf: the full Signature Set fully refined is
++7.9% ball speed — about 20 honest yards on a drive — not the literal +65%.
+
+**Coins** are earned exactly as the economy document specifies: 20 per hole,
++15 par, +30 birdie, +60 eagle, +150 ace, −5 per stroke over (never below
+zero), +100 for the round, +10% per hole of a 3+ under-par streak (cap 50%),
+and a one-time 500 for the first clear of each course. Every effect is
+applied INSIDE the server's own simulation from the profile it holds — a
+client cannot claim gear, caddies or coins it does not have.
+
 ## Tests
 
 ```bash

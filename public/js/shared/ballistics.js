@@ -14,6 +14,7 @@ import { CLUBS, CLUB_BY_KEY, CARRY } from './clubs.js';
 import { SURFACES } from './terrain.js';
 import { clamp } from './rng.js';
 import { gearEffect } from './gear.js';
+import { crewEffect } from './crew.js';
 
 /* ------------------------------------------------------------- constants */
 const G = 9.80665;
@@ -66,16 +67,23 @@ export class ShotSim {
             : lieSurface.id === 'path' ? 1.0 : 1.0;
     const lieSpin = lieSurface.spinKeep;
 
+    // The Caddie Crew and the club set, applied by whoever runs this sim
+    // from whatever the server has on file.  All exact 1s and 0s when absent.
+    const cfx = this.cfx = crewEffect(shot.crew, shot.clubTier, shot.refine, {
+      power, isPutt: !!club.putter, afterBadHole: !!shot.afterBadHole
+    });
+
     // strike quality: faceDeg is where the face pointed relative to the aim,
-    // attackDeg trims launch (thin vs fat)
-    const face = shot.faceDeg || 0;
+    // attackDeg trims launch (thin vs fat).  Ace and a forgiving set tighten
+    // the face BEFORE physics sees it — a mishit with a good bag mishits less.
+    const face = (shot.faceDeg || 0) * (1 - cfx.faceDamp);
     const attack = shot.attackDeg || 0;
 
     // Equipment: the shot carries the gear the SERVER holds for this player,
     // so an upgraded ball or forged irons change the flight for real — and a
     // shot with no gear multiplies by exactly 1 everywhere.
     const fx = gearEffect(shot.gear, club);
-    let speed = club.speed * power * lieSpeed * fx.speed;
+    let speed = club.speed * power * Math.min(1, lieSpeed + cfx.lieMercy) * fx.speed * cfx.speed;
     let launch = club.launch + attack;
     if (lieSurface.id === 'sand') launch += 5;         // you have to dig it out
     if (lieSurface.id === 'deep' || lieSurface.id === 'rough') launch += 2.5;
@@ -107,9 +115,10 @@ export class ShotSim {
     this.dir0 = dir;
 
     this.wind = shot.wind || { dir: 0, speed: 0 };
+    const windKeep = 1 - cfx.windDamp;               // Gale, reading the gusts
     this.windV = {
-      x: Math.sin(this.wind.dir) * this.wind.speed,
-      z: Math.cos(this.wind.dir) * this.wind.speed
+      x: Math.sin(this.wind.dir) * this.wind.speed * windKeep,
+      z: Math.cos(this.wind.dir) * this.wind.speed * windKeep
     };
 
     this.t = 0;
@@ -363,14 +372,15 @@ export class ShotSim {
     const cup = this.hole.cup;
     const dcup = this.ignoreCup ? Infinity : Math.hypot(p.x - cup.x, p.z - cup.z);
     sp = Math.hypot(v.x, v.z);
-    if (dcup <= cup.r + RADIUS * 0.5 && sp <= HOLE_CAPTURE_SPEED) {
+    const capture = HOLE_CAPTURE_SPEED * (1 + (this.cfx?.cupBonus || 0));
+    if (dcup <= cup.r + RADIUS * 0.5 && sp <= capture) {
       this.events.push({ type: 'holed', x: cup.x, y: p.y, z: cup.z });
       return this._finish({ reason: 'holed', holed: true, penalty: 0, x: cup.x, z: cup.z, lie: 'green' });
     }
     // Too much pace: the ball catches the lip, loses most of its speed and is
     // thrown off line.  This must fire ONCE — applying it every step while the
     // ball is over the hole would be a 400 Hz impulse that scrambles the putt.
-    if (!this._lipped && dcup <= cup.r + RADIUS && sp > HOLE_CAPTURE_SPEED && sp < HOLE_CAPTURE_SPEED * 2.6) {
+    if (!this._lipped && dcup <= cup.r + RADIUS && sp > capture && sp < capture * 2.6) {
       this._lipped = true;
       this.events.push({ type: 'lipout', x: cup.x, y: p.y, z: cup.z });
       // deflect away from whichever side of the hole it was already running

@@ -6,6 +6,7 @@ import { CARRY, CLUBS, CLUB_BY_KEY, BAG_SIZE, DEFAULT_BAG } from '../shared/club
 import { HOLES_PER_COURSE, BALL_COLORS } from '../shared/biomes.js';
 import { CAPS, SHIRTS, SKINS, TROUSERS } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
+import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { toYards, clamp } from '../shared/rng.js';
 
 const $ = id => document.getElementById(id);
@@ -298,26 +299,112 @@ HUD.renderCareer = (prof) => {
     cell(prof.avgPutts == null ? '—' : prof.avgPutts, 'putts / hole');
 };
 
-/** The pro shop: what you own, what you can afford, what comes next. */
+/**
+ * The shop, two tabs: the Caddie Crew (personified stats, levelled 1-10)
+ * and the Pro Shop (the club-tier ladder, refinements, and balls).
+ */
+let shopTab = 'crew';
 HUD.renderShop = (prof, onBuy) => {
   if (!el.shopList) return;
   el.coinBal.textContent = prof ? '🪙 ' + (prof.coins || 0) : '';
   el.shopList.innerHTML = '';
-  const gear = prof?.gear || {};
-  for (const [key, it] of Object.entries(SHOP)) {
-    const owned = (gear[it.slot] || 0) >= it.tier;
-    const blocked = prof ? purchaseBlocked(key, { coins: prof.coins, gear }) : 'Join a room first.';
-    const card = document.createElement('div');
-    card.className = 'shopcard' + (owned ? ' owned' : '');
-    card.innerHTML = `<b>${it.name}</b><span class="sc-blurb">${it.blurb}</span>`;
-    const btn = document.createElement('button');
-    btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
-    btn.textContent = owned ? 'In the bag ✓' : '🪙 ' + it.cost;
-    btn.disabled = owned || !!blocked;
-    if (!owned && blocked) btn.title = blocked;
-    if (!owned && !blocked) btn.addEventListener('click', () => onBuy(key));
-    card.appendChild(btn);
-    el.shopList.appendChild(card);
+
+  const tabs = document.createElement('div');
+  tabs.className = 'shoptabs';
+  for (const [id, label] of [['crew', '⛳ Caddie Crew'], ['pro', '🏌️ Pro Shop']]) {
+    const t = document.createElement('button');
+    t.className = 'shoptab' + (shopTab === id ? ' on' : '');
+    t.textContent = label;
+    t.addEventListener('click', () => { shopTab = id; HUD.renderShop(prof, onBuy); });
+    tabs.appendChild(t);
+  }
+  el.shopList.appendChild(tabs);
+
+  const grid = document.createElement('div');
+  grid.className = 'shop';
+  el.shopList.appendChild(grid);
+  const coins = prof?.coins || 0;
+
+  if (shopTab === 'crew') {
+    const crew = prof?.crew || {};
+    for (const [key, c] of Object.entries(CADDIES)) {
+      const lvl = crew[key] || 0;
+      const cost = caddieCost(lvl);
+      const card = document.createElement('div');
+      card.className = 'shopcard caddie' + (lvl >= CADDIE_MAX ? ' owned' : '');
+      const pips = Array.from({ length: CADDIE_MAX }, (_, i) =>
+        `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
+      card.innerHTML = `
+        <div class="cad-head"><span class="cad-face">${c.emoji}</span>
+          <div><b>${c.name}</b><span class="cad-stat">${c.stat}${lvl >= CADDIE_MAX ? ' · LEGEND' : lvl ? ' · Lv ' + lvl : ''}</span></div>
+        </div>
+        <span class="sc-blurb">${c.blurb}</span>
+        <div class="cad-pips">${pips}</div>
+        ${lvl ? `<span class="cad-now">${c.line(lvl)}</span>` : ''}`;
+      const btn = document.createElement('button');
+      if (lvl >= CADDIE_MAX) {
+        btn.className = 'btn'; btn.textContent = 'Legend ★'; btn.disabled = true;
+      } else {
+        const can = coins >= cost;
+        btn.className = 'btn' + (can ? ' primary' : '');
+        btn.textContent = (lvl ? 'Level up · ' : 'Hire · ') + '🪙 ' + cost;
+        btn.disabled = !can;
+        if (!can) btn.title = 'Costs ' + cost + ' coins — you have ' + coins;
+        else btn.addEventListener('click', () => onBuy('caddie:' + key));
+      }
+      card.appendChild(btn);
+      grid.appendChild(card);
+    }
+  } else {
+    // the club ladder: your set, the refinement, the next rung
+    const tier = prof?.clubTier ?? 0, refine = prof?.refine ?? 0;
+    const cur = CLUB_TIERS[tier];
+    const curCard = document.createElement('div');
+    curCard.className = 'shopcard owned';
+    curCard.innerHTML = `<b>${cur.name}</b><span class="sc-blurb">${cur.blurb}</span>
+      <span class="cad-now">Tier ${tier + 1}/7${refine ? ' · Refinement ' + ['I','II','III'][refine - 1] : ''}</span>`;
+    if (refine < 3) {
+      const rc = REFINE_COSTS(tier)[refine];
+      const rb = document.createElement('button');
+      rb.className = 'btn' + (coins >= rc ? ' primary' : '');
+      rb.textContent = 'Refine ' + ['I','II','III'][refine] + ' · 🪙 ' + rc;
+      rb.disabled = coins < rc;
+      if (coins >= rc) rb.addEventListener('click', () => onBuy('club:refine'));
+      curCard.appendChild(rb);
+    }
+    grid.appendChild(curCard);
+
+    if (tier < 6) {
+      const nxt = CLUB_TIERS[tier + 1];
+      const nc = document.createElement('div');
+      nc.className = 'shopcard';
+      nc.innerHTML = `<b>${nxt.name}</b><span class="sc-blurb">${nxt.blurb}</span>
+        <span class="cad-now">Refinements reset on upgrade — a new set starts raw</span>`;
+      const nb = document.createElement('button');
+      nb.className = 'btn' + (coins >= nxt.cost ? ' primary' : '');
+      nb.textContent = 'Upgrade set · 🪙 ' + nxt.cost;
+      nb.disabled = coins < nxt.cost;
+      if (coins >= nxt.cost) nb.addEventListener('click', () => onBuy('club:tier'));
+      nc.appendChild(nb);
+      grid.appendChild(nc);
+    }
+
+    // the legacy ball and cart lines still live here
+    const gear = prof?.gear || {};
+    for (const [key, it] of Object.entries(SHOP)) {
+      if (it.slot === 'irons' || it.slot === 'woods' || it.slot === 'putter') continue;
+      const owned = (gear[it.slot] || 0) >= it.tier;
+      const blocked = prof ? purchaseBlocked(key, { coins, gear }) : 'Join first.';
+      const card = document.createElement('div');
+      card.className = 'shopcard' + (owned ? ' owned' : '');
+      card.innerHTML = `<b>${it.name}</b><span class="sc-blurb">${it.blurb}</span>`;
+      const btn = document.createElement('button');
+      btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
+      btn.textContent = owned ? 'In the bag ✓' : '🪙 ' + it.cost;
+      btn.disabled = owned || !!blocked;
+      if (!owned && !blocked) btn.addEventListener('click', () => onBuy(key));
+      grid.appendChild(card);
+    }
   }
 };
 

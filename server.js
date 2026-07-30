@@ -26,6 +26,8 @@ import { normaliseLook, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
+import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
+import { settleRound } from './server/profiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -213,6 +215,7 @@ function finishHole(room) {
       fairwayHit: h.par >= 4 ? !!p.holeFairway : null,
       gir: !!p.holeGir
     });
+    p.afterBad = p.scores[room.holeIndex] > h.par;    // Grit steadies the next tee
   }
   room.state = 'holeover';
   room.turnPid = null;
@@ -227,12 +230,21 @@ function nextHole(room) {
     room.state = 'results';
     room.turnPid = null;
     const parTotal = course(room).holes.reduce((a, x) => a + x.par, 0);
+    const pars = course(room).holes.map(x => x.par);
     for (const p of active(room)) {
       const played = p.scores.filter(v => v != null).length;
       const total = p.scores.reduce((a, v) => a + (v ?? 0), 0);
+      const holeScores = p.scores.map((s, i) => s == null ? null : { strokes: s, par: pars[i] }).filter(Boolean);
+      const rc = settleRound(p.pid, room.courseId, holeScores);
       const prof = recordRound(p.pid, total - parTotal, played);
       const sock = p.socketId && io.sockets.sockets.get(p.socketId);
-      if (sock && prof) sock.emit('profile', prof);
+      if (sock && prof) {
+        sock.emit('profile', prof);
+        const bits = ['🪙 +' + rc.total + ' this round'];
+        if (rc.streakPct) bits.push('streak +' + rc.streakPct + '%');
+        if (rc.firstClearBonus) bits.push('first clear +500');
+        sock.emit('toast', { msg: bits.join(' · '), kind: 'good' });
+      }
     }
     broadcastState(room);
     return;
@@ -265,6 +277,7 @@ function snapshot(room) {
       // players:pos channel for the same reason walking positions do: this
       // snapshot goes to everyone on every state change.
       cart: inCart(p) ? (p.cart.s === 'd' ? { s: 'd', r: p.cart.r } : { s: 'p', o: p.cart.o }) : null,
+      clubTier: getProfile(p.pid).clubTier ?? 0,
       connected: p.connected, spectator: p.spectator
     }))
   };
@@ -475,9 +488,9 @@ io.on('connection', socket => {
    */
   socket.on('shop:buy', ({ item } = {}) => {
     const ref = sockets.get(socket.id); if (!ref) return;
-    const why = buyItem(ref.pid, String(item || ''), SHOP, purchaseBlocked);
+    const why = buyItem(ref.pid, String(item || ''), SHOP, purchaseBlocked, crewPurchase);
     if (why) return socket.emit('toast', { msg: why, kind: 'warn' });
-    socket.emit('toast', { msg: SHOP[item].name + ' — in the bag.', kind: 'good' });
+    socket.emit('toast', { msg: 'In the bag.', kind: 'good' });
     socket.emit('profile', publicProfile(ref.pid));
   });
 
@@ -515,9 +528,14 @@ io.on('connection', socket => {
 
     const club = CLUB_BY_KEY[data?.clubKey];
     if (!club) return;
+    const prof = getProfile(p.pid);
     const shot = {
       x: p.x, z: p.z,                                  // the server's ball, not theirs
-      gear: getProfile(p.pid).gear || null,            // the gear WE have on file
+      gear: prof.gear || null,                         // what WE have on file
+      crew: prof.crew || null,
+      clubTier: prof.clubTier ?? 0,
+      refine: prof.refine ?? 0,
+      afterBadHole: !!p.afterBad,                      // Grit's moment
       clubKey: club.key,
       power: clamp(Number(data.power) || 0, 0, 1.12),
       aim: Number(data.aim) || 0,

@@ -12,6 +12,7 @@
    ========================================================================= */
 
 import fs from 'node:fs';
+import { holeCoins, roundCoins } from '../public/js/shared/economy.js';
 import path from 'node:path';
 
 const FILE = path.join(process.cwd(), 'data', 'profiles.json');
@@ -48,6 +49,8 @@ export function getProfile(pid) {
       best: null,               // best round relative to par
       coins: 0, rating: 20,
       gear: { ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 },
+      crew: { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
+      clubTier: 0, refine: 0, cleared: [],
       history: []               // last 20 rounds, [relToPar]
     };
     profiles.set(pid, p);
@@ -62,6 +65,8 @@ export function publicProfile(pid) {
     rounds: p.rounds, best: p.best, coins: p.coins, rating: Math.round(p.rating),
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
+    crew: p.crew || { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
+    clubTier: p.clubTier ?? 0, refine: p.refine ?? 0, cleared: (p.cleared || []).length,
     avgPutts: p.holes ? +(p.putts / p.holes).toFixed(2) : null,
     fairwayPct: p.fairwayChances ? Math.round(p.fairways / p.fairwayChances * 100) : null,
     girPct: p.holes ? Math.round(p.gir / p.holes * 100) : null,
@@ -84,17 +89,29 @@ export function recordHole(pid, h) {
   if (h.strokes === 1) p.aces++;
   else if (rel === -2) p.eagles++;
   else if (rel === -1) p.birdies++;
-  // coins: play well, earn more.  Par 12, birdie 30, eagle 80, ace 250 — and
-  // even a rough hole pays a little, so a beginner still progresses.
-  p.coins += h.strokes === 1 ? 250 : rel <= -2 ? 80 : rel === -1 ? 30 : rel === 0 ? 12 : 4;
+  // the economy document's per-hole payout, shared with the test suite
+  p.coins += holeCoins(h.strokes, h.par);
   saveSoon();
 }
 
 /** Fold a finished ROUND in: rating moves on how you played against par. */
 /** Spend coins on an item.  Returns null on success or a reason string. */
-export function buyItem(pid, item, SHOP, purchaseBlocked) {
+export function buyItem(pid, item, SHOP, purchaseBlocked, crewPurchase) {
   const p = getProfile(pid);
   if (!p.gear) p.gear = { ball: 0, irons: 0, woods: 0, putter: 0 };
+  if (!p.crew) p.crew = { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 };
+  if (p.clubTier == null) { p.clubTier = 0; p.refine = 0; }
+
+  // the Caddie Crew and the club ladder go through the shared till
+  if (String(item).includes(':')) {
+    const res = crewPurchase(item, p);
+    if (res.blocked) return res.blocked;
+    p.coins -= res.cost;
+    res.apply(p);
+    saveSoon();
+    return null;
+  }
+
   const why = purchaseBlocked(item, p);
   if (why) return why;
   const it = SHOP[item];
@@ -102,6 +119,23 @@ export function buyItem(pid, item, SHOP, purchaseBlocked) {
   p.gear[it.slot] = it.tier;
   saveSoon();
   return null;
+}
+
+/**
+ * The end-of-round settlement: the flat round bonus, the streak bonus and
+ * the one-time first-clear reward.  Per-hole coins were paid as they
+ * happened, so only the EXTRAS are added here.
+ * @param holeScores [{strokes, par}]
+ */
+export function settleRound(pid, courseId, holeScores) {
+  const p = getProfile(pid);
+  const firstClear = courseId && !(p.cleared || []).includes(courseId)
+    && holeScores.length >= 9;
+  const rc = roundCoins(holeScores, firstClear);
+  p.coins += rc.total - rc.holes;                  // holes already paid live
+  if (firstClear) { p.cleared = p.cleared || []; p.cleared.push(courseId); }
+  saveSoon();
+  return rc;
 }
 
 export function recordRound(pid, relToPar, holesPlayed) {

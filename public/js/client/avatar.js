@@ -126,7 +126,8 @@ export class Avatar {
     this.club.visible = false;
     this.armR.add(this.club);
     this.clubKey = null;
-    this.setClub('I7');
+    this.clubTierIdx = -1;
+    this.setClub('I7', 0);
 
     this.root.add(this.body);
 
@@ -178,11 +179,31 @@ export class Avatar {
    * and re-tilted, so switching from driver to putter costs nothing and can
    * never pop assets in or out.
    */
-  setClub(key) {
-    if (key === this.clubKey) return;
+  setClub(key, tier = 0) {
+    if (key === this.clubKey && tier === this.clubTierIdx) return;
     const c = CLUB_BY_KEY[key];
     if (!c) return;
     this.clubKey = key;
+
+    // The set's visual identity: rope-gripped wood up to the holographic
+    // Signature finish.  Two materials repainted — no new meshes.
+    if (tier !== this.clubTierIdx) {
+      this.clubTierIdx = tier;
+      const looks = [
+        { shaft: 0x8a6a42, head: 0x6e5432, glow: 0 },          // wooden
+        { shaft: 0x7a6a5c, head: 0x8a5a42, glow: 0 },          // rusty iron
+        { shaft: 0xc9ccd2, head: 0x3a3d42, glow: 0 },          // polished steel
+        { shaft: 0x2e3136, head: 0x1d1f24, glow: 0 },          // carbon
+        { shaft: 0xe8eaee, head: 0x22242a, glow: 0 },          // tour pro
+        { shaft: 0xb8c4cc, head: 0x4a5058, glow: 0x27424e },   // titanium glow
+        { shaft: 0xd8c8f0, head: 0x2a2438, glow: 0x51286e }    // signature holo
+      ];
+      const L = looks[Math.max(0, Math.min(6, tier))];
+      this.mats.chrome.color.setHex(L.shaft);
+      this.mats.headDark.color.setHex(L.head);
+      this.mats.chrome.emissive.setHex(L.glow);
+      this.mats.headDark.emissive.setHex(L.glow);
+    }
 
     // shaft length: drivers are long, wedges short, the putter shortest
     const len = c.putter ? 0.62 : c.type === 'wood' ? 0.92 : c.type === 'hybrid' ? 0.84

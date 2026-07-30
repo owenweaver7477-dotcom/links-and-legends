@@ -10,6 +10,7 @@ import { CartManager } from './carts.js';
 import { reactionFor, REACTION_TIER } from './celebrations.js';
 import { mph } from './cart3d.js';
 import { BOARD_RADIUS } from '../shared/cart.js';
+import { cartBoost, CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
 import { SwingController, SWING } from './swing.js';
@@ -184,15 +185,20 @@ function refreshAimPreview(force) {
   const isPutt = CLUB_BY_KEY[clubKey].putter;
   const toPinD = G.T.toPin(b.x, b.z);
   const myGear = G.profile?.gear || null;
+  const myCrew = G.profile?.crew || null;
+  const myTier = G.profile?.clubTier ?? 0;
+  const myRefine = G.profile?.refine ?? 0;
   const previewPower = isPutt
     ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45, myGear) ?? 1)
     : 1;
-  // The milled putter's perk: the read keeps going past the cup and shows the
-  // run-out.  Without it, the line ends where the hole would swallow the ball.
-  const showRunOut = !isPutt || (myGear?.putter || 0) >= 1;
+  // Roller (or the legacy milled putter) extends the read past the cup,
+  // showing the run-out.  Without either, the line ends where the hole
+  // would swallow the ball.
+  const showRunOut = !isPutt || (myCrew?.roller || 0) >= 4 || (myGear?.putter || 0) >= 1;
   const sim = new ShotSim(G.T, {
     x: b.x, z: b.z, clubKey, power: Math.min(previewPower, 1.12), aim: swing.aim,
-    faceDeg: 0, attackDeg: 0, wind: G.wind, ignoreCup: showRunOut, gear: myGear
+    faceDeg: 0, attackDeg: 0, wind: G.wind, ignoreCup: showRunOut, gear: myGear,
+    crew: myCrew, clubTier: myTier, refine: myRefine
   });
   const r = sim.runToEnd();
 
@@ -226,7 +232,7 @@ function refreshAimPreview(force) {
     const risky = bend > 0.3 || toPinD > 6;
     scene.setAimLineColor(hard ? 0xff7a5c : risky ? 0xffd76b : 0x8fe07a);
     scene.setSlopeRead(b.x, b.z, G.T);
-    scene.setGreenRead(true);
+    scene.setGreenRead((myCrew?.roller || 0) >= 1 || (myGear?.putter || 0) >= 1);
   } else {
     scene.setAimLineColor(0xffffff);
     scene.setSlopeRead(null);
@@ -313,7 +319,7 @@ function updateAvatars(dt) {
       // back exactly as far as the meter says — the swing you see IS the
       // number you are about to play
       if (mode() === 'swing') {
-        av.setClub(clubKey);              // the club in hand IS the club selected
+        av.setClub(clubKey, G.profile?.clubTier ?? 0);   // your club, your set
         av.setAddress(true, swing.aim + Math.PI / 2);
         const m = swing.meter();
         av.setBackswing(m.state === 'back' || m.state === 'down' ? m.power / 1.12 : 0);
@@ -379,7 +385,8 @@ function updateLandingDot(now) {
     x: b.x, z: b.z, clubKey,
     power: Math.min(m.power, 1.12), aim: swing.aim,
     faceDeg: m.face || 0, attackDeg: 0, wind: G.wind,
-    gear: G.profile?.gear || null
+    gear: G.profile?.gear || null, crew: G.profile?.crew || null,
+    clubTier: G.profile?.clubTier ?? 0, refine: G.profile?.refine ?? 0
   }).runToEnd();
   scene.setLanding(r.x, G.T.heightAt(r.x, r.z), r.z, Math.min(1, Math.abs(m.face || 0) / 7));
   G.landingOn = true;
@@ -472,7 +479,7 @@ function beginShot(msg) {
   G.balls[msg.pid] = { x: sim.p.x, y: sim.p.y, z: sim.p.z };
   // the golfer swings on every screen, timed so the ball leaves at the hit
   const swingAv = G.avatars.get(msg.pid);
-  if (swingAv) { swingAv.setClub(msg.shot.clubKey); swingAv.strike(msg.shot.aim); }
+  if (swingAv) { swingAv.setClub(msg.shot.clubKey, player(msg.pid)?.clubTier ?? 0); swingAv.strike(msg.shot.aim); }
   Sound.strike(CLUB_BY_KEY[msg.shot.clubKey], msg.shot.power);
   scene.clearTrace();
   scene.setAimLine(null);
@@ -777,7 +784,8 @@ function toggleCart() {
   const why = carts.board(G.T, G.hole, walker.x, walker.z, walker.heading, G.room.players);
   if (why === 'nowhere') return HUD.toast('No room for a cart here.', 'warn');
   if (why) return;
-  if (carts.body) carts.body.boost = (G.profile?.gear?.cart || 0) >= 1 ? 1.12 : 1;
+  if (carts.body) carts.body.boost = Math.min(1.6,
+    ((G.profile?.gear?.cart || 0) >= 1 ? 1.12 : 1) * cartBoost(G.profile?.crew));
   walker.cancelAuto();
   rig.handOff(carts.body ? carts.body.heading : walker.heading);
   HUD.toast(carts.driving ? 'In the cart — W A S D to drive, C to get out'

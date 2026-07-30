@@ -586,3 +586,22 @@ h1 em { font-style: normal; color: #7ed492; }
 .walkbar { font-size: 13px; }
 .m-label { font-size: 12px; }
 input[type=text] { font-size: 16px; padding: 12px 14px; }
+
+/* ---------------------------------------------------- caddie crew shop */
+.shoptabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.shoptab { font: inherit; font-size: 13px; font-weight: 700; color: #a9c2ae;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.10);
+  border-radius: 10px; padding: 8px 14px; cursor: pointer; transition: .15s; }
+.shoptab:hover { background: rgba(255,255,255,.1); }
+.shoptab.on { color: #fff; background: linear-gradient(180deg, rgba(76,180,102,.35), rgba(46,125,67,.25));
+  border-color: rgba(140,230,160,.4); }
+.cad-head { display: flex; align-items: center; gap: 9px; }
+.cad-face { font-size: 25px; width: 40px; height: 40px; display: grid; place-items: center;
+  background: rgba(255,255,255,.06); border-radius: 11px; }
+.cad-stat { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+  color: #8fbf9c; font-weight: 700; }
+.cad-pips { display: flex; gap: 3px; margin: 2px 0; }
+.cad-pips i { width: 14px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.10); }
+.cad-pips i.on { background: linear-gradient(90deg,#4cb466,#8fe07a); }
+.shopcard.caddie.owned .cad-pips i.on { background: linear-gradient(90deg,#ffd76b,#ffea9e); }
+.cad-now { font-size: 11px; color: #8fe07a; font-weight: 600; }
