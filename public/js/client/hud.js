@@ -5,6 +5,7 @@
 import { CARRY, CLUBS, CLUB_BY_KEY, BAG_SIZE, DEFAULT_BAG } from '../shared/clubs.js';
 import { HOLES_PER_COURSE, BALL_COLORS } from '../shared/biomes.js';
 import { CAPS, SHIRTS, SKINS, TROUSERS } from '../shared/avatars.js';
+import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { toYards, clamp } from '../shared/rng.js';
 
 const $ = id => document.getElementById(id);
@@ -17,10 +18,10 @@ for (const id of [
   'wArrow', 'wSpeed', 'wDesc',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
   'playbar', 'clubName', 'clubCarry', 'mFill', 'mFaceDot', 'mLabel', 'aimTxt', 'mPct',
-  'shotinfo', 'toasts', 'mapwrap', 'mapc',
+  'shotinfo', 'toasts', 'mapwrap', 'mapc', 'minic', 'miniPanel',
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
-  'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox',
+  'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -295,6 +296,29 @@ HUD.renderCareer = (prof) => {
     cell(prof.fairwayPct == null ? '—' : prof.fairwayPct + '%', 'fairways') +
     cell(prof.girPct == null ? '—' : prof.girPct + '%', 'greens in reg') +
     cell(prof.avgPutts == null ? '—' : prof.avgPutts, 'putts / hole');
+};
+
+/** The pro shop: what you own, what you can afford, what comes next. */
+HUD.renderShop = (prof, onBuy) => {
+  if (!el.shopList) return;
+  el.coinBal.textContent = prof ? '🪙 ' + (prof.coins || 0) : '';
+  el.shopList.innerHTML = '';
+  const gear = prof?.gear || {};
+  for (const [key, it] of Object.entries(SHOP)) {
+    const owned = (gear[it.slot] || 0) >= it.tier;
+    const blocked = prof ? purchaseBlocked(key, { coins: prof.coins, gear }) : 'Join a room first.';
+    const card = document.createElement('div');
+    card.className = 'shopcard' + (owned ? ' owned' : '');
+    card.innerHTML = `<b>${it.name}</b><span class="sc-blurb">${it.blurb}</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
+    btn.textContent = owned ? 'In the bag ✓' : '🪙 ' + it.cost;
+    btn.disabled = owned || !!blocked;
+    if (!owned && blocked) btn.title = blocked;
+    if (!owned && !blocked) btn.addEventListener('click', () => onBuy(key));
+    card.appendChild(btn);
+    el.shopList.appendChild(card);
+  }
 };
 
 HUD.renderLook = (look, onPick) => {

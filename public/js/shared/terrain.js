@@ -43,7 +43,9 @@ export class TerrainModel {
     // water surface heights, resolved once (a pond is flat, obviously)
     this.waterLevels = hole.waters.map(w => {
       const base = this._natural(w.x, w.z);
-      return base - (w.depth || 2.2) * 0.35;
+      // Nearly to the brim.  The old level sat most of a metre down, which
+      // left every pond ringed by a wide dry bowl — a dam nobody filled.
+      return base - 0.22;
     });
 
     // green plane, so putting surfaces are smooth and readable

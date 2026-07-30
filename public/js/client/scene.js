@@ -373,7 +373,7 @@ export class GolfScene {
     m.rotation.x = -Math.PI / 2;
     m.rotation.z = -w.rot || 0;
     m.position.set(w.x, level, w.z);
-    m.scale.set(w.rx, w.rz, 1);
+    m.scale.set(w.rx * 1.03, w.rz * 1.03, 1);   // kiss the banks — no dry seam
     m.userData.mat = mat;
     return m;
   }
@@ -805,6 +805,83 @@ export class GolfScene {
     const q = Math.min(1, Math.max(0, quality ?? 0));
     L.material.color.setRGB(1, 1 - q * 0.65, 1 - q * 0.9);
     L.visible = true;
+  }
+
+  /**
+   * The green, read like a caddie's book: light is high ground, dark is low,
+   * with contour lines every band.  Built once per hole from the same
+   * heightAt() the ball rolls on, draped over the actual green surface, and
+   * shown only while the putter is in hand.
+   */
+  setGreenRead(on) {
+    if (!on) { if (this._read) this._read.visible = false; return; }
+    const hole = this.hole, T = this.T;
+    if (!hole) return;
+    const key = hole.number + ':' + (hole.terrainSeed || 0);
+    if (this._read && this._readKey === key) { this._read.visible = true; return; }
+    if (this._read) { this._read.geometry.dispose(); this._read.material.map?.dispose(); this._read.material.dispose(); this.scene.remove(this._read); }
+
+    const g = hole.green;
+    const RX = g.rx + 1.5, RZ = g.rz + 1.5;
+
+    /* paint the elevation bands */
+    const S = 256;
+    const cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const ctx2 = cv.getContext('2d');
+    const img = ctx2.createImageData(S, S);
+    const hs = new Float32Array(S * S);
+    let lo = Infinity, hi = -Infinity;
+    const ca = Math.cos(g.rot || 0), sa = Math.sin(g.rot || 0);
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const u = (i / (S - 1)) * 2 - 1, v = (j / (S - 1)) * 2 - 1;
+      const ex = u * RX, ez = v * RZ;
+      const x = g.x + ex * ca - ez * sa, z = g.z + ex * sa + ez * ca;
+      const h = T.heightAt(x, z);
+      hs[j * S + i] = h;
+      if (u * u + v * v <= 1) { if (h < lo) lo = h; if (h > hi) hi = h; }
+    }
+    const range = Math.max(0.05, hi - lo);
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const u = (i / (S - 1)) * 2 - 1, v = (j / (S - 1)) * 2 - 1;
+      const r2 = u * u + v * v;
+      const k = (j * S + i) * 4;
+      if (r2 > 1) { img.data[k + 3] = 0; continue; }
+      const t = (hs[j * S + i] - lo) / range;              // 0 low -> 1 high
+      // bands: warm light on the high side, cool dark in the hollows
+      img.data[k] = 60 + t * 195;
+      img.data[k + 1] = 70 + t * 175;
+      img.data[k + 2] = 90 + t * 115;
+      // contour lines every sixth of the range
+      const c6 = (t * 6) % 1;
+      const line = c6 < 0.06 || c6 > 0.94 ? 90 : 0;
+      img.data[k] = Math.max(0, img.data[k] - line);
+      img.data[k + 1] = Math.max(0, img.data[k + 1] - line);
+      img.data[k + 2] = Math.max(0, img.data[k + 2] - line * 0.6);
+      // fade at the rim so it sits ON the green rather than stamping it
+      img.data[k + 3] = Math.round(150 * Math.min(1, (1 - Math.sqrt(r2)) * 5));
+    }
+    ctx2.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+
+    /* drape it over the actual green surface */
+    const N = 26;
+    const geo = new THREE.PlaneGeometry(2, 2, N, N);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const u = pos.getX(i), v = pos.getY(i);
+      const ex = u * RX, ez = v * RZ;
+      const x = g.x + ex * ca - ez * sa, z = g.z + ex * sa + ez * ca;
+      pos.setXYZ(i, x, T.heightAt(x, z) + 0.055, z);
+    }
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, depthWrite: false
+    }));
+    mesh.renderOrder = 1;
+    this._read = mesh;
+    this._readKey = key;
+    this.scene.add(mesh);          // persistent scene: rebuilt per hole by key
   }
 
   /** Tint the preview line — the putt read runs green / amber / red. */

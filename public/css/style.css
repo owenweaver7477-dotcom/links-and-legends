@@ -534,3 +534,20 @@ h1 em { font-style: normal; color: #7ed492; }
   letter-spacing: 1px; color: #7fa088; font-weight: 700; }
 .career-empty { font-size: 12px; color: #7fa088; }
 .swbtn.locked { opacity: .45; cursor: default; font-size: 12px; display: grid; place-items: center; }
+
+/* ------------------------------------------------------------ pro shop */
+.coinbal { font-size: 12px; color: #ffd76b; letter-spacing: 0; text-transform: none; font-weight: 700; }
+.shop { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.shopcard { display: flex; flex-direction: column; gap: 5px; padding: 12px;
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.10); border-radius: 12px; }
+.shopcard b { font-size: 13.5px; }
+.shopcard .sc-blurb { font-size: 11px; color: #a9c2ae; line-height: 1.45; flex: 1; }
+.shopcard .btn { margin-top: 7px; font-size: 12.5px; padding: 8px 10px; }
+.shopcard.owned { border-color: rgba(111,212,138,.45); }
+.shopcard.owned .btn { color: #8fe07a; opacity: 1; }
+
+
+/* ------------------------------------------------------------- minimap */
+.minimap { top: 118px; left: 14px; padding: 7px; }
+.minimap canvas { display: block; width: 132px; height: auto; border-radius: 8px; }
+@media (max-width: 640px) { .minimap { display: none; } }

@@ -13,6 +13,7 @@
 import { CLUBS, CLUB_BY_KEY, CARRY } from './clubs.js';
 import { SURFACES } from './terrain.js';
 import { clamp } from './rng.js';
+import { gearEffect } from './gear.js';
 
 /* ------------------------------------------------------------- constants */
 const G = 9.80665;
@@ -70,7 +71,11 @@ export class ShotSim {
     const face = shot.faceDeg || 0;
     const attack = shot.attackDeg || 0;
 
-    let speed = club.speed * power * lieSpeed;
+    // Equipment: the shot carries the gear the SERVER holds for this player,
+    // so an upgraded ball or forged irons change the flight for real — and a
+    // shot with no gear multiplies by exactly 1 everywhere.
+    const fx = gearEffect(shot.gear, club);
+    let speed = club.speed * power * lieSpeed * fx.speed;
     let launch = club.launch + attack;
     if (lieSurface.id === 'sand') launch += 5;         // you have to dig it out
     if (lieSurface.id === 'deep' || lieSurface.id === 'rough') launch += 2.5;
@@ -95,7 +100,7 @@ export class ShotSim {
     // or an overswing.  This is why a good wedge player can attack pins.
     const purity = clamp(1 - Math.abs(face) / 6 - Math.max(0, power - 1) * 2.5, 0, 1);
     const spinReward = 1 + purity * (club.loft / 64) * 0.30;
-    const backspin = club.spin * (0.55 + 0.45 * power) * lieSpin * spinReward;
+    const backspin = club.spin * (0.55 + 0.45 * power) * lieSpin * spinReward * fx.spin;
     const sidespin = face * club.curve * 260 * lieSpin;   // rpm per degree of face
     this.spinBack = backspin * RPM;
     this.spinSide = sidespin * RPM;
@@ -548,10 +553,10 @@ export function simulate(terrain, shot) {
  * This is what the marker on the power meter points at, and it is the single
  * thing that makes the game playable rather than a guessing exercise.
  */
-export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist) {
+export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist, gear = null) {
   const run = p => {
     const r = new ShotSim(terrain, {
-      x, z, clubKey, power: p, aim, faceDeg: 0, attackDeg: 0, wind,
+      x, z, clubKey, power: p, aim, faceDeg: 0, attackDeg: 0, wind, gear,
       ignoreCup: true          // measure how far it ROLLS, not whether it drops
     }).runToEnd();
     // measure along the aim line, so a shot that leaks sideways is not

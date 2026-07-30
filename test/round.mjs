@@ -85,7 +85,26 @@ function maybePlay(c, st) {
     const dist = Math.hypot(h.pin.x - p.x, h.pin.z - p.z);
     const lie = T.surfaceAt(p.x, p.z);
     const club = suggestClub(dist, lie.id, lie.id === 'green');
-    const aim = Math.atan2(h.pin.x - p.x, h.pin.z - p.z);
+    // Aim like a golfer, not a crow: near the hole go at the pin, but from
+    // distance follow the ROUTE — which is what makes a dogleg guarded by
+    // trees playable at all.  Walk the centreline to the point one shot
+    // ahead of wherever on the route we currently are.
+    let aim;
+    if (dist <= 170 || !h.route) {
+      aim = Math.atan2(h.pin.x - p.x, h.pin.z - p.z);
+    } else {
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < h.route.length; i += 4) {
+        const q = h.route[i];
+        const dd = (q[0] - p.x) ** 2 + (q[1] - p.z) ** 2;
+        if (dd < bd) { bd = dd; bi = i; }
+      }
+      const ahead = Math.min(h.total * 0.985, h.cum[bi] + 195);
+      let ti = bi;
+      while (ti < h.cum.length - 1 && h.cum[ti] < ahead) ti++;
+      const t = h.route[ti];
+      aim = Math.atan2(t[0] - p.x, t[1] - p.z);
+    }
 
     // use the same caddie number the human player is shown
     let power = suggestedPower(T, p.x, p.z, club.key, aim, cur.wind, dist + (club.putter ? 0.45 : 0));

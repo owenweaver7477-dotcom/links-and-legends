@@ -47,6 +47,7 @@ export function getProfile(pid) {
       birdies: 0, eagles: 0, aces: 0,
       best: null,               // best round relative to par
       coins: 0, rating: 20,
+      gear: { ball: 0, irons: 0, woods: 0, putter: 0 },
       history: []               // last 20 rounds, [relToPar]
     };
     profiles.set(pid, p);
@@ -60,6 +61,7 @@ export function publicProfile(pid) {
   return {
     rounds: p.rounds, best: p.best, coins: p.coins, rating: Math.round(p.rating),
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
+    gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
     avgPutts: p.holes ? +(p.putts / p.holes).toFixed(2) : null,
     fairwayPct: p.fairwayChances ? Math.round(p.fairways / p.fairwayChances * 100) : null,
     girPct: p.holes ? Math.round(p.gir / p.holes * 100) : null,
@@ -89,6 +91,19 @@ export function recordHole(pid, h) {
 }
 
 /** Fold a finished ROUND in: rating moves on how you played against par. */
+/** Spend coins on an item.  Returns null on success or a reason string. */
+export function buyItem(pid, item, SHOP, purchaseBlocked) {
+  const p = getProfile(pid);
+  if (!p.gear) p.gear = { ball: 0, irons: 0, woods: 0, putter: 0 };
+  const why = purchaseBlocked(item, p);
+  if (why) return why;
+  const it = SHOP[item];
+  p.coins -= it.cost;
+  p.gear[it.slot] = it.tier;
+  saveSoon();
+  return null;
+}
+
 export function recordRound(pid, relToPar, holesPlayed) {
   if (!holesPlayed) return;
   const p = getProfile(pid);

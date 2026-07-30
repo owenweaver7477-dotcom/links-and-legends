@@ -15,6 +15,7 @@ import { CameraRig, fitMapCamera } from './cameras.js';
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
 import { Net } from './net.js';
+import { Sound } from './sound.js';
 
 import { allCourses, getCourse } from '../shared/coursegen.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
@@ -167,7 +168,7 @@ function stepClub(dir) {
 /* ===================================================================== */
 let previewKey = '';
 function refreshAimPreview(force) {
-  if (!canSwing() || !G.T) { scene.setAimLine(null); previewKey = ''; return; }
+  if (!canSwing() || !G.T) { scene.setAimLine(null); scene.setSlopeRead(null); scene.setGreenRead(false); previewKey = ''; return; }
   const now = performance.now();
   if (!force && now - G.lastAimPreview < 80) return;
   G.lastAimPreview = now;
@@ -182,12 +183,16 @@ function refreshAimPreview(force) {
   // caddie aims the read at the hole itself, so the line IS the make line.
   const isPutt = CLUB_BY_KEY[clubKey].putter;
   const toPinD = G.T.toPin(b.x, b.z);
+  const myGear = G.profile?.gear || null;
   const previewPower = isPutt
-    ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45) ?? 1)
+    ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45, myGear) ?? 1)
     : 1;
+  // The milled putter's perk: the read keeps going past the cup and shows the
+  // run-out.  Without it, the line ends where the hole would swallow the ball.
+  const showRunOut = !isPutt || (myGear?.putter || 0) >= 1;
   const sim = new ShotSim(G.T, {
     x: b.x, z: b.z, clubKey, power: Math.min(previewPower, 1.12), aim: swing.aim,
-    faceDeg: 0, attackDeg: 0, wind: G.wind, ignoreCup: true
+    faceDeg: 0, attackDeg: 0, wind: G.wind, ignoreCup: showRunOut, gear: myGear
   });
   const r = sim.runToEnd();
 
@@ -204,6 +209,7 @@ function refreshAimPreview(force) {
   const last = path[path.length - 1];
   if (last) pts.push(new THREE.Vector3(last.x, G.T.heightAt(last.x, last.z) + 0.07, last.z));
   scene.setAimLine(pts);
+  G.lastPreviewEnd = last ? { x: last.x, z: last.z } : null;
 
   // Putt difficulty, read off the simulation itself: how far the borrow
   // carries the ball off the straight line, plus the length of the putt.
@@ -220,9 +226,11 @@ function refreshAimPreview(force) {
     const risky = bend > 0.3 || toPinD > 6;
     scene.setAimLineColor(hard ? 0xff7a5c : risky ? 0xffd76b : 0x8fe07a);
     scene.setSlopeRead(b.x, b.z, G.T);
+    scene.setGreenRead(true);
   } else {
     scene.setAimLineColor(0xffffff);
     scene.setSlopeRead(null);
+    scene.setGreenRead(false);
   }
 
   // The caddie mark: how hard to hit it to finish at the flag.  On a putt aim
@@ -230,7 +238,7 @@ function refreshAimPreview(force) {
   // goes in.
   const toPin = G.T.toPin(b.x, b.z);
   const past = CLUB_BY_KEY[clubKey].putter ? 0.45 : 0;
-  HUD.setTargetPower(suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPin + past));
+  HUD.setTargetPower(suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPin + past, G.profile?.gear || null));
 }
 
 /* ===================================================================== */
@@ -370,20 +378,33 @@ function updateLandingDot(now) {
   const r = new ShotSim(G.T, {
     x: b.x, z: b.z, clubKey,
     power: Math.min(m.power, 1.12), aim: swing.aim,
-    faceDeg: m.face || 0, attackDeg: 0, wind: G.wind
+    faceDeg: m.face || 0, attackDeg: 0, wind: G.wind,
+    gear: G.profile?.gear || null
   }).runToEnd();
   scene.setLanding(r.x, G.T.heightAt(r.x, r.z), r.z, Math.min(1, Math.abs(m.face || 0) / 7));
   G.landingOn = true;
 }
 
-const AIM_RATE = 0.20;              // radians per second — deliberate, not slewing
+/**
+ * Aiming has two speeds in one key: TAP for surgical half-degree nudges,
+ * HOLD and the rate winds up from fine to a fast sweep — so lining up on the
+ * flag and swinging round a dogleg are the same control.  Shift stays
+ * pinned to ultra-fine for putts.
+ */
+const AIM_RATE_TAP = 0.055;         // rad/s at the first touch — fine
+const AIM_RATE_HELD = 0.85;         // rad/s after two seconds — gross
+let aimHeldFor = 0;
 function stepAim(dt) {
-  if (G.screen !== 'game' || !canSwing()) return;
-  const fine = keys.has('shift') ? 0.12 : 1;
-  let d = 0;
-  if (keys.has('arrowleft')) d -= AIM_RATE * fine * dt;
-  if (keys.has('arrowright')) d += AIM_RATE * fine * dt;
-  if (d) { swing.nudgeAim(d); refreshAimPreview(); }
+  if (G.screen !== 'game' || !canSwing()) { aimHeldFor = 0; return; }
+  const l = keys.has('arrowleft'), r = keys.has('arrowright');
+  if (!l && !r) { aimHeldFor = 0; return; }
+  aimHeldFor += dt;
+  const wind = Math.min(1, aimHeldFor / 2.0);
+  let rate = AIM_RATE_TAP + (AIM_RATE_HELD - AIM_RATE_TAP) * wind * wind;
+  if (keys.has('shift')) rate = AIM_RATE_TAP * 0.5;      // ultra fine, always
+  const d = (r ? 1 : 0) - (l ? 1 : 0);
+  swing.nudgeAim(d * rate * dt);
+  refreshAimPreview();
 }
 
 /* A rolling average of real frame time. Averaged over a second so it reads
@@ -452,6 +473,7 @@ function beginShot(msg) {
   // the golfer swings on every screen, timed so the ball leaves at the hit
   const swingAv = G.avatars.get(msg.pid);
   if (swingAv) { swingAv.setClub(msg.shot.clubKey); swingAv.strike(msg.shot.aim); }
+  Sound.strike(CLUB_BY_KEY[msg.shot.clubKey], msg.shot.power);
   scene.clearTrace();
   scene.setAimLine(null);
   rig.kick(0.55);
@@ -465,14 +487,15 @@ function drainEvents(a) {
   const evs = a.sim.events;
   for (; a.eventIdx < evs.length; a.eventIdx++) {
     const e = evs[a.eventIdx];
-    if (e.type === 'splash') { scene.fx.burst('splash', e.x, e.y, e.z, 24); rig.kick(0.4); }
-    else if (e.type === 'tree') scene.fx.burst('leaves', e.x, e.y, e.z, 8);
+    if (e.type === 'splash') { scene.fx.burst('splash', e.x, e.y, e.z, 24); rig.kick(0.4); Sound.splash(); }
+    else if (e.type === 'tree') { scene.fx.burst('leaves', e.x, e.y, e.z, 8); Sound.bounce('grass', e.speed || 8); }
     else if (e.type === 'bounce' || e.type === 'land') {
       if (e.speed > 6) {
         const kind = e.surf === 'sand' ? 'sand' : 'grass';
         scene.fx.burst(kind, e.x, e.y, e.z, e.surf === 'sand' ? 16 : 8);
+        Sound.bounce(e.surf, e.speed);
       }
-    } else if (e.type === 'holed') { scene.fx.burst('grass', e.x, e.y + 0.2, e.z, 20); }
+    } else if (e.type === 'holed') { scene.fx.burst('grass', e.x, e.y + 0.2, e.z, 20); Sound.holed(); }
   }
 }
 
@@ -554,7 +577,10 @@ function fireReaction(pid, strokes, par, capped) {
   const av = G.avatars.get(pid);
   if (!av) return;
   const dur = av.play(name);
-  if (dur) G.celebUntil = Math.max(G.celebUntil || 0, performance.now() + dur * 1000);
+  if (dur) {
+    G.celebUntil = Math.max(G.celebUntil || 0, performance.now() + dur * 1000);
+    Sound.celebrate(REACTION_TIER[name] || 0);
+  }
 }
 
 const celebrating = () => (G.celebUntil || 0) > performance.now();
@@ -576,13 +602,26 @@ function frame(now) {
   // rather than lagging it by one
   const m = mode();
   const seated = m === 'drive' || m === 'ride';
+  // Holing out does NOT root you to the green: you can walk off, fetch the
+  // cart, follow your friends.  The only thing being finished takes away is
+  // the swing, which mode() already refuses.
   walker.enabled = !seated && G.screen === 'game' && !G.mapOpen && !G.anim
-    && G.room?.state === 'playing' && !me()?.finished;
+    && G.room?.state === 'playing';
   walker.arrowsAim = m === 'swing';  // arrows become the aim when in range
 
   if (m === 'drive') {
     carts.readKeys(keys);
+    const wasFlash = carts.hitFlash;
     carts.step(dt, G.T, G.hole);
+    if (carts.hitFlash > wasFlash + 0.3) Sound.crash();
+    Sound.cart(carts.sinking != null ? 0.5 : carts.body?.speed ?? 0);
+    if (carts.sinking != null && carts.sinking < dt * 2) Sound.splash();
+    const shore = carts.resolveSink(dt);
+    if (shore) {
+      walker.reset(shore.x, shore.z, walker.heading);
+      rig.handOff(walker.heading);
+      HUD.toast('🌊 The cart is at the bottom of the lake. You swam.', 'warn', 3600);
+    }
     // the golfer goes where the cart goes, so everything downstream — the
     // roster, the ball gate, the camera — keeps working unchanged
     const seat = carts.body.seat('driver');
@@ -595,6 +634,7 @@ function frame(now) {
     walker.speed = 0;
   } else {
     carts.clearInput();
+    Sound.cart(null);                  // the motor does not idle without you
   }
 
   stepAim(dt);
@@ -623,6 +663,7 @@ function frame(now) {
   // the summary was deferred for a celebration — show it once that is done
   if (G.screen === 'game' && G.room?.state === 'holeover' && !celebrating() && !G.anim) route();
 
+  drawMini(now);
   if (G.mapOpen) drawMap();
   scene.render(scene.camera);
   measureFrame(now);
@@ -733,7 +774,6 @@ function toggleCart() {
     HUD.toast('Out of the cart.', 'info', 1400);
     return;
   }
-  if (me()?.finished) return;
   const why = carts.board(G.T, G.hole, walker.x, walker.z, walker.heading, G.room.players);
   if (why === 'nowhere') return HUD.toast('No room for a cart here.', 'warn');
   if (why) return;
@@ -814,7 +854,7 @@ window.addEventListener('pointermove', ev => {
   if (looking) {
     const dx = ev.clientX - looking.x, dy = ev.clientY - looking.y;
     looking.x = ev.clientX; looking.y = ev.clientY;
-    rig.orbit = clamp(rig.orbit - dx * 0.005, -Math.PI * 0.85, Math.PI * 0.85);
+    rig.orbit = rig.orbit - dx * 0.005;      // free look — all the way round
     rig.pitch = clamp(rig.pitch - dy * 0.0016, -0.25, 0.6);
     return;
   }
@@ -915,7 +955,8 @@ function toggleView() {
 
 /** Jog over to your own ball (F).  Any WASD input takes back control. */
 function jogToMyBall() {
-  if (!G.room || G.room.state !== 'playing' || me()?.finished) return;
+  if (!G.room || G.room.state !== 'playing') return;
+  if (me()?.finished) { HUD.toast('Holed out — wander where you like.', 'info', 1600); return; }
   const b = ballOf(G.myPid);
   if (walker.nearBall(b)) { HUD.toast('You are already at your ball.', 'info', 1200); return; }
   const spot = addressSpot(b, swing.aim);
@@ -966,6 +1007,90 @@ function drawMap() {
     scene.renderer.setSize(prev.x, prev.y, false);
     scene.resize();
   }
+}
+
+/* ===================================================================== */
+/*  MINIMAP — the hole at a glance, always on                             */
+/* ===================================================================== */
+let miniAt = 0;
+function drawMini(now) {
+  if (G.screen !== 'game' || !G.hole) { HUD.el.miniPanel.style.display = 'none'; return; }
+  HUD.el.miniPanel.style.display = '';
+  if (now - miniAt < 250) return;           // 4 Hz is plenty for a map
+  miniAt = now;
+
+  const h = G.hole, b = h.bounds;
+  const spanX = b.maxX - b.minX, spanZ = b.maxZ - b.minZ;
+  const W = 132, H = Math.round(W * spanZ / spanX);
+  const c = HUD.el.minic;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; }
+  c.style.height = H + 'px';
+  const x2 = x => (x - b.minX) / spanX * W * dpr;
+  // flip z so up the canvas is up the hole (tee at the bottom)
+  const z2 = z => (b.maxZ - z) / spanZ * H * dpr;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#11241a';
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  // the fairway ribbon, straight off the route
+  const fw = h.fairwayWidth / spanX * W * dpr;
+  for (const [width, col] of [[fw + h.roughWidth * 0.9 / spanX * W * dpr, '#1a3624'], [fw, '#2e6b38']]) {
+    ctx.beginPath();
+    for (let i = 0; i < h.route.length; i += 2) {
+      const q = h.route[i];
+      i === 0 ? ctx.moveTo(x2(q[0]), z2(q[1])) : ctx.lineTo(x2(q[0]), z2(q[1]));
+    }
+    ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = col; ctx.stroke();
+  }
+
+  const ell = (e, fill) => {
+    ctx.beginPath();
+    ctx.ellipse(x2(e.x), z2(e.z), (e.rx || e.r) / spanX * W * dpr, (e.rz || e.r) / spanZ * H * dpr, -(e.rot || 0), 0, Math.PI * 2);
+    ctx.fillStyle = fill; ctx.fill();
+  };
+  for (const w of h.waters) ell(w, '#1d5c7a');
+  for (const s2 of h.bunkers) ell(s2, '#c9b177');
+  ell(h.green, '#3f9a4d');
+
+  // trees: the hazard the aim line cares about most
+  ctx.fillStyle = 'rgba(16,48,24,0.9)';
+  for (const t of h.trees) {
+    const r = Math.max(1.2, t.r / spanX * W * dpr * 0.8);
+    ctx.beginPath(); ctx.arc(x2(t.x), z2(t.z), r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // my aim line out to where the preview says the ball finishes
+  const meBall = G.balls[G.myPid];
+  if (meBall && G.lastPreviewEnd && canSwing()) {
+    ctx.beginPath();
+    ctx.moveTo(x2(meBall.x), z2(meBall.z));
+    ctx.lineTo(x2(G.lastPreviewEnd.x), z2(G.lastPreviewEnd.z));
+    ctx.lineWidth = 1.4 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(x2(G.lastPreviewEnd.x), z2(G.lastPreviewEnd.z), 2.6 * dpr, 0, Math.PI * 2);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2 * dpr; ctx.stroke();
+  }
+
+  // everyone's ball, mine ringed
+  if (G.room) for (const p of G.room.players) {
+    if (p.spectator) continue;
+    const bl = G.balls[p.pid] || p;
+    ctx.beginPath();
+    ctx.arc(x2(bl.x), z2(bl.z), (p.pid === G.myPid ? 3.2 : 2.4) * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = p.color; ctx.fill();
+    if (p.pid === G.myPid) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3 * dpr; ctx.stroke(); }
+  }
+
+  // the pin
+  ctx.beginPath();
+  ctx.arc(x2(h.pin.x), z2(h.pin.z), 2.2 * dpr, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff5347'; ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = dpr; ctx.stroke();
 }
 
 /* ===================================================================== */
@@ -1051,6 +1176,10 @@ Net.on('reset', () => {
 /** Somebody else moved.  Store it as a target; the frame loop eases toward it. */
 Net.on('pos', d => {
   if (!d || d.pid === G.myPid) return;
+  // A spectator has no golfer on the course, so they get no cart either —
+  // otherwise a mid-round joiner could parade an EMPTY cart around the hole.
+  const sender = player(d.pid);
+  if (!sender || sender.spectator) return;
   carts.feed(d.pid, d.cart, performance.now());
   const r = G.remote.get(d.pid);
   if (!r) return;
@@ -1061,6 +1190,8 @@ Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
   HUD.renderCareer(prof);
+  HUD.renderShop(prof, item => Net.buy(item));
+  previewKey = '';                     // gear may have changed the flight
   if (G.room?.state === 'lobby') renderLobbyAll(G.room);
   // the post-round payout, announced once the results are up
   if (before && prof.coins > before.coins) {
@@ -1159,6 +1290,9 @@ HUD.el.optQuality.addEventListener('change', e => {
   HUD.toast(HUD.quality === 'quality' ? 'Sun shadows on' : 'Performance mode — blob shadows', 'info', 1600);
 });
 
+const sndBox = document.getElementById('optSound');
+sndBox.checked = !Sound.muted();
+sndBox.addEventListener('change', e => Sound.setMuted(!e.target.checked));
 HUD.el.optMetres.checked = HUD.metric;
 HUD.el.optMetres.addEventListener('change', e => {
   HUD.setMetric(e.target.checked);

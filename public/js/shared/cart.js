@@ -276,16 +276,22 @@ export class CartBody {
       }
     }
 
-    /* water and greens and bunkers: the front wheels simply refuse */
-    if (!drivable(terrain, nx, nz)) {
-      const alongX = drivable(terrain, nx, fromZ);
-      const alongZ = drivable(terrain, fromX, nz);
+    /* Greens and bunkers: the wheels simply refuse.  Water does NOT refuse —
+       you are free to drive into the lake, and the cart will do exactly what
+       a cart does in a lake.  Spawning still checks water via drivable(). */
+    const blockedHere = (x, z) => surfFor(terrain.surfaceAt(x, z).id).block
+      && terrain.waterAt(x, z) === null;
+    if (blockedHere(nx, nz)) {
+      const alongX = !blockedHere(nx, fromZ);
+      const alongZ = !blockedHere(fromX, nz);
       if (alongX) { nz = fromZ; }
       else if (alongZ) { nx = fromX; }
       else { nx = fromX; nz = fromZ; }
       this._scrub('bank');
       touching = true;
     }
+    // deep water drags hard at the wheels the moment you are in it
+    if (terrain.waterAt(nx, nz) !== null) this.speed *= Math.max(0, 1 - 3.5 * SUB_DT);
 
     this.x = nx; this.z = nz;
     this._wasTouching = touching;

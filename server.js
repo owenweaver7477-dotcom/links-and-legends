@@ -24,7 +24,8 @@ import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
-import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed } from './server/profiles.js';
+import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem } from './server/profiles.js';
+import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -467,6 +468,19 @@ io.on('connection', socket => {
     socket.emit('toast', { msg: `Offered ${best.name} a lift.`, kind: 'info' });
   });
 
+  /**
+   * The pro shop.  Coins were earned from shots this server simulated, and
+   * the gear bought here is applied by this server inside the simulation —
+   * the client never tells us what equipment it has, it ASKS what it owns.
+   */
+  socket.on('shop:buy', ({ item } = {}) => {
+    const ref = sockets.get(socket.id); if (!ref) return;
+    const why = buyItem(ref.pid, String(item || ''), SHOP, purchaseBlocked);
+    if (why) return socket.emit('toast', { msg: why, kind: 'warn' });
+    socket.emit('toast', { msg: SHOP[item].name + ' — in the bag.', kind: 'good' });
+    socket.emit('profile', publicProfile(ref.pid));
+  });
+
   socket.on('game:start', () => {
     const ref = sockets.get(socket.id); if (!ref) return;
     const room = rooms.get(ref.code); if (!room) return;
@@ -503,6 +517,7 @@ io.on('connection', socket => {
     if (!club) return;
     const shot = {
       x: p.x, z: p.z,                                  // the server's ball, not theirs
+      gear: getProfile(p.pid).gear || null,            // the gear WE have on file
       clubKey: club.key,
       power: clamp(Number(data.power) || 0, 0, 1.12),
       aim: Number(data.aim) || 0,

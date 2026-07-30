@@ -51,7 +51,7 @@ You have a golfer on the course, and you walk them to the ball.
   always "away from me". Hold `Shift` to run. `F` jogs you to your own ball if
   you cannot be bothered.
 - **Take a cart** with `C`. `W`/`S` are the pedals, `A`/`D` steer, `Space` is the
-  handbrake, and `C` again gets you out. It tops out at 21 mph, so it genuinely
+  handbrake, and `C` again gets you out. It tops out at 28 mph, so it genuinely
   beats running, and it will not go on a green or into a bunker — the same
   places you would be shouted at for taking a real one. Hills matter: it slows
   going up and runs away from you coming down.
@@ -68,8 +68,10 @@ You have a golfer on the course, and you walk them to the ball.
 
 Once you are at the ball, you are standing behind it looking down the hole.
 
-- **Aim** with `←`/`→` (hold `Shift` for fine) — the arrows switch from walking to
-  aiming as soon as you are over the ball. Right-drag to look around.
+- **Aim** with `←`/`→` — TAP for a surgical nudge, HOLD and the sweep winds up
+  from fine to fast, `Shift` pins it ultra-fine for putts. The arrows switch
+  from walking to aiming as soon as you are over the ball. Right-drag looks
+  around freely, the whole way round.
 - **Club**: `Q`/`E` or the mouse wheel. One is picked for you from the lie and
   the yardage; override it whenever you like.
 - **Swing**: press the left button and **drag down** to take the club back, then
@@ -94,6 +96,11 @@ at all, deliberately: they are the three most common scores in golf, and
 reacting to them would make a birdie feel like nothing. Every client plays
 everyone's reaction, and the hole summary now waits for it to finish instead of
 dropping a black card over the top.
+
+**The minimap** (top left) shows the whole hole at a glance — fairway, water,
+sand, the tree masses, every ball and the pin, plus a dashed line to where
+your current club and aim would actually finish. Check it before every tee
+shot to see what to avoid.
 
 **Knowing who is who.** The roster in the top right lists everyone with their
 distance to the hole, live. Players you can see on screen get their name floating
@@ -322,15 +329,14 @@ green speed and firmness are per-biome knobs in the same file.
 
 ## Two things worth knowing
 
-**Hole 1 of Claude National plays short for a par 5.** The original top-down map
-is a hairpin dogleg: 541 yards around the corner, but only 220 in a straight
-line. That worked when the ball could only roll — the rough stopped you cutting
-the corner. With real ball flight you can simply fly it, and a good drive leaves
-a wedge. The other 44 holes are all generated with straight-line distance within
-7% of their playing length, so their pars are honest. I kept the geometry exactly
-as your map draws it rather than redesigning your hole; if you would rather it
-played as a par 4, that is one number — `par` in `makeSignatureHole()` in
-[`coursegen.js`](public/js/shared/coursegen.js).
+**Hole 1 is guarded by the sentinels.** The original hairpin dogleg was
+cuttable — 541 yards around the corner but only 220 straight at the pin, and
+with real ball flight a drive over the trees left a wedge in. Two walls of
+old-growth oaks (14–23 m, two to three times the height of the surrounding
+forest) now stand on the inside of the corner, tall enough to catch a driver
+while it is still climbing. Verified in simulation: a driver, 3 wood or 5 iron
+aimed at the pin all finish ~180 m short in the trees, and the honest line
+around the dogleg is untouched.
 
 **Difficulty.** Simulated rounds by a competent bot come in around level par to
 +10 on every course, which is where a decent amateur field lands. `skill` in the

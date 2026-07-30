@@ -22,6 +22,9 @@
     <div class="h-meta" id="hMeta">541 yds</div>
   </div>
 
+  <!-- the hole at a glance: always on, so you can see what to avoid -->
+  <div class="panel minimap" id="miniPanel"><canvas id="minic"></canvas></div>
+
   <!-- distance + lie -->
   <div class="panel dist" id="distPanel">
     <div class="d-big"><span id="dYds">—</span><em>yds to pin</em></div>
@@ -180,6 +183,11 @@
     </div>
 
     <div class="section">
+      <h4 class="lbl">Pro shop <span class="coinbal" id="coinBal"></span></h4>
+      <div class="shop" id="shopList"></div>
+    </div>
+
+    <div class="section">
       <h4 class="lbl">Course</h4>
       <div class="courses" id="courseList"></div>
       <div class="teerow">
@@ -205,6 +213,7 @@
       <div class="bagbar">
         <button class="btn" id="btnBagReset">Reset to standard</button>
         <label class="unitsel"><input type="checkbox" id="optMetres"> distances in metres</label>
+        <label class="unitsel"><input type="checkbox" id="optSound"> sound</label>
         <label class="unitsel">graphics
           <select id="optQuality">
             <option value="perf">Performance</option>

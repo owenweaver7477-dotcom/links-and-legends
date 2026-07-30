@@ -42,6 +42,8 @@ export class CartManager {
     this.riders = new Map();   // passenger pid -> { driver, seenAt }
     this.myPid = null;
     this.input = { throttle: 0, steer: 0, handbrake: false };
+    this.sinking = null;       // seconds under water, once you have driven in
+    this._lastDry = null;
     this.hitFlash = 0;
   }
 
@@ -117,13 +119,34 @@ export class CartManager {
   /** Drive the local cart.  Returns true if we moved something. */
   step(dt, terrain, hole) {
     if (!this.driving || !this.body) return false;
+
+    // Already going down: the only thing driving does now is nothing.
+    if (this.sinking != null) {
+      this.sinking += dt;
+      return true;
+    }
+
     this.body.step(dt, this.input, terrain, hole);
 
-    // Cart-to-cart: each client owns only its OWN cart, so collision is
-    // resolved one-sidedly — we push ourselves out of remote carts and give
-    // back some speed.  Both drivers do this against each other's reported
-    // pose, which converges to a believable mutual bounce without the server
-    // ever arbitrating a crash.
+    // You drove it into the lake.  The cart settles, you swim for the bank,
+    // and the cart is gone — C at the shore buys a fresh one for free.
+    if (terrain.waterAt(this.body.x, this.body.z) !== null && Math.hypot(
+      this.body.x - (this._lastDry?.x ?? this.body.x),
+      this.body.z - (this._lastDry?.z ?? this.body.z)) > 1.2) {
+      this.sinking = 0;
+      this.clearInput();
+      return true;
+    }
+    if (terrain.waterAt(this.body.x, this.body.z) === null) {
+      this._lastDry = { x: this.body.x, z: this.body.z };
+    }
+
+    // Cart-to-cart, with momentum meaning something.  Each client owns only
+    // its OWN cart, so the collision is resolved one-sidedly against the
+    // other cart's reported pose — but WEIGHTED by who was moving: get
+    // T-boned while parked and you are shunted hard along their travel;
+    // ram a parked cart and you barely notice it, they do.  Both clients
+    // run this rule, so the pair converges on a believable exchange.
     const b = this.body;
     for (const [, r] of this.remote) {
       const dx = b.x - r.x, dz = b.z - r.z;
@@ -131,11 +154,32 @@ export class CartManager {
       const R = 2.1;                              // two cart half-lengths, roughly
       if (d2 < R * R && d2 > 1e-9) {
         const d = Math.sqrt(d2);
-        b.x = r.x + (dx / d) * R;
-        b.z = r.z + (dz / d) * R;
-        // an inelastic thump: lose most of your speed, take a small shove back
-        if (Math.abs(b.speed) > 1) this.hitFlash = Math.max(this.hitFlash, Math.min(1, Math.abs(b.speed) / 9));
-        b.speed *= -0.25;
+        const nx = dx / d, nz = dz / d;           // away from them, toward me
+        const mine = Math.abs(b.speed);
+        const theirs = Math.abs(r.speed || 0);
+        // their share of the blame — and of the energy
+        const w = theirs / (mine + theirs + 0.001);
+
+        // I always leave the overlap (I am the only cart I may move)…
+        b.x = r.x + nx * R;
+        b.z = r.z + nz * R;
+
+        // …but what happens to my SPEED depends on who brought the momentum.
+        // Their velocity along the collision line becomes a shove on me.
+        const rvx = Math.sin(r.heading) * (r.speed || 0);
+        const rvz = Math.cos(r.heading) * (r.speed || 0);
+        const shove = (rvx * nx + rvz * nz);      // + = they are driving into me
+        const bvx = Math.sin(b.heading) * b.speed + Math.max(0, shove) * nx * w * 1.1;
+        const bvz = Math.cos(b.heading) * b.speed + Math.max(0, shove) * nz * w * 1.1;
+        const newSpeed = Math.hypot(bvx, bvz);
+        if (newSpeed > 0.3) {
+          b.heading = Math.atan2(bvx, bvz);
+          b.speed = Math.min(newSpeed, 14) * (1 - 0.35 * (1 - w));   // rammer bleeds energy
+        } else {
+          b.speed *= -0.2;
+        }
+        const impact = Math.max(mine, theirs);
+        if (impact > 1.5) this.hitFlash = Math.max(this.hitFlash, Math.min(1, impact / 9));
       }
     }
 
@@ -191,6 +235,23 @@ export class CartManager {
         if (this.driver === pid) { this.seat = null; this.driver = null; }
       }
     }
+  }
+
+  /**
+   * The sink, resolved: after a beat underwater the driver is put back on
+   * the last dry ground and the cart is destroyed.  Returns the spot to
+   * stand on (or null while still afloat / not sinking).
+   */
+  resolveSink(dt) {
+    if (this.sinking == null) return null;
+    if (this.sinking < 1.1) return null;          // still going under
+    const at = this._lastDry || { x: this.body?.x || 0, z: this.body?.z || 0 };
+    this.sinking = null;
+    this.body = null;
+    this.seat = null; this.rider = null; this.driver = null;
+    const mine = this.meshes.get(this.myPid);
+    if (mine) { this.group.remove(mine.root); mine.dispose(); this.meshes.delete(this.myPid); }
+    return { x: at.x, z: at.z };
   }
 
   /** Where a seat is on a remote cart. */
@@ -253,8 +314,10 @@ export class CartManager {
 
     if (this.driving && this.body) {
       const b = this.body;
-      this._mesh(myPid, tintOf(myPid)).update(dt, b, terrain.heightAt(b.x, b.z),
-        terrain.normalAt(b.x, b.z, 1.15));
+      const m = this._mesh(myPid, tintOf(myPid));
+      const sinkDepth = this.sinking != null ? Math.min(1.6, this.sinking * 1.5) : 0;
+      m.update(dt, b, terrain.heightAt(b.x, b.z) - sinkDepth, terrain.normalAt(b.x, b.z, 1.15));
+      if (this.sinking != null) m.tilt.rotation.x = Math.min(0.5, this.sinking * 0.6);
     } else {
       const mine = this.meshes.get(myPid);
       if (mine && !this.remote.has(myPid)) {
@@ -291,6 +354,7 @@ export class CartManager {
     this.remote.clear();
     this.riders.clear();
     this.body = null; this.seat = null; this.rider = null; this.driver = null;
+    this.sinking = null;
     this.clearInput();
   }
 }

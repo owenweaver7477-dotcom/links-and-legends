@@ -64,6 +64,7 @@ Net.prefs = p => Net.socket.emit('player:prefs', p);
 Net.setLook = look => Net.socket.emit('player:look', { look });
 Net.move = (x, z, rot, moving, cart) => Net.socket.emit('player:move', { x, z, rot, moving, cart });
 Net.hail = () => Net.socket.emit('cart:hail');
+Net.buy = item => Net.socket.emit('shop:buy', { item });
 Net.start = () => Net.socket.emit('game:start');
 Net.next = () => Net.socket.emit('game:next');
 Net.again = () => Net.socket.emit('game:again');

@@ -198,12 +198,15 @@ head('surfaces');
   drive(T, c, GO, 12);
   ok('cannot drive onto the putting surface', c.x <= 10.001, `stopped at x ${c.x.toFixed(2)}`);
 
-  // and must not end up in a lake
+  // Water is deliberately ENTERABLE — driving in is how you sink the cart —
+  // but it drags hard at the wheels the moment you are in.
   const W = flat();
   W.waterAt = (x) => (x > 8 ? 0 : null);
   const c2 = new CartBody(0, 0, Math.PI / 2);
   drive(W, c2, GO, 12);
-  ok('cannot drive into water', c2.x <= 8.001, `stopped at x ${c2.x.toFixed(2)}`);
+  ok('CAN drive into water (to its doom)', c2.x > 8, `reached x ${c2.x.toFixed(2)}`);
+  ok('but water drags it down to a crawl', Math.abs(c2.speed) < 4,
+     `${c2.speed.toFixed(1)} m/s in the water vs ${MAX_FWD} dry`);
 }
 
 /* ================================================================ trees */
@@ -326,6 +329,30 @@ head('spin — loft plus a pure strike earns backspin');
      'x' + lwGain.toFixed(2));
   ok('the driver barely cares — loft is what earns it', drGain < 1.08,
      'x' + drGain.toFixed(2));
+}
+
+/* ================================================================= gear */
+head('gear — bought upgrades change the flight, absence changes nothing');
+{
+  const { ShotSim, makeFlatRange } = await import('../public/js/shared/ballistics.js');
+  const { gearEffect, purchaseBlocked, SHOP, NO_GEAR } = await import('../public/js/shared/gear.js');
+  const T3 = makeFlatRange();
+  const fire = gear => new ShotSim(T3, { x:0, z:0, clubKey:'DR', power:1, aim:0,
+    faceDeg:0, attackDeg:0, wind:{speed:0,dir:0}, gear }).runToEnd().carry;
+  const base = fire(null);
+  const kitted = fire({ ball:2, irons:1, woods:1, putter:1 });
+  ok('no gear means the stock ball exactly', Math.abs(fire(NO_GEAR) - base) < 1e-9);
+  ok('the full bag buys a few honest yards', kitted > base + 2 && kitted < base + 14,
+     `${base.toFixed(1)} -> ${kitted.toFixed(1)} m`);
+  const fx = gearEffect({ ball:2, irons:1, woods:1 }, { type:'iron', loft:34 });
+  ok('multipliers stay modest', fx.speed < 1.04 && fx.spin < 1.06,
+     `speed x${fx.speed.toFixed(3)}, spin x${fx.spin.toFixed(3)}`);
+  ok('a broke player cannot buy',
+     purchaseBlocked('ball_tour', { coins: 10, gear: { ...NO_GEAR } }) !== null);
+  ok('tiers require their prerequisite',
+     purchaseBlocked('ball_pro', { coins: 99999, gear: { ...NO_GEAR } }) !== null);
+  ok('a funded player can',
+     purchaseBlocked('ball_tour', { coins: 500, gear: { ...NO_GEAR } }) === null);
 }
 
 /* ========================================================== celebrations */

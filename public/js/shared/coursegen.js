@@ -534,7 +534,13 @@ function makeSignatureHole(bio) {
     { x: 726, z: 906, rx: 266, rz: 300, n: 48 },
     { x: 1086, z: 706, rx: 150, rz: 262, n: 22 },
     { x: 520, z: 1410, rx: 330, rz: 180, n: 26 },
-    { x: 1120, z: 560, rx: 120, rz: 120, n: 10 }
+    { x: 1120, z: 560, rx: 120, rz: 120, n: 10 },
+    // The sentinels.  The dogleg used to be cuttable — 201 m straight at the
+    // pin on a 500 m par 5 — so two walls of towering oaks now stand on the
+    // inside of the corner, tall enough to catch a driver while it is still
+    // climbing.  Play the hole the way it bends.
+    { x: 560, z: 436, rx: 160, rz: 200, n: 24, tall: [15, 23] },
+    { x: 742, z: 410, rx: 170, rz: 210, n: 26, tall: [14, 21] }
   ];
   const dist2route = makeRouteDistanceFn(hole);
   const corridor = hole.fairwayWidth / 2 + 8;
@@ -556,7 +562,8 @@ function makeSignatureHole(bio) {
       for (const ww of waters) if (inEllipse(x, z, ww, 6)) { bad = true; break; }
       if (bad) continue;
       const species = rk.pick(bio.treeSpecies);
-      const h = rk.f(bio.treeHeight[0], bio.treeHeight[1]);
+      // 'tall' clusters are old growth: two to three times the normal canopy
+      const h = cl.tall ? rk.f(cl.tall[0], cl.tall[1]) : rk.f(bio.treeHeight[0], bio.treeHeight[1]);
       hole.trees.push({ x, z, species, h, r: h * 0.34, rot: rk.f(0, Math.PI * 2), tone: rk.f(0, 1) });
       placed++;
     }
