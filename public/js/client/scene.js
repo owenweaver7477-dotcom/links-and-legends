@@ -10,6 +10,7 @@ import * as THREE from '/vendor/three.module.js';
 import { buildSurfaceTexture } from './surfacemap.js';
 import { mulberry32, clamp, lerp, fbm, smoothstep } from '../shared/rng.js';
 import { BALL_RADIUS } from '../shared/ballistics.js';
+import { sharedBlobTexture } from './avatar.js';
 
 const GRID_STEP = 2.6;          // metres between terrain vertices
 const _fwd = new THREE.Vector3();
@@ -23,7 +24,7 @@ export class GolfScene {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.12;
     // Shadow maps are the single most expensive thing here — a whole extra
     // pass over every caster — so they are OFF by default.  Avatars and balls
     // carry blob shadows instead, which cost one transparent quad each.
@@ -134,8 +135,14 @@ export class GolfScene {
       this._water.push(m);
     }
 
+    /* ---- clouds ---- */
+    this.clouds = this._buildClouds(hole, bio);
+    if (this.clouds) g.add(this.clouds);
+
     /* ---- trees ---- */
     for (const mesh of this._buildTrees(hole, terrain, bio)) { g.add(mesh); this._trees.push(mesh); }
+    const treeShade = this._buildTreeShadows(hole, terrain);
+    if (treeShade) g.add(treeShade);
 
     /* ---- foliage: bushes, blooms, grass, rocks, reeds ---- */
     for (const mesh of this._buildFoliage(hole, terrain, bio)) g.add(mesh);
@@ -161,7 +168,7 @@ export class GolfScene {
       if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
       if (o.material) {
         const mats = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of mats) { if (m.map) m.map.dispose(); m.dispose(); }
+        for (const m of mats) { if (m.map && !m.map.userData.shared) m.map.dispose(); m.dispose(); }
       }
     });
     this.scene.remove(this.holeGroup);
@@ -188,11 +195,16 @@ export class GolfScene {
         uniform vec3 top, bot, sunCol, sunDir;
         varying vec3 vDir;
         void main(){
-          float h = clamp(vDir.y*0.5+0.5, 0.0, 1.0);
+          vec3 nd = normalize(vDir);
+          float h = clamp(nd.y*0.5+0.5, 0.0, 1.0);
           vec3 c = mix(bot, top, pow(h, 0.72));
-          float d = max(dot(normalize(vDir), normalize(sunDir)), 0.0);
-          c += sunCol * pow(d, 260.0) * 1.6;              // the sun itself
-          c += sunCol * pow(d, 5.0) * 0.10;               // glow around it
+          // a pale haze band sitting on the horizon, the way real distance reads
+          float horizon = 1.0 - smoothstep(0.0, 0.16, abs(nd.y));
+          c = mix(c, mix(bot, vec3(1.0), 0.45), horizon * 0.38);
+          float d = max(dot(nd, normalize(sunDir)), 0.0);
+          c += sunCol * pow(d, 900.0) * 2.4;              // the disc itself, small and hot
+          c += sunCol * pow(d, 90.0) * 0.55;              // inner bloom
+          c += sunCol * pow(d, 6.0) * 0.14;               // wide warm wash
           gl_FragColor = vec4(c, 1.0);
         }`
     });
@@ -350,7 +362,12 @@ export class GolfScene {
           uniform float uTime; varying vec2 vRip;`)
         .replace('#include <dithering_fragment>', `#include <dithering_fragment>
           float r = sin(vRip.x*26.0 + uTime*2.2) * sin(vRip.y*21.0 - uTime*1.7);
-          gl_FragColor.rgb += vec3(0.06,0.09,0.10) * smoothstep(0.55, 1.0, r);`);
+          gl_FragColor.rgb += vec3(0.06,0.09,0.10) * smoothstep(0.55, 1.0, r);
+          // depth read: dark middle, paler shallows, a breathing foam line at the bank
+          float rad = length(vRip);
+          gl_FragColor.rgb *= mix(0.72, 1.18, smoothstep(0.15, 1.0, rad));
+          float foam = smoothstep(0.965, 0.995, rad + sin(atan(vRip.y, vRip.x)*9.0 + uTime*0.8)*0.006);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.92, 0.97, 0.98), foam * 0.55);`);
     };
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
@@ -359,6 +376,57 @@ export class GolfScene {
     m.scale.set(w.rx, w.rz, 1);
     m.userData.mat = mat;
     return m;
+  }
+
+  /* ----------------------------------------------------------- clouds --- */
+  /**
+   * A dozen low-poly clouds drifting slowly with the wind.  Each cloud is
+   * three squashed icosahedra; the whole sky is ONE InstancedMesh, so it
+   * costs a single draw call.  Seeded from the hole, like everything else.
+   */
+  _buildClouds(hole, bio) {
+    const rng = mulberry32((hole.terrainSeed ^ 0xc10d) >>> 0);
+    const density = bio.cloudDensity ?? 1;
+    const count = Math.round(10 * density);
+    if (!count) return null;
+
+    const geo = cached('cloud-puff', () => new THREE.IcosahedronGeometry(1, 0));
+    // Self-lit: a cloud is lit by the whole sky, not by our one sun, and
+    // Lambert-shaded puffs come out looking like grey boulders.
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xf7fafc, fog: false, transparent: true, opacity: 0.88
+    });
+    const inst = new THREE.InstancedMesh(geo, mat, count * 3);
+    inst.frustumCulled = false;              // they wrap around the whole sky
+    const b = hole.bounds;
+    const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), eul = new THREE.Euler();
+    const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+    const drift = [];
+    let k = 0;
+    for (let i = 0; i < count; i++) {
+      const a = rng() * Math.PI * 2;
+      const r = 470 + rng() * 640;      // never close enough to loom
+      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      const y = 230 + rng() * 150;
+      const s = 22 + rng() * 34;
+      for (let p = 0; p < 3; p++) {
+        const off = p === 0 ? 0 : (p === 1 ? -0.75 : 0.72);
+        pos.set(x + off * s + (rng() - 0.5) * 8, y + (p ? -s * 0.16 : 0), z + (rng() - 0.5) * s * 0.5);
+        scl.set(s * (p ? 0.62 : 1), s * (p ? 0.34 : 0.45), s * (p ? 0.55 : 0.8));
+        eul.set(0, rng() * Math.PI, 0);
+        q.setFromEuler(eul);
+        m4.compose(pos, q, scl);
+        inst.setMatrixAt(k, m4);
+        drift.push({ i: k, baseX: pos.x, z: pos.z, y: pos.y, sx: scl.x, sy: scl.y, sz: scl.z, ry: eul.y, speed: 0.9 + rng() * 1.4 });
+        k++;
+      }
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    inst.userData.drift = drift;
+    inst.userData.span = (b.maxX - b.minX) / 2 + 950;
+    inst.userData.cx = cx;
+    return inst;
   }
 
   /* ---------------------------------------------------------- foliage --- */
@@ -536,6 +604,34 @@ export class GolfScene {
     }
 
     return meshes;
+  }
+
+  /**
+   * A soft dark disc under every tree — one instanced draw call for the whole
+   * forest.  This is the cheapest trick in the book and the one that makes
+   * the biggest difference: without a contact shadow, trees float.
+   */
+  _buildTreeShadows(hole, T) {
+    if (!hole.trees.length) return null;
+    const geo = cached('tree-blob', () => new THREE.CircleGeometry(1, 16));
+    const mat = new THREE.MeshBasicMaterial({
+      map: sharedBlobTexture(), transparent: true, depthWrite: false, opacity: 0.5
+    });
+    const inst = new THREE.InstancedMesh(geo, mat, hole.trees.length);
+    inst.renderOrder = 1;
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+    q.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+    const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+    for (let i = 0; i < hole.trees.length; i++) {
+      const t = hole.trees[i];
+      const r = Math.max(1.1, t.r * (t.species === 'palm' ? 3.2 : 1.15));
+      pos.set(t.x, T.heightAt(t.x, t.z) + 0.05, t.z);
+      scl.set(r, r, 1);
+      m4.compose(pos, q, scl);
+      inst.setMatrixAt(i, m4);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    return inst;
   }
 
   /* ------------------------------------------------------------ trees --- */
@@ -825,6 +921,25 @@ export class GolfScene {
       }
       pos.needsUpdate = true;
       if (this.windDir != null) this.flag.rotation.y = this.windDir + Math.PI / 2;
+    }
+
+    // clouds drift downwind, wrapping round when they leave the far side
+    if (this.clouds) {
+      const dx = Math.sin(this.windDir || 0.6), dz = Math.cos(this.windDir || 0.6);
+      const drift = this.clouds.userData.drift;
+      const span = this.clouds.userData.span, cx = this.clouds.userData.cx;
+      const m4 = new THREE.Matrix4();
+      for (const d of drift) {
+        d.baseX += dx * d.speed * dt;
+        d.z += dz * d.speed * dt;
+        if (d.baseX > cx + span) d.baseX -= span * 2;
+        if (d.baseX < cx - span) d.baseX += span * 2;
+        m4.makeRotationY(d.ry);
+        m4.scale(new THREE.Vector3(d.sx, d.sy, d.sz));
+        m4.setPosition(d.baseX, d.y, d.z);
+        this.clouds.setMatrixAt(d.i, m4);
+      }
+      this.clouds.instanceMatrix.needsUpdate = true;
     }
     if (this.fx) this.fx.update(dt);
   }

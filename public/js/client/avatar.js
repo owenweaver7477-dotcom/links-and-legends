@@ -38,6 +38,7 @@ function blobTexture() {
   g.fillStyle = grd;
   g.fillRect(0, 0, S, S);
   _blobTex = new THREE.CanvasTexture(c);
+  _blobTex.userData.shared = true;   // scene.dispose() must never free this
   return _blobTex;
 }
 

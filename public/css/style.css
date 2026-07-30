@@ -515,3 +515,11 @@ h1 em { font-style: normal; color: #7ed492; }
    properly when it does not. */
 .screen { align-items: flex-start; }
 .card { margin: auto; }
+
+/* A quiet vignette over the 3D view. Pure CSS compositing — costs nothing on
+   the GPU where a real post-processing pass would blow the frame budget. */
+.vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(ellipse 118% 100% at 50% 42%, transparent 62%, rgba(6,12,8,.34) 100%),
+    linear-gradient(180deg, rgba(8,14,10,.14), transparent 14%);
+}
