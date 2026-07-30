@@ -841,7 +841,12 @@ const keys = new Set();
 canvas.addEventListener('pointerdown', ev => {
   if (G.screen !== 'game' || G.mapOpen) return;
   canvas.setPointerCapture(ev.pointerId);
-  if (ev.button === 2 || ev.button === 1 || ev.altKey) {
+  // Hold ANY button and move the mouse to look around — walking, driving,
+  // spectating, waiting on your turn.  The one exception is standing over
+  // your ball, where the left button is the swing itself; the right button
+  // (or Alt) still looks even there.
+  const leftIsFree = !canSwing();
+  if (ev.button === 2 || ev.button === 1 || ev.altKey || (ev.button === 0 && leftIsFree)) {
     looking = { x: ev.clientX, y: ev.clientY };
     canvas.classList.add('looking');
     return;

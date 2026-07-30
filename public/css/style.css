@@ -11,7 +11,9 @@ html, body {
 
 #stage { position: fixed; inset: 0; }
 #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+#gl { cursor: grab; }
 #gl.looking { cursor: grabbing; }
+#gl.swinging { cursor: crosshair; }
 #gl.swinging { cursor: ns-resize; }
 
 /* ───────────────────────────────────────────────────────── glass panels */
