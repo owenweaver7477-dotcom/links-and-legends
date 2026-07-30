@@ -40,6 +40,7 @@ const G = {
   avatars: new Map(),       // pid -> Avatar
   remote: new Map(),        // pid -> {x,z,rot,tx,tz,trot,moving} interpolation state
   view: 'third',            // third | first
+  profile: null,            // career stats, straight from the server
   celebUntil: 0,            // ms; holds the hole summary back for a reaction
   lastMoveSent: 0
 };
@@ -177,23 +178,52 @@ function refreshAimPreview(force) {
   if (!force && key === previewKey) return;
   previewKey = key;
 
-  // where a well-struck full shot with this club would finish
+  // Where a well-struck shot with this club would finish.  On the green the
+  // caddie aims the read at the hole itself, so the line IS the make line.
+  const isPutt = CLUB_BY_KEY[clubKey].putter;
+  const toPinD = G.T.toPin(b.x, b.z);
+  const previewPower = isPutt
+    ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45) ?? 1)
+    : 1;
   const sim = new ShotSim(G.T, {
-    x: b.x, z: b.z, clubKey, power: 1, aim: swing.aim,
-    faceDeg: 0, attackDeg: 0, wind: G.wind
+    x: b.x, z: b.z, clubKey, power: Math.min(previewPower, 1.12), aim: swing.aim,
+    faceDeg: 0, attackDeg: 0, wind: G.wind, ignoreCup: true
   });
   const r = sim.runToEnd();
 
-  // draw the aim line along the ground, following the terrain
+  // The line is the SIMULATED path, not a straight ruler: a putt bends with
+  // the borrow, an approach shows its arc and its bounce.  This is the
+  // "where will it actually go" read a real caddie gives you.
+  const path = sim.path;
   const pts = [];
-  const dist = Math.hypot(r.x - b.x, r.z - b.z);
-  const n = 30;
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    const x = lerp(b.x, r.x, t), z = lerp(b.z, r.z, t);
-    pts.push(new THREE.Vector3(x, G.T.heightAt(x, z) + 0.30, z));
+  const step = Math.max(1, Math.floor(path.length / 60));
+  for (let i = 0; i < path.length; i += step) {
+    const p = path[i];
+    pts.push(new THREE.Vector3(p.x, Math.max(p.y + 0.05, G.T.heightAt(p.x, p.z) + 0.07), p.z));
   }
+  const last = path[path.length - 1];
+  if (last) pts.push(new THREE.Vector3(last.x, G.T.heightAt(last.x, last.z) + 0.07, last.z));
   scene.setAimLine(pts);
+
+  // Putt difficulty, read off the simulation itself: how far the borrow
+  // carries the ball off the straight line, plus the length of the putt.
+  if (isPutt && pts.length > 2) {
+    const dx = last.x - b.x, dz = last.z - b.z;
+    const chord = Math.hypot(dx, dz) || 1;
+    let bend = 0;
+    for (const p of path) {
+      const t = ((p.x - b.x) * dx + (p.z - b.z) * dz) / (chord * chord);
+      const px = b.x + dx * t, pz = b.z + dz * t;
+      bend = Math.max(bend, Math.hypot(p.x - px, p.z - pz));
+    }
+    const hard = bend > 0.9 || toPinD > 12;
+    const risky = bend > 0.3 || toPinD > 6;
+    scene.setAimLineColor(hard ? 0xff7a5c : risky ? 0xffd76b : 0x8fe07a);
+    scene.setSlopeRead(b.x, b.z, G.T);
+  } else {
+    scene.setAimLineColor(0xffffff);
+    scene.setSlopeRead(null);
+  }
 
   // The caddie mark: how hard to hit it to finish at the flag.  On a putt aim
   // to run it a foot and a half past — a putt that dies at the hole never
@@ -275,6 +305,7 @@ function updateAvatars(dt) {
       // back exactly as far as the meter says — the swing you see IS the
       // number you are about to play
       if (mode() === 'swing') {
+        av.setClub(clubKey);              // the club in hand IS the club selected
         av.setAddress(true, swing.aim + Math.PI / 2);
         const m = swing.meter();
         av.setBackswing(m.state === 'back' || m.state === 'down' ? m.power / 1.12 : 0);
@@ -420,7 +451,7 @@ function beginShot(msg) {
   G.balls[msg.pid] = { x: sim.p.x, y: sim.p.y, z: sim.p.z };
   // the golfer swings on every screen, timed so the ball leaves at the hit
   const swingAv = G.avatars.get(msg.pid);
-  if (swingAv) swingAv.strike(msg.shot.aim);
+  if (swingAv) { swingAv.setClub(msg.shot.clubKey); swingAv.strike(msg.shot.aim); }
   scene.clearTrace();
   scene.setAimLine(null);
   rig.kick(0.55);
@@ -815,8 +846,10 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', ev => {
   if (G.screen !== 'game') return;
   ev.preventDefault();
-  if (ev.shiftKey) { rig.zoom = clamp(rig.zoom * (1 + ev.deltaY * 0.001), 0.55, 2.6); return; }
-  stepClub(ev.deltaY > 0 ? 1 : -1);
+  // over the ball the wheel is your caddie flicking through clubs; anywhere
+  // else it is a zoom, which is what every other 3D game taught your hands
+  if (canSwing() && !ev.shiftKey) { stepClub(ev.deltaY > 0 ? 1 : -1); return; }
+  rig.zoom = clamp(rig.zoom * (1 + ev.deltaY * 0.001), 0.55, 2.6);
 }, { passive: false });
 
 window.addEventListener('keydown', ev => {
@@ -1024,6 +1057,17 @@ Net.on('pos', d => {
   r.tx = d.x; r.tz = d.z; r.trot = d.rot; r.moving = !!d.moving;
 });
 
+Net.on('profile', prof => {
+  const before = G.profile;
+  G.profile = prof;
+  HUD.renderCareer(prof);
+  if (G.room?.state === 'lobby') renderLobbyAll(G.room);
+  // the post-round payout, announced once the results are up
+  if (before && prof.coins > before.coins) {
+    HUD.toast(`🪙 +${prof.coins - before.coins} coins · rating ${prof.rating}`, 'good', 4200);
+  }
+});
+
 Net.on('toast', d => HUD.toast(d.msg, d.kind));
 Net.on('kicked', d => { G.joined = false; G.room = null; route(); HUD.homeError(d.reason || 'Disconnected.'); });
 Net.on('disconnect', () => HUD.toast('Lost the connection — reconnecting…', 'warn', 2200));
@@ -1073,7 +1117,7 @@ function renderLobbyAll(r) {
   HUD.renderLobby(r, G.myPid);
   HUD.renderCourses(COURSES, r.courseId, isHost, id => Net.pickCourse(id));
   HUD.renderTees(course.holes[0], r.teeSet || 'back', isHost, t => Net.pickTees(t));
-  HUD.renderColours(r, G.myPid, hex => Net.prefs({ color: hex }));
+  HUD.renderColours(r, G.myPid, hex => Net.prefs({ color: hex }), G.profile?.rating || 0);
   bagDraft = me()?.bag?.length ? me().bag.slice() : normaliseBag(DEFAULT_BAG, { pad: true });
   HUD.renderBag(bagDraft, toggleClubInBag);
   lookDraft = normaliseLook(me()?.look);

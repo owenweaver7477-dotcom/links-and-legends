@@ -191,7 +191,10 @@ export const BALL_COLORS = [
   { name: 'Coral',    hex: '#ff8a3d' },
   { name: 'Orchid',   hex: '#c77dff' },
   { name: 'Mint',     hex: '#4ce0b3' },
-  { name: 'Rose',     hex: '#ff7ab8' }
+  { name: 'Rose',     hex: '#ff7ab8' },
+  // earned, not given: the server refuses these until your rating clears the bar
+  { name: 'Tour Gold', hex: '#ffd94a', lockRating: 45 },
+  { name: 'Pearl',     hex: '#e8f4ff', lockRating: 70 }
 ];
 
 export const MAX_PLAYERS = 8;

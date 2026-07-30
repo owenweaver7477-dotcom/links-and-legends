@@ -20,7 +20,7 @@ for (const id of [
   'shotinfo', 'toasts', 'mapwrap', 'mapc',
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
-  'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud',
+  'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -236,16 +236,19 @@ HUD.renderTees = (hole, selected, isHost, onPick) => {
   }
 };
 
-HUD.renderColours = (room, myPid, onPick) => {
+HUD.renderColours = (room, myPid, onPick, rating = 0) => {
   el.ballColours.innerHTML = '';
   const mine = room.players.find(p => p.pid === myPid)?.color;
   for (const c of BALL_COLORS) {
     const taken = room.players.some(p => p.pid !== myPid && p.color === c.hex);
+    const locked = !!c.lockRating && rating < c.lockRating;
     const b = document.createElement('button');
-    b.className = 'swbtn' + (c.hex === mine ? ' on' : '') + (taken ? ' taken' : '');
+    b.className = 'swbtn' + (c.hex === mine ? ' on' : '') + (taken ? ' taken' : '') + (locked ? ' locked' : '');
     b.style.background = c.hex;
-    b.title = taken ? c.name + ' (taken)' : c.name;
-    if (!taken) b.addEventListener('click', () => onPick(c.hex));
+    b.title = locked ? c.name + ' — unlocks at rating ' + c.lockRating
+      : taken ? c.name + ' (taken)' : c.name;
+    if (locked) b.textContent = '🔒';
+    if (!taken && !locked) b.addEventListener('click', () => onPick(c.hex));
     el.ballColours.appendChild(b);
   }
 };
@@ -270,6 +273,30 @@ const LOOK_GROUPS = [
   ['cap', 'Cap', CAPS], ['shirt', 'Shirt', SHIRTS],
   ['skin', 'Skin', SKINS], ['trousers', 'Trousers', TROUSERS]
 ];
+/**
+ * Your career, from the server's book of record.  Nothing here is client
+ * arithmetic on trust — every number came from shots the server simulated.
+ */
+HUD.renderCareer = (prof) => {
+  const box = el.careerBox;
+  if (!box) return;
+  if (!prof || !prof.rounds) {
+    box.innerHTML = '<p class="career-empty">Your first round starts your career — stats, a skill rating and coins live here.</p>';
+    return;
+  }
+  const rel = v => v == null ? '—' : v > 0 ? '+' + v : v === 0 ? 'E' : String(v);
+  const cell = (v, l) => `<div class="cstatc"><b>${v}</b><span>${l}</span></div>`;
+  box.innerHTML =
+    cell(prof.rating, 'rating') +
+    cell('🪙 ' + prof.coins, 'coins') +
+    cell(prof.rounds, 'rounds') +
+    cell(rel(prof.best), 'best') +
+    cell(prof.birdies + (prof.eagles ? ' / ' + prof.eagles : ''), prof.eagles ? 'birdies / eagles' : 'birdies') +
+    cell(prof.fairwayPct == null ? '—' : prof.fairwayPct + '%', 'fairways') +
+    cell(prof.girPct == null ? '—' : prof.girPct + '%', 'greens in reg') +
+    cell(prof.avgPutts == null ? '—' : prof.avgPutts, 'putts / hole');
+};
+
 HUD.renderLook = (look, onPick) => {
   el.lookPicker.innerHTML = '';
   for (const [key, title, list] of LOOK_GROUPS) {

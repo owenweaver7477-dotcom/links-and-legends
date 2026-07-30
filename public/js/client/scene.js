@@ -807,6 +807,45 @@ export class GolfScene {
     L.visible = true;
   }
 
+  /** Tint the preview line — the putt read runs green / amber / red. */
+  setAimLineColor(hex) {
+    if (this.aimLine) this.aimLine.material.color.set(hex);
+  }
+
+  /**
+   * The slope read at the ball while putting: a short fall-line arrow on the
+   * turf pointing DOWNhill, stretched by how hard the green is leaning.
+   * One reused mesh; pass null to hide it.
+   */
+  setSlopeRead(x, z, T) {
+    if (x == null) { if (this._slope) this._slope.visible = false; return; }
+    if (!this._slope) {
+      const g = new THREE.Group();
+      const shaftGeo = cached('slope-shaft', () => new THREE.BoxGeometry(0.09, 0.02, 1));
+      const tipGeo = cached('slope-tip', () => new THREE.ConeGeometry(0.14, 0.34, 4));
+      const mat = new THREE.MeshBasicMaterial({ color: 0x9fd4ff, transparent: true, opacity: 0.85, depthWrite: false });
+      const shaft = new THREE.Mesh(shaftGeo, mat);
+      shaft.position.z = 0.5;
+      const tip = new THREE.Mesh(tipGeo, mat);
+      tip.rotation.x = Math.PI / 2;
+      tip.rotation.y = Math.PI / 4;
+      tip.position.z = 1.1;
+      g.add(shaft, tip);
+      g.renderOrder = 2;
+      this._slope = g;
+      this.scene.add(g);
+    }
+    const n = T.normalAt(x, z, 1.6);
+    const grade = Math.hypot(n[0], n[2]);
+    if (grade < 0.008) { this._slope.visible = false; return; }   // dead flat: no read
+    this._slope.visible = true;
+    // the fall line: gravity's component in the plane, which is (nx, nz)
+    this._slope.position.set(x, T.heightAt(x, z) + 0.10, z);
+    this._slope.rotation.y = Math.atan2(n[0], n[2]);
+    const s = Math.min(2.2, 0.7 + grade * 26);
+    this._slope.scale.set(1, 1, s);
+  }
+
   setTrace(path, upTo) {
     const l = this.traceLine;
     if (!path || path.length < 2) { l.geometry.setDrawRange(0, 0); return; }

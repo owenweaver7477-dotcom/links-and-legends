@@ -38,6 +38,7 @@ Net.connect = () => {
   Net.socket.on('game:hole', d => fire('hole', d));
   Net.socket.on('game:reset', d => fire('reset', d));
   Net.socket.on('toast', d => fire('toast', d));
+  Net.socket.on('profile', d => fire('profile', d));
   Net.socket.on('kicked', d => fire('kicked', d));
 };
 

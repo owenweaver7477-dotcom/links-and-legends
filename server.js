@@ -24,6 +24,7 @@ import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
+import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed } from './server/profiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -46,6 +47,7 @@ const io = new Server(httpServer, {
 /* Build every course and the yardage table once, at boot. */
 const COURSES = allCourses();
 calibrateCarries();
+loadProfiles();
 
 // No max-age: the client is a handful of small files and an ETag revalidation
 // is cheap, whereas a stale module after a deploy is a genuinely confusing bug.
@@ -122,7 +124,8 @@ function rollWind(room) {
 
 function addPlayer(room, pid, name, spectator) {
   const used = new Set(room.players.map(p => p.color));
-  const col = BALL_COLORS.find(c => !used.has(c.hex)) || BALL_COLORS[room.players.length % BALL_COLORS.length];
+  const col = BALL_COLORS.find(c => !c.lockRating && !used.has(c.hex))
+    || BALL_COLORS.find(c => !c.lockRating) || BALL_COLORS[0];
   const h = hole(room);
   const t = teeOf(room);
   const p = {
@@ -157,6 +160,7 @@ function startHole(room, { purge = false } = {}) {
     p.x = t.x; p.z = t.z; p.lie = 'tee';
     p.ax = t.x; p.az = t.z; p.arot = t.rot;
     p.cart = null; p.cartAt = 0;      // everyone walks to the tee
+    p.holePutts = 0; p.holeFairway = false; p.holeGir = false;
   }
   if (purge) room.players = room.players.filter(p => p.connected);
   if (!room.players.some(p => p.pid === room.hostPid)) {
@@ -197,10 +201,17 @@ function everyoneDone(room) {
 }
 
 function finishHole(room) {
+  const h = hole(room);
   for (const p of active(room)) {
     if (p.scores[room.holeIndex] == null) {
-      p.scores[room.holeIndex] = p.finished ? p.strokes : hole(room).maxStrokes;
+      p.scores[room.holeIndex] = p.finished ? p.strokes : h.maxStrokes;
     }
+    recordHole(p.pid, {
+      strokes: p.scores[room.holeIndex], par: h.par,
+      putts: p.holePutts || 0,
+      fairwayHit: h.par >= 4 ? !!p.holeFairway : null,
+      gir: !!p.holeGir
+    });
   }
   room.state = 'holeover';
   room.turnPid = null;
@@ -214,6 +225,14 @@ function nextHole(room) {
   if (room.holeIndex >= HOLES_PER_COURSE - 1) {
     room.state = 'results';
     room.turnPid = null;
+    const parTotal = course(room).holes.reduce((a, x) => a + x.par, 0);
+    for (const p of active(room)) {
+      const played = p.scores.filter(v => v != null).length;
+      const total = p.scores.reduce((a, v) => a + (v ?? 0), 0);
+      const prof = recordRound(p.pid, total - parTotal, played);
+      const sock = p.socketId && io.sockets.sockets.get(p.socketId);
+      if (sock && prof) sock.emit('profile', prof);
+    }
     broadcastState(room);
     return;
   }
@@ -277,6 +296,7 @@ io.on('connection', socket => {
     sockets.set(socket.id, { code: room.code, pid: player.pid });
     socket.join(room.code);
     room.emptySince = null;
+    socket.emit('profile', publicProfile(player.pid));
   }
 
   socket.on('room:create', (data, ack) => {
@@ -355,7 +375,11 @@ io.on('connection', socket => {
       const wanted = BALL_COLORS.find(c => c.hex === color);
       // first come first served — two identical balls on one hole is confusing
       const taken = room.players.some(o => o.pid !== p.pid && o.color === color);
-      if (wanted && !taken) { p.color = wanted.hex; p.colorName = wanted.name; }
+      if (wanted && !taken) {
+        if (wanted.lockRating && !colorAllowed(ref.pid, wanted.hex)) {
+          socket.emit('toast', { msg: `${wanted.name} unlocks at rating ${wanted.lockRating} — you are ${Math.round(getProfile(ref.pid).rating)}.`, kind: 'warn' });
+        } else { p.color = wanted.hex; p.colorName = wanted.name; }
+      }
     }
     if (Array.isArray(bag)) p.bag = normaliseBag(bag);
     broadcastState(room);
@@ -489,9 +513,17 @@ io.on('connection', socket => {
     if (!isFinite(shot.aim) || shot.power < 0.02) return;
 
     const h = hole(room);
+    const fromGreen = p.lie === 'green';
+    const wasTeeShot = p.strokes === 0;
     const result = new ShotSim(terrain(room), shot).runToEnd();
 
     p.strokes += 1 + result.penalty;
+    // the stats book: a putt is a stroke played from the green; a fairway is
+    // hit or missed by the tee shot on par 4s and 5s; a green is "in
+    // regulation" when you are putting with two strokes of par in hand
+    if (fromGreen) p.holePutts++;
+    if (wasTeeShot && h.par >= 4 && result.lie === 'fairway') p.holeFairway = true;
+    if ((result.lie === 'green' || result.holed) && p.strokes <= h.par - 2) p.holeGir = true;
     p.penalties += result.penalty;
     // the golfer stays where they played from; the ball moves on without them
     p.ax = p.x; p.az = p.z;

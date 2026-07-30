@@ -11,6 +11,7 @@
 import * as THREE from '/vendor/three.module.js';
 import { AVATAR_HEIGHT } from '../shared/avatars.js';
 import { CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
+import { CLUB_BY_KEY } from '../shared/clubs.js';
 
 /* One unit box, reused by every part of every avatar.
    `userData.shared` is what stops GolfScene.dispose() from freeing these on
@@ -105,18 +106,27 @@ export class Avatar {
     this.legR = limb(this.mats.trousers, 0.145, H * 0.42, 0.105, H * 0.47, this.mats.shoe, H * 0.05);
     this.body.add(this.armL, this.armR, this.legL, this.legR);
 
-    /* --- the club: shaft, hosel and head, hanging from the right hand ---
-       Three more boxes, visible only while addressing or swinging, so the
-       cost is nothing for anyone just walking about. */
+    /* --- the club: grip, shaft and an interchangeable head ---------------
+       The same five boxes serve every club in the bag; setClub() reshapes
+       them, so a driver, a 7 iron and the putter are the same draw calls
+       with different proportions.  Visible only while addressing or
+       swinging, so the cost is nothing for anyone just walking about. */
     this.mats.chrome = M('#c9ccd2');
+    this.mats.headDark = M('#3a3d42');
     this.club = new THREE.Group();
     this.club.position.set(0, -(H * 0.355), 0.02);      // the right hand
     this.club.rotation.x = 0.25;                        // shaft leans toward the ball
-    this.club.add(part(this.mats.chrome, 0.022, 0.96, 0.022, 0, -0.46, 0));
-    this.club.add(part(this.mats.shoe, 0.034, 0.07, 0.034, 0, -0.90, 0));
-    this.club.add(part(this.mats.shoe, 0.05, 0.05, 0.17, 0, -0.945, 0.06));
+    this.clubGrip = part(this.mats.shoe, 0.034, 0.16, 0.034, 0, -0.06, 0);
+    this.clubShaft = part(this.mats.chrome, 0.020, 0.80, 0.020, 0, -0.54, 0);
+    this.clubHead = new THREE.Group();
+    this.clubFace = part(this.mats.chrome, 0.05, 0.07, 0.03, 0, 0, 0.02);
+    this.clubSole = part(this.mats.headDark, 0.05, 0.03, 0.10, 0, -0.04, 0.05);
+    this.clubHead.add(this.clubFace, this.clubSole);
+    this.club.add(this.clubGrip, this.clubShaft, this.clubHead);
     this.club.visible = false;
     this.armR.add(this.club);
+    this.clubKey = null;
+    this.setClub('I7');
 
     this.root.add(this.body);
 
@@ -161,6 +171,67 @@ export class Avatar {
   }
   get celebrating() { return !!this.cel; }
   cancelCelebration() { this.cel = null; }
+
+  /**
+   * Reshape the club in hand to match the club being played.  No meshes are
+   * created or destroyed — the grip, shaft and two head boxes are rescaled
+   * and re-tilted, so switching from driver to putter costs nothing and can
+   * never pop assets in or out.
+   */
+  setClub(key) {
+    if (key === this.clubKey) return;
+    const c = CLUB_BY_KEY[key];
+    if (!c) return;
+    this.clubKey = key;
+
+    // shaft length: drivers are long, wedges short, the putter shortest
+    const len = c.putter ? 0.62 : c.type === 'wood' ? 0.92 : c.type === 'hybrid' ? 0.84
+      : 0.82 - (c.loft - 18) * 0.0032;
+    this.clubShaft.scale.y = len;
+    this.clubShaft.position.y = -0.14 - len / 2;
+    this.clubHead.position.y = -0.14 - len;
+
+    const H2 = this.clubHead;
+    if (c.putter) {
+      // a flat bar, square to the ball, no loft to speak of
+      this.clubFace.scale.set(0.030, 0.030, 0.11);
+      this.clubFace.position.set(0, -0.012, 0.045);
+      this.clubFace.material = this.mats.headDark;
+      this.clubSole.scale.set(0.026, 0.014, 0.09);
+      this.clubSole.position.set(0, -0.030, 0.045);
+      H2.rotation.x = -0.03;
+    } else if (c.type === 'wood') {
+      // the big rounded head; biggest for the driver, shrinking to the 7 wood
+      const s = c.key === 'DR' ? 1.0 : c.key === 'W3' ? 0.86 : 0.78;
+      this.clubFace.scale.set(0.085 * s, 0.062 * s, 0.070 * s);
+      this.clubFace.position.set(0, -0.020, 0.045);
+      this.clubFace.material = this.mats.headDark;
+      this.clubSole.scale.set(0.080 * s, 0.018, 0.062 * s);
+      this.clubSole.position.set(0, -0.052 * s, 0.045);
+      this.clubSole.material = this.mats.chrome;
+      H2.rotation.x = -c.loft * Math.PI / 180 * 0.35;
+    } else if (c.type === 'hybrid') {
+      this.clubFace.scale.set(0.060, 0.050, 0.048);
+      this.clubFace.position.set(0, -0.018, 0.040);
+      this.clubFace.material = this.mats.headDark;
+      this.clubSole.scale.set(0.055, 0.015, 0.045);
+      this.clubSole.position.set(0, -0.045, 0.040);
+      this.clubSole.material = this.mats.chrome;
+      H2.rotation.x = -c.loft * Math.PI / 180 * 0.4;
+    } else {
+      // irons and wedges: a blade whose face visibly lies back with the loft,
+      // growing slightly shorter and deeper from the long irons to the lob
+      const t = Math.min(1, Math.max(0, (c.loft - 18) / 46));    // 0 long iron -> 1 lob
+      this.clubFace.scale.set(0.020 + t * 0.008, 0.075 - t * 0.012, 0.085 + t * 0.010);
+      this.clubFace.position.set(0, -0.024, 0.048);
+      this.clubFace.material = this.mats.chrome;
+      this.clubSole.scale.set(0.022, 0.016, 0.080);
+      this.clubSole.position.set(0, -0.058 + t * 0.006, 0.050);
+      this.clubSole.material = this.mats.headDark;
+      // the whole blade lies back: at address a lob wedge SHOWS its 58 degrees
+      H2.rotation.x = -c.loft * Math.PI / 180 * 0.55;
+    }
+  }
 
   /* ---------------------------------------------------------- the swing */
 

@@ -118,6 +118,27 @@ export class CartManager {
   step(dt, terrain, hole) {
     if (!this.driving || !this.body) return false;
     this.body.step(dt, this.input, terrain, hole);
+
+    // Cart-to-cart: each client owns only its OWN cart, so collision is
+    // resolved one-sidedly — we push ourselves out of remote carts and give
+    // back some speed.  Both drivers do this against each other's reported
+    // pose, which converges to a believable mutual bounce without the server
+    // ever arbitrating a crash.
+    const b = this.body;
+    for (const [, r] of this.remote) {
+      const dx = b.x - r.x, dz = b.z - r.z;
+      const d2 = dx * dx + dz * dz;
+      const R = 2.1;                              // two cart half-lengths, roughly
+      if (d2 < R * R && d2 > 1e-9) {
+        const d = Math.sqrt(d2);
+        b.x = r.x + (dx / d) * R;
+        b.z = r.z + (dz / d) * R;
+        // an inelastic thump: lose most of your speed, take a small shove back
+        if (Math.abs(b.speed) > 1) this.hitFlash = Math.max(this.hitFlash, Math.min(1, Math.abs(b.speed) / 9));
+        b.speed *= -0.25;
+      }
+    }
+
     if (this.body.hit > this.hitFlash) this.hitFlash = this.body.hit;
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.2);
     return true;
