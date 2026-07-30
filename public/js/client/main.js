@@ -157,15 +157,26 @@ function carryMult(club) {
   return fx.speed * cfx.speed;
 }
 
+/** The same figure without a club in hand, for choosing one in the first place. */
+const reachMult = () => crewEffect(G.profile?.crew || null, G.profile?.clubTier ?? 0,
+  G.profile?.refine ?? 0, { power: 1 }).speed;
+
+/** Where this club sits in the bag, so the arrows can grey out at the ends. */
+function bagEnds() {
+  const bag = myBag();
+  const i = clubIndex(clubKey, bag);
+  return { longest: i <= 0, shortest: i >= bag.length - 1 };
+}
+
 function autoClub() {
   if (clubManual || !G.T) return;
   const b = ballOf(G.myPid);
   const d = G.T.toPin(b.x, b.z);
   const lie = G.T.surfaceAt(b.x, b.z);
-  clubKey = suggestClub(d, lie.id, lie.id === 'green', myBag()).key;
+  clubKey = suggestClub(d, lie.id, lie.id === 'green', myBag(), reachMult()).key;
   swing.clubKey = clubKey;
   const club = CLUB_BY_KEY[clubKey];
-  HUD.setClub(club, lie.id, carryMult(club));
+  HUD.setClub(club, lie.id, carryMult(club), bagEnds());
 }
 function stepClub(dir) {
   const bag = myBag();
@@ -175,7 +186,8 @@ function stepClub(dir) {
   swing.clubKey = clubKey;
   clubManual = true;
   const club = CLUB_BY_KEY[clubKey];
-  HUD.setClub(club, G.T ? G.T.surfaceAt(ballOf(G.myPid).x, ballOf(G.myPid).z).id : 'fairway', carryMult(club));
+  HUD.setClub(club, G.T ? G.T.surfaceAt(ballOf(G.myPid).x, ballOf(G.myPid).z).id : 'fairway',
+    carryMult(club), bagEnds());
   refreshAimPreview(true);
 }
 
@@ -439,7 +451,12 @@ function stepAim(dt) {
 const AIM_BTN = { dir: 0, held: 0 };
 function stepAimButtons(dt) {
   if (!AIM_BTN.dir) return;
-  if (!canSwing()) { AIM_BTN.dir = 0; return; }
+  // losing the turn mid-sweep must release the button, not leave it glowing
+  if (!canSwing()) {
+    AIM_BTN.dir = 0;
+    for (const id of ['aimL', 'aimR']) document.getElementById(id).classList.remove('held');
+    return;
+  }
   AIM_BTN.held += dt;
   const wind = Math.min(1, AIM_BTN.held / 2.0);
   const rate = AIM_RATE_TAP + (AIM_RATE_HELD - AIM_RATE_TAP) * wind * wind;
@@ -450,10 +467,11 @@ function holdAim(el, dir) {
   const start = e => {
     e.preventDefault();
     AIM_BTN.dir = dir; AIM_BTN.held = 0;
+    el.classList.add('held');             // the button says it is sweeping
     swing.nudgeAim(dir * 0.009);          // the tap: ~0.5 degrees
     refreshAimPreview(true);
   };
-  const stop = () => { AIM_BTN.dir = 0; AIM_BTN.held = 0; };
+  const stop = () => { AIM_BTN.dir = 0; AIM_BTN.held = 0; el.classList.remove('held'); };
   el.addEventListener('pointerdown', start);
   el.addEventListener('pointerup', stop);
   el.addEventListener('pointerleave', stop);

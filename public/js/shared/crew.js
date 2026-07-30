@@ -77,30 +77,45 @@ export const NO_CREW = Object.freeze({
   ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0
 });
 
-/* ------------------------------------------------------- the club ladder --- */
+/* ------------------------------------------------------- the club ladder ---
+   The whole point of a ladder is that the bottom rung is genuinely bad.  These
+   speeds used to run 1.000 -> 1.065, which meant a brand-new player already
+   struck the ball exactly as far as the club table's reference and the entire
+   ladder bought 6% — nothing you could feel.  They now run 0.86 -> 1.065, so a
+   beginner carries a driver about 231 yards and a Legend with the Signature
+   Set, its refinements and Bruiser carries about 318.  That gap is the game.
+
+   1.000 sits at the Tour Pro Set deliberately: the reference the club table is
+   calibrated against, and the point where you stop being an amateur. */
 export const CLUB_TIERS = [
   { name: 'Wooden Starter Set', cost: 0,
-    speed: 1.000, faceDamp: 0.00, look: 'wood',
-    blurb: 'Rough-hewn wood, rope grips. Where everyone begins.' },
+    speed: 0.860, faceDamp: 0.00, look: 'wood',
+    blurb: 'Rough-hewn wood, rope grips. Short, unforgiving, and where everyone begins.' },
   { name: 'Rusty Iron Set', cost: 1500,
-    speed: 1.008, faceDamp: 0.03, look: 'rust',
+    speed: 0.895, faceDamp: 0.03, look: 'rust',
     blurb: 'Worn steel and duct-taped grips, but it strikes true enough.' },
   { name: 'Polished Steel Set', cost: 3500,
-    speed: 1.016, faceDamp: 0.07, look: 'steel',
+    speed: 0.930, faceDamp: 0.07, look: 'steel',
     blurb: 'Chrome shine, leather grips. The first set you polish on purpose.' },
   { name: 'Carbon Comp Set', cost: 7000,
-    speed: 1.026, faceDamp: 0.12, look: 'carbon',
+    speed: 0.965, faceDamp: 0.12, look: 'carbon',
     blurb: 'Matte black carbon fibre. Quiet, fast, forgiving.' },
   { name: 'Tour Pro Set', cost: 13000,
-    speed: 1.038, faceDamp: 0.18, look: 'tour',
-    blurb: 'Sponsor decals and tour stamping. Plays like a paycheque.' },
+    speed: 1.000, faceDamp: 0.18, look: 'tour',
+    blurb: 'Sponsor decals and tour stamping. Full tour length at last.' },
   { name: 'Titanium Elite Set', cost: 22000,
-    speed: 1.050, faceDamp: 0.24, look: 'titanium',
+    speed: 1.032, faceDamp: 0.24, look: 'titanium',
     blurb: 'Brushed titanium with a glow inlay. Hits like the future.' },
   { name: 'Signature Set', cost: 35000,
     speed: 1.065, faceDamp: 0.33, look: 'signature',
     blurb: 'Holographic finish, premium everything. The bag of legends.' }
 ];
+
+/* A shot that names no bag at all is the REFERENCE ball: exactly the club
+   table, which is what calibrateCarries() measures and the physics suite
+   asserts against.  A real profile always names its tier, so this is never
+   what a player swings — it is the yardstick the ladder is measured with. */
+const REFERENCE_SET = { speed: 1, faceDamp: 0 };
 
 /** Refinements: three sub-levels inside a tier, lost on tier-up (by design). */
 export const REFINE_COSTS = tierIdx => {
@@ -120,12 +135,16 @@ export const REFINE_SPEED = [0.004, 0.008, 0.014];   // cumulative extra ball sp
  * @param refine    0-3 refinement level within the tier
  * @param ctx       { power, isPutt, afterBadHole }
  */
-export function crewEffect(crew, clubTier = 0, refine = 0, ctx = {}) {
+export function crewEffect(crew, clubTier = null, refine = 0, ctx = {}) {
   // Merge over NO_CREW rather than trusting the shape: a profile written by
   // an older build (or a hand-edited save) may miss keys, and one undefined
   // level would NaN the whole shot — ball position included.
   const c = crew ? { ...NO_CREW, ...crew } : NO_CREW;
-  const tier = CLUB_TIERS[Math.max(0, Math.min(6, clubTier))] || CLUB_TIERS[0];
+  // No tier named at all means the reference ball (see REFERENCE_SET); tier 0
+  // is a real, and deliberately poor, Wooden Starter Set.
+  const tier = clubTier == null
+    ? REFERENCE_SET
+    : (CLUB_TIERS[Math.max(0, Math.min(6, clubTier))] || CLUB_TIERS[0]);
   const ref = REFINE_SPEED[Math.max(0, Math.min(3, refine)) - 1] || 0;
 
   // ball speed: the club set, its refinement, and Bruiser on full swings

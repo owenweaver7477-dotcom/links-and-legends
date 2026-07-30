@@ -18,7 +18,7 @@ for (const id of [
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
   'wArrow', 'wSpeed', 'wDesc',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
-  'playbar', 'clubName', 'clubCarry', 'mFill', 'mFaceDot', 'mLabel', 'aimTxt', 'mPct',
+  'playbar', 'clubName', 'clubCarry', 'clubUp', 'clubDown', 'mFill', 'mFaceDot', 'mLabel', 'aimTxt', 'mPct',
   'shotinfo', 'toasts', 'mapwrap', 'mapc', 'minic', 'miniPanel',
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
@@ -113,8 +113,14 @@ HUD.setWind = (wind, viewHeading) => {
 };
 
 /* ------------------------------------------------------------------- club */
-HUD.setClub = (club, lieId, mult = 1) => {
+HUD.setClub = (club, lieId, mult = 1, ends = null) => {
   el.clubName.textContent = club.label;
+  // grey the arrow you cannot take any further, rather than letting it click
+  // and do nothing — the bag has a longest and a shortest club
+  if (ends) {
+    el.clubDown.disabled = !!ends.longest;
+    el.clubUp.disabled = !!ends.shortest;
+  }
   if (club.putter) {
     el.clubCarry.textContent = 'on the green';
   } else {

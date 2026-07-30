@@ -7,6 +7,7 @@ import { terrainFor } from '../public/js/shared/terrain.js';
 import { BIOMES } from '../public/js/shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower } from '../public/js/shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub } from '../public/js/shared/clubs.js';
+import { crewEffect } from '../public/js/shared/crew.js';
 
 calibrateCarries();
 const URL = 'http://localhost:3000';
@@ -34,6 +35,7 @@ function mkClient(i) {
       if (clients.filter(Boolean).length === N) setTimeout(() => clients[0].s.emit('game:start'), 350);
     });
   });
+  s.on('profile', pr => { c.profile = pr; });      // what this bot actually owns
   s.on('room:state', st => { room = st; if (i === 0) onState(st); maybePlay(c, st); });
   s.on('game:shot', m => { if (i === 0) onShot(m); });
   clients[i] = c;
@@ -84,7 +86,12 @@ function maybePlay(c, st) {
     const T = terrainFor(h, BIOMES[cur.courseId]);
     const dist = Math.hypot(h.pin.x - p.x, h.pin.z - p.z);
     const lie = T.surfaceAt(p.x, p.z);
-    const club = suggestClub(dist, lie.id, lie.id === 'green');
+    // These bots have brand-new profiles, so they swing the Wooden Starter Set
+    // and reach well short of the reference bag the CARRY table was measured
+    // with.  Club up accordingly, exactly as the client does for a player.
+    const kit = c.profile || {};
+    const reach = crewEffect(kit.crew || null, kit.clubTier ?? 0, kit.refine ?? 0, { power: 1 }).speed;
+    const club = suggestClub(dist, lie.id, lie.id === 'green', null, reach);
     // Aim like a golfer, not a crow: near the hole go at the pin, but from
     // distance follow the ROUTE — which is what makes a dogleg guarded by
     // trees playable at all.  Walk the centreline to the point one shot
@@ -112,7 +119,10 @@ function maybePlay(c, st) {
     }
 
     // use the same caddie number the human player is shown
-    let power = suggestedPower(T, p.x, p.z, club.key, aim, cur.wind, target + (club.putter ? 0.45 : 0));
+    // the caddie's number has to price the bag the server will actually swing
+    let power = suggestedPower(T, p.x, p.z, club.key, aim, cur.wind,
+      target + (club.putter ? 0.45 : 0), kit.gear || null,
+      { crew: kit.crew || null, clubTier: kit.clubTier ?? 0, refine: kit.refine ?? 0 });
     if (power == null) power = 1;
     const face = (Math.random() * 2 - 1) * 2.0 * SKILL;
     const pw = Math.min(1.05, power * (1 + (Math.random() * 2 - 1) * 0.04 * SKILL));

@@ -624,7 +624,10 @@ export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist, ge
     const r = new ShotSim(terrain, {
       x, z, clubKey, power: p, aim, faceDeg: 0, attackDeg: 0, wind, gear,
       crew: kit?.crew || null,
-      clubTier: kit?.clubTier ?? 0,
+      // null, not 0: no kit named means the reference ball, exactly as the
+      // simulation treats it.  Defaulting to 0 would quietly price every
+      // caller's marker for a Wooden Starter Set.
+      clubTier: kit ? (kit.clubTier ?? 0) : null,
       refine: kit?.refine ?? 0,
       ignoreCup: true          // measure how far it ROLLS, not whether it drops
     }).runToEnd();

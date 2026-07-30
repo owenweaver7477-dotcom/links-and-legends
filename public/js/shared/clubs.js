@@ -71,10 +71,18 @@ export const CARRY = {};
  * The green gets the putter, a bunker gets loft, otherwise take the shortest
  * club that still covers the distance.
  */
-export function suggestClub(distanceM, surfaceId, onGreen, bag = null) {
+/**
+ * @param reach  how far THIS player hits relative to the reference bag the
+ *   CARRY table was measured with.  A beginner on the Wooden Starter Set
+ *   reaches 0.86 of it, so asking for 195 m means finding a club that carries
+ *   195/0.86 = 227 m at reference.  Without this every new player would be
+ *   handed a club that lands them consistently short.
+ */
+export function suggestClub(distanceM, surfaceId, onGreen, bag = null, reach = 1) {
   const carried = (bag && bag.length ? bag : CLUBS.map(c => c.key)).filter(k => CLUB_BY_KEY[k]);
   const has = k => carried.includes(k);
   if (onGreen || surfaceId === 'green') return PUTTER;
+  distanceM = distanceM / (reach > 0 ? reach : 1);
 
   if (surfaceId === 'sand') {
     // you need loft to get out; shortest lofted club that still gets there

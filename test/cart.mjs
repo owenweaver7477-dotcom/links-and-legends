@@ -379,38 +379,82 @@ head('gear — bought upgrades change the flight, absence changes nothing');
 }
 
 /* ============================================================== economy */
-head('the coin economy — the document numbers, exactly');
+head('the coin economy — the document’s shape, at PAYOUT_SCALE');
 {
-  const { holeCoins, roundCoins } = await import('../public/js/shared/economy.js');
-  ok('par pays 35', holeCoins(4, 4) === 35);
-  ok('birdie pays 50', holeCoins(3, 4) === 50);
-  ok('eagle pays 80', holeCoins(3, 5) === 80);
-  ok('an ace pays 170', holeCoins(1, 3) === 170);
-  ok('bogey pays 15', holeCoins(5, 4) === 15);
+  const { holeCoins, roundCoins, PAYOUT_SCALE: K } = await import('../public/js/shared/economy.js');
+  ok('par pays 35 x scale', holeCoins(4, 4) === 35 * K, String(holeCoins(4, 4)));
+  ok('birdie pays 50 x scale', holeCoins(3, 4) === 50 * K, String(holeCoins(3, 4)));
+  ok('eagle pays 80 x scale', holeCoins(3, 5) === 80 * K, String(holeCoins(3, 5)));
+  ok('an ace pays 170 x scale', holeCoins(1, 3) === 170 * K, String(holeCoins(1, 3)));
+  ok('bogey pays 15 x scale', holeCoins(5, 4) === 15 * K, String(holeCoins(5, 4)));
   ok('a blow-up hole never goes negative', holeCoins(11, 4) === 0);
   const par4 = { strokes: 4, par: 4 }, birdie = { strokes: 3, par: 4 };
   const flat9 = roundCoins(Array(9).fill(par4));
-  ok('nine pars: holes + the 100 round bonus, no streak',
-     flat9.total === 9 * 35 + 100 && flat9.streakPct === 0, 'total ' + flat9.total);
+  ok('nine pars: holes + the round bonus, no streak',
+     flat9.total === (9 * 35 + 100) * K && flat9.streakPct === 0, 'total ' + flat9.total);
   const hot = roundCoins([par4, birdie, birdie, birdie, birdie, par4, par4, par4, par4]);
   ok('4 birdies in a row pays a 40% streak bonus', hot.streakPct === 40,
      hot.streakPct + '%');
   const clear = roundCoins(Array(9).fill(par4), true);
-  ok('first clear of a course adds 500', clear.total === flat9.total + 500);
+  ok('first clear of a course adds 500 x scale', clear.total === flat9.total + 500 * K);
+}
+
+/* ============================================== how long the climb actually is */
+head('progression — bad at the start, maxed in 20 to 30 hours');
+{
+  const { roundCoins } = await import('../public/js/shared/economy.js');
+  const { CADDIE_COSTS, CADDIE_KEYS, CLUB_TIERS, REFINE_COSTS, crewEffect } =
+    await import('../public/js/shared/crew.js');
+  const { SHOP } = await import('../public/js/shared/gear.js');
+
+  const toMax = CADDIE_COSTS.reduce((a, b) => a + b, 0) * CADDIE_KEYS.length
+    + CLUB_TIERS.reduce((a, t) => a + t.cost, 0)
+    + REFINE_COSTS(6).reduce((a, b) => a + b, 0)          // only the top tier survives
+    + Object.values(SHOP).reduce((a, i) => a + i.cost, 0);
+
+  const perRound = roundCoins(Array(9).fill({ strokes: 4, par: 4 })).total;
+  const firstClears = roundCoins([{ strokes: 4, par: 4 }], true).firstClearBonus * 5;
+  const rounds = Math.ceil((toMax - firstClears) / perRound);
+  // a nine-hole round is 10-15 minutes; the bound is deliberately wide because
+  // the pace of play is the one number here that is not ours to measure
+  const lo = rounds * 10 / 60, hi = rounds * 15 / 60;
+  ok('owning everything takes 20-30 hours of golf', hi >= 20 && lo <= 30,
+     `${rounds} rounds = ${lo.toFixed(0)}-${hi.toFixed(0)} h`);
+  ok('but the first caddie is affordable after one round',
+     perRound >= CADDIE_COSTS[0], `${perRound} vs ${CADDIE_COSTS[0]}`);
+  ok('and the last Legend level is not', perRound < CADDIE_COSTS[9],
+     `${perRound} vs ${CADDIE_COSTS[9]}`);
+
+  // the distance arc is the point of the ladder: a beginner must be short
+  const mult = (tier, refine, bruiser) => crewEffect(
+    bruiser ? { ace: 0, bruiser: 10, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 } : null,
+    tier, refine, { power: 1 }).speed;
+  ok('an unnamed bag is the reference the club table is calibrated to',
+     crewEffect(null, null, 0, { power: 1 }).speed === 1);
+  ok('the starter set is genuinely short', mult(0, 0, false) < 0.9,
+     'x' + mult(0, 0, false).toFixed(3));
+  ok('the ladder reaches reference length at the Tour Pro Set',
+     Math.abs(mult(4, 0, false) - 1) < 1e-9);
+  ok('and a maxed player hits it a third further than a beginner',
+     mult(6, 3, true) / mult(0, 0, false) > 1.3,
+     'x' + (mult(6, 3, true) / mult(0, 0, false)).toFixed(2));
 }
 
 /* ================================================================= crew */
 head('the caddie crew — hired stats that actually do things');
 {
   const { crewEffect, crewPurchase, cartBoost, NO_CREW, CADDIE_COSTS } = await import('../public/js/shared/crew.js');
-  const none = crewEffect(null, 0, 0, { power: 1 });
-  ok('no crew, wooden set: exact identity',
+  // no crew AND no bag named: the reference ball, exactly 1s and 0s.  This is
+  // the configuration the physics suite and calibrateCarries() run in.
+  const none = crewEffect(null, null, 0, { power: 1 });
+  ok('nothing equipped at all: exact identity',
      none.speed === 1 && none.faceDamp === 0 && none.windDamp === 0 && none.cupBonus === 0);
-  const ace10 = crewEffect({ ...NO_CREW, ace: 10 }, 0, 0, {});
+  const ace10 = crewEffect({ ...NO_CREW, ace: 10 }, null, 0, {});
   ok('Ace at Legend damps 40% of mishit drift', Math.abs(ace10.faceDamp - 0.40) < 1e-9);
-  const br = crewEffect({ ...NO_CREW, bruiser: 10 }, 0, 0, { power: 1 });
-  const brSoft = crewEffect({ ...NO_CREW, bruiser: 10 }, 0, 0, { power: 0.7 });
-  ok('Bruiser only fires on full swings', br.speed > 1.09 && brSoft.speed === 1);
+  const br = crewEffect({ ...NO_CREW, bruiser: 10 }, null, 0, { power: 1 });
+  const brSoft = crewEffect({ ...NO_CREW, bruiser: 10 }, null, 0, { power: 0.7 });
+  ok('Bruiser only fires on full swings', br.speed > 1.09 && brSoft.speed === 1,
+     `full x${br.speed.toFixed(3)}, soft x${brSoft.speed.toFixed(3)}`);
   const sig = crewEffect(null, 6, 3, {});
   ok('the Signature Set fully refined is +7.9% ball speed',
      Math.abs(sig.speed - 1.079) < 1e-9, 'x' + sig.speed.toFixed(3));

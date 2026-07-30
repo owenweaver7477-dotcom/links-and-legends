@@ -88,11 +88,24 @@ html, body {
   background: rgba(10,18,15,.76); backdrop-filter: blur(10px);
   border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 7px 8px;
   box-shadow: 0 8px 26px rgba(0,0,0,.5); }
-.cbtn { width: 28px; height: 30px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.05); color: #e8f2ea; font-size: 15px; cursor: pointer; transition: .14s; font-family: inherit; }
-.cbtn:hover { background: rgba(255,255,255,.14); }
-.cbtn:active { transform: translateY(1px); }
-.cinfo { min-width: 74px; text-align: center; line-height: 1.15; }
+/* These are the two controls a player uses on every single shot, so they get
+   a real target to hit: 38x40 clears the thumb-sized minimum, and the whole
+   pair is unselectable so a fast double-press never highlights the glyph or
+   triggers a double-tap zoom. */
+.cbtn { width: 38px; height: 40px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06); color: #e8f2ea; font-size: 17px; line-height: 1; cursor: pointer;
+  transition: background .14s, transform .08s, box-shadow .14s; font-family: inherit;
+  display: grid; place-items: center; -webkit-user-select: none; user-select: none;
+  touch-action: manipulation; }
+.cbtn:hover { background: rgba(255,255,255,.15); }
+.cbtn:active { transform: translateY(1px); background: rgba(255,255,255,.2); }
+.cbtn:focus-visible { outline: 2px solid #7fd694; outline-offset: 2px; }
+/* held: the aim buttons sweep while you keep them down, so they glow to say so */
+.cbtn.held { background: linear-gradient(180deg, rgba(96,200,124,.42), rgba(52,140,80,.3));
+  border-color: rgba(150,236,172,.6); box-shadow: 0 0 14px rgba(110,220,140,.45); transform: translateY(1px); }
+.cbtn[disabled] { opacity: .3; cursor: default; }
+.cbtn[disabled]:hover { background: rgba(255,255,255,.06); }
+.cinfo { min-width: 84px; text-align: center; line-height: 1.15; -webkit-user-select: none; user-select: none; }
 .cinfo b { display: block; font-size: 14px; }
 .cinfo span { font-size: 10.5px; color: #93ad99; font-variant-numeric: tabular-nums; }
 
@@ -115,7 +128,13 @@ html, body {
 .m-face { position: relative; height: 7px; margin-top: 6px; border-radius: 4px; background: rgba(255,255,255,.08); }
 .m-face-zone { position: absolute; left: 44%; right: 44%; top: 0; bottom: 0; background: rgba(120,220,150,.5); border-radius: 4px; }
 .m-face-dot { position: absolute; top: -2px; width: 4px; height: 11px; border-radius: 2px; background: #fff; left: 50%; margin-left: -2px; transition: left .04s linear; }
-.m-label { margin-top: 7px; font-size: 11px; color: #b8ccbc; text-align: center; height: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Two lines of room, reserved: the coaching line ("Drag down to take the club
+   back") is the one piece of text a first-timer actually needs, and clipping
+   it to an ellipsis on a narrow window hid the instruction. The height is
+   fixed either way so the bar never jumps as the label changes. */
+.m-label { margin-top: 7px; font-size: 11px; color: #b8ccbc; text-align: center;
+  height: 26px; font-weight: 600; line-height: 13px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; }
 .m-label.hot { color: #ffc06b; }
 
 .hintbar { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 5;
@@ -255,11 +274,22 @@ input.code { text-transform: uppercase; letter-spacing: 6px; font-weight: 700; t
 
 /* ─────────────────────────────────────────────────────────── responsive */
 @media (max-width: 900px) {
-  .wind { right: 14px; top: 108px; }
+  /* The wind rose is positioned by the 980px rule below — deliberately not
+     touched here.  Setting `right` at this width while that rule sets `left`
+     anchored the panel on BOTH edges, and an auto-width box pinned on both
+     sides stretches to fill the gap: the rose ended up a 330px slab lying
+     across the turn banner. */
   .board { min-width: 0; font-size: 11.5px; }
   .hintbar { display: none; }
-  .playbar { gap: 8px; bottom: 16px; flex-wrap: wrap; justify-content: center; }
-  .meter { width: 190px; }
+  /* Stay on ONE row: wrapping stacked club, meter and aim into a 200px-tall
+     tower that swallowed the bottom of the screen.  The meter is the only
+     part that can afford to give ground, so it shrinks and the two button
+     groups keep their full-size targets. */
+  .playbar { gap: 8px; bottom: 16px; flex-wrap: nowrap; justify-content: center;
+    max-width: 100vw; padding: 0 8px; }
+  .meter { width: auto; flex: 1 1 auto; min-width: 132px; max-width: 230px; }
+  .clubsel, .aimsel { flex: 0 0 auto; }
+  .cinfo { min-width: 66px; }
   .split { grid-template-columns: 1fr; }
   .or { flex-direction: row; padding: 0; }
   .or::before, .or::after { width: auto; height: 1px; min-height: 0; }
@@ -557,7 +587,10 @@ h1 em { font-style: normal; color: #7ed492; }
 /* On a narrow window the centre-top row runs out of room: the wind rose drops
    under the distance panel and turn banner instead of crowding the scorecard. */
 @media (max-width: 980px) {
-  .wind { top: 128px; left: 50%; transform: translateX(-50%); }
+  /* right:auto matters — the base rule anchors nothing on the right, but any
+     earlier narrow-width rule that did would stretch this box across the
+     screen instead of centring it. */
+  .wind { top: 128px; left: 50%; right: auto; transform: translateX(-50%); }
   .board { top: 232px; }
 }
 
