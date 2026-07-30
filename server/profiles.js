@@ -47,7 +47,7 @@ export function getProfile(pid) {
       birdies: 0, eagles: 0, aces: 0,
       best: null,               // best round relative to par
       coins: 0, rating: 20,
-      gear: { ball: 0, irons: 0, woods: 0, putter: 0 },
+      gear: { ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 },
       history: []               // last 20 rounds, [relToPar]
     };
     profiles.set(pid, p);

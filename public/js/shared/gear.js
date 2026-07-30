@@ -31,11 +31,15 @@ export const SHOP = {
   putter_pro: {
     name: 'Milled putter', cost: 600, slot: 'putter', tier: 1,
     blurb: 'The green read extends past the cup, showing the run-out'
+  },
+  cart_tune: {
+    name: 'Tuned cart', cost: 700, slot: 'cart', tier: 1,
+    blurb: '+12% top speed and a stronger motor on your golf cart'
   }
 };
 
 /** A fresh profile owns nothing. */
-export const NO_GEAR = Object.freeze({ ball: 0, irons: 0, woods: 0, putter: 0 });
+export const NO_GEAR = Object.freeze({ ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 });
 
 /**
  * The multipliers a given bag of gear earns for a given club.

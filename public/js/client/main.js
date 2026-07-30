@@ -777,6 +777,7 @@ function toggleCart() {
   const why = carts.board(G.T, G.hole, walker.x, walker.z, walker.heading, G.room.players);
   if (why === 'nowhere') return HUD.toast('No room for a cart here.', 'warn');
   if (why) return;
+  if (carts.body) carts.body.boost = (G.profile?.gear?.cart || 0) >= 1 ? 1.12 : 1;
   walker.cancelAuto();
   rig.handOff(carts.body ? carts.body.heading : walker.heading);
   HUD.toast(carts.driving ? 'In the cart — W A S D to drive, C to get out'
@@ -871,6 +872,11 @@ window.addEventListener('pointerup', () => {
   const shot = swing.pointerUp();
   swing.reset();
   if (shot && canSwing()) {
+    // call the strike the moment it leaves the face — a golfer knows
+    const sev = Math.abs(shot.faceDeg);
+    if (sev >= 6 || shot.power > 1.08) {
+      HUD.flash('MISHIT', sev >= 6 ? (shot.faceDeg > 0 ? 'face wide open' : 'face shut') : 'overswung', '#ff6b52');
+    }
     Net.swing({
       clubKey: shot.clubKey, power: shot.power, aim: shot.aim,
       faceDeg: shot.faceDeg, attackDeg: shot.attackDeg
@@ -918,6 +924,14 @@ window.addEventListener('keydown', ev => {
     if (!seated) { aimAtPin(); refreshAimPreview(true); }
   }
   if (k === 'v') toggleView();
+  if (canSwing()) {
+    // camera presets, PGA-style: 1 behind, 2 elevated, 3 side-on, 4 first person
+    if (k === '1') { rig.orbit = 0; rig.pitch = 0; rig.zoom = 1; G.view = 'third'; }
+    if (k === '2') { rig.orbit = 0; rig.pitch = 0.42; rig.zoom = 1.35; G.view = 'third'; }
+    if (k === '3') { rig.orbit = Math.PI / 2; rig.pitch = 0.05; rig.zoom = 1.1; G.view = 'third'; }
+    if (k === '4') { G.view = 'first'; }
+    if (k === ' ') { rig.reset(); }        // frame reset, without touching the aim
+  }
   if (k === 'c') toggleCart();
   if (k === 'g') hailRide();
   if (k === 'f') {
@@ -1007,6 +1021,54 @@ function drawMap() {
     scene.renderer.setSize(prev.x, prev.y, false);
     scene.resize();
   }
+
+  // Live markers over the render: every ball, the flag, the wind, a scale.
+  // The ortho camera letterboxes to the canvas aspect, so recompute the same
+  // expanded extents fitMapCamera used or everything lands offset.
+  const ctx = c.getContext('2d');
+  const cx2 = (bd.minX + bd.maxX) / 2, cz2 = (bd.minZ + bd.maxZ) / 2;
+  let hw = (bd.maxX - bd.minX) * 0.51, hh = (bd.maxZ - bd.minZ) * 0.51;
+  const casp = w / h;
+  if (hw / hh < casp) hw = hh * casp; else hh = hw / casp;
+  const mx = x => (x - (cx2 - hw)) / (hw * 2) * w;
+  const mz = z => ((cz2 + hh) - z) / (hh * 2) * h;
+
+  // the flag: a proper red pennant at the pin
+  const fx = mx(G.hole.pin.x), fz = mz(G.hole.pin.z);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * dpr;
+  ctx.beginPath(); ctx.moveTo(fx, fz); ctx.lineTo(fx, fz - 16 * dpr); ctx.stroke();
+  ctx.fillStyle = '#ff5347';
+  ctx.beginPath(); ctx.moveTo(fx, fz - 16 * dpr);
+  ctx.lineTo(fx + 11 * dpr, fz - 12.5 * dpr); ctx.lineTo(fx, fz - 9 * dpr);
+  ctx.closePath(); ctx.fill();
+
+  // every ball in play, mine ringed
+  if (G.room) for (const p of G.room.players) {
+    if (p.spectator) continue;
+    const bl = G.balls[p.pid] || p;
+    ctx.beginPath();
+    ctx.arc(mx(bl.x), mz(bl.z), (p.pid === G.myPid ? 6 : 4.5) * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = p.color; ctx.fill();
+    ctx.strokeStyle = p.pid === G.myPid ? '#fff' : 'rgba(0,0,0,.5)';
+    ctx.lineWidth = 1.6 * dpr; ctx.stroke();
+  }
+
+  // wind arrow, top-left of the map
+  ctx.save();
+  ctx.translate(34 * dpr, 34 * dpr);
+  ctx.rotate(G.wind.dir + Math.PI);
+  ctx.fillStyle = G.wind.speed < 3.5 ? '#8fe07a' : G.wind.speed < 8 ? '#ffd76b' : '#ff7a5c';
+  ctx.beginPath(); ctx.moveTo(0, -14 * dpr); ctx.lineTo(8 * dpr, 10 * dpr);
+  ctx.lineTo(0, 4 * dpr); ctx.lineTo(-8 * dpr, 10 * dpr); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#e8f2ea'; ctx.font = 700 + ' ' + 11 * dpr + 'px system-ui';
+  ctx.fillText(Math.round(G.wind.speed * 2.237) + ' mph', 20 * dpr, 58 * dpr);
+
+  // a scale bar: how long 100 m is on this map
+  const px100 = 100 / (hw * 2) * w;
+  ctx.strokeStyle = '#e8f2ea'; ctx.lineWidth = 2 * dpr;
+  ctx.beginPath(); ctx.moveTo(20 * dpr, h - 20 * dpr); ctx.lineTo(20 * dpr + px100, h - 20 * dpr); ctx.stroke();
+  ctx.fillText('100 m', 20 * dpr, h - 28 * dpr);
 }
 
 /* ===================================================================== */

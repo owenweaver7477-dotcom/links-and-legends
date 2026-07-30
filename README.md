@@ -51,7 +51,7 @@ You have a golfer on the course, and you walk them to the ball.
   always "away from me". Hold `Shift` to run. `F` jogs you to your own ball if
   you cannot be bothered.
 - **Take a cart** with `C`. `W`/`S` are the pedals, `A`/`D` steer, `Space` is the
-  handbrake, and `C` again gets you out. It tops out at 28 mph, so it genuinely
+  handbrake, and `C` again gets you out. It tops out at 49 mph — heavy off the line, quick once rolling —, so it genuinely
   beats running, and it will not go on a green or into a bunker — the same
   places you would be shouted at for taking a real one. Hills matter: it slows
   going up and runs away from you coming down.

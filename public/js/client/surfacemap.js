@@ -128,11 +128,18 @@ export function buildSurfaceTexture(hole, bio) {
   /* 6 ─ the water bed (the surface itself is real geometry) -------------- */
   for (const w of hole.waters) {
     g.save();
-    g.fillStyle = darken(P.dirt, 0.35);
+    // a proper sandy margin first: the wet band every pond wears on land
+    g.fillStyle = P.sand;
+    ellipse(g, px(w.x), pz(w.z), pr(w.rx + 2.2), pr(w.rz + 2.2), -w.rot); g.fill();
+    g.fillStyle = darken(P.sand, 0.18);
+    ellipse(g, px(w.x), pz(w.z), pr(w.rx + 0.9), pr(w.rz + 0.9), -w.rot); g.fill();
+    // then the bed itself, darkening toward the middle where it is deep
+    const bx = px(w.x), bz = pz(w.z);
+    const grd = g.createRadialGradient(bx, bz, pr(Math.min(w.rx, w.rz)) * 0.2, bx, bz, pr(Math.max(w.rx, w.rz)));
+    grd.addColorStop(0, darken(P.dirt, 0.22));
+    grd.addColorStop(1, darken(P.dirt, 0.5));
+    g.fillStyle = grd;
     ellipse(g, px(w.x), pz(w.z), pr(w.rx), pr(w.rz), -w.rot); g.fill();
-    g.strokeStyle = P.sand;
-    g.lineWidth = pr(1.6);
-    ellipse(g, px(w.x), pz(w.z), pr(w.rx), pr(w.rz), -w.rot); g.stroke();
     g.restore();
   }
 

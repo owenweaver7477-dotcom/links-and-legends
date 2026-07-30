@@ -175,7 +175,7 @@ head('speed limits');
   const z0 = b.z;
   drive(flat(), b, { throttle: -1, steer: 0, handbrake: false }, 4);
   stopM = b.z - z0;
-  ok('stops from top speed in a sane distance', b.speed <= 0.01 && stopM < 14,
+  ok('stops from top speed in a sane distance', b.speed <= 0.01 && stopM < 27,
      `${before.toFixed(1)} m/s -> 0 in ${stopM.toFixed(1)} m`);
 }
 

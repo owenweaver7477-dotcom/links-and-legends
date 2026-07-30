@@ -40,7 +40,7 @@ html, body {
 .d-sub { font-size: 11.5px; color: #a9c2ae; margin-top: 1px; }
 
 /* wind */
-.wind { top: 14px; right: 232px; padding: 8px 10px; display: flex; align-items: center; gap: 9px; }
+.wind { top: 14px; left: 50%; transform: translateX(120px); padding: 8px 10px; display: flex; align-items: center; gap: 9px; }
 .wrose { width: 46px; height: 46px; }
 .w-ring { fill: rgba(255,255,255,.05); stroke: rgba(255,255,255,.2); stroke-width: 1.5; }
 .w-n { fill: #7f9a86; font-size: 9px; text-anchor: middle; font-weight: 700; }
@@ -551,3 +551,10 @@ h1 em { font-style: normal; color: #7ed492; }
 .minimap { top: 118px; left: 14px; padding: 7px; }
 .minimap canvas { display: block; width: 132px; height: auto; border-radius: 8px; }
 @media (max-width: 640px) { .minimap { display: none; } }
+
+/* On a narrow window the centre-top row runs out of room: the wind rose drops
+   under the distance panel and turn banner instead of crowding the scorecard. */
+@media (max-width: 980px) {
+  .wind { top: 128px; left: 50%; transform: translateX(-50%); }
+  .board { top: 232px; }
+}

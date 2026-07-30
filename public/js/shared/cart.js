@@ -30,19 +30,19 @@ export const SEATS = {
 };
 
 /* --------------------------------------------------------------- motion */
-export const MAX_FWD = 12.5;      // m/s ≈ 28 mph. Well above SPRINT_SPEED 9.2, so
+export const MAX_FWD = 22.0;      // m/s ≈ 49 mph. Fast enough to be genuinely fun, so
 export const MAX_REV = 3.0;       // driving genuinely beats running.
-export const A_DRIVE = 5.2;       // m/s² — reaches 90% of top in ~4 s
+export const A_DRIVE = 7.5;       // m/s² at full pull — see the heavy-start ramp below
 export const A_DRIVE_REV = 2.2;
-export const A_BRAKE = 6.5;
+export const A_BRAKE = 11.0;      // ~2 s and ~22 m from flat out
 export const A_HAND = 9.0;        // handbrake
 export const ENGINE_BRAKE = 0.75; // coasting with the pedal up. Deliberately
                                   // weaker than gravity on anything above the
                                   // park grade, or a cart would sit on a hill
                                   // with the brake off and never roll.
 export const C_AERO = 0.012;      // 1/m — 1.11 m/s² at top speed
-export const ABS_MAX = 16.0;      // hard ceiling; 16/120 = 0.133 m per substep,
-                                  // still 6x inside the 0.88 m capture radius
+export const ABS_MAX = 26.0;      // hard ceiling; 26/120 = 0.217 m per substep,
+                                  // still 4x inside the 0.88 m capture radius
 
 /* --------------------------------------------------------------- slopes */
 export const G = 9.81;
@@ -67,8 +67,8 @@ export const CRASH_SPEED = 7.0;     // above this a tree stops you dead
 export const FENCE_INSET = 4;       // m inside the hole bounds
 
 /* ------------------------------------------------------------ integration */
-export const SUB_DT = 1 / 120;
-export const MAX_SUB = 14;          // covers a full 0.1 s clamped frame
+export const SUB_DT = 1 / 240;   // doubled with the top speed: accuracy scales with it
+export const MAX_SUB = 26;          // covers a full 0.1 s clamped frame
 export const PARK_GRADE = 0.12;
 export const PARK_SPEED = 0.35;
 
@@ -138,6 +138,7 @@ export class CartBody {
     this.hit = 0;                   // 0..1, decays — drives the crunch effects
     this._wasTouching = false;      // edge trigger, so a scrape isn't a crash
     this.odo = 0;                   // m, for spinning the wheels
+    this.boost = 1;                 // the shop's cart tune: multiplies top and motor
   }
 
   set(x, z, heading, speed = 0) {
@@ -195,15 +196,19 @@ export class CartBody {
 
     /* ------------------------------------------------------------ engine */
     const thr = clamp(input.throttle || 0, -1, 1);
-    const vTop = MAX_FWD * surf.top;
+    const vTop = MAX_FWD * surf.top * this.boost;
     let a = aSlope;
 
     if (input.handbrake) {
       a -= Math.sign(this.speed) * A_HAND;
       if (Math.abs(this.speed) < A_HAND * dt) { this.speed = 0; a = aSlope; }
     } else if (thr > 0.01) {
-      // pressing forward while rolling backwards is a brake, not a gear change
-      a += this.speed < -0.2 ? A_BRAKE : A_DRIVE * thr * (this.speed < vTop ? 1 : 0);
+      // Pressing forward while rolling backwards is a brake, not a gear
+      // change.  And a cart at rest is HEAVY: barely a third of the motor
+      // until it is rolling, so pulling away feels like mass, not a go-kart.
+      const heavy = 0.35 + 0.65 * Math.min(1, Math.abs(this.speed) / 6);
+      a += this.speed < -0.2 ? A_BRAKE
+        : A_DRIVE * this.boost * heavy * thr * (this.speed < vTop ? 1 : 0);
     } else if (thr < -0.01) {
       a += this.speed > 0.2 ? -A_BRAKE : -A_DRIVE_REV * -thr * (this.speed > -MAX_REV ? 1 : 0);
     } else if (Math.abs(this.speed) > 0.01) {

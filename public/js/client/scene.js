@@ -355,8 +355,11 @@ export class GolfScene {
           uniform float uTime; varying vec2 vRip;`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
           vRip = position.xy;
-          transformed.z += sin(position.x*3.1 + uTime*1.6)*0.035
-                         + sin(position.y*2.3 - uTime*1.1)*0.035;`);
+          // two octaves of gentle swell: ~3 m wavelength riding an ~8 m one,
+          // peaks a little under a decimetre — water, not geometry
+          transformed.z += sin(position.x*2.1 + uTime*1.4)*0.05
+                         + sin(position.y*1.6 - uTime*0.9)*0.05
+                         + sin((position.x+position.y)*0.75 + uTime*0.6)*0.035;`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
           uniform float uTime; varying vec2 vRip;`)
