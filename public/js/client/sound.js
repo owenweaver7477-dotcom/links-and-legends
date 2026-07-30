@@ -120,12 +120,21 @@ let cartOsc = null, cartGain = null, cartFilter = null;
 
 /** The cart hum: on while driving, pitch riding the speed. */
 Sound.cart = (speed) => {
-  const c = ac(); if (!c) return;
   if (speed == null) {                      // switch the motor off
+    // This is called EVERY frame on foot, so if the motor is already off it
+    // must be a no-op: touching the dead gain node 60 times a second would
+    // pile automation events onto the audio thread forever (and creating the
+    // AudioContext from the frame loop for silence would be absurd).
+    if (!cartOsc) return;
+    const c = ac(); if (!c) return;
     if (cartGain) { cartGain.gain.linearRampToValueAtTime(0, c.currentTime + 0.2); }
-    if (cartOsc) { const o = cartOsc; setTimeout(() => { try { o.stop(); } catch { /* done */ } }, 300); cartOsc = null; }
+    const o = cartOsc; setTimeout(() => {
+      try { o.stop(); } catch { /* done */ }
+    }, 300);
+    cartOsc = null; cartGain = null; cartFilter = null;
     return;
   }
+  const c = ac(); if (!c) return;
   if (!cartOsc) {
     cartOsc = c.createOscillator();
     cartOsc.type = 'sawtooth';

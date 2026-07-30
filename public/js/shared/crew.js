@@ -28,7 +28,9 @@ export const CADDIES = {
   bruiser: {
     name: 'Bruiser', emoji: '💪', stat: 'Power',
     blurb: 'Hypes you up on every tee. Full-power swings fly further.',
-    line: lvl => `+${(lvl * 4.5).toFixed(0)} yds on full swings`
+    // +1% ball speed per level measures out to ~3.3 yds/level on a full
+    // driver — the card promises what the simulation actually delivers
+    line: lvl => `+${Math.round(lvl * 3.3)} yds on full swings`
   },
   steady: {
     name: 'Steady', emoji: '🧘', stat: 'Control',
@@ -119,7 +121,10 @@ export const REFINE_SPEED = [0.004, 0.008, 0.014];   // cumulative extra ball sp
  * @param ctx       { power, isPutt, afterBadHole }
  */
 export function crewEffect(crew, clubTier = 0, refine = 0, ctx = {}) {
-  const c = crew || NO_CREW;
+  // Merge over NO_CREW rather than trusting the shape: a profile written by
+  // an older build (or a hand-edited save) may miss keys, and one undefined
+  // level would NaN the whole shot — ball position included.
+  const c = crew ? { ...NO_CREW, ...crew } : NO_CREW;
   const tier = CLUB_TIERS[Math.max(0, Math.min(6, clubTier))] || CLUB_TIERS[0];
   const ref = REFINE_SPEED[Math.max(0, Math.min(3, refine)) - 1] || 0;
 
@@ -157,7 +162,8 @@ export function crewPurchase(item, profile) {
   const [kind, which] = String(item).split(':');
 
   if (kind === 'caddie') {
-    if (!CADDIES[which]) return { blocked: 'No such caddie.' };
+    // own-property only: 'caddie:constructor' must not hire a phantom
+    if (!Object.hasOwn(CADDIES, which)) return { blocked: 'No such caddie.' };
     const lvl = (profile.crew || NO_CREW)[which] || 0;
     const cost = caddieCost(lvl);
     if (cost == null) return { blocked: `${CADDIES[which].name} is already a Legend.` };

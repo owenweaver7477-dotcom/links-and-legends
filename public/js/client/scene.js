@@ -16,6 +16,10 @@ const GRID_STEP = 1.8;          // metres between terrain vertices.  2.6 read
                                 // as polygonal on every mound; 1.8 is the
                                 // point where silhouettes become curves.
 const _fwd = new THREE.Vector3();
+// per-frame scratch: the cloud drift and effect loops run every frame of the
+// whole round, so they must not allocate — reuse these instead
+const _m4 = new THREE.Matrix4();
+const _scl = new THREE.Vector3();
 
 export class GolfScene {
   constructor(canvas) {
@@ -163,6 +167,12 @@ export class GolfScene {
     g.add(this.traceLine);
 
     this.fx = new EffectPool(g);
+
+    // Pre-rasterise the green-read while the loading screen is still up:
+    // the 256x256 contour bake costs 25-35 ms, which is invisible here but
+    // would drop frames if left until the putter first comes out mid-play.
+    this.setGreenRead(true);
+    this.setGreenRead(false);
     return this;
   }
 
@@ -1161,16 +1171,15 @@ export class GolfScene {
       const dx = Math.sin(this.windDir || 0.6), dz = Math.cos(this.windDir || 0.6);
       const drift = this.clouds.userData.drift;
       const span = this.clouds.userData.span, cx = this.clouds.userData.cx;
-      const m4 = new THREE.Matrix4();
       for (const d of drift) {
         d.baseX += dx * d.speed * dt;
         d.z += dz * d.speed * dt;
         if (d.baseX > cx + span) d.baseX -= span * 2;
         if (d.baseX < cx - span) d.baseX += span * 2;
-        m4.makeRotationY(d.ry);
-        m4.scale(new THREE.Vector3(d.sx, d.sy, d.sz));
-        m4.setPosition(d.baseX, d.y, d.z);
-        this.clouds.setMatrixAt(d.i, m4);
+        _m4.makeRotationY(d.ry);
+        _m4.scale(_scl.set(d.sx, d.sy, d.sz));
+        _m4.setPosition(d.baseX, d.y, d.z);
+        this.clouds.setMatrixAt(d.i, _m4);
       }
       this.clouds.instanceMatrix.needsUpdate = true;
     }
@@ -1418,7 +1427,7 @@ class EffectPool {
     this.items.push({ inst, parts, life: 1.15, age: 0, mat });
   }
   update(dt) {
-    const m4 = new THREE.Matrix4();
+    const m4 = _m4;                 // module scratch — no per-frame allocation
     for (let i = this.items.length - 1; i >= 0; i--) {
       const it = this.items[i];
       it.age += dt;

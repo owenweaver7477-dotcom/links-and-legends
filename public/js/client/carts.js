@@ -212,7 +212,16 @@ export class CartManager {
     this.riders.delete(pid);
     if (this.rider === pid) this.rider = null;
 
-    if (!cart || cart.s !== 'd') { this.remote.delete(pid); return; }
+    if (!cart || cart.s !== 'd') {
+      // If that vanished cart is the one WE are riding, get out with it —
+      // otherwise the passenger sits frozen in a ghost seat forever (the TTL
+      // sweep in reap() can never fire: the entry is already gone).
+      if (this.driver === pid) { this.seat = null; this.driver = null; }
+      const m = this.meshes.get(pid);
+      if (m) { this.group.remove(m.root); m.dispose(); this.meshes.delete(pid); }
+      this.remote.delete(pid);
+      return;
+    }
     let r = this.remote.get(pid);
     if (!r) {
       r = {

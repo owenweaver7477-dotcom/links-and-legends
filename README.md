@@ -76,8 +76,8 @@ Once you are at the ball, you are standing behind it looking down the hole.
   the yardage; override it whenever you like.
 - **Swing**: press the left button and **drag down** to take the club back, then
   **drag back up and release** to strike. Letting go at the top of the backswing
-  still plays the shot — dead straight, with none of the shaping the
-  through-stroke gives you — so a swing is never simply lost.
+  still plays the shot — with whatever draw or fade your pull-back chose and no
+  strike error on top — so a swing is never simply lost.
   - How far you drag down is power. Past 100% you are overswinging, and accuracy
     goes with it.
   - How far you drift **sideways** as you come back through the ball is your
@@ -86,6 +86,9 @@ Once you are at the ball, you are standing behind it looking down the hole.
 - **The white mark on the power meter is your caddie**: it is the exact power
   that finishes this shot at the flag, in this wind, from this lie, computed by
   running the real simulation. Match it and you are pin high.
+- **Cameras**: `1`–`4` pick the broadcast angles (behind / elevated / side-on /
+  first person) while you are over the ball, and `Space` re-frames the shot.
+  The mouse wheel zooms; `Shift`+wheel zooms even while you are lining up.
 - `M` for the hole map, `R` to reset the view, `Esc` to abandon a swing, `P` for
   the frame-rate meter.
 

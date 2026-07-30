@@ -41,8 +41,12 @@ export const ENGINE_BRAKE = 0.75; // coasting with the pedal up. Deliberately
                                   // park grade, or a cart would sit on a hill
                                   // with the brake off and never roll.
 export const C_AERO = 0.012;      // 1/m — 1.11 m/s² at top speed
-export const ABS_MAX = 26.0;      // hard ceiling; 26/120 = 0.217 m per substep,
-                                  // still 4x inside the 0.88 m capture radius
+export const ABS_MAX = 36.0;      // hard ceiling ABOVE the full boosted range
+                                  // (22 x 1.6 = 35.2, Pitstop 10 + the tune) —
+                                  // the shop's +6%/level must be real speed,
+                                  // not a promise the clamp silently eats.
+                                  // 36/240 = 0.15 m per substep, still well
+                                  // inside the 0.88 m capture radius
 
 /* --------------------------------------------------------------- slopes */
 export const G = 9.81;

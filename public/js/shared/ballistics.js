@@ -56,7 +56,10 @@ export class ShotSim {
     this.lieSurface = lieSurface;
     this.lie = { x: shot.x, z: shot.z };
 
-    const power = clamp(shot.power, 0, 1);
+    // Overswings are admitted up to 1.12 — the server accepts them and the
+    // meter sends them, so the sim must see them too: the purity penalty
+    // below and Steady's overswing damping both key off power > 1.
+    const power = clamp(shot.power, 0, 1.12);
     this.power = power;
 
     // A bad lie costs you speed and kills spin — you cannot spin it out of deep rough.
@@ -563,10 +566,17 @@ export function simulate(terrain, shot) {
  * This is what the marker on the power meter points at, and it is the single
  * thing that makes the game playable rather than a guessing exercise.
  */
-export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist, gear = null) {
+export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist, gear = null, kit = null) {
+  // `kit` carries the rest of the equipment room — { crew, clubTier, refine }.
+  // The probe MUST swing the same ball the server will: a Signature Set with
+  // a Legend Bruiser flies up to ~19% faster than a bare one, and a marker
+  // calibrated for the bare ball would sail every green.
   const run = p => {
     const r = new ShotSim(terrain, {
       x, z, clubKey, power: p, aim, faceDeg: 0, attackDeg: 0, wind, gear,
+      crew: kit?.crew || null,
+      clubTier: kit?.clubTier ?? 0,
+      refine: kit?.refine ?? 0,
       ignoreCup: true          // measure how far it ROLLS, not whether it drops
     }).runToEnd();
     // measure along the aim line, so a shot that leaks sideways is not

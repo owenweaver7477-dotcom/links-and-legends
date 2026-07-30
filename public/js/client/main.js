@@ -10,7 +10,8 @@ import { CartManager } from './carts.js';
 import { reactionFor, REACTION_TIER } from './celebrations.js';
 import { mph } from './cart3d.js';
 import { BOARD_RADIUS } from '../shared/cart.js';
-import { cartBoost, CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
+import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
+import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
 import { SwingController, SWING } from './swing.js';
@@ -144,6 +145,18 @@ let clubManual = false;
 /** the fourteen clubs this player is carrying (server is the source of truth) */
 const myBag = () => me()?.bag?.length ? me().bag : normaliseBag(DEFAULT_BAG);
 
+/**
+ * How much further this player's ball flies than a stock one.  The carry
+ * number under the club name has to promise what the upgraded bag will
+ * actually deliver — for a fresh profile every factor is exactly 1.
+ */
+function carryMult(club) {
+  const fx = gearEffect(G.profile?.gear || null, club);
+  const cfx = crewEffect(G.profile?.crew || null, G.profile?.clubTier ?? 0,
+    G.profile?.refine ?? 0, { power: 1 });
+  return fx.speed * cfx.speed;
+}
+
 function autoClub() {
   if (clubManual || !G.T) return;
   const b = ballOf(G.myPid);
@@ -151,7 +164,8 @@ function autoClub() {
   const lie = G.T.surfaceAt(b.x, b.z);
   clubKey = suggestClub(d, lie.id, lie.id === 'green', myBag()).key;
   swing.clubKey = clubKey;
-  HUD.setClub(CLUB_BY_KEY[clubKey], lie.id);
+  const club = CLUB_BY_KEY[clubKey];
+  HUD.setClub(club, lie.id, carryMult(club));
 }
 function stepClub(dir) {
   const bag = myBag();
@@ -160,7 +174,8 @@ function stepClub(dir) {
   clubKey = bag[clamp(i + dir, 0, bag.length - 1)];
   swing.clubKey = clubKey;
   clubManual = true;
-  HUD.setClub(CLUB_BY_KEY[clubKey], G.T ? G.T.surfaceAt(ballOf(G.myPid).x, ballOf(G.myPid).z).id : 'fairway');
+  const club = CLUB_BY_KEY[clubKey];
+  HUD.setClub(club, G.T ? G.T.surfaceAt(ballOf(G.myPid).x, ballOf(G.myPid).z).id : 'fairway', carryMult(club));
   refreshAimPreview(true);
 }
 
@@ -188,8 +203,9 @@ function refreshAimPreview(force) {
   const myCrew = G.profile?.crew || null;
   const myTier = G.profile?.clubTier ?? 0;
   const myRefine = G.profile?.refine ?? 0;
+  const myKit = { crew: myCrew, clubTier: myTier, refine: myRefine };
   const previewPower = isPutt
-    ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45, myGear) ?? 1)
+    ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45, myGear, myKit) ?? 1)
     : 1;
   // Roller (or the legacy milled putter) extends the read past the cup,
   // showing the run-out.  Without either, the line ends where the hole
@@ -244,7 +260,8 @@ function refreshAimPreview(force) {
   // goes in.
   const toPin = G.T.toPin(b.x, b.z);
   const past = CLUB_BY_KEY[clubKey].putter ? 0.45 : 0;
-  HUD.setTargetPower(suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPin + past, G.profile?.gear || null));
+  // the marker swings the same upgraded ball the server will — see suggestedPower
+  HUD.setTargetPower(suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPin + past, myGear, myKit));
 }
 
 /* ===================================================================== */
@@ -631,15 +648,18 @@ function frame(now) {
     if (carts.sinking != null && carts.sinking < dt * 2) Sound.splash();
     const shore = carts.resolveSink(dt);
     if (shore) {
+      // resolveSink just destroyed the cart (carts.body is null now), so the
+      // seat read below must not run this frame — the walker takes over
       walker.reset(shore.x, shore.z, walker.heading);
       rig.handOff(walker.heading);
       HUD.toast('🌊 The cart is at the bottom of the lake. You swam.', 'warn', 3600);
+    } else {
+      // the golfer goes where the cart goes, so everything downstream — the
+      // roster, the ball gate, the camera — keeps working unchanged
+      const seat = carts.body.seat('driver');
+      walker.x = seat.x; walker.z = seat.z; walker.heading = carts.body.heading;
+      walker.speed = 0;
     }
-    // the golfer goes where the cart goes, so everything downstream — the
-    // roster, the ball gate, the camera — keeps working unchanged
-    const seat = carts.body.seat('driver');
-    walker.x = seat.x; walker.z = seat.z; walker.heading = carts.body.heading;
-    walker.speed = 0;
   } else if (m === 'ride') {
     carts.clearInput();
     const seat = carts.seatFor(G.myPid, G.myPid);
@@ -1001,6 +1021,7 @@ function toggleMap() {
   HUD.el.mapwrap.hidden = !G.mapOpen;
   if (G.mapOpen) drawMap();
 }
+let mapBase = null, mapBaseKey = '';
 function drawMap() {
   if (!G.hole || !scene.holeGroup) return;
   const c = HUD.el.mapc;
@@ -1019,27 +1040,42 @@ function drawMap() {
   w = Math.max(320, Math.round(w * dpr));
   h = Math.max(240, Math.round(h * dpr));
   if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
-  fitMapCamera(scene.mapCamera, G.hole, aspect);
 
-  // Fog is tuned for eye level; from 600 m up it would grey the whole hole out.
-  // Everything here mutates shared scene state, so it MUST be unwound even if
-  // the render throws — otherwise the course stays fogless for the rest of the
-  // round.
-  const prev = scene.renderer.getSize(new THREE.Vector2());
-  const fog = scene.scene.fog;
-  const bg = scene.scene.background;
-  try {
-    scene.scene.fog = null;
-    scene.scene.background = new THREE.Color(0x0d1512);
-    scene.renderer.setSize(w, h, false);
-    scene.render(scene.mapCamera);
-    c.getContext('2d').drawImage(scene.renderer.domElement, 0, 0, w, h);
-  } finally {
-    scene.scene.fog = fog;
-    scene.scene.background = bg;
-    scene.renderer.setSize(prev.x, prev.y, false);
-    scene.resize();
+  // The terrain render is expensive (a second full scene pass at up to
+  // 2000x2500, plus two drawing-buffer resizes) and the terrain never moves —
+  // so render it ONCE per hole and size into an offscreen base, and per frame
+  // only stamp the base and redraw the live markers on top.
+  const baseKey = G.room?.courseId + ':' + G.hole.number + ':' + w + 'x' + h;
+  if (!mapBase || mapBaseKey !== baseKey) {
+    // The camera must letterbox to the CANVAS aspect, not the hole-bounds
+    // aspect — the size floors above can change it, and the marker overlay
+    // below maps through the canvas aspect.  One mapping, or dots drift.
+    fitMapCamera(scene.mapCamera, G.hole, w / h);
+
+    // Fog is tuned for eye level; from 600 m up it would grey the whole hole
+    // out.  Everything here mutates shared scene state, so it MUST be unwound
+    // even if the render throws — otherwise the course stays fogless for the
+    // rest of the round.
+    const prev = scene.renderer.getSize(new THREE.Vector2());
+    const fog = scene.scene.fog;
+    const bg = scene.scene.background;
+    try {
+      scene.scene.fog = null;
+      scene.scene.background = new THREE.Color(0x0d1512);
+      scene.renderer.setSize(w, h, false);
+      scene.render(scene.mapCamera);
+      mapBase = document.createElement('canvas');
+      mapBase.width = w; mapBase.height = h;
+      mapBase.getContext('2d').drawImage(scene.renderer.domElement, 0, 0, w, h);
+      mapBaseKey = baseKey;
+    } finally {
+      scene.scene.fog = fog;
+      scene.scene.background = bg;
+      scene.renderer.setSize(prev.x, prev.y, false);
+      scene.resize();
+    }
   }
+  c.getContext('2d').drawImage(mapBase, 0, 0);
 
   // Live markers over the render: every ball, the flag, the wind, a scale.
   // The ortho camera letterboxes to the canvas aspect, so recompute the same
@@ -1105,7 +1141,9 @@ function drawMini(now) {
   const W = 132, H = Math.round(W * spanZ / spanX);
   const c = HUD.el.minic;
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; }
+  // W is a constant, so the height must be checked too — each hole has its
+  // own aspect, and a stale backing-store height squashes every later hole
+  if (c.width !== W * dpr || c.height !== H * dpr) { c.width = W * dpr; c.height = H * dpr; }
   c.style.height = H + 'px';
   const x2 = x => (x - b.minX) / spanX * W * dpr;
   // flip z so up the canvas is up the hole (tee at the bottom)
@@ -1188,7 +1226,11 @@ Net.on('state', s => {
 
   if (G.T) {
     for (const p of s.players) {
+      // never snap a ball whose shot is mid-animation OR still waiting its
+      // turn in the replay queue — snapping a queued player's ball teleports
+      // it to its final lie before their shot has even played on this screen
       if (G.anim && G.anim.pid === p.pid) continue;
+      if (G.queue.some(q => q.pid === p.pid)) continue;
       const cur = G.balls[p.pid];
       if (!cur || Math.hypot(cur.x - p.x, cur.z - p.z) > 0.05) {
         G.balls[p.pid] = { x: p.x, y: G.T.heightAt(p.x, p.z) + BALL_RADIUS, z: p.z };
@@ -1295,6 +1337,13 @@ function route() {
     HUD.show('lobby');
     renderLobbyAll(r);
     return;
+  }
+  // Joining mid-summary: the join ack routes before any state broadcast has
+  // run ensureHole(), so the course may not be loaded yet.  Both summary
+  // screens dereference it; hold the loading screen for the moment it takes
+  // the first broadcast to arrive and route again.
+  if ((r.state === 'results' || r.state === 'holeover') && !G.course) {
+    G.screen = 'load'; HUD.show('load'); return;
   }
   if (r.state === 'results') { G.screen = 'results'; HUD.show('results'); HUD.renderResults(r, G.myPid, G.course); return; }
   if (r.state === 'holeover') {

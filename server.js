@@ -155,6 +155,11 @@ function addPlayer(room, pid, name, spectator) {
  * holes you miss but never your card or your seat.
  */
 function startHole(room, { purge = false } = {}) {
+  // Every path into a fresh hole comes through here, so this is the one place
+  // the hole-summary timer can be cancelled without missing an entry point —
+  // a stale timer would later yank the live round forward a hole on its own.
+  clearTimeout(room.summaryTimer);
+  room.summaryTimer = null;
   const t = teeOf(room);
   rollWind(room);
   for (const p of room.players) {
@@ -163,6 +168,9 @@ function startHole(room, { purge = false } = {}) {
     p.x = t.x; p.z = t.z; p.lie = 'tee';
     p.ax = t.x; p.az = t.z; p.arot = t.rot;
     p.cart = null; p.cartAt = 0;      // everyone walks to the tee
+    // Grit's after-a-bad-hole calm carries hole to hole, but a NEW round
+    // (purge) starts with a clean slate — no hole preceded its first tee.
+    if (purge) p.afterBad = false;
     p.holePutts = 0; p.holeFairway = false; p.holeGir = false;
   }
   if (purge) room.players = room.players.filter(p => p.connected);
@@ -201,6 +209,19 @@ function pickNextToPlay(room, teeOff = false) {
 function everyoneDone(room) {
   const a = active(room).filter(p => p.connected);
   return a.length > 0 && a.every(p => p.finished);
+}
+
+/**
+ * A departing player keeps their seat mid-round — a dropped connection must
+ * never cost anyone their scorecard.  But a seat is only worth keeping if it
+ * has a card: in the lobby, or for a spectator who never played a hole, the
+ * seat is dropped so join/leave churn cannot grow the roster (and with it
+ * every snapshot) without bound.
+ */
+function dropIfNeverPlayed(room, p) {
+  if (room.state === 'lobby' || (p.spectator && p.scores.every(s => s == null))) {
+    room.players = room.players.filter(x => x.pid !== p.pid);
+  }
 }
 
 function finishHole(room) {
@@ -295,41 +316,97 @@ function snapshot(room) {
 const inCart = p => !!p.cart && Date.now() - (p.cartAt || 0) < CART_TTL_MS;
 
 const broadcastState = room => io.to(room.code).emit('room:state', snapshot(room));
+
+/**
+ * Broadcast for the chatty per-player channels (look, prefs).  A snapshot goes
+ * to every player, so a client scripting hundreds of messages a second must
+ * not become a bandwidth amplifier: bursts coalesce to at most ~5 snapshots a
+ * second per player, with a trailing send so the last change always lands.
+ */
+function castSoon(room, p) {
+  const now = Date.now();
+  if (now - (p.castAt || 0) >= 200) { p.castAt = now; broadcastState(room); return; }
+  if (p.castTimer) return;
+  p.castTimer = setTimeout(() => {
+    p.castTimer = null; p.castAt = Date.now(); broadcastState(room);
+  }, 220);
+  p.castTimer.unref?.();
+}
 const toast = (room, msg, kind) => io.to(room.code).emit('toast', { msg, kind: kind || 'info' });
 
 /* ------------------------------------------------------------------ sockets */
 io.on('connection', socket => {
 
   function bind(room, player) {
-    if (player.socketId && player.socketId !== socket.id) {
-      const old = io.sockets.sockets.get(player.socketId);
-      if (old) { try { old.emit('kicked', { reason: 'Opened in another tab' }); old.disconnect(true); } catch { /* gone */ } }
-    }
+    // Claim the seat FIRST.  Kicking the old socket runs its disconnect
+    // handler synchronously, and that handler bows out only when the seat's
+    // socketId no longer matches — reassign after the kick and the handler
+    // would remove the very player we are binding.
+    const oldId = player.socketId;
     player.socketId = socket.id;
     player.connected = true;
+    if (oldId && oldId !== socket.id) {
+      const old = io.sockets.sockets.get(oldId);
+      if (old) { try { old.emit('kicked', { reason: 'Opened in another tab' }); old.disconnect(true); } catch { /* gone */ } }
+    }
     sockets.set(socket.id, { code: room.code, pid: player.pid });
     socket.join(room.code);
     room.emptySince = null;
     socket.emit('profile', publicProfile(player.pid));
   }
 
+  /**
+   * A socket holds one seat at a time.  Before it creates or joins a room,
+   * release whatever it was bound to — otherwise the old room keeps a phantom
+   * `connected` player forever, the reaper can never collect it, and this
+   * socket keeps receiving that room's broadcasts on top of the new one's.
+   */
+  function unbind() {
+    const ref = sockets.get(socket.id);
+    if (!ref) return;
+    sockets.delete(socket.id);
+    socket.leave(ref.code);
+    const room = rooms.get(ref.code); if (!room) return;
+    const p = room.players.find(x => x.pid === ref.pid);
+    if (!p || p.socketId !== socket.id) return;
+    p.connected = false;
+    p.socketId = null;
+    dropIfNeverPlayed(room, p);
+    if (room.hostPid === p.pid) {
+      const heir = room.players.find(x => x.connected);
+      room.hostPid = heir?.pid ?? null;
+      if (heir) toast(room, heir.name + ' is now the host.');
+    }
+    if (room.state === 'playing') {
+      if (everyoneDone(room)) finishHole(room);
+      else pickNextToPlay(room);
+    }
+    if (!room.players.some(x => x.connected)) room.emptySince = Date.now();
+    broadcastState(room);
+  }
+
   socket.on('room:create', (data, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
     const pid = cleanPid(data?.pid);
-    if (!pid) return ack?.({ ok: false, error: 'Bad client id — refresh the page.' });
+    if (!pid) return reply({ ok: false, error: 'Bad client id — refresh the page.' });
+    unbind();
     const room = createRoom(makeCode(), data?.courseId);
     rollWind(room);
     const p = addPlayer(room, pid, cleanName(data?.name), false);
     bind(room, p);
-    ack?.({ ok: true, code: room.code, pid, state: snapshot(room) });
+    reply({ ok: true, code: room.code, pid, state: snapshot(room) });
     broadcastState(room);
   });
 
   socket.on('room:join', (data, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
     const pid = cleanPid(data?.pid);
     const code = String(data?.code ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
-    if (!pid) return ack?.({ ok: false, error: 'Bad client id — refresh the page.' });
+    if (!pid) return reply({ ok: false, error: 'Bad client id — refresh the page.' });
     const room = rooms.get(code);
-    if (!room) return ack?.({ ok: false, error: 'No room with code ' + (code || '—') });
+    if (!room) return reply({ ok: false, error: 'No room with code ' + (code || '—') });
+    const prev = sockets.get(socket.id);
+    if (!prev || prev.code !== code || prev.pid !== pid) unbind();
 
     let p = room.players.find(x => x.pid === pid);
     if (p) {
@@ -340,22 +417,38 @@ io.on('connection', socket => {
         const cur = room.players.find(x => x.pid === room.turnPid);
         if (!cur || !cur.connected || cur.finished) pickNextToPlay(room);
       }
-      ack?.({ ok: true, code, pid, state: snapshot(room), rejoined: true });
+      reply({ ok: true, code, pid, state: snapshot(room), rejoined: true });
       broadcastState(room);
       return;
     }
     if (room.players.filter(x => x.connected).length >= MAX_PLAYERS) {
-      return ack?.({ ok: false, error: `That room is full (${MAX_PLAYERS} players).` });
+      return reply({ ok: false, error: `That room is full (${MAX_PLAYERS} players).` });
+    }
+    // Join/leave churn during a round must not grow the roster without bound:
+    // every seat rides inside every snapshot.  Reclaim dead spectator seats
+    // first, and past a hard cap turn newcomers away.
+    if (room.players.length >= MAX_PLAYERS * 2) {
+      const ghost = room.players.find(x =>
+        !x.connected && x.pid !== room.hostPid && x.scores.every(s => s == null));
+      if (ghost) room.players = room.players.filter(x => x !== ghost);
+      if (room.players.length >= MAX_PLAYERS * 3) {
+        return reply({ ok: false, error: 'That room is full.' });
+      }
     }
     const spec = room.state !== 'lobby';
     p = addPlayer(room, pid, cleanName(data?.name), spec);
     bind(room, p);
-    ack?.({ ok: true, code, pid, state: snapshot(room), spectator: spec });
+    reply({ ok: true, code, pid, state: snapshot(room), spectator: spec });
     toast(room, p.name + (spec ? ' is watching until the next hole.' : ' joined.'));
     broadcastState(room);
   });
 
-  socket.on('room:course', ({ courseId } = {}) => {
+  // Payloads are normalised INSIDE the body, never destructured in the
+  // parameter list: a `= {}` default only covers undefined, so a client
+  // emitting `null` would throw before the first guard ran — and an uncaught
+  // throw in a socket handler kills the whole process.
+  socket.on('room:course', (d) => {
+    const courseId = d?.courseId;
     const ref = sockets.get(socket.id); if (!ref) return;
     const room = rooms.get(ref.code); if (!room) return;
     if (ref.pid !== room.hostPid || room.state !== 'lobby') return;
@@ -368,7 +461,8 @@ io.on('connection', socket => {
     broadcastState(room);
   });
 
-  socket.on('room:tees', ({ teeSet } = {}) => {
+  socket.on('room:tees', (d) => {
+    const teeSet = d?.teeSet;
     const ref = sockets.get(socket.id); if (!ref) return;
     const room = rooms.get(ref.code); if (!room) return;
     if (ref.pid !== room.hostPid || room.state !== 'lobby') return;
@@ -380,11 +474,13 @@ io.on('connection', socket => {
   });
 
   /** Your own kit: ball colour and the fourteen clubs you carry. */
-  socket.on('player:prefs', ({ color, bag } = {}) => {
+  socket.on('player:prefs', (d) => {
+    const color = d?.color, bag = d?.bag;
     const ref = sockets.get(socket.id); if (!ref) return;
     const room = rooms.get(ref.code); if (!room) return;
     const p = room.players.find(x => x.pid === ref.pid); if (!p) return;
 
+    const before = p.color + '|' + JSON.stringify(p.bag);
     if (typeof color === 'string') {
       const wanted = BALL_COLORS.find(c => c.hex === color);
       // first come first served — two identical balls on one hole is confusing
@@ -396,7 +492,9 @@ io.on('connection', socket => {
       }
     }
     if (Array.isArray(bag)) p.bag = normaliseBag(bag);
-    broadcastState(room);
+    // only broadcast a real change, and coalesce bursts (see castSoon)
+    if (before === p.color + '|' + JSON.stringify(p.bag)) return;
+    castSoon(room, p);
   });
 
   /**
@@ -429,7 +527,7 @@ io.on('connection', socket => {
             x: clamp(Number(c.x) || 0, b.minX, b.maxX),
             z: clamp(Number(c.z) || 0, b.minZ, b.maxZ),
             h: isFinite(Number(c.h)) ? Number(c.h) : 0,
-            v: clamp(Number(c.v) || 0, -6, 27),
+            v: clamp(Number(c.v) || 0, -6, 37),
             r: cleanPid(c.r) || null
           }
         : { s: 'p', o: cleanPid(c.o) || null };
@@ -446,12 +544,15 @@ io.on('connection', socket => {
     });
   });
 
-  socket.on('player:look', ({ look } = {}) => {
+  socket.on('player:look', (d) => {
     const ref = sockets.get(socket.id); if (!ref) return;
     const room = rooms.get(ref.code); if (!room) return;
     const p = room.players.find(x => x.pid === ref.pid); if (!p) return;
-    p.look = normaliseLook(look, room.players.indexOf(p));
-    broadcastState(room);
+    const next = normaliseLook(d?.look, room.players.indexOf(p));
+    // only broadcast a real change, and coalesce bursts (see castSoon)
+    if (JSON.stringify(next) === JSON.stringify(p.look)) return;
+    p.look = next;
+    castSoon(room, p);
   });
 
   /**
@@ -486,7 +587,8 @@ io.on('connection', socket => {
    * the gear bought here is applied by this server inside the simulation —
    * the client never tells us what equipment it has, it ASKS what it owns.
    */
-  socket.on('shop:buy', ({ item } = {}) => {
+  socket.on('shop:buy', (d) => {
+    const item = d?.item;
     const ref = sockets.get(socket.id); if (!ref) return;
     const why = buyItem(ref.pid, String(item || ''), SHOP, purchaseBlocked, crewPurchase);
     if (why) return socket.emit('toast', { msg: why, kind: 'warn' });
@@ -628,7 +730,7 @@ io.on('connection', socket => {
 
     p.connected = false;
     p.socketId = null;
-    if (room.state === 'lobby') room.players = room.players.filter(x => x.pid !== p.pid);
+    dropIfNeverPlayed(room, p);
     if (room.hostPid === p.pid) {
       const heir = room.players.find(x => x.connected);
       room.hostPid = heir?.pid ?? null;
@@ -687,3 +789,13 @@ httpServer.listen(PORT, HOST, () => {
 
 process.on('SIGTERM', () => httpServer.close(() => process.exit(0)));
 process.on('SIGINT', () => httpServer.close(() => process.exit(0)));
+
+// The last line of defence, never the first: every handler above normalises
+// its own input, but no single bug should ever take down every room on the
+// server.  Log it loudly and keep serving.
+process.on('uncaughtException', err => {
+  console.error('  UNCAUGHT —', err?.stack || err);
+});
+process.on('unhandledRejection', err => {
+  console.error('  UNHANDLED REJECTION —', err?.stack || err);
+});

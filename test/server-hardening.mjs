@@ -253,6 +253,124 @@ const run = async () => {
   a.close(); b.close();
   await wait(300);
 
+  /* ---------------- 8. null payloads on every handler ---------------- */
+  // A parameter-list `({x} = {})` default only covers undefined, not null —
+  // this exact shape once let `emit('room:course', null)` kill the process.
+  const nA = mk('nA'); await wait(200);
+  const nr = await rpc(nA, 'room:create', { name: 'Null', pid: 'null_a' });
+  const nCode = nr?.code;
+  for (const evt of ['room:course', 'room:tees', 'player:prefs', 'player:look',
+                     'shop:buy', 'player:move', 'game:swing', 'cart:hail']) {
+    nA.emit(evt, null);
+    nA.emit(evt, undefined);
+    nA.emit(evt, 'string');
+    nA.emit(evt, 42);
+  }
+  await wait(500);
+  const nAlive = await rpc(nA, 'room:join', { code: nCode, name: 'Null', pid: 'null_a' });
+  check('null payloads on every handler leave the server alive', !!nAlive?.ok);
+
+  // an ack slot filled with a non-function must not be callable-crashed either
+  nA.emit('room:create', { pid: 'null_a' }, 'boom');
+  nA.emit('room:join', { code: 'ZZZZ', pid: 'null_a' }, 12345);
+  nA.emit('room:join', { code: nCode, pid: '' }, { not: 'a function' });
+  await wait(500);
+  const nAlive2 = await rpc(nA, 'room:join', { code: nCode, name: 'Null', pid: 'null_a' });
+  check('a non-function ack cannot crash create or join', !!nAlive2?.ok);
+  nA.close();
+  await wait(200);
+
+  /* ---------------- 9. the shop till ---------------- */
+  // Prototype-chain keys ('constructor' etc) once resolved to truthy objects
+  // with an undefined cost — one purchase NaN'd the balance permanently.
+  const sA = mk('sA');
+  let prof = null;
+  sA.on('profile', p => { prof = p; });
+  await wait(200);
+  await rpc(sA, 'room:create', { name: 'Shopper', pid: 'shop_a' });
+  await wait(300);
+  const coins0 = prof?.coins;
+  for (const item of ['constructor', 'toString', '__proto__', 'hasOwnProperty',
+                      'caddie:constructor', 'caddie:__proto__', 'club:constructor']) {
+    sA.emit('shop:buy', { item });
+    await wait(60);
+  }
+  await wait(400);
+  // ask for a fresh profile via a rejected known-item purchase (server replies
+  // with a toast either way; profile arrives only on success — so re-join)
+  sA.close(); await wait(200);
+  const sB = mk('sB');
+  let prof2 = null;
+  sB.on('profile', p => { prof2 = p; });
+  await wait(200);
+  await rpc(sB, 'room:create', { name: 'Shopper', pid: 'shop_a' });
+  await wait(300);
+  check('prototype-chain shop keys buy nothing',
+    Number.isFinite(prof2?.coins) && prof2.coins === coins0
+    && !Object.keys(prof2?.crew || {}).includes('constructor'),
+    `coins ${coins0} -> ${prof2?.coins}`);
+  sB.close();
+  await wait(200);
+
+  /* ---------------- 10. rooms are released, seats are kept honest ------- */
+  // One socket creating rooms in a loop used to leak them all: the old room
+  // kept a phantom `connected` player forever and the reaper skipped it.
+  const lA = mk('lA'); await wait(200);
+  const r1 = await rpc(lA, 'room:create', { name: 'Leaky', pid: 'leak_a' });
+  const r2 = await rpc(lA, 'room:create', { name: 'Leaky', pid: 'leak_a' });
+  const peek = mk('peek'); await wait(200);
+  const p1 = await rpc(peek, 'room:join', { code: r1?.code, name: 'Peek', pid: 'peek_a' });
+  // the first room must NOT still list leak_a as connected — either the seat
+  // is marked disconnected or (lobby, never played) dropped entirely
+  const ghost = p1?.state?.players?.find(p => p.pid === 'leak_a');
+  check('creating a second room releases the first',
+    !!p1?.ok && (!ghost || ghost.connected === false),
+    ghost ? `leak_a connected=${ghost.connected}` : 'seat dropped');
+  peek.close(); lA.close();
+  await wait(200);
+
+  // A second tab binding the same pid in the lobby once deleted the player
+  // mid-bind, acking rejoined:true into a room that no longer listed them.
+  const t1 = mk('t1'); await wait(200);
+  const tr = await rpc(t1, 'room:create', { name: 'TabOne', pid: 'tab_pid' });
+  const t2 = mk('t2'); await wait(200);
+  const tr2 = await rpc(t2, 'room:join', { code: tr?.code, name: 'TabTwo', pid: 'tab_pid' });
+  const tabSeat = tr2?.state?.players?.find(p => p.pid === 'tab_pid');
+  check('a second tab keeps the seat and the host',
+    !!tr2?.ok && !!tabSeat && tr2?.state?.hostPid === 'tab_pid',
+    `players=${tr2?.state?.players?.length} host=${tr2?.state?.hostPid}`);
+  t1.close(); t2.close();
+  await wait(200);
+
+  /* ---------------- 11. churn and amplification ---------------- */
+  // Join/leave churn during a round must not grow the roster without bound.
+  const hostC = mk('hostC'); await wait(200);
+  const cr = await rpc(hostC, 'room:create', { name: 'Churn', pid: 'churn_host' });
+  hostC.emit('game:start'); await wait(600);
+  for (let i = 0; i < 24; i++) {
+    const ghostS = mk('g' + i); await wait(50);
+    await rpc(ghostS, 'room:join', { code: cr?.code, name: 'G' + i, pid: 'ghost' + i });
+    ghostS.close();
+  }
+  await wait(500);
+  const after8 = await rpc(hostC, 'room:join', { code: cr?.code, name: 'Churn', pid: 'churn_host' });
+  check('mid-round join churn cannot grow the roster without bound',
+    !!after8?.ok && (after8?.state?.players?.length ?? 999) <= 16,
+    `${after8?.state?.players?.length} seats after 24 join/leave cycles`);
+
+  // identical look/prefs spam must not fan out as full snapshots
+  const wA = mk('wA'); await wait(200);
+  await rpc(wA, 'room:join', { code: cr?.code, name: 'Watcher', pid: 'watch_a' });
+  await wait(400);
+  let casts = 0;
+  wA.on('room:state', () => casts++);
+  for (let i = 0; i < 60; i++) hostC.emit('player:look', { look: { shirt: '#ff0000' } });
+  await wait(800);
+  check('60 identical look messages coalesce to at most 2 snapshots',
+    casts <= 2, `${casts} snapshots for 60 messages`);
+  wA.close(); hostC.close();
+  await wait(200);
+
   /* ---------------- report ---------------- */
   const fails = results.filter(r => !r.pass);
   for (const r of results) console.log(`  ${r.pass ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? '   [' + r.detail + ']' : ''}`);

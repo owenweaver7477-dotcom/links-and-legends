@@ -107,6 +107,7 @@ export function buyItem(pid, item, SHOP, purchaseBlocked, crewPurchase) {
     const res = crewPurchase(item, p);
     if (res.blocked) return res.blocked;
     p.coins -= res.cost;
+    if (!Number.isFinite(p.coins)) { p.coins = 0; return 'No such item.'; }
     res.apply(p);
     saveSoon();
     return null;
@@ -114,8 +115,11 @@ export function buyItem(pid, item, SHOP, purchaseBlocked, crewPurchase) {
 
   const why = purchaseBlocked(item, p);
   if (why) return why;
-  const it = SHOP[item];
+  // own-property only — a prototype-chain key would charge undefined coins
+  const it = Object.hasOwn(SHOP, item) ? SHOP[item] : null;
+  if (!it) return 'No such item.';
   p.coins -= it.cost;
+  if (!Number.isFinite(p.coins)) { p.coins = 0; return 'No such item.'; }
   p.gear[it.slot] = it.tier;
   saveSoon();
   return null;

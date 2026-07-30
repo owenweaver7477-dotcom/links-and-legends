@@ -60,14 +60,17 @@ export function gearEffect(gear, club) {
 
 /** Can this profile buy this item right now?  Returns null or a reason. */
 export function purchaseBlocked(item, profile) {
-  const it = SHOP[item];
+  // Own-property lookup only: item names come off the wire, and a key like
+  // 'constructor' would otherwise resolve up the prototype chain to something
+  // truthy with an undefined cost — and undefined arithmetic NaNs the balance.
+  const it = Object.hasOwn(SHOP, item) ? SHOP[item] : null;
   if (!it) return 'No such item.';
   const owned = profile.gear || NO_GEAR;
   const slotTier = owned[it.slot] || 0;
   if (slotTier >= it.tier) return 'Already owned.';
   if (it.requires) {
-    const req = SHOP[it.requires];
-    if ((owned[req.slot] || 0) < req.tier) return `Needs ${req.name} first.`;
+    const req = Object.hasOwn(SHOP, it.requires) ? SHOP[it.requires] : null;
+    if (req && (owned[req.slot] || 0) < req.tier) return `Needs ${req.name} first.`;
   }
   if ((profile.coins || 0) < it.cost) return `Costs ${it.cost} coins — you have ${profile.coins || 0}.`;
   return null;

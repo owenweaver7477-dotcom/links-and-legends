@@ -113,12 +113,14 @@ HUD.setWind = (wind, viewHeading) => {
 };
 
 /* ------------------------------------------------------------------- club */
-HUD.setClub = (club, lieId) => {
+HUD.setClub = (club, lieId, mult = 1) => {
   el.clubName.textContent = club.label;
   if (club.putter) {
     el.clubCarry.textContent = 'on the green';
   } else {
-    const c = CARRY[club.key] || 0;
+    // mult is the player's equipment factor — an upgraded bag genuinely
+    // carries further, and this label must not quote the stock number
+    const c = (CARRY[club.key] || 0) * mult;
     el.clubCarry.textContent = Math.round(dist(c)) + ' ' + HUD.unit();
   }
 };
@@ -403,6 +405,7 @@ HUD.renderShop = (prof, onBuy) => {
       btn.textContent = owned ? 'In the bag ✓' : '🪙 ' + it.cost;
       btn.disabled = owned || !!blocked;
       if (!owned && !blocked) btn.addEventListener('click', () => onBuy(key));
+      card.appendChild(btn);
       grid.appendChild(card);
     }
   }

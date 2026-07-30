@@ -404,6 +404,60 @@ head('the caddie crew — hired stats that actually do things');
   const p = { coins: 5000, clubTier: 1, refine: 3, crew: { ...NO_CREW } };
   crewPurchase('club:tier', p).apply(p);
   ok('tier-up resets refinement, as designed', p.clubTier === 2 && p.refine === 0);
+
+  // a partial crew object (older save, hand-edited file, or a future ninth
+  // caddie) must behave as zeros, never as NaN — NaN here is a NaN ball
+  const partial = crewEffect({ ace: 2 }, 0, 0, { power: 1, isPutt: true, afterBadHole: true });
+  ok('a partial crew object never NaNs the shot',
+     [partial.speed, partial.faceDamp, partial.windDamp, partial.cupBonus, partial.lieMercy]
+       .every(Number.isFinite),
+     JSON.stringify(partial));
+
+  // prototype-chain names must not hire phantoms or charge for them
+  ok('caddie:constructor is refused',
+     !!crewPurchase('caddie:constructor', { coins: 99999, crew: { ...NO_CREW } }).blocked);
+}
+
+/* ========================================================== overswing */
+head('overswing — power past 1.0 must actually reach the simulation');
+{
+  const { ShotSim, makeFlatRange } = await import('../public/js/shared/ballistics.js');
+  const { NO_CREW } = await import('../public/js/shared/crew.js');
+  const T4 = makeFlatRange();
+  const fire = (power, crew) => new ShotSim(T4, { x: 0, z: 0, clubKey: 'DR',
+    power, aim: 0, faceDeg: 3, attackDeg: 0, wind: { speed: 0, dir: 0 }, crew });
+  // the sim once clamped power to 1.0, which made every overswing consequence
+  // dead code: no extra speed, no purity penalty, and Steady did nothing
+  const over = fire(1.12, null).runToEnd().carry;
+  const fullC = fire(1.0, null).runToEnd().carry;
+  ok('an overswing genuinely flies further than a full swing',
+     over > fullC + 5, `${fullC.toFixed(0)} -> ${over.toFixed(0)} m`);
+  const calm = fire(1.12, { ...NO_CREW, steady: 10 });
+  const raw = fire(1.12, null);
+  ok('Steady damps the face on an overswing',
+     calm.cfx.faceDamp > raw.cfx.faceDamp + 0.3,
+     `damp ${raw.cfx.faceDamp.toFixed(2)} -> ${calm.cfx.faceDamp.toFixed(2)}`);
+  const full = fire(1.0, { ...NO_CREW, steady: 10 });
+  ok('but never on an ordinary full swing', full.cfx.faceDamp === 0);
+}
+
+/* ============================================== the boosted cart is honest */
+head('boost — the shop’s +6% per level must be real speed, not a clamp');
+{
+  const T = flat();
+  const stock = new CartBody(0, 0, 0);
+  drive(T, stock, GO, 30);
+  const tuned = new CartBody(0, 0, 0);
+  tuned.boost = 1.6;                      // Pitstop 10 + the cart tune, capped
+  drive(T, tuned, GO, 20);                // 20 s stays inside the 900 m field
+  // aero drag equilibrates a 1.6 boost near 31 m/s — the point is that the
+  // old ABS_MAX = 26 clamp is gone and boost past ~1.18 buys real speed
+  ok('a fully boosted cart genuinely passes the old 26 m/s clamp',
+     tuned.speed > 28 && tuned.speed <= ABS_MAX,
+     `${tuned.speed.toFixed(1)} m/s (${(tuned.speed * 2.237).toFixed(0)} mph)`);
+  ok('and boost past 1.18 still adds speed',
+     tuned.speed > stock.speed + 5,
+     `stock ${stock.speed.toFixed(1)} -> boosted ${tuned.speed.toFixed(1)} m/s`);
 }
 
 /* ========================================================== celebrations */

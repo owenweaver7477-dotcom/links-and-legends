@@ -1,7 +1,7 @@
 /* =========================================================================
    swing.js — aiming and the swing itself
    -------------------------------------------------------------------------
-   Aim with the mouse (or A/D), pick a club, then make a swing:
+   Aim with ←/→ (Shift = ultra-fine), pick a club, then make a swing:
 
      press and drag DOWN   -> backswing, power builds
      drag back UP and let go near the ball -> the strike
