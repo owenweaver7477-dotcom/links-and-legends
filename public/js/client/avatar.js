@@ -103,6 +103,20 @@ export class Avatar {
     this.legL = limb(this.mats.trousers, 0.145, H * 0.42, -0.105, H * 0.47, this.mats.shoe, H * 0.05);
     this.legR = limb(this.mats.trousers, 0.145, H * 0.42, 0.105, H * 0.47, this.mats.shoe, H * 0.05);
     this.body.add(this.armL, this.armR, this.legL, this.legR);
+
+    /* --- the club: shaft, hosel and head, hanging from the right hand ---
+       Three more boxes, visible only while addressing or swinging, so the
+       cost is nothing for anyone just walking about. */
+    this.mats.chrome = M('#c9ccd2');
+    this.club = new THREE.Group();
+    this.club.position.set(0, -(H * 0.355), 0.02);      // the right hand
+    this.club.rotation.x = 0.25;                        // shaft leans toward the ball
+    this.club.add(part(this.mats.chrome, 0.022, 0.96, 0.022, 0, -0.46, 0));
+    this.club.add(part(this.mats.shoe, 0.034, 0.07, 0.034, 0, -0.90, 0));
+    this.club.add(part(this.mats.shoe, 0.05, 0.05, 0.17, 0, -0.945, 0.06));
+    this.club.visible = false;
+    this.armR.add(this.club);
+
     this.root.add(this.body);
 
     /* --- blob shadow: one textured disc, no shadow map ------------------ */
@@ -118,6 +132,7 @@ export class Avatar {
     this.swingAmp = 0;          // eased, so limbs settle instead of snapping
     this.seated = false;
     this.cel = null;            // { name, t, dur, in, out } while celebrating
+    this.golf = null;           // { k, strikeT, yawLock } while addressing/swinging
     this._yaw = 0;              // where place() wants the body to face
     // two reusable pose buffers: a celebration allocates nothing per frame
     this._pose = blankPose();
@@ -146,13 +161,49 @@ export class Avatar {
   get celebrating() { return !!this.cel; }
   cancelCelebration() { this.cel = null; }
 
+  /* ---------------------------------------------------------- the swing */
+
+  /**
+   * Take up the address: side-on to the target line, club down behind the
+   * ball.  `yaw` is the facing (aim + 90°); pass null to leave the stance.
+   */
+  setAddress(on, yaw = null) {
+    if (!on) {
+      if (this.golf && this.golf.strikeT == null) this.golf = null;
+      return;
+    }
+    if (this.golf && this.golf.strikeT != null) return;   // mid-strike: leave it
+    if (!this.golf) this.golf = { k: 0, strikeT: null, yawLock: yaw };
+    else this.golf.yawLock = yaw;
+  }
+
+  /** How far back the club is, 0..1 — driven live from the power meter. */
+  setBackswing(k) {
+    if (this.golf && this.golf.strikeT == null) this.golf.k = Math.max(0, Math.min(1, k));
+  }
+
+  /**
+   * Swing through the ball.  Runs on its own timing and ends back at address
+   * (or standing, if the address was released meanwhile).  Every client calls
+   * this when a shot event arrives, so the whole room sees the stroke.
+   */
+  strike(aimYaw = null) {
+    if (this.seated) return 0;
+    const from = this.golf?.k ?? 0.85;
+    this.golf = {
+      k: from, strikeT: 0,
+      yawLock: aimYaw != null ? aimYaw + Math.PI / 2 : this.golf?.yawLock ?? null
+    };
+    return 0.8;
+  }
+
   /**
    * Sit the golfer in a cart.  A hard override rather than a blend: the seat
    * pose is static, and the blob is hidden because the cart casts its own.
    */
   setSeated(on) {
     this.seated = !!on;
-    if (this.seated) this.cel = null;
+    if (this.seated) { this.cel = null; this.golf = null; this.club.visible = false; }
     this.blob.visible = !this.seated;
   }
 
@@ -199,6 +250,54 @@ export class Avatar {
     P.bodyRz = s * swing * 0.056;        // 0.035 rad of sway at a full stride
     P.yaw = 0;
     P.headRx = 0; P.headRy = 0; P.hatY = 0; P.hatRx = 0;
+
+    /* --------------------------------------------------------- the swing */
+    // Address, backswing and strike write over the walk pose at full weight
+    // while the golfer is standing still.  A celebration still wins below —
+    // holing out mid-follow-through should cut straight to the arms-up.
+    const g = this.golf;
+    this.club.visible = !!g;
+    if (g && !moving) {
+      let armX, yaw, wrist;
+      if (g.strikeT == null) {
+        // address -> backswing, k straight off the power meter
+        const k = g.k;
+        armX = -0.60 - 1.80 * k;
+        yaw = -0.16 - 0.62 * k;
+        wrist = -1.05 * k;
+      } else {
+        g.strikeT += dt;
+        const t = g.strikeT;
+        const fromX = -0.60 - 1.80 * g.k, fromYaw = -0.16 - 0.62 * g.k, fromW = -1.05 * g.k;
+        if (t < 0.10) {                       // the hit: fast, accelerating
+          const u = (t / 0.10) ** 2;
+          armX = fromX + (0.85 - fromX) * u;
+          yaw = fromYaw + (0.78 - fromYaw) * u;
+          wrist = fromW + (0.35 - fromW) * u;
+        } else if (t < 0.55) {                // hold the follow-through
+          armX = 0.85; yaw = 0.78; wrist = 0.35;
+        } else if (t < 0.85) {                // settle back to address
+          const u = (t - 0.55) / 0.30, e = u * u * (3 - 2 * u);
+          armX = 0.85 + (-0.60 - 0.85) * e;
+          yaw = 0.78 + (-0.16 - 0.78) * e;
+          wrist = 0.35 * (1 - e);
+        } else {
+          this.golf = { k: 0, strikeT: null, yawLock: g.yawLock };
+          armX = -0.60; yaw = -0.16; wrist = 0;
+        }
+      }
+      P.armLx = armX; P.armRx = armX;
+      P.armLz = 0.16; P.armRz = -0.16;         // hands together on the grip
+      P.bodyRx = 0.14;                         // bent slightly over the ball
+      P.yaw = yaw;
+      P.legLx = -0.06; P.legRx = 0.06;
+      P.headRx = 0.32;                         // eyes on the ball
+      P.bodyY = 0;
+      this.club.rotation.x = 0.25 + wrist;
+      if (g.yawLock != null) this._yaw = g.yawLock;
+    } else {
+      this.club.rotation.x = 0.25;
+    }
 
     if (this.cel) {
       const cel = this.cel;

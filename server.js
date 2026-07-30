@@ -391,7 +391,7 @@ io.on('connection', socket => {
             x: clamp(Number(c.x) || 0, b.minX, b.maxX),
             z: clamp(Number(c.z) || 0, b.minZ, b.maxZ),
             h: isFinite(Number(c.h)) ? Number(c.h) : 0,
-            v: clamp(Number(c.v) || 0, -6, 14),
+            v: clamp(Number(c.v) || 0, -6, 17),
             r: cleanPid(c.r) || null
           }
         : { s: 'p', o: cleanPid(c.o) || null };

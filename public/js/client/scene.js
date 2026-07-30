@@ -498,6 +498,39 @@ export class GolfScene {
     l.visible = true;
   }
 
+  /**
+   * The landing marker: a ring on the ground where the CURRENT swing would
+   * finish the ball.  It slides out as the player pulls the club back and
+   * bends sideways when the strike is opening or closing the face — power
+   * first, then shape, exactly the way the shot itself works.
+   */
+  setLanding(x, y, z, quality) {
+    if (!this._landing) {
+      const g = new THREE.RingGeometry(0.55, 0.85, 22);
+      g.userData.shared = true;
+      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false
+      }));
+      m.rotation.x = -Math.PI / 2;
+      m.renderOrder = 2;
+      const dotG = new THREE.CircleGeometry(0.16, 14);
+      dotG.userData.shared = true;
+      const dot = new THREE.Mesh(dotG, m.material);
+      dot.rotation.x = -Math.PI / 2;
+      dot.position.y = 0.01;
+      m.add(dot);
+      this._landing = m;
+      this.scene.add(m);          // persistent — never dies with a hole
+    }
+    const L = this._landing;
+    if (x == null) { L.visible = false; return; }
+    L.position.set(x, y + 0.06, z);
+    // white = pure, amber = a bit of shape, red = full hook or slice
+    const q = Math.min(1, Math.max(0, quality ?? 0));
+    L.material.color.setRGB(1, 1 - q * 0.65, 1 - q * 0.9);
+    L.visible = true;
+  }
+
   setTrace(path, upTo) {
     const l = this.traceLine;
     if (!path || path.length < 2) { l.geometry.setDrawRange(0, 0); return; }

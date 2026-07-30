@@ -30,9 +30,9 @@ export const SEATS = {
 };
 
 /* --------------------------------------------------------------- motion */
-export const MAX_FWD = 9.6;       // m/s ≈ 21 mph. Above SPRINT_SPEED 9.2, so
+export const MAX_FWD = 12.5;      // m/s ≈ 28 mph. Well above SPRINT_SPEED 9.2, so
 export const MAX_REV = 3.0;       // driving genuinely beats running.
-export const A_DRIVE = 3.6;       // m/s²
+export const A_DRIVE = 5.2;       // m/s² — reaches 90% of top in ~4 s
 export const A_DRIVE_REV = 2.2;
 export const A_BRAKE = 6.5;
 export const A_HAND = 9.0;        // handbrake
@@ -41,7 +41,8 @@ export const ENGINE_BRAKE = 0.75; // coasting with the pedal up. Deliberately
                                   // park grade, or a cart would sit on a hill
                                   // with the brake off and never roll.
 export const C_AERO = 0.012;      // 1/m — 1.11 m/s² at top speed
-export const ABS_MAX = 13.0;      // hard ceiling; 13/120 = 0.108 m per substep
+export const ABS_MAX = 16.0;      // hard ceiling; 16/120 = 0.133 m per substep,
+                                  // still 6x inside the 0.88 m capture radius
 
 /* --------------------------------------------------------------- slopes */
 export const G = 9.81;

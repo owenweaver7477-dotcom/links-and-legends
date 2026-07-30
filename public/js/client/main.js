@@ -271,6 +271,16 @@ function updateAvatars(dt) {
 
     if (pl.pid === G.myPid) {
       av.place(walker.x, G.T.heightAt(walker.x, walker.z), walker.z, walker.heading);
+      // over the ball on your turn you take up the stance, and the club goes
+      // back exactly as far as the meter says — the swing you see IS the
+      // number you are about to play
+      if (mode() === 'swing') {
+        av.setAddress(true, swing.aim + Math.PI / 2);
+        const m = swing.meter();
+        av.setBackswing(m.state === 'back' || m.state === 'down' ? m.power / 1.12 : 0);
+      } else {
+        av.setAddress(false);
+      }
       av.update(dt, walker.speed);
       av.setVisible(G.view !== 'first');        // you cannot see your own head
       continue;
@@ -309,6 +319,32 @@ function pushMyPosition(now) {
  * same whether the machine is running at 144 fps or struggling at 30 — and it
  * cannot stall the way a background-throttled timer would.
  */
+/**
+ * The landing dot: where THIS power finishes the ball, refreshed a few times
+ * a second while the club is going back.  Runs the real simulation, so it
+ * bends when the strike is drifting into a hook or a slice.
+ */
+let lastLanding = 0;
+function updateLandingDot(now) {
+  if (!G.T) return;
+  const m = swing.meter();
+  const dragging = canSwing() && (m.state === 'back' || m.state === 'down');
+  if (!dragging) {
+    if (G.landingOn) { scene.setLanding(null); G.landingOn = false; }
+    return;
+  }
+  if (now - lastLanding < 120 || m.power < 0.05) return;
+  lastLanding = now;
+  const b = ballOf(G.myPid);
+  const r = new ShotSim(G.T, {
+    x: b.x, z: b.z, clubKey,
+    power: Math.min(m.power, 1.12), aim: swing.aim,
+    faceDeg: m.face || 0, attackDeg: 0, wind: G.wind
+  }).runToEnd();
+  scene.setLanding(r.x, G.T.heightAt(r.x, r.z), r.z, Math.min(1, Math.abs(m.face || 0) / 7));
+  G.landingOn = true;
+}
+
 const AIM_RATE = 0.48;              // radians per second
 function stepAim(dt) {
   if (G.screen !== 'game' || !canSwing()) return;
@@ -382,6 +418,9 @@ function beginShot(msg) {
     launchDir: msg.shot.aim
   };
   G.balls[msg.pid] = { x: sim.p.x, y: sim.p.y, z: sim.p.z };
+  // the golfer swings on every screen, timed so the ball leaves at the hit
+  const swingAv = G.avatars.get(msg.pid);
+  if (swingAv) swingAv.strike(msg.shot.aim);
   scene.clearTrace();
   scene.setAimLine(null);
   rig.kick(0.55);
@@ -531,6 +570,7 @@ function frame(now) {
   }
 
   stepAim(dt);
+  updateLandingDot(now);
   walker.update(dt, cameraYaw(), G.T, G.hole);
   carts.render(dt, G.T, G.myPid, tintOf, now);
   pushMyPosition(now);

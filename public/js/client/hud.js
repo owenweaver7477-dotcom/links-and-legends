@@ -16,7 +16,7 @@ for (const id of [
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
   'wArrow', 'wSpeed', 'wDesc',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
-  'playbar', 'clubName', 'clubCarry', 'mFill', 'mFaceDot', 'mLabel', 'aimTxt',
+  'playbar', 'clubName', 'clubCarry', 'mFill', 'mFaceDot', 'mLabel', 'aimTxt', 'mPct',
   'shotinfo', 'toasts', 'mapwrap', 'mapc',
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
@@ -134,10 +134,14 @@ HUD.setTargetPower = (p) => {
 HUD.setMeter = (m, enabled) => {
   const pct = clamp(m.power, 0, 1.12) / 1.12 * 100;
   el.mFill.style.width = pct + '%';
+  // the number, riding the end of the bar — power is the whole game here
+  const live = enabled && (m.state === 'back' || m.state === 'down');
+  el.mPct.textContent = live ? Math.round(m.power * 100) + '%' : '';
+  el.mPct.style.left = Math.min(pct, 86) + '%';
   el.mFaceDot.style.left = `calc(${clamp(50 + m.face * 4.4, 2, 98)}% - 2px)`;
   if (!enabled) { el.mLabel.textContent = 'Waiting…'; el.mLabel.classList.remove('hot'); return; }
   if (m.state === 'back') {
-    el.mLabel.textContent = m.power > 1 ? 'Overswinging — accuracy is going' : 'Now bring it back up through the ball';
+    el.mLabel.textContent = m.power > 1 ? 'Overswinging — accuracy is going' : 'Release up through the ball — the ring is where it lands';
     el.mLabel.classList.toggle('hot', m.power > 1);
   } else if (m.state === 'down') {
     const q = Math.abs(m.face);
