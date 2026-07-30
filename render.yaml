@@ -1,0 +1,13 @@
+# Render blueprint — push this repo to GitHub, then on render.com:
+#   New  ->  Blueprint  ->  pick the repo.  Free tier is fine.
+services:
+  - type: web
+    name: links-and-legends
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

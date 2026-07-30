@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0b1210">
+<title>Links &amp; Legends — Online Golf</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>⛳</text></svg>">
+</head>
+<body>
+
+<!-- ═══════════════════════════════ THE COURSE ═══════════════════════════ -->
+<div id="stage">
+  <canvas id="gl"></canvas>
+
+  <!-- hole info -->
+  <div class="panel hud" id="hud">
+    <div class="h-course" id="hCourse">Claude National</div>
+    <div class="h-title"><span id="hNum">Hole 1</span><span class="h-par" id="hPar">Par 5</span></div>
+    <div class="h-meta" id="hMeta">541 yds</div>
+  </div>
+
+  <!-- distance + lie -->
+  <div class="panel dist" id="distPanel">
+    <div class="d-big"><span id="dYds">—</span><em>yds to pin</em></div>
+    <div class="d-sub"><span id="dLie">—</span> · <span id="dElev">—</span></div>
+  </div>
+
+  <!-- wind -->
+  <div class="panel wind" id="windPanel">
+    <svg viewBox="0 0 60 60" class="wrose">
+      <circle cx="30" cy="30" r="26" class="w-ring"/>
+      <text x="30" y="11" class="w-n">N</text>
+      <g id="wArrow"><path d="M30 12 L37 34 L30 29 L23 34 Z" class="w-arr"/></g>
+    </svg>
+    <div class="w-txt"><b id="wSpeed">0</b><em>mph</em><span id="wDesc">calm</span></div>
+  </div>
+
+  <!-- scorecard -->
+  <div class="panel board" id="board">
+    <div class="board-head"><h4>Scorecard</h4><button class="roomtag" id="boardRoom" title="Copy the invite link">—</button></div>
+    <div id="boardRows"></div>
+  </div>
+
+  <!-- live roster: who is where -->
+  <div class="panel roster" id="rosterPanel">
+    <div class="board-head"><h4>On the course</h4></div>
+    <div id="rosterList"></div>
+  </div>
+
+  <!-- floating name labels above avatars -->
+  <div class="labellayer" id="labelLayer"></div>
+
+  <!-- golf cart -->
+  <div class="cartbar" id="cartbar">
+    <div class="c-row"><b id="cartSeat">Driving</b><span id="cartWho">solo</span></div>
+    <div class="c-speed"><b id="cartMph">0</b><em>mph</em></div>
+    <div class="c-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>Space</kbd> brake · <kbd>G</kbd> offer a lift · <kbd>C</kbd> get out</div>
+  </div>
+
+  <!-- walk prompt -->
+  <div class="walkbar" id="walkbar">
+    <span id="walkText">Walk to your ball</span>
+    <kbd>W A S D</kbd><kbd>Shift</kbd> run <kbd>F</kbd> jog to ball <kbd>C</kbd> cart <kbd>V</kbd> view
+  </div>
+
+  <!-- turn banner -->
+  <div class="turnbar" id="turnbar"><span class="tb-dot" id="tbDot"></span><span id="tbText">—</span></div>
+
+  <!-- club + swing -->
+  <div class="playbar" id="playbar">
+    <div class="clubsel">
+      <button class="cbtn" id="clubDown" title="Shorter club (Q)">‹</button>
+      <div class="cinfo">
+        <b id="clubName">Driver</b>
+        <span id="clubCarry">268 yds</span>
+      </div>
+      <button class="cbtn" id="clubUp" title="Longer club (E)">›</button>
+    </div>
+
+    <div class="meter" id="meter">
+      <div class="m-track">
+        <div class="m-over"></div>
+        <div class="m-fill" id="mFill"></div>
+        <div class="m-mark" id="mMark"></div>
+      </div>
+      <div class="m-face"><div class="m-face-zone"></div><div class="m-face-dot" id="mFaceDot"></div></div>
+      <div class="m-label" id="mLabel">Drag down to take the club back</div>
+    </div>
+
+    <div class="aimsel">
+      <button class="cbtn" id="aimL" title="Aim left (A)">◄</button>
+      <div class="cinfo"><b id="aimTxt">0°</b><span>aim</span></div>
+      <button class="cbtn" id="aimR" title="Aim right (D)">►</button>
+    </div>
+  </div>
+
+  <div class="hintbar" id="hintbar">
+    <kbd>W A S D</kbd> walk · <kbd>Shift</kbd> run · <kbd>F</kbd> jog to ball · <kbd>C</kbd> cart · <kbd>V</kbd> view ·
+    <kbd>drag ↓ then ↑</kbd> swing · <kbd>← →</kbd> aim · <kbd>Q</kbd><kbd>E</kbd> club ·
+    <kbd>right-drag</kbd> look · <kbd>M</kbd> map · <kbd>P</kbd> fps
+  </div>
+
+  <div class="perfhud" id="perfHud" hidden></div>
+  <div class="shotinfo" id="shotinfo"></div>
+  <div class="toasts" id="toasts"></div>
+
+  <!-- hole map overlay -->
+  <div class="mapwrap" id="mapwrap" hidden><canvas id="mapc"></canvas><div class="maphint">M to close</div></div>
+</div>
+
+<!-- ═══════════════════════════════ OVERLAYS ═════════════════════════════ -->
+
+<div class="screen" id="screenHome">
+  <div class="card">
+    <div class="brand">
+      <div class="brand-mark">⛳</div>
+      <div><h1>Links &amp; Legends</h1><p class="sub">Five courses · nine holes · up to eight players</p></div>
+    </div>
+    <label class="field"><span>Your name</span>
+      <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
+    <div class="split">
+      <div class="split-col">
+        <button class="btn primary big" id="btnCreate">Create room</button>
+        <p class="tiny">You'll be the host and pick the course.</p>
+      </div>
+      <div class="or"><span>or</span></div>
+      <div class="split-col">
+        <label class="field"><span>Room code</span>
+          <input id="inpCode" type="text" maxlength="5" placeholder="ABCD" autocomplete="off" spellcheck="false" class="code"></label>
+        <button class="btn big" id="btnJoin">Join room</button>
+      </div>
+    </div>
+    <p class="err" id="homeErr"></p>
+  </div>
+</div>
+
+<div class="screen" id="screenLobby" hidden>
+  <div class="card wide">
+    <div class="lobby-head">
+      <div><h2>Room <span class="codebig" id="lobbyCode">—</span></h2><p class="sub">Pick a course and tee it up</p></div>
+      <div class="linkrow"><input id="lobbyLink" type="text" readonly><button class="btn" id="btnCopy">Copy link</button></div>
+      <p class="tiny sharehint" id="shareHint"></p>
+    </div>
+    <h4 class="lbl">Course</h4>
+    <div class="courses" id="courseList"></div>
+    <h4 class="lbl">Tees</h4>
+    <div class="tees" id="teeList"></div>
+
+    <h4 class="lbl">Your ball</h4>
+    <div class="swatches" id="ballColours"></div>
+
+    <h4 class="lbl">Your golfer</h4>
+    <div class="looker" id="lookPicker"></div>
+
+    <h4 class="lbl">Your bag <span id="bagCount"></span></h4>
+    <div class="bag" id="bagList"></div>
+    <div class="bagbar">
+      <button class="btn" id="btnBagReset">Reset to standard</button>
+      <label class="unitsel"><input type="checkbox" id="optMetres"> distances in metres</label>
+      <label class="unitsel">graphics
+        <select id="optQuality">
+          <option value="perf">Performance</option>
+          <option value="quality">Quality</option>
+        </select>
+      </label>
+    </div>
+
+    <h4 class="lbl">Players <span id="lobbyCount"></span></h4>
+    <div class="players" id="lobbyPlayers"></div>
+    <div class="lobby-actions">
+      <button class="btn primary big" id="btnStart">Start round</button>
+      <button class="btn big" id="btnLeave">Leave</button>
+    </div>
+    <p class="tiny" id="lobbyNote"></p>
+  </div>
+</div>
+
+<div class="screen soft" id="screenHoleOver" hidden>
+  <div class="card">
+    <h2 id="hoTitle">Hole 1</h2>
+    <p class="sub" id="hoSub">Par 5</p>
+    <div class="restable" id="hoTable"></div>
+    <div class="lobby-actions">
+      <button class="btn primary big" id="btnNext">Next hole</button>
+      <span class="tiny" id="hoNote"></span>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screenResults" hidden>
+  <div class="card wide">
+    <h2 id="resTitle">Final</h2>
+    <p class="sub" id="resSub"></p>
+    <div class="cardwrap"><table class="scorecard" id="fullCard"></table></div>
+    <div class="lobby-actions">
+      <button class="btn primary big" id="btnAgain">Play again</button>
+      <button class="btn big" id="btnBackLobby">Change course</button>
+    </div>
+    <p class="tiny" id="resNote"></p>
+  </div>
+</div>
+
+<div class="screen loading" id="screenLoad" hidden>
+  <div class="loadbox"><div class="spinner"></div><p id="loadMsg">Shaping the terrain…</p></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="/js/client/main.js"></script>
+</body>
+</html>

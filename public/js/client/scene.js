@@ -1,0 +1,882 @@
+/* =========================================================================
+   scene.js — the 3D world
+   -------------------------------------------------------------------------
+   Builds a hole into a Three.js scene: terrain mesh sampled from the same
+   heightAt() the physics uses, the painted surface texture, water surfaces,
+   instanced trees, flagstick and cup, and the player balls.
+   ========================================================================= */
+
+import * as THREE from '/vendor/three.module.js';
+import { buildSurfaceTexture } from './surfacemap.js';
+import { mulberry32, clamp, lerp, fbm, smoothstep } from '../shared/rng.js';
+import { BALL_RADIUS } from '../shared/ballistics.js';
+
+const GRID_STEP = 2.6;          // metres between terrain vertices
+const _fwd = new THREE.Vector3();
+
+export class GolfScene {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.renderer = new THREE.WebGLRenderer({
+      canvas, antialias: true, powerPreference: 'high-performance'
+    });
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+    // Shadow maps are the single most expensive thing here — a whole extra
+    // pass over every caster — so they are OFF by default.  Avatars and balls
+    // carry blob shadows instead, which cost one transparent quad each.
+    // 'quality' turns the real sun shadow on for machines that can take it.
+    this.quality = 'perf';
+    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.12, 3000);
+    this.mapCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
+
+    this.holeGroup = null;
+    // Actors — golfers and carts — outlive the hole they are standing on.
+    // holeGroup is destroyed and rebuilt on every hole change, so anything
+    // parented to it is silently orphaned the moment the hole turns over.
+    this.actorGroup = new THREE.Group();
+    this.actorGroup.name = 'actors';
+    this.scene.add(this.actorGroup);
+    this.balls = new Map();
+    this.t = 0;
+    this._water = [];
+    this._trees = [];
+    this.resize();
+  }
+
+  /**
+   * Switch the graphics budget.  Only touches the shadow pass; geometry and
+   * textures are already sized for the low end.
+   */
+  setQuality(q) {
+    const on = q === 'quality';
+    this.quality = q;
+    this.renderer.shadowMap.enabled = on;
+    this.renderer.shadowMap.autoUpdate = on;
+    this.renderer.shadowMap.needsUpdate = true;
+    if (this.sun) this.sun.castShadow = on;
+    if (this.terrainMesh) this.terrainMesh.receiveShadow = on;
+    // materials must be recompiled when the shadow path changes
+    this.scene.traverse(o => { if (o.material) {
+      const m = Array.isArray(o.material) ? o.material : [o.material];
+      for (const mm of m) mm.needsUpdate = true;
+    } });
+  }
+
+  resize() {
+    const w = this.canvas.clientWidth || 1, h = this.canvas.clientHeight || 1;
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
+  /* ===================================================================== */
+  /*  BUILD                                                                 */
+  /* ===================================================================== */
+
+  loadHole(hole, terrain, bio) {
+    this.dispose();
+    this.hole = hole; this.T = terrain; this.bio = bio;
+
+    const g = this.holeGroup = new THREE.Group();
+    this.scene.add(g);
+
+    const P = bio.palette;
+    const skyTop = new THREE.Color(P.sky[0]);
+    const skyBot = new THREE.Color(P.sky[1]);
+
+    /* ---- atmosphere ---- */
+    this.scene.fog = new THREE.Fog(new THREE.Color(P.fog), 210, 1150);
+    this.scene.background = skyBot.clone();
+
+    const hemi = new THREE.HemisphereLight(skyTop.clone(), new THREE.Color(P.rough), bio.ambient);
+    g.add(hemi);
+
+    const sunDir = dirFromAngles(bio.sunElev, bio.sunAzim);
+    const sun = new THREE.DirectionalLight(new THREE.Color(P.sun), 1.55);
+    sun.position.set(sunDir.x * 600, sunDir.y * 600, sunDir.z * 600);
+    sun.castShadow = this.quality === 'quality';
+    sun.shadow.mapSize.set(1536, 1536);
+    const SH = 70;                       // metres of shadow coverage around the camera
+    sun.shadow.camera.left = -SH; sun.shadow.camera.right = SH;
+    sun.shadow.camera.top = SH; sun.shadow.camera.bottom = -SH;
+    sun.shadow.camera.near = 1; sun.shadow.camera.far = 420;
+    sun.shadow.bias = -0.0012;
+    sun.shadow.normalBias = 0.035;
+    g.add(sun);
+    g.add(sun.target);
+    this.sun = sun;
+    this.sunDir = sunDir;
+
+    // A weak fill that follows the camera. Costs nothing and stops avatars and
+    // balls turning into silhouettes whenever you are looking into the sun.
+    this.fill = new THREE.DirectionalLight(new THREE.Color(P.sky[1]), 0.5);
+    g.add(this.fill);
+    g.add(this.fill.target);
+
+    g.add(this._buildSky(skyTop, skyBot, P.sun, bio));
+
+    /* ---- terrain ---- */
+    g.add(this._buildTerrain(hole, terrain, bio));
+    g.add(this._buildSurrounds(hole, terrain, bio));
+
+    /* ---- water ---- */
+    for (let i = 0; i < hole.waters.length; i++) {
+      const m = this._buildWater(hole.waters[i], terrain.waterLevels[i], bio);
+      g.add(m);
+      this._water.push(m);
+    }
+
+    /* ---- trees ---- */
+    for (const mesh of this._buildTrees(hole, terrain, bio)) { g.add(mesh); this._trees.push(mesh); }
+
+    /* ---- flag, cup, tee markers ---- */
+    g.add(this._buildPin(hole, terrain, bio));
+    g.add(this._buildTeeMarkers(hole, terrain, bio));
+
+    /* ---- aiming aids ---- */
+    this.aimLine = this._buildAimLine();
+    g.add(this.aimLine);
+    this.traceLine = this._buildTrace();
+    g.add(this.traceLine);
+
+    this.fx = new EffectPool(g);
+    return this;
+  }
+
+  dispose() {
+    if (!this.holeGroup) return;
+    this.holeGroup.traverse(o => {
+      // shared tree geometries live in _geoCache and outlive the hole
+      if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
+      if (o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) { if (m.map) m.map.dispose(); m.dispose(); }
+      }
+    });
+    this.scene.remove(this.holeGroup);
+    this.holeGroup = null;
+    this.balls.clear();
+    this._water.length = 0;
+    this._trees.length = 0;
+  }
+
+  /* -------------------------------------------------------------- sky --- */
+  _buildSky(top, bot, sunHex, bio) {
+    const geo = new THREE.SphereGeometry(2200, 32, 20);
+    const mat = new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false, fog: false,
+      uniforms: {
+        top: { value: top }, bot: { value: bot },
+        sunCol: { value: new THREE.Color(sunHex) },
+        sunDir: { value: dirFromAngles(bio.sunElev, bio.sunAzim) }
+      },
+      vertexShader: `
+        varying vec3 vDir;
+        void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      fragmentShader: `
+        uniform vec3 top, bot, sunCol, sunDir;
+        varying vec3 vDir;
+        void main(){
+          float h = clamp(vDir.y*0.5+0.5, 0.0, 1.0);
+          vec3 c = mix(bot, top, pow(h, 0.72));
+          float d = max(dot(normalize(vDir), normalize(sunDir)), 0.0);
+          c += sunCol * pow(d, 260.0) * 1.6;              // the sun itself
+          c += sunCol * pow(d, 5.0) * 0.10;               // glow around it
+          gl_FragColor = vec4(c, 1.0);
+        }`
+    });
+    const m = new THREE.Mesh(geo, mat);
+    m.renderOrder = -1;
+    return m;
+  }
+
+  /* ---------------------------------------------------------- terrain --- */
+  _buildTerrain(hole, T, bio) {
+    const b = hole.bounds;
+    const spanX = b.maxX - b.minX, spanZ = b.maxZ - b.minZ;
+    const nx = Math.max(8, Math.round(spanX / GRID_STEP));
+    const nz = Math.max(8, Math.round(spanZ / GRID_STEP));
+
+    const verts = (nx + 1) * (nz + 1);
+    const pos = new Float32Array(verts * 3);
+    const uv = new Float32Array(verts * 2);
+    let p = 0, u = 0;
+    for (let iz = 0; iz <= nz; iz++) {
+      const fz = iz / nz, z = b.minZ + fz * spanZ;
+      for (let ix = 0; ix <= nx; ix++) {
+        const fx = ix / nx, x = b.minX + fx * spanX;
+        pos[p++] = x; pos[p++] = T.heightAt(x, z); pos[p++] = z;
+        uv[u++] = fx; uv[u++] = fz;
+      }
+    }
+    const idx = new Uint32Array(nx * nz * 6);
+    let k = 0;
+    for (let iz = 0; iz < nz; iz++) {
+      for (let ix = 0; ix < nx; ix++) {
+        const a = iz * (nx + 1) + ix, c = a + 1, d = a + (nx + 1), e = d + 1;
+        idx[k++] = a; idx[k++] = d; idx[k++] = c;
+        idx[k++] = c; idx[k++] = d; idx[k++] = e;
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    geo.computeVertexNormals();
+
+    const tex = new THREE.CanvasTexture(buildSurfaceTexture(hole, bio));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.flipY = false;
+    tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+
+    const detail = makeDetailTexture(bio);
+
+    const mat = new THREE.MeshLambertMaterial({ map: tex });
+    // Blend a repeating grass detail over the top so the ground still reads as
+    // turf when the camera is 1.6 m off the deck and the base texture is
+    // stretched to a few centimetres per pixel.
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.detailMap = { value: detail };
+      sh.uniforms.detailScale = { value: new THREE.Vector2(spanX / 3.5, spanZ / 3.5) };
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+          uniform sampler2D detailMap; uniform vec2 detailScale;`)
+        .replace('#include <map_fragment>', `#include <map_fragment>
+          {
+            vec3 d = texture2D(detailMap, vMapUv * detailScale).rgb;
+            diffuseColor.rgb *= mix(vec3(1.0), d * 2.0, 0.35);
+          }`);
+    };
+    mat.needsUpdate = true;
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = 'terrain';
+    mesh.receiveShadow = this.quality === 'quality';
+    this.terrainMesh = mesh;
+    return mesh;
+  }
+
+  /**
+   * The hole's mesh has to stop somewhere, and a hard edge against the sky
+   * looks like the world ran out.  A big low-res apron carries the ground out
+   * to the fog, with a ring of distant hills sitting on the horizon behind it.
+   */
+  _buildSurrounds(hole, T, bio) {
+    const grp = new THREE.Group();
+    const b = hole.bounds;
+    const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+
+    /* A *rectangular* ring, not a circular one: the terrain is a rectangle, so
+       a circle either overlaps it (z-fighting) or leaves a gap at the mid-edges
+       — both of which show up as a bright seam along the horizon. Walking the
+       boundary keeps the inner rim exactly on the terrain edge. */
+    const RINGS = 10, SEGS = 128, SPREAD = 7.5, OVERLAP = 0.97;
+    const pos = [], idx = [];
+
+    // a point on the terrain's boundary rectangle at perimeter fraction t
+    const boundary = (t) => {
+      const u = (t % 1) * 4;
+      if (u < 1) return [lerp(b.minX, b.maxX, u), b.minZ];
+      if (u < 2) return [b.maxX, lerp(b.minZ, b.maxZ, u - 1)];
+      if (u < 3) return [lerp(b.maxX, b.minX, u - 2), b.maxZ];
+      return [b.minX, lerp(b.maxZ, b.minZ, u - 3)];
+    };
+
+    for (let r = 0; r <= RINGS; r++) {
+      const t = r / RINGS;
+      // start just INSIDE the terrain and a little below it: overlapping
+      // guarantees no gap at the join, and the terrain hides the step
+      const scale = lerp(OVERLAP, SPREAD, t * t);
+      for (let s = 0; s <= SEGS; s++) {
+        const [ex, ez] = boundary(s / SEGS);
+        const x = cx + (ex - cx) * scale, z = cz + (ez - cz) * scale;
+        const edge = T.heightAt(ex, ez);                       // exact rim height
+        const far = fbm(x * 0.0016, z * 0.0016, hole.terrainSeed ^ 0x99, 3) * bio.relief * 3.2 - bio.relief * 0.6;
+        // sink the ring a touch as it leaves the rim so the seam tucks under
+        pos.push(x, lerp(edge - 0.6, far, smoothstep(0.02, 0.5, t)), z);
+      }
+    }
+    for (let r = 0; r < RINGS; r++) {
+      for (let s = 0; s < SEGS; s++) {
+        const a = r * (SEGS + 1) + s, c = a + 1, d = a + (SEGS + 1), e = d + 1;
+        idx.push(a, d, c, c, d, e);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+
+    const col = new THREE.Color(bio.palette.deep);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: col }));
+    mesh.renderOrder = -0.5;
+    grp.add(mesh);
+    return grp;
+  }
+
+  /* ------------------------------------------------------------ water --- */
+  _buildWater(w, level, bio) {
+    const geo = new THREE.CircleGeometry(1, 56);
+    const col = new THREE.Color(bio.palette.water);
+    const mat = new THREE.MeshPhongMaterial({
+      color: col, transparent: true, opacity: 0.86,
+      shininess: 140, specular: new THREE.Color(0xbfe9ff),
+      side: THREE.DoubleSide
+    });
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uTime = { value: 0 };
+      mat.userData.sh = sh;
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', `#include <common>
+          uniform float uTime; varying vec2 vRip;`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          vRip = position.xy;
+          transformed.z += sin(position.x*3.1 + uTime*1.6)*0.035
+                         + sin(position.y*2.3 - uTime*1.1)*0.035;`);
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+          uniform float uTime; varying vec2 vRip;`)
+        .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+          float r = sin(vRip.x*26.0 + uTime*2.2) * sin(vRip.y*21.0 - uTime*1.7);
+          gl_FragColor.rgb += vec3(0.06,0.09,0.10) * smoothstep(0.55, 1.0, r);`);
+    };
+    const m = new THREE.Mesh(geo, mat);
+    m.rotation.x = -Math.PI / 2;
+    m.rotation.z = -w.rot || 0;
+    m.position.set(w.x, level, w.z);
+    m.scale.set(w.rx, w.rz, 1);
+    m.userData.mat = mat;
+    return m;
+  }
+
+  /* ------------------------------------------------------------ trees --- */
+  _buildTrees(hole, T, bio) {
+    const bySpecies = new Map();
+    for (const t of hole.trees) {
+      if (!bySpecies.has(t.species)) bySpecies.set(t.species, []);
+      bySpecies.get(t.species).push(t);
+    }
+    const meshes = [];
+    for (const [species, list] of bySpecies) {
+      const parts = treeParts(species, bio);
+      for (const part of parts) {
+        // Per-instance colour MULTIPLIES the material colour, so the material
+        // has to be white or every tree comes out as its own colour squared —
+        // which turns a mid-green cactus almost black.
+        part.mat.color.setRGB(1, 1, 1);
+        const inst = new THREE.InstancedMesh(part.geo, part.mat, list.length);
+        inst.frustumCulled = true;
+        const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), eul = new THREE.Euler();
+        const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+        const col = new THREE.Color();
+        for (let i = 0; i < list.length; i++) {
+          const t = list[i];
+          const y = T.heightAt(t.x, t.z);
+          const s = t.h;
+          // the part's offset is defined in the tree's own frame, so spin it
+          // with the tree — otherwise every palm's fronds point the same way
+          const ca = Math.cos(t.rot), sa = Math.sin(t.rot);
+          const ox = part.off[0] * s, oz = part.off[2] * s;
+          pos.set(t.x + ox * ca + oz * sa, y + part.off[1] * s, t.z - ox * sa + oz * ca);
+          scl.set(part.scale[0] * s, part.scale[1] * s, part.scale[2] * s);
+          eul.set(part.tilt || 0, t.rot + (part.rotY || 0), part.tiltZ || 0);
+          q.setFromEuler(eul);
+          m4.compose(pos, q, scl);
+          inst.setMatrixAt(i, m4);
+          col.copy(part.color).offsetHSL(0, (t.tone - 0.5) * 0.06, (t.tone - 0.5) * 0.11);
+          inst.setColorAt(i, col);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+        inst.castShadow = true;
+        inst.receiveShadow = part.receives !== false;
+        meshes.push(inst);
+      }
+    }
+    return meshes;
+  }
+
+  /* -------------------------------------------------------------- pin --- */
+  _buildPin(hole, T, bio) {
+    const grp = new THREE.Group();
+    const y = T.heightAt(hole.pin.x, hole.pin.z);
+
+    // the cup: a dark cylinder sunk into the green, plus a white liner ring
+    const cupGeo = new THREE.CylinderGeometry(hole.cup.r, hole.cup.r, 0.32, 20, 1, true);
+    const cup = new THREE.Mesh(cupGeo, new THREE.MeshBasicMaterial({ color: 0x0a0f07, side: THREE.BackSide }));
+    cup.position.set(hole.cup.x, y - 0.16 + 0.005, hole.cup.z);
+    grp.add(cup);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(hole.cup.r * 0.92, hole.cup.r * 1.06, 24),
+      new THREE.MeshBasicMaterial({ color: 0xeef4ea, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(hole.cup.x, y + 0.012, hole.cup.z);
+    grp.add(ring);
+
+    // flagstick
+    const stick = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.016, 0.016, 2.13, 8),
+      new THREE.MeshLambertMaterial({ color: 0xf2f2ee })
+    );
+    stick.position.set(hole.pin.x, y + 1.065, hole.pin.z);
+    stick.castShadow = true;
+    grp.add(stick);
+
+    // flag — a small plane we ripple in update()
+    const flagGeo = new THREE.PlaneGeometry(0.52, 0.34, 12, 4);
+    const flagMat = new THREE.MeshLambertMaterial({ color: 0xe8443a, side: THREE.DoubleSide });
+    const flag = new THREE.Mesh(flagGeo, flagMat);
+    flag.position.set(hole.pin.x + 0.26, y + 1.92, hole.pin.z);
+    grp.add(flag);
+    this.flag = flag;
+    this.flagBase = new THREE.Vector3(hole.pin.x, y + 1.92, hole.pin.z);
+
+    this.pinY = y;
+    return grp;
+  }
+
+  _buildTeeMarkers(hole, T, bio) {
+    const grp = new THREE.Group();
+    // low discs either side of the tee, set back so they frame the ball rather
+    // than sit in the shot line
+    const geo = new THREE.CylinderGeometry(0.085, 0.10, 0.11, 10);
+    for (const [off, hex] of [[-2.0, 0xf0f2f0], [2.0, 0xe03b3b]]) {
+      const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: hex }));
+      const x = hole.tee.x + Math.cos(hole.tee.rot) * off - Math.sin(hole.tee.rot) * 0.5;
+      const z = hole.tee.z - Math.sin(hole.tee.rot) * off - Math.cos(hole.tee.rot) * 0.5;
+      m.position.set(x, T.heightAt(x, z) + 0.055, z);
+      grp.add(m);
+    }
+    return grp;
+  }
+
+  /* --------------------------------------------------------- aim aids --- */
+  _buildAimLine() {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(64 * 3), 3));
+    const mat = new THREE.LineDashedMaterial({
+      color: 0xffffff, dashSize: 1.6, gapSize: 1.1, transparent: true, opacity: 0.55, depthTest: false
+    });
+    const l = new THREE.Line(geo, mat);
+    l.renderOrder = 5;
+    l.visible = false;
+    l.frustumCulled = false;
+    return l;
+  }
+
+  _buildTrace() {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(1200 * 3), 3));
+    geo.setDrawRange(0, 0);
+    const mat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 });
+    const l = new THREE.Line(geo, mat);
+    l.frustumCulled = false;
+    return l;
+  }
+
+  setAimLine(points) {
+    const l = this.aimLine;
+    if (!points || points.length < 2) { l.visible = false; return; }
+    const arr = l.geometry.attributes.position.array;
+    const n = Math.min(points.length, 64);
+    for (let i = 0; i < n; i++) {
+      arr[i * 3] = points[i].x; arr[i * 3 + 1] = points[i].y; arr[i * 3 + 2] = points[i].z;
+    }
+    l.geometry.setDrawRange(0, n);
+    l.geometry.attributes.position.needsUpdate = true;
+    l.computeLineDistances();
+    l.visible = true;
+  }
+
+  setTrace(path, upTo) {
+    const l = this.traceLine;
+    if (!path || path.length < 2) { l.geometry.setDrawRange(0, 0); return; }
+    const arr = l.geometry.attributes.position.array;
+    const n = Math.min(upTo == null ? path.length : upTo, 1200);
+    for (let i = 0; i < n; i++) {
+      arr[i * 3] = path[i].x; arr[i * 3 + 1] = path[i].y; arr[i * 3 + 2] = path[i].z;
+    }
+    l.geometry.setDrawRange(0, n);
+    l.geometry.attributes.position.needsUpdate = true;
+  }
+
+  clearTrace() { this.traceLine.geometry.setDrawRange(0, 0); }
+
+  /* ------------------------------------------------------------ balls --- */
+  syncBalls(players) {
+    const seen = new Set();
+    for (const p of players) {
+      seen.add(p.pid);
+      let b = this.balls.get(p.pid);
+      if (!b) {
+        const geo = new THREE.SphereGeometry(BALL_RADIUS, 18, 14);
+        const mat = new THREE.MeshPhongMaterial({ color: new THREE.Color(p.color), shininess: 60, specular: 0x555555 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.castShadow = true;
+        const shGeo = new THREE.CircleGeometry(BALL_RADIUS * 1.5, 12);
+        const shadow = new THREE.Mesh(shGeo, new THREE.MeshBasicMaterial({
+          color: 0x0a1408, transparent: true, opacity: 0.4, depthWrite: false
+        }));
+        shadow.rotation.x = -Math.PI / 2;
+        this.holeGroup.add(mesh); this.holeGroup.add(shadow);
+        b = { mesh, shadow };
+        this.balls.set(p.pid, b);
+      }
+      b.mesh.material.color.set(p.color);
+      b.mesh.visible = !p.spectator;
+      b.shadow.visible = !p.spectator;
+    }
+    for (const [pid, b] of this.balls) {
+      if (seen.has(pid)) continue;
+      this.holeGroup.remove(b.mesh); this.holeGroup.remove(b.shadow);
+      b.mesh.geometry.dispose(); b.mesh.material.dispose();
+      this.balls.delete(pid);
+    }
+  }
+
+  setBall(pid, x, y, z) {
+    const b = this.balls.get(pid);
+    if (!b) return;
+    b.mesh.position.set(x, y, z);
+
+    // A 43 mm ball 200 m away is a fraction of a pixel.  Draw it oversized and
+    // grow it further with distance so you can always actually follow the shot
+    // — every golf game does this, and without it the ball simply vanishes.
+    const d = this.camera.position.distanceTo(b.mesh.position);
+    const grow = 2.4 * Math.max(1, Math.pow(d / 22, 0.72));
+    b.mesh.scale.setScalar(grow);
+    // the sphere grows around its centre, which sits one true ball-radius off
+    // the deck — without lifting it the drawn ball sinks into the turf and you
+    // only see a dark sliver
+    b.mesh.position.y = y + BALL_RADIUS * (grow - 1);
+
+    // The sun casts a real shadow now, so the painted disc under the ball is
+    // only useful in the air — where it shows the landing spot and the real
+    // shadow may be outside the shadow map. On the ground it just made the
+    // ball look like a dark blob, so fade it out.
+    const gy = this.T.heightAt(x, z);
+    const lift = clamp((y - gy) / 12, 0, 1);
+    b.shadow.position.set(x, gy + 0.012, z);
+    b.shadow.visible = lift > 0.02;
+    b.shadow.material.opacity = 0.34 * Math.min(1, lift * 6) * (1 - lift * 0.55);
+    b.shadow.scale.setScalar((1 + lift * 2.6) * 2.2);
+  }
+
+  ballObj(pid) { return this.balls.get(pid); }
+
+  /* ------------------------------------------------------------ frame --- */
+  update(dt) {
+    this.t += dt;
+    // slide the shadow frustum along with the camera so the visible ground is
+    // always the part that has shadows on it
+    if (this.fill) {
+      // sit the fill at the camera and aim it where the camera is actually
+      // looking, so whatever you are watching is never a pure silhouette
+      const c = this.camera.position;
+      this.camera.getWorldDirection(_fwd);
+      this.fill.position.copy(c);
+      this.fill.target.position.set(c.x + _fwd.x * 20, c.y + _fwd.y * 20 - 3, c.z + _fwd.z * 20);
+      this.fill.target.updateMatrixWorld();
+    }
+    if (this.sun && this.sunDir && this.quality === 'quality') {
+      const c = this.camera.position;
+      this.sun.target.position.set(c.x, this.T ? this.T.heightAt(c.x, c.z) : 0, c.z);
+      this.sun.position.set(
+        this.sun.target.position.x + this.sunDir.x * 220,
+        this.sun.target.position.y + this.sunDir.y * 220,
+        this.sun.target.position.z + this.sunDir.z * 220);
+      this.sun.target.updateMatrixWorld();
+    }
+    for (const w of this._water) {
+      const sh = w.userData.mat.userData.sh;
+      if (sh) sh.uniforms.uTime.value = this.t;
+    }
+    if (this.flag) {
+      // ripple the flag and let it stream with the wind
+      const g = this.flag.geometry;
+      const pos = g.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const fx = (x + 0.26) / 0.52;
+        pos.setZ(i, Math.sin(fx * 7 + this.t * 8) * 0.07 * fx);
+      }
+      pos.needsUpdate = true;
+      if (this.windDir != null) this.flag.rotation.y = this.windDir + Math.PI / 2;
+    }
+    if (this.fx) this.fx.update(dt);
+  }
+
+  render(camera) { this.renderer.render(this.scene, camera || this.camera); }
+}
+
+/* ========================================================================= */
+/*  TREES                                                                     */
+/* ========================================================================= */
+
+const _geoCache = new Map();
+function cached(key, make) {
+  let g = _geoCache.get(key);
+  if (!g) { g = make(); g.userData.shared = true; _geoCache.set(key, g); }
+  return g;
+}
+
+/**
+ * Each species is a handful of instanced primitives.  `off` and `scale` are
+ * expressed as fractions of the tree's height so one geometry serves every
+ * size, and the whole species draws in one call per part.
+ */
+function treeParts(species, bio) {
+  const P = bio.palette;
+  const trunkMat = () => new THREE.MeshLambertMaterial({ color: new THREE.Color(P.trunk) });
+  const leafMat = (hex, opts = {}) => new THREE.MeshLambertMaterial(
+    Object.assign({ color: new THREE.Color(hex), flatShading: true }, opts));
+
+  switch (species) {
+    case 'pine': case 'spruce': case 'fir': {
+      const dark = species === 'fir' ? '#2b5230' : '#2f5a2a';
+      const skirt = (i, n) => {
+        const t = i / (n - 1);
+        const r = 0.36 * (1 - t * 0.78);
+        const h = 0.30 * (1 - t * 0.42);
+        const y = 0.34 + t * 0.62;
+        const col = lightenHex(dark, t * 0.22);
+        return {
+          geo: cached('skirt' + i, () => new THREE.ConeGeometry(r, h, 9)),
+          mat: leafMat(col), off: [0, y, 0], scale: [1, 1, 1], color: new THREE.Color(col)
+        };
+      };
+      const parts = [
+        { geo: cached('conitrunk', () => new THREE.CylinderGeometry(0.022, 0.062, 1, 7)), mat: trunkMat(),
+          off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) }
+      ];
+      for (let i = 0; i < 5; i++) parts.push(skirt(i, 5));
+      return parts;
+    }
+    case 'palm': {
+      const frond = '#4f9440';
+      const parts = [
+        { geo: cached('palmtrunk', () => {
+            // a gently leaning trunk built from stacked segments
+            const g = new THREE.CylinderGeometry(0.026, 0.055, 1, 9, 6);
+            const pos = g.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+              const y = pos.getY(i) + 0.5;                    // 0..1 up the trunk
+              pos.setX(i, pos.getX(i) + Math.sin(y * 1.5) * 0.10 * y);
+            }
+            g.computeVertexNormals();
+            return g;
+          }), mat: trunkMat(), off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) }
+      ];
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const droop = -0.28 - (i % 3) * 0.16;
+        parts.push({
+          geo: cached('frond', () => {
+            // a tapered, drooping blade rather than a flat rectangle
+            const g = new THREE.PlaneGeometry(0.68, 0.20, 8, 1);
+            const pos = g.attributes.position;
+            for (let k = 0; k < pos.count; k++) {
+              const t = (pos.getX(k) + 0.34) / 0.68;          // 0 at base, 1 at tip
+              pos.setY(k, pos.getY(k) * (1 - t * 0.85));       // taper
+              pos.setZ(k, -t * t * 0.22);                      // droop
+            }
+            g.translate(0.34, 0, 0);
+            g.computeVertexNormals();
+            return g;
+          }),
+          mat: leafMat(frond, { side: THREE.DoubleSide }),
+          off: [Math.cos(a) * 0.13 + 0.10, 0.95, Math.sin(a) * 0.13],
+          scale: [1, 1, 1], color: new THREE.Color(frond),
+          rotY: a, tilt: droop
+        });
+      }
+      return parts;
+    }
+    case 'gorse': {
+      const c = '#5d6f2e';
+      return [
+        { geo: cached('bush', () => new THREE.IcosahedronGeometry(0.5, 1)), mat: leafMat(c),
+          off: [0, 0.40, 0], scale: [1.15, 0.78, 1.15], color: new THREE.Color(c) },
+        { geo: cached('bush2', () => new THREE.IcosahedronGeometry(0.34, 1)), mat: leafMat('#8a8b34'),
+          off: [0.24, 0.52, 0.10], scale: [1, 0.8, 1], color: new THREE.Color('#8a8b34') },
+        { geo: cached('bush3', () => new THREE.IcosahedronGeometry(0.28, 1)), mat: leafMat(darkenHex(c, 0.16)),
+          off: [-0.22, 0.44, -0.14], scale: [1, 0.82, 1], color: new THREE.Color(darkenHex(c, 0.16)) },
+        // the gorse flower that makes a links course yellow in spring
+        { geo: cached('bushf', () => new THREE.IcosahedronGeometry(0.17, 0)), mat: leafMat('#d8c73c'),
+          off: [0.05, 0.62, 0.16], scale: [1, 0.7, 1], color: new THREE.Color('#d8c73c') }
+      ];
+    }
+    case 'saguaro': {
+      const c = '#4b6b3d';
+      const ribbed = (rt, rb, h, seg) => {
+        const g = new THREE.CylinderGeometry(rt, rb, h, seg);
+        const pos = g.attributes.position;                    // pinch alternate columns into ribs
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i), z = pos.getZ(i);
+          const a = Math.atan2(z, x), r = Math.hypot(x, z);
+          const rr = r * (1 + Math.cos(a * seg) * 0.10);
+          pos.setX(i, Math.cos(a) * rr); pos.setZ(i, Math.sin(a) * rr);
+        }
+        g.computeVertexNormals();
+        return g;
+      };
+      const cap = (r) => new THREE.SphereGeometry(r, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+      return [
+        { geo: cached('sagbody', () => ribbed(0.085, 0.10, 1, 12)), mat: leafMat(c),
+          off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(c) },
+        { geo: cached('sagcap', () => cap(0.085)), mat: leafMat(c),
+          off: [0, 1.0, 0], scale: [1, 1, 1], color: new THREE.Color(c) },
+        // right arm: out, then up
+        { geo: cached('sagout', () => ribbed(0.055, 0.055, 0.20, 10)), mat: leafMat(c),
+          off: [0.11, 0.62, 0], scale: [1, 1, 1], color: new THREE.Color(c), tiltZ: Math.PI / 2 },
+        { geo: cached('sagup', () => ribbed(0.05, 0.055, 0.34, 10)), mat: leafMat(c),
+          off: [0.20, 0.79, 0], scale: [1, 1, 1], color: new THREE.Color(c) },
+        { geo: cached('sagupcap', () => cap(0.05)), mat: leafMat(c),
+          off: [0.20, 0.96, 0], scale: [1, 1, 1], color: new THREE.Color(c) },
+        // left arm, a little lower
+        { geo: cached('sagout2', () => ribbed(0.05, 0.05, 0.17, 10)), mat: leafMat(c),
+          off: [-0.10, 0.50, 0.02], scale: [1, 1, 1], color: new THREE.Color(c), tiltZ: Math.PI / 2 },
+        { geo: cached('sagup2', () => ribbed(0.045, 0.05, 0.26, 10)), mat: leafMat(c),
+          off: [-0.18, 0.63, 0.02], scale: [1, 1, 1], color: new THREE.Color(c) },
+        { geo: cached('sagupcap2', () => cap(0.045)), mat: leafMat(c),
+          off: [-0.18, 0.76, 0.02], scale: [1, 1, 1], color: new THREE.Color(c) }
+      ];
+    }
+    case 'palo': {
+      const c = '#7f9350';
+      return [
+        { geo: cached('cyl8', () => new THREE.CylinderGeometry(0.035, 0.055, 1, 6)), mat: trunkMat(),
+          off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color('#8d9a5e') },
+        { geo: cached('ico1', () => new THREE.IcosahedronGeometry(0.42, 0)), mat: leafMat(c),
+          off: [0, 0.92, 0], scale: [1, 0.62, 1], color: new THREE.Color(c) }
+      ];
+    }
+    case 'maple': case 'oak': default: {
+      const c = species === 'maple' ? '#5c8f3a' : '#43762f';
+      // a tapered trunk, two lifted branches, and five overlapping canopy lobes
+      return [
+        { geo: cached('btrunk', () => new THREE.CylinderGeometry(0.028, 0.075, 1, 8)), mat: trunkMat(),
+          off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
+        { geo: cached('branchL', () => { const g = new THREE.CylinderGeometry(0.014, 0.032, 0.34, 5); g.translate(0, 0.17, 0); g.rotateZ(0.75); return g; }),
+          mat: trunkMat(), off: [0, 0.50, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
+        { geo: cached('branchR', () => { const g = new THREE.CylinderGeometry(0.014, 0.032, 0.34, 5); g.translate(0, 0.17, 0); g.rotateZ(-0.8); return g; }),
+          mat: trunkMat(), off: [0, 0.46, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
+        { geo: cached('lobeA', () => new THREE.IcosahedronGeometry(0.40, 1)), mat: leafMat(c),
+          off: [0, 0.82, 0], scale: [1.05, 0.88, 1.05], color: new THREE.Color(c) },
+        { geo: cached('lobeB', () => new THREE.IcosahedronGeometry(0.29, 1)), mat: leafMat(lightenHex(c, 0.16)),
+          off: [0.20, 0.96, 0.10], scale: [1, 0.88, 1], color: new THREE.Color(lightenHex(c, 0.16)) },
+        { geo: cached('lobeC', () => new THREE.IcosahedronGeometry(0.26, 1)), mat: leafMat(darkenHex(c, 0.14)),
+          off: [-0.22, 0.74, -0.10], scale: [1, 0.9, 1], color: new THREE.Color(darkenHex(c, 0.14)) },
+        { geo: cached('lobeD', () => new THREE.IcosahedronGeometry(0.23, 1)), mat: leafMat(lightenHex(c, 0.07)),
+          off: [0.06, 0.68, -0.24], scale: [1, 0.9, 1], color: new THREE.Color(lightenHex(c, 0.07)) },
+        { geo: cached('lobeE', () => new THREE.IcosahedronGeometry(0.21, 1)), mat: leafMat(darkenHex(c, 0.06)),
+          off: [-0.10, 1.00, -0.06], scale: [1, 0.9, 1], color: new THREE.Color(darkenHex(c, 0.06)) }
+      ];
+    }
+  }
+}
+
+function lightenHex(hex, a) {
+  const c = new THREE.Color(hex); c.lerp(new THREE.Color(0xffffff), a); return '#' + c.getHexString();
+}
+function darkenHex(hex, a) {
+  const c = new THREE.Color(hex); c.lerp(new THREE.Color(0x000000), a); return '#' + c.getHexString();
+}
+
+/* ========================================================================= */
+/*  DETAIL TEXTURE                                                            */
+/* ========================================================================= */
+const _detailCache = new Map();
+function makeDetailTexture(bio) {
+  let t = _detailCache.get(bio.id);
+  if (t) return t;
+  const S = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  const rnd = mulberry32(0x9e37 ^ S);
+  g.fillStyle = '#808080';
+  g.fillRect(0, 0, S, S);
+  // little blades, so grass reads as grass at the player's eye level
+  for (let i = 0; i < 5200; i++) {
+    const x = rnd() * S, y = rnd() * S;
+    const v = 96 + rnd() * 118;
+    g.strokeStyle = `rgb(${v},${v},${v})`;
+    g.lineWidth = 0.8 + rnd() * 0.7;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + (rnd() - 0.5) * 3, y - 1.5 - rnd() * 3.5);
+    g.stroke();
+  }
+  t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.NoColorSpace;
+  _detailCache.set(bio.id, t);
+  return t;
+}
+
+function dirFromAngles(elevDeg, azimDeg) {
+  const e = elevDeg * Math.PI / 180, a = azimDeg * Math.PI / 180;
+  return new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e)).normalize();
+}
+
+/* ========================================================================= */
+/*  EFFECTS — splashes, divots, sand puffs                                    */
+/* ========================================================================= */
+class EffectPool {
+  constructor(parent) {
+    this.parent = parent;
+    this.items = [];
+  }
+  burst(kind, x, y, z, n = 18) {
+    const colors = { splash: 0xd6f0fb, sand: 0xf0e2b8, grass: 0x4e8a3c, leaves: 0x3f7a37 };
+    const geo = new THREE.SphereGeometry(kind === 'splash' ? 0.09 : 0.06, 5, 4);
+    const mat = new THREE.MeshBasicMaterial({ color: colors[kind] || 0xffffff, transparent: true });
+    const inst = new THREE.InstancedMesh(geo, mat, n);
+    inst.frustumCulled = false;
+    const parts = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + i * 0.7;
+      const sp = kind === 'splash' ? 2.2 + (i % 5) * 0.9 : 1.4 + (i % 4) * 0.6;
+      parts.push({
+        x, y, z,
+        vx: Math.cos(a) * sp * 0.6, vy: 2.2 + (i % 6) * 0.5, vz: Math.sin(a) * sp * 0.6
+      });
+    }
+    this.parent.add(inst);
+    this.items.push({ inst, parts, life: 1.15, age: 0, mat });
+  }
+  update(dt) {
+    const m4 = new THREE.Matrix4();
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      it.age += dt;
+      const k = it.age / it.life;
+      if (k >= 1) {
+        this.parent.remove(it.inst);
+        it.inst.geometry.dispose(); it.mat.dispose();
+        this.items.splice(i, 1);
+        continue;
+      }
+      it.mat.opacity = 1 - k;
+      for (let j = 0; j < it.parts.length; j++) {
+        const p = it.parts[j];
+        p.vy -= 9.8 * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+        m4.makeTranslation(p.x, p.y, p.z);
+        it.inst.setMatrixAt(j, m4);
+      }
+      it.inst.instanceMatrix.needsUpdate = true;
+    }
+  }
+}

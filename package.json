@@ -1,0 +1,30 @@
+{
+  "name": "claude-national-golf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ultrarealistic online multiplayer golf — 5 courses, 9 holes each, first-person",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test/physics.mjs",
+    "test:physics": "node test/physics.mjs",
+    "test:server": "node test/server-hardening.mjs",
+    "test:resilience": "node test/resilience.mjs",
+    "test:round": "node test/round.mjs",
+    "share": "node share.mjs",
+    "test:cart": "node test/cart.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "three": "^0.169.0"
+  },
+  "type": "module",
+  "devDependencies": {
+    "socket.io-client": "^4.8.1"
+  }
+}

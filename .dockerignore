@@ -1,0 +1,6 @@
+node_modules
+npm-debug.log*
+.git
+.DS_Store
+test
+reference_hole1_course_map.html
