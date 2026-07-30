@@ -47,6 +47,31 @@ function blobTexture() {
    texture keeps it lazy — nothing is rasterised until something needs one. */
 export { blobTexture as sharedBlobTexture, blobGeo as sharedBlobGeo };
 
+/* One face for the whole field: two eyes and the hint of a smile, drawn once
+   and shared.  It rides a tiny plane just in front of the head, so the box
+   UV problem (a cube texture repeats on every side) never comes up. */
+let _faceTex = null, _faceGeo = null, _faceMat = null;
+function faceParts() {
+  if (!_faceMat) {
+    const S = 64;
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgba(0,0,0,0)'; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#1d2126';
+    g.beginPath(); g.ellipse(20, 26, 4.6, 6.2, 0, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(44, 26, 4.6, 6.2, 0, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(20,24,28,.85)'; g.lineWidth = 2.6; g.lineCap = 'round';
+    g.beginPath(); g.arc(32, 36, 9, Math.PI * 0.22, Math.PI * 0.78); g.stroke();
+    _faceTex = new THREE.CanvasTexture(c);
+    _faceTex.userData.shared = true;
+    _faceGeo = shared(new THREE.PlaneGeometry(1, 1));
+    _faceMat = new THREE.MeshBasicMaterial({ map: _faceTex, transparent: true, depthWrite: false });
+    _faceMat.userData = { shared: true };
+  }
+  return { geo: _faceGeo, mat: _faceMat };
+}
+
 const H = AVATAR_HEIGHT;          // 1.78 m
 const part = (mat, w, h, d, x, y, z) => {
   const m = new THREE.Mesh(box(), mat);
@@ -84,6 +109,12 @@ export class Avatar {
     this.head = new THREE.Group();
     this.head.position.set(0, NECK, 0);
     this.head.add(part(this.mats.skin, 0.225, H * 0.125, 0.225, 0, H * 0.0625, 0));
+    // the face: a shared decal floating a hair in front of the head box
+    const fp = faceParts();
+    const face = new THREE.Mesh(fp.geo, fp.mat);
+    face.scale.set(0.20, 0.20, 1);
+    face.position.set(0, H * 0.0625, 0.1135);
+    this.head.add(face);
     this.hat = new THREE.Group();
     // cap crown + peak, so you can read a player's colour from behind
     this.hat.add(part(this.mats.cap, 0.24, H * 0.05, 0.24, 0, H * 0.1355, 0));

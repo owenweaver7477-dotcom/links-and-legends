@@ -137,6 +137,9 @@ export class GolfScene {
       this._water.push(m);
     }
 
+    /* ---- the world beyond the course ---- */
+    g.add(this._buildHorizon(hole, bio));
+
     /* ---- clouds ---- */
     this.clouds = this._buildClouds(hole, bio);
     if (this.clouds) g.add(this.clouds);
@@ -170,7 +173,11 @@ export class GolfScene {
       if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
       if (o.material) {
         const mats = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of mats) { if (m.map && !m.map.userData.shared) m.map.dispose(); m.dispose(); }
+        for (const m of mats) {
+          if (m.userData && m.userData.shared) continue;   // singleton materials survive
+          if (m.map && !m.map.userData.shared) m.map.dispose();
+          m.dispose();
+        }
       }
     });
     this.scene.remove(this.holeGroup);
@@ -381,6 +388,77 @@ export class GolfScene {
     m.scale.set(w.rx * 1.03, w.rz * 1.03, 1);   // kiss the banks — no dry seam
     m.userData.mat = mat;
     return m;
+  }
+
+  /* ---------------------------------------------------------- horizon --- */
+  /**
+   * The world beyond the course.  A ring of silhouette terrain out past the
+   * fog line — jagged peaks for the alpine valley, flat-topped mesas in the
+   * desert, low dunes for the links, rolling forest for the parkland, island
+   * humps off the cay.  One vertex-coloured mesh, one draw call, and the fog
+   * does the atmospheric work for free.
+   */
+  _buildHorizon(hole, bio) {
+    const rng = mulberry32((hole.terrainSeed ^ 0x4021ee) >>> 0);
+    const b = hole.bounds;
+    const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+    const baseR = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) * 0.75 + 420;
+
+    // biome character: [amplitude, jaggedness, plateau clip 0-1, colour]
+    const CHAR = {
+      alpine:   { amp: 300, jag: 0.9, clip: 1.0, col: '#5a6b78', snow: true },
+      desert:   { amp: 130, jag: 0.5, clip: 0.55, col: '#8a5844', snow: false },
+      links:    { amp: 55,  jag: 0.55, clip: 1.0, col: '#5d6b52', snow: false },
+      parkland: { amp: 95,  jag: 0.35, clip: 1.0, col: '#3d5a40', snow: false },
+      tropical: { amp: 70,  jag: 0.45, clip: 0.85, col: '#3f6b55', snow: false }
+    };
+    const ch = CHAR[bio.id] || CHAR.parkland;
+
+    const N = 110;
+    // a looped 1D ridge profile: two octaves of value noise around the circle
+    const knots = 12;
+    const k1 = Array.from({ length: knots }, () => rng());
+    const k2 = Array.from({ length: knots * 3 }, () => rng());
+    const prof = t => {
+      const f = (arr, reps) => {
+        const x = t * reps * arr.length / arr.length % 1 * arr.length;
+        const i = Math.floor(t * reps * arr.length) % arr.length;
+        const u = (t * reps * arr.length) % 1;
+        const s = u * u * (3 - 2 * u);
+        return arr[i] * (1 - s) + arr[(i + 1) % arr.length] * s;
+      };
+      return f(k1, 1) * (1 - ch.jag * 0.4) + f(k2, 1) * ch.jag * 0.6;
+    };
+
+    const pos = [], col = [], idx = [];
+    const base = new THREE.Color(ch.col);
+    const dark = base.clone().multiplyScalar(0.55);
+    const snowC = new THREE.Color('#e8eef2');
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const a = t * Math.PI * 2;
+      const r = baseR * (1 + prof((t + 0.37) % 1) * 0.25);
+      let h = Math.min(prof(t), ch.clip) * ch.amp + 8;
+      const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+      pos.push(x, -6, z);  col.push(dark.r, dark.g, dark.b);
+      pos.push(x, h, z);
+      // snowline on the alpine ridge
+      const top = ch.snow && h > ch.amp * 0.62 ? snowC : base;
+      col.push(top.r, top.g, top.b);
+    }
+    for (let i = 0; i < N; i++) {
+      const a = i * 2, c = a + 1, d = a + 2, e = a + 3;
+      idx.push(a, d, c, c, d, e);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      vertexColors: true, side: THREE.DoubleSide
+    }));
+    mesh.renderOrder = -0.5;              // behind everything but the sky
+    return mesh;
   }
 
   /* ----------------------------------------------------------- clouds --- */
@@ -887,6 +965,40 @@ export class GolfScene {
     this._read = mesh;
     this._readKey = key;
     this.scene.add(mesh);          // persistent scene: rebuilt per hole by key
+  }
+
+  /** A soft additive glow that rides the ball in flight — broadcast tracer. */
+  setBallGlow(x, y, z, hex) {
+    if (x == null) { if (this._glow) this._glow.visible = false; return; }
+    if (!this._glow) {
+      // a WHITE radial — the blob shadow texture is black, and additive
+      // black is nothing at all
+      const S = 64, c = document.createElement('canvas');
+      c.width = c.height = S;
+      const g2 = c.getContext('2d');
+      const grd = g2.createRadialGradient(S/2, S/2, 1, S/2, S/2, S/2);
+      grd.addColorStop(0, 'rgba(255,255,255,0.9)');
+      grd.addColorStop(0.4, 'rgba(255,255,255,0.35)');
+      grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g2.fillStyle = grd; g2.fillRect(0, 0, S, S);
+      const tex = new THREE.CanvasTexture(c);
+      tex.userData.shared = true;
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex, color: 0xffffff,
+        blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.85
+      }));
+      m.scale.set(1.6, 1.6, 1);
+      this._glow = m;
+      this.scene.add(m);
+    }
+    this._glow.visible = true;
+    this._glow.position.set(x, y, z);
+    if (hex) this._glow.material.color.set(hex);
+  }
+
+  /** Tint the shot tracer to the player whose ball is flying. */
+  setTraceColor(hex) {
+    if (this.traceLine) this.traceLine.material.color.set(hex || '#ffffff');
   }
 
   /** Tint the preview line — the putt read runs green / amber / red. */

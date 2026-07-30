@@ -480,6 +480,7 @@ function beginShot(msg) {
   // the golfer swings on every screen, timed so the ball leaves at the hit
   const swingAv = G.avatars.get(msg.pid);
   if (swingAv) { swingAv.setClub(msg.shot.clubKey, player(msg.pid)?.clubTier ?? 0); swingAv.strike(msg.shot.aim); }
+  scene.setTraceColor(player(msg.pid)?.color || '#ffffff');
   Sound.strike(CLUB_BY_KEY[msg.shot.clubKey], msg.shot.power);
   scene.clearTrace();
   scene.setAimLine(null);
@@ -512,6 +513,10 @@ function stepAnim(dt, now) {
 
   if (!a.done) {
     const res = a.sim.advance(dt);
+    // the broadcast-tracer glow rides the ball while it is in the air
+    if (a.sim.airborne) {
+      scene.setBallGlow(a.sim.p.x, a.sim.p.y, a.sim.p.z, player(a.pid)?.color);
+    } else scene.setBallGlow(null);
     drainEvents(a);
     const p = a.sim.p;
     G.balls[a.pid] = { x: p.x, y: p.y, z: p.z };
@@ -533,6 +538,7 @@ function stepAnim(dt, now) {
     scene.setBall(a.pid, G.balls[a.pid].x, G.balls[a.pid].y, G.balls[a.pid].z);
     scene.clearTrace();
     G.anim = null;
+    scene.setBallGlow(null);
     pumpQueue();
     refreshTurnUi();
     if (myTurn()) { clubManual = false; autoClub(); aimAtPin(); rig.reset(); G.view = 'third'; }
