@@ -68,10 +68,13 @@ You have a golfer on the course, and you walk them to the ball.
 
 Once you are at the ball, you are standing behind it looking down the hole.
 
-- **Aim** with `←`/`→` — TAP for a surgical nudge, HOLD and the sweep winds up
-  from fine to fast, `Shift` pins it ultra-fine for putts. The arrows switch
-  from walking to aiming as soon as you are over the ball. Right-drag looks
-  around freely, the whole way round.
+- **Aim** with `←`/`→`, or press and hold the on-screen `◄`/`►` — TAP for a
+  surgical nudge, HOLD and the sweep winds up from fine to fast, `Shift` pins
+  it ultra-fine for putts. The arrows switch from walking to aiming as soon as
+  you are over the ball.
+- **Look around**: hold any mouse button and drag, or just hold `Shift` and
+  move the mouse while you are standing still. Either way the view goes the
+  whole way round. Holding `Shift` mid-swing does not disturb the stroke.
 - **Club**: `Q`/`E` or the mouse wheel. One is picked for you from the lie and
   the yardage; override it whenever you like.
 - **Swing**: press the left button and **drag down** to take the club back, then

@@ -368,7 +368,39 @@ const run = async () => {
   await wait(800);
   check('60 identical look messages coalesce to at most 2 snapshots',
     casts <= 2, `${casts} snapshots for 60 messages`);
+
+  // ...but coalescing must never SWALLOW the last change, or a player's kit
+  // silently reverts for everyone else.  Palette colours only: the server
+  // allow-lists them, so arbitrary hexes are replaced by the default.
+  let lastState = null;
+  wA.on('room:state', st => { lastState = st; });
+  for (const hex of ['#7fb6dd', '#e8735a', '#5c8a4a', '#d9a731', '#a98cd8']) {
+    hostC.emit('player:look', { look: { shirt: hex } });
+    await wait(20);
+  }
+  await wait(700);
+  const finalShirt = lastState?.players?.find(p => p.pid === 'churn_host')?.look?.shirt;
+  check('a coalesced burst still delivers the FINAL look',
+    finalShirt === '#a98cd8', `shirt ${finalShirt}`);
   wA.close(); hostC.close();
+  await wait(200);
+
+  /* ---------------- 12. the host can leave mid-round ---------------- */
+  // A round must never die because whoever created the room closed their tab.
+  const hA = mk('hA'); await wait(150);
+  const hr = await rpc(hA, 'room:create', { name: 'Host', pid: 'leave_host' });
+  const hB = mk('hB'); await wait(150);
+  await rpc(hB, 'room:join', { code: hr?.code, name: 'Other', pid: 'leave_other' });
+  let hState = null; hB.on('room:state', x => { hState = x; });
+  hA.emit('game:start'); await wait(700);
+  hA.close(); await wait(700);
+  check('the round survives the host leaving mid-round',
+    hState?.state === 'playing', `state ${hState?.state}`);
+  check('a connected player inherits the room',
+    hState?.hostPid === 'leave_other', `host ${hState?.hostPid}`);
+  check('and the leaver keeps their seat and scorecard',
+    !!hState?.players?.some(p => p.pid === 'leave_host' && !p.connected));
+  hB.close();
   await wait(200);
 
   /* ---------------- report ---------------- */

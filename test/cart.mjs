@@ -441,6 +441,58 @@ head('the caddie crew — hired stats that actually do things');
      !!crewPurchase('caddie:constructor', { coins: 99999, crew: { ...NO_CREW } }).blocked);
 }
 
+/* ============================================== a hazard must never wedge a hole */
+head('water relief — a penalty drop has to make progress');
+{
+  const { ShotSim } = await import('../public/js/shared/ballistics.js');
+  const { TerrainModel, SURFACES } = await import('../public/js/shared/terrain.js');
+
+  // A pond starting three metres in front of the ball and running 120 m: the
+  // worst case, where every point on the flight line except the origin is wet.
+  // The drop used to walk back to the ball's own spot, so the identical shot
+  // replayed for ever and the hole could only end on the stroke cap.
+  const moat = () => {
+    const T = Object.create(TerrainModel.prototype);
+    const wet = (x, z) => z > 3 && z < 123 && Math.abs(x) < 90;
+    T.heightAt = () => 0;
+    T.surfaceAt = (x, z) => wet(x, z) ? SURFACES.water : SURFACES.fairway;
+    T.waterAt = (x, z) => wet(x, z) ? -0.4 : null;
+    T.normalAt = () => [0, 1, 0];
+    T.bio = { greenSpeed: 1, firmness: 1 };
+    T.toPin = (x, z) => Math.hypot(x - 0, z - 300);
+    T.hole = {
+      trees: [], bunkers: [],
+      waters: [{ x: 0, z: 63, rx: 90, rz: 60, rot: 0 }],
+      bounds: { minX: -900, maxX: 900, minZ: -900, maxZ: 900 },
+      ob: { minX: -900, maxX: 900, minZ: -900, maxZ: 900 },
+      pin: { x: 0, z: 300 }, cup: { x: 0, z: 300, r: 0.108 },
+      green: { x: 0, z: 300, rx: 20, rz: 20, rot: 0 }
+    };
+    return T;
+  };
+
+  const T = moat();
+  let p = { x: 0, z: 0 }, drops = 0, stuck = false;
+  for (let i = 0; i < 6; i++) {
+    const r = new ShotSim(T, { x: p.x, z: p.z, clubKey: 'I7', power: 0.5, aim: 0,
+      faceDeg: 0, attackDeg: 0, wind: { dir: 0, speed: 0 } }).runToEnd();
+    if (r.penalty === 0) break;
+    drops++;
+    const moved = Math.hypot(r.x - p.x, r.z - p.z);
+    if (moved < 1e-6) { stuck = true; break; }
+    p = { x: r.x, z: r.z };
+  }
+  ok('a drop never returns the ball to the spot it was played from', !stuck,
+     `${drops} drops, finished at z ${p.z.toFixed(1)}`);
+  ok('and each drop advances toward the hole', p.z > 0, `z ${p.z.toFixed(1)}`);
+
+  // the ordinary case still behaves: carry the water, no penalty at all
+  const over = new ShotSim(T, { x: 0, z: 0, clubKey: 'DR', power: 1, aim: 0,
+    faceDeg: 0, attackDeg: 0, wind: { dir: 0, speed: 0 } }).runToEnd();
+  ok('a shot that clears the water is not penalised', over.penalty === 0,
+     `carried ${over.carry.toFixed(0)} m to z ${over.z.toFixed(0)}`);
+}
+
 /* ================================================= the courses are not corridors */
 head('hole shapes — five courses must not be forty-five straight lines');
 {

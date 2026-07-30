@@ -935,8 +935,11 @@ window.addEventListener('pointermove', ev => {
     return;
   }
   // Hold SHIFT and move the mouse — no button — to look around while standing
-  // still.  Gated on actually being still, so Shift+WASD stays the run key.
-  if (ev.shiftKey && G.screen === 'game' && !G.mapOpen && walker.speed < 0.2) {
+  // still.  Gated on actually being still, so Shift+WASD stays the run key,
+  // and never DURING a stroke: Shift is a habit key, and stealing the pointer
+  // mid-swing would abandon the shot and spin the camera instead.
+  const midSwing = swing.state !== SWING.IDLE && swing.state !== SWING.DONE;
+  if (ev.shiftKey && !midSwing && G.screen === 'game' && !G.mapOpen && walker.speed < 0.2) {
     if (shiftLook) {
       const dx = ev.clientX - shiftLook.x, dy = ev.clientY - shiftLook.y;
       rig.orbit = rig.orbit - dx * 0.005;
@@ -1093,7 +1096,9 @@ function drawMap() {
   // 2000x2500, plus two drawing-buffer resizes) and the terrain never moves —
   // so render it ONCE per hole and size into an offscreen base, and per frame
   // only stamp the base and redraw the live markers on top.
-  const baseKey = G.room?.courseId + ':' + G.hole.number + ':' + w + 'x' + h;
+  // the graphics setting changes how the terrain renders, so it belongs in the
+  // key — otherwise switching quality leaves the map showing the old pass
+  const baseKey = G.room?.courseId + ':' + G.hole.number + ':' + w + 'x' + h + ':' + HUD.quality;
   if (!mapBase || mapBaseKey !== baseKey) {
     // The camera must letterbox to the CANVAS aspect, not the hole-bounds
     // aspect — the size floors above can change it, and the marker overlay

@@ -34,6 +34,12 @@ export const SURFACES = {
   ob:       { id: 'ob',       label: 'Out of bounds', roll: 0.700, bounce: 0.14, grab: 0.9, spinKeep: 0.1 }
 };
 
+/* How far in front of a tee the ground is graded, and the steepest climb it
+   is allowed over that stretch.  6% for 95 m clears the launch window on any
+   terrain without levelling the mountain the hole is cut into. */
+const TEE_APRON = 95;
+const TEE_CLIMB = 0.06;
+
 /* =========================================================================
    TerrainModel — one per hole, cached
    ========================================================================= */
@@ -91,6 +97,29 @@ export class TerrainModel {
     const halfW = hole.fairwayWidth * 0.5;
     const graded = 1 - smoothstep(halfW, halfW + hole.roughWidth + 26, d);
     let h = lerp(natural, base + natural * 0.22, graded * 0.85);
+
+    /* The launch apron.
+       A tee pad on its own is only a few metres across, so on a high-relief
+       course the natural land could rear up into a wall a few paces in front
+       of it — Hochkar had corridors climbing 28% at 5 m, and a drive simply
+       slammed into the hillside.  Real courses grade the ground away from a
+       tee; here the corridor is given a CEILING that climbs no faster than
+       TEE_CLIMB for the first stretch, then fades back into the natural land.
+       Only the rise is capped, so a tee shot into a falling valley — the good
+       part of mountain golf — is untouched. */
+    if (graded > 0.001) {
+      for (const t of Object.values(hole.tees || { back: hole.tee })) {
+        const along = s - (t.s || 0);
+        if (along <= 0 || along >= TEE_APRON) continue;
+        const teeH = elevationAlongRoute(hole, t.s || 0) + 0.15;
+        const ceiling = teeH + along * TEE_CLIMB;
+        if (h > ceiling) {
+          // full authority close in, releasing back to the landform by the end
+          const k = graded * (1 - smoothstep(TEE_APRON * 0.55, TEE_APRON, along));
+          h = lerp(h, ceiling, k);
+        }
+      }
+    }
 
     // green: a smooth, gently tilted plateau
     const g = hole.green;

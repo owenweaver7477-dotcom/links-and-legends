@@ -439,9 +439,14 @@ export function elevationAlongRoute(hole, s) {
 
 function describeHole(hole, rk) {
   const { par } = hole;
+  // bendOf compares the tee tangent with the green tangent, which is zero for
+  // an S-curve — it comes back to the same heading.  The shape knows better,
+  // so a snaking hole is never called "Straightaway".
   const dog = hole.route.length > 2 ? bendOf(hole) : 0;
   const names = [];
-  if (Math.abs(dog) > 0.34) names.push(dog > 0 ? 'Dogleg Right' : 'Dogleg Left');
+  if (hole.shape === 's_curve') names.push('The Snake');
+  else if (Math.abs(dog) > 0.34) names.push(dog > 0 ? 'Dogleg Right' : 'Dogleg Left');
+  else if (hole.shape === 'sweep') names.push(dog > 0 ? 'The Right Bend' : 'The Left Bend');
   else names.push(par === 3 ? 'The Short' : 'Straightaway');
   if (hole.waters.length >= 2) names.push('Double Cross');
   else if (hole.waters.length === 1) names.push('Watermark');

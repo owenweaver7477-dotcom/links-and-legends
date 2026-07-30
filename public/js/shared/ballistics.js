@@ -20,6 +20,11 @@ import { crewEffect } from './crew.js';
 const G = 9.80665;
 // A rolling solid sphere climbs and falls at 5/7 g — see _stepGround.
 const ROLL_G = G * 5 / 7;
+// How far clear of the water a penalty drop should sit: two club lengths.
+const DROP_CLEAR = 4.5;
+// And how far it must move on from the spot the shot was played, so a hazard
+// right in front of the ball can never hand it back for an identical replay.
+const MIN_DROP_ADVANCE = 6;
 const MASS = 0.0459;             // kg
 const RADIUS = 0.02135;          // m
 const AREA = Math.PI * RADIUS * RADIUS;
@@ -443,24 +448,49 @@ export class ShotSim {
       });
     }
 
-    // walk back along the flight path for the last dry, playable, tree-free spot
+    // Walk back along the flight path for the last dry, playable, tree-free
+    // spot — but take a PROPER drop, a couple of club lengths clear of the
+    // water rather than in its face.  The last dry sample on the line is often
+    // a metre from the edge, in the wet sand margin, which leaves the next
+    // shot playing out of the hazard's lip for no reason the rules require.
     const entry = { x: this.p.x, z: this.p.z };
     const path = this.path;
+    // A drop must never land back on the spot the shot was played from.  When
+    // the water starts immediately in front of the ball, every point on the
+    // flight line is wet except the origin — so the old walk-back handed the
+    // ball straight back, the player replayed the identical shot, and the
+    // hole became an unbreakable loop costing a stroke a time.  Relief is
+    // taken AT THE HAZARD, so the drop has to make progress.
+    const advanced = (x, z) =>
+      Math.hypot(x - this.lie.x, z - this.lie.z) > MIN_DROP_ADVANCE;
     let drop = null;
     for (let i = path.length - 1; i >= 0 && !drop; i--) {
       const q = path[i];
-      if (this._dryPlayable(q.x, q.z)) drop = { x: q.x, z: q.z };
+      if (advanced(q.x, q.z) && this._dryPlayable(q.x, q.z) && this._clearOfWater(q.x, q.z)) {
+        drop = { x: q.x, z: q.z };
+      }
+    }
+    // no roomy spot on the line: the last dry one that still makes progress
+    for (let i = path.length - 1; i >= 0 && !drop; i--) {
+      const q = path[i];
+      if (advanced(q.x, q.z) && this._dryPlayable(q.x, q.z)) drop = { x: q.x, z: q.z };
     }
     if (!drop) {
-      // nothing on the line — take the nearest dry ground to where it went in
+      // Nothing on the line — take relief beside the point of entry, working
+      // outwards.  Preferring ground that ALSO advances on the lie keeps the
+      // no-progress loop closed here too.
+      let fallback = null;
       outer:
       for (let r = 2; r <= 60; r += 2) {
         for (let k = 0; k < 24; k++) {
           const a = (k / 24) * Math.PI * 2;
           const cx = entry.x + Math.cos(a) * r, cz = entry.z + Math.sin(a) * r;
-          if (this._dryPlayable(cx, cz)) { drop = { x: cx, z: cz }; break outer; }
+          if (!this._dryPlayable(cx, cz)) continue;
+          if (!fallback) fallback = { x: cx, z: cz };
+          if (advanced(cx, cz)) { drop = { x: cx, z: cz }; break outer; }
         }
       }
+      if (!drop) drop = fallback;
     }
     if (!drop) drop = { x: this.lie.x, z: this.lie.z };
 
@@ -475,6 +505,16 @@ export class ShotSim {
     const s = this.T.surfaceAt(x, z);
     if (s.id === 'water' || s.id === 'ob') return false;
     return !this._insideTree(x, z);
+  }
+
+  /** Room to swing: no water within a couple of club lengths. */
+  _clearOfWater(x, z) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const cx = x + Math.cos(a) * DROP_CLEAR, cz = z + Math.sin(a) * DROP_CLEAR;
+      if (this.T.surfaceAt(cx, cz).id === 'water') return false;
+    }
+    return true;
   }
 
   _finish(res) {
