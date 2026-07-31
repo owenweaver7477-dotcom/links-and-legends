@@ -26,7 +26,7 @@ export const BIOMES = {
     waterKind: 'pond',
     bunkerCount: [2, 5],
     greenSpeed: 1.0,            // 1 = tour-ish stimp; higher = faster
-    greenSize: [17, 24],        // radius metres
+    greenSize: [12, 16],        // radius metres — a real green is 25-32 m across
     windBase: 3.0,              // m/s
     windGust: 2.5,
     palette: {
@@ -60,7 +60,7 @@ export const BIOMES = {
     bunkerCount: [4, 8],
     bunkerStyle: 'pot',         // small, deep, brutal
     greenSpeed: 1.12,
-    greenSize: [18, 27],
+    greenSize: [13, 17],
     windBase: 6.5,              // the defining hazard
     windGust: 2.6,
     firmness: 1.35,             // extra run-out on landing
@@ -95,7 +95,7 @@ export const BIOMES = {
     bunkerCount: [2, 5],
     wasteAreas: true,           // desert scrub outside the corridor plays as sand-ish
     greenSpeed: 1.05,
-    greenSize: [16, 22],
+    greenSize: [11, 15],
     windBase: 4.0,
     windGust: 3.0,
     firmness: 1.25,
@@ -129,7 +129,7 @@ export const BIOMES = {
     waterKind: 'lake',
     bunkerCount: [1, 4],
     greenSpeed: 0.94,           // slower, wetter greens
-    greenSize: [17, 23],
+    greenSize: [12, 16],
     windBase: 2.0,
     windGust: 2.0,
     slopeBias: 1.3,             // exaggerate along-route elevation change
@@ -163,7 +163,7 @@ export const BIOMES = {
     waterKind: 'lagoon',
     bunkerCount: [2, 5],
     greenSpeed: 0.97,
-    greenSize: [18, 25],
+    greenSize: [13, 17],
     windBase: 5.0,
     windGust: 3.2,
     firmness: 0.85,             // soft, holds approach shots

@@ -21,7 +21,7 @@ export const SURFACES = {
   // 3 m putt more than half a metre, which needs AimPoint-grade reading to hole
   // anything.  8 ft breaks about 35 cm: enough that the read matters, little
   // enough that a player who trusts the caddie's line makes it.
-  green:    { id: 'green',    label: 'Green',      roll: 0.070, bounce: 0.30, grab: 0.72, spinKeep: 0.55 },
+  green:    { id: 'green',    label: 'Green',      roll: 0.062, bounce: 0.30, grab: 0.72, spinKeep: 0.55 },
   fringe:   { id: 'fringe',   label: 'Fringe',     roll: 0.170, bounce: 0.26, grab: 0.80, spinKeep: 0.40 },
   fairway:  { id: 'fairway',  label: 'Fairway',    roll: 0.230, bounce: 0.30, grab: 0.70, spinKeep: 0.50 },
   tee:      { id: 'tee',      label: 'Tee',        roll: 0.230, bounce: 0.30, grab: 0.70, spinKeep: 0.50 },

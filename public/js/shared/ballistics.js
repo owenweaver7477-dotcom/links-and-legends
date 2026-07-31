@@ -69,11 +69,14 @@ export class ShotSim {
     const power = clamp(shot.power, 0, 1.12);
     this.power = power;
 
-    // A bad lie costs you speed and kills spin — you cannot spin it out of deep rough.
-    const lieSpeed = lieSurface.id === 'sand' ? 0.72
-      : lieSurface.id === 'deep' ? 0.68
-        : lieSurface.id === 'rough' ? 0.86
-          : lieSurface.id === 'waste' ? 0.80
+    // A bad lie costs you speed and kills spin — you cannot spin it out of deep
+    // rough.  These are deliberately harsher than they were: missing the
+    // fairway used to cost about a club, which is not a penalty, it is a
+    // rounding error.  Now it is the difference between reaching and laying up.
+    const lieSpeed = lieSurface.id === 'sand' ? 0.64
+      : lieSurface.id === 'deep' ? 0.56
+        : lieSurface.id === 'rough' ? 0.80
+          : lieSurface.id === 'waste' ? 0.72
             : lieSurface.id === 'path' ? 1.0 : 1.0;
     const lieSpin = lieSurface.spinKeep;
 
@@ -99,8 +102,10 @@ export class ShotSim {
     if (lieSurface.id === 'deep' || lieSurface.id === 'rough') launch += 2.5;
     launch = clamp(launch, -8, 62);
 
-    // direction: aim, pushed by the face angle
-    const dir = shot.aim + face * (Math.PI / 180) * 0.55;
+    // Direction: aim, pushed by the face angle.  An open face has to actually
+    // send the ball somewhere — at 0.55 a three-degree miss pushed the ball
+    // less than two degrees and every mishit still found the green.
+    const dir = shot.aim + face * (Math.PI / 180) * 0.78;
 
     const lr = launch * Math.PI / 180;
     const groundY = T.heightAt(shot.x, shot.z);
@@ -119,7 +124,7 @@ export class ShotSim {
     const purity = clamp(1 - Math.abs(face) / 6 - Math.max(0, power - 1) * 2.5, 0, 1);
     const spinReward = 1 + purity * (club.loft / 64) * 0.30;
     const backspin = club.spin * (0.55 + 0.45 * power) * lieSpin * spinReward * fx.spin;
-    const sidespin = face * club.curve * 260 * lieSpin;   // rpm per degree of face
+    const sidespin = face * club.curve * 330 * lieSpin;   // rpm per degree of face
     this.spinBack = backspin * RPM;
     this.spinSide = sidespin * RPM;
     this.dir0 = dir;
