@@ -48,13 +48,17 @@ and hole number alone.
 You have a golfer on the course, and you walk them to the ball.
 
 - **Walk** with `W A S D` — relative to where the camera is looking, so `W` is
-  always "away from me". Hold `Shift` to run. `F` jogs you to your own ball if
-  you cannot be bothered.
+  always "away from me". Hold `Shift` to jog. `F` walks you to your own ball.
+  These are human speeds: a walk is a walk, and 250 yards is a long way, which
+  is exactly why there is a cart on the tee.
 - **Take a cart** with `C`. `W`/`S` are the pedals, `A`/`D` steer, `Space` is the
-  handbrake, and `C` again gets you out. It tops out at 49 mph — heavy off the line, quick once rolling —, so it genuinely
-  beats running, and it will not go on a green or into a bunker — the same
-  places you would be shouted at for taking a real one. Hills matter: it slows
-  going up and runs away from you coming down.
+  handbrake, and `C` again gets you out. It is governed like a real one — about
+  22 km/h stock and 35 fully upgraded, heavy off the line — and it will not go
+  on a green or into a bunker, the same places you would be shouted at for
+  taking a real one. Hills matter: it slows going up and runs away from you
+  coming down. There is a speedometer on the dash.
+- **Carts take damage.** Ram one enough and the engine starts smoking and the
+  warning light comes on; keep going and it dies on the spot, and you walk.
 - **Offer someone a lift** with `G` while driving. The nearest player gets a
   message; they walk over and press `C` to drop into the passenger seat.
 - **You cannot play a shot from a cart.** Get out first. The server enforces it.
@@ -77,21 +81,26 @@ Once you are at the ball, you are standing behind it looking down the hole.
   whole way round. Holding `Shift` mid-swing does not disturb the stroke.
 - **Club**: `Q`/`E` or the mouse wheel. One is picked for you from the lie and
   the yardage; override it whenever you like.
-- **Swing**: press the left button and **drag down** to take the club back, then
-  **drag back up and release** to strike. Letting go at the top of the backswing
-  still plays the shot — with whatever draw or fade your pull-back chose and no
-  strike error on top — so a swing is never simply lost.
-  - How far you drag down is power. Past 100% you are overswinging, and accuracy
-    goes with it.
-  - How far you drift **sideways** as you come back through the ball is your
-    strike. Dead straight is pure; off to one side opens or closes the face and
-    the ball fades or draws. The meter shows it live.
+- **Swing** — two beats, because they are two different skills:
+  1. **Power.** Press the left button and **drag down**. How far you pull is how
+     hard you hit; past 100% you are overswinging and accuracy goes with it. The
+     **angle** of the pull is the shape of the shot, like a swing plane — pull
+     straight back for straight, angled for a draw or a fade.
+  2. **Strike.** Let go and the power locks; a marker starts sweeping across the
+     strike bar. **Click** (or press `Space`) to hit. Stop it in the middle and
+     you flush it; stop it wide and the face is that far open or shut, and the
+     ball comes out thin as well.
+  - The sweep's **speed is your lie**. Off a tee or fairway it is brisk, light
+    rough hurries it, heavy rough is close to a blur. Sand is the exception: the
+    marker crawls, so it is the easiest strike on the course to time — and the
+    sand still eats most of the ball speed, which is the trade a bunker makes.
 - **The white mark on the power meter is your caddie**: it is the exact power
   that finishes this shot at the flag, in this wind, from this lie, computed by
   running the real simulation. Match it and you are pin high.
 - **Cameras**: `1`–`4` pick the broadcast angles (behind / elevated / side-on /
-  first person) while you are over the ball, and `Space` re-frames the shot.
-  The mouse wheel zooms; `Shift`+wheel zooms even while you are lining up.
+  first person) while you are over the ball, and `Space` re-frames the shot when
+  no strike is waiting. The mouse wheel zooms; `Shift`+wheel zooms even while
+  you are lining up.
 - `M` for the hole map, `R` to reset the view, `Esc` to abandon a swing, `P` for
   the frame-rate meter.
 
@@ -115,14 +124,20 @@ you always know where the group is. Whoever is up next is highlighted.
 
 ### Setting up your round
 
-In the lobby you pick the **course**, the **tees**, **how your golfer looks**,
-your **ball colour** and the **fourteen clubs** you carry, plus yards or metres
-and the graphics setting.
+A room is a **round**, so the lobby holds only what the round needs: the
+**course**, the **tees** and your **ball colour**.
 
-Your golfer is a blocky low-poly figure you dress from swatches: **cap** (8),
-**shirt** (8), **skin** (5) and **trousers** (5). Changes show up on everyone
-else's screen immediately and stick for the whole session. The cap carries a
-small flash in your ball colour, so you can tell people apart from behind.
+Everything that is *yours* lives outside any room. Your golfer is on the front
+page, where you can change it before you have even thought about hosting — a
+blocky low-poly figure you dress from swatches: **cap** (8), **shirt** (8),
+**skin** (5) and **trousers** (5). It saves to your browser and comes with you
+into whatever room you join, and changes show up on everyone else's screen
+immediately. The cap carries a small flash in your ball colour, so you can tell
+people apart from behind.
+
+The **Clubhouse** button on the front page opens your career, the pro shop and
+your **fourteen clubs**, plus yards or metres and the graphics setting — all
+reachable without starting a game.
 
 Three tee sets per hole, cut back along the centreline: **Championship** (the
 full card, and the default), **Members** (about 8% shorter) and **Forward**
@@ -259,8 +274,15 @@ material groups, and it adds no textures at all because it borrows the avatars'
 blob shadow. Eight carts on screen cost about what two golfers do — the avatars
 are the expensive things here, at fourteen draw calls each.
 
-**Graphics** in the lobby defaults to *Performance* — blob shadows only. Switch it
-to *Quality* for a real sun shadow map if the machine can take it.
+**Graphics** in the clubhouse defaults to *Performance* — blob shadows only.
+Switch it to *Quality* for a real sun shadow map if the machine can take it. If
+frame times stay bad for several seconds the game drops the sun shadows for you,
+once, and says so, rather than grinding on.
+
+If the browser loses the GPU context — which is what "it crashed" usually means
+in a 3D web game — the renderer notices, stops drawing, tells you, and rebuilds
+the hole from its seed when the context comes back. A hiccup instead of a dead
+tab.
 
 One honest caveat: I could not measure a true frame rate in this environment. A
 headless browser pane never composites, so `gl.finish()` returns instantly and
@@ -280,7 +302,7 @@ mid-round puts you in as a spectator until the next hole.
 
 ## Swing Squad: the Caddie Crew and the club ladder
 
-Progression is people, not sliders. The shop in the lobby has two tabs:
+Progression is people, not sliders. The shop in the clubhouse has two tabs:
 
 **The Caddie Crew** — eight caddies, each governing one stat, hired and
 levelled 1–10 with coins. Ace tightens your mishit drift, Bruiser adds yards
