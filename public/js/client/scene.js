@@ -40,6 +40,25 @@ export class GolfScene {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
 
+    /* A lost WebGL context is what "the game crashed" usually means in a
+       browser: the GPU resets under load or the driver reclaims the context,
+       every buffer becomes invalid, and a renderer that keeps drawing throws
+       on the next frame and never recovers.  Catching the event lets us stop
+       cleanly, tell the player, and rebuild when the browser hands the
+       context back — a hiccup instead of a dead tab. */
+    this.contextLost = false;
+    canvas.addEventListener('webglcontextlost', ev => {
+      ev.preventDefault();               // required, or it is never restored
+      this.contextLost = true;
+      this.onContextLost?.();
+    }, false);
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      // the renderer rebuilds its own state; ours is rebuilt by reloading the
+      // hole, which the caller does through onContextRestored
+      this.onContextRestored?.();
+    }, false);
+
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.12, 3000);
     this.mapCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
@@ -1361,7 +1380,29 @@ export class GolfScene {
     if (this.fx) this.fx.update(dt);
   }
 
-  render(camera) { this.renderer.render(this.scene, camera || this.camera); }
+  /**
+   * Draw, defensively.
+   *
+   * The webglcontextlost EVENT is delivered asynchronously, so between the
+   * GPU actually going away and the flag being set there is a window of one
+   * or more frames.  Draw in that window and three.js reads a null shader log
+   * and throws "cannot read properties of null" — from inside the frame loop,
+   * which kills the loop and takes the whole game with it.  gl.isContextLost()
+   * is the synchronous truth, and the try/catch means that even an unforeseen
+   * driver failure costs one frame instead of the session.
+   */
+  render(camera) {
+    if (this.contextLost) return;
+    const gl = this.renderer.getContext();
+    if (gl.isContextLost && gl.isContextLost()) { this.contextLost = true; return; }
+    try {
+      this.renderer.render(this.scene, camera || this.camera);
+    } catch (e) {
+      if (gl.isContextLost && gl.isContextLost()) { this.contextLost = true; return; }
+      this._renderFails = (this._renderFails || 0) + 1;
+      if (this._renderFails <= 3) console.error('render failed —', e?.message || e);
+    }
+  }
 }
 
 /* ========================================================================= */

@@ -81,25 +81,39 @@ export class Roster {
    */
   update(players, avatars, pin, camera, camYaw, myPid, turnPid) {
     const w = window.innerWidth, h = window.innerHeight;
+    // Writing text into the DOM can force a layout, and with eight players
+    // this ran forty style and text writes EVERY frame.  The yardages and the
+    // turn highlight are read, not watched, so they update several times a
+    // second; only the things that track the camera — the compass needles and
+    // the floating labels — have to move every frame.
+    const now = performance.now();
+    const slow = now - (this._slowAt || 0) > 180;
+    if (slow) this._slowAt = now;
+
     for (const p of players) {
       if (p.spectator) continue;
       const r = this.rows.get(p.pid);
       const av = avatars.get(p.pid);
       if (!r) continue;
 
-      // distance from the PLAYER'S BALL to the hole — that is the number
-      // that actually matters on a scorecard
-      const d = Math.hypot(p.x - pin.x, p.z - pin.z);
-      r.dist.textContent = p.finished ? 'holed' : Math.round(HUD.dist(d)) + ' ' + HUD.unit();
-      r.row.classList.toggle('turn', p.pid === turnPid);
-      r.row.classList.toggle('done', !!p.finished);
+      if (slow) {
+        // distance from the PLAYER'S BALL to the hole — that is the number
+        // that actually matters on a scorecard
+        const d = Math.hypot(p.x - pin.x, p.z - pin.z);
+        const txt = p.finished ? 'holed' : Math.round(HUD.dist(d)) + ' ' + HUD.unit();
+        if (r.dist.textContent !== txt) r.dist.textContent = txt;
+        r.row.classList.toggle('turn', p.pid === turnPid);
+        r.row.classList.toggle('done', !!p.finished);
+      }
 
       // bearing to that player's AVATAR, relative to where I am looking
       if (av) {
         const bearing = Math.atan2(av.root.position.x - camera.position.x,
                                    av.root.position.z - camera.position.z) - camYaw;
-        r.needle.style.transform = `rotate(${(bearing * 180 / Math.PI).toFixed(0)}deg)`;
-        r.needle.style.opacity = p.pid === myPid ? '0.25' : '0.9';
+        const deg = (bearing * 180 / Math.PI).toFixed(0);
+        if (r._deg !== deg) { r._deg = deg; r.needle.style.transform = `rotate(${deg}deg)`; }
+        const op = p.pid === myPid ? '0.25' : '0.9';
+        if (r._op !== op) { r._op = op; r.needle.style.opacity = op; }
       }
 
       /* --- floating name label ---------------------------------------- */

@@ -488,15 +488,30 @@ function holdAim(el, dir) {
 /* A rolling average of real frame time. Averaged over a second so it reads
    steadily rather than flickering on every hitch. */
 let _fpsAcc = 0, _fpsN = 0, _fpsAt = 0;
+let _slowRuns = 0, _autoDropped = false;
 function measureFrame(now) {
-  if (!HUD.perfVisible()) return;
   if (_fpsAt) { _fpsAcc += now - _fpsAt; _fpsN++; }
   _fpsAt = now;
-  if (_fpsN >= 30) {
-    const ms = _fpsAcc / _fpsN;
+  if (_fpsN < 30) return;
+  const ms = _fpsAcc / _fpsN;
+  _fpsAcc = 0; _fpsN = 0;
+  if (HUD.perfVisible()) {
     const r = scene.renderer.info.render;
     HUD.setPerf(1000 / ms, ms, r.calls, r.triangles, HUD.quality);
-    _fpsAcc = 0; _fpsN = 0;
+  }
+
+  /* Adaptive quality.  Sun shadows are a whole extra pass over every caster,
+     and with a full course of golfers and carts that is exactly the machine
+     that cannot afford them.  Rather than let it grind, notice a sustained
+     bad frame time and drop to the blob-shadow path once, saying so.  Only
+     ever downward, and only once, so it can never oscillate. */
+  if (_autoDropped || HUD.quality !== 'quality' || G.screen !== 'game') return;
+  _slowRuns = ms > 34 ? _slowRuns + 1 : 0;      // worse than ~30 fps
+  if (_slowRuns >= 12) {                        // ~6 s of it, not one hitch
+    _autoDropped = true;
+    HUD.quality = 'perf';
+    scene.setQuality('perf');
+    HUD.toast('Graphics eased to keep things smooth — change it in the clubhouse.', 'info', 4200);
   }
 }
 
@@ -1563,6 +1578,24 @@ HUD.el.boardRoom.addEventListener('click', copyLink);
 
 HUD.el.optQuality.value = HUD.quality;
 scene.setQuality(HUD.quality);
+
+/* Losing the GPU context is the browser equivalent of a crash: every buffer
+   goes invalid at once.  Say what happened rather than leaving a frozen
+   picture, and rebuild the hole when it comes back — the course is generated
+   from a seed, so there is nothing to lose. */
+scene.onContextLost = () => HUD.toast('Graphics context lost — recovering…', 'warn', 6000);
+scene.onContextRestored = () => {
+  const key = G.loadedKey;
+  G.loadedKey = null;                        // force a full rebuild
+  if (key && G.room) {
+    const i = key.lastIndexOf(':');
+    ensureHole(key.slice(0, i), Number(key.slice(i + 1)));
+    syncAvatars(G.room.players || []);
+  }
+  scene.setQuality(HUD.quality);
+  HUD.toast('Graphics restored.', 'good', 2400);
+};
+
 HUD.el.optQuality.addEventListener('change', e => {
   HUD.setQuality(e.target.value);
   scene.setQuality(HUD.quality);
