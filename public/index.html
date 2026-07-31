@@ -118,6 +118,16 @@
     <kbd>hold-drag</kbd> or <kbd>Shift</kbd>+move look · <kbd>M</kbd> map · <kbd>P</kbd> fps
   </div>
 
+  <!-- Touch controls.  Walking, the cart, the map and the view were keyboard
+       only, which on a phone means you cannot reach your own ball — the game
+       is unplayable rather than merely awkward.  Shown only on touch devices. -->
+  <div class="touchpad" id="touchPad">
+    <button class="tbtn" id="tbBall" title="Walk to your ball">🚶<span>Ball</span></button>
+    <button class="tbtn" id="tbCart" title="Get in or out of a cart">🛺<span>Cart</span></button>
+    <button class="tbtn" id="tbView" title="Change view">🎥<span>View</span></button>
+    <button class="tbtn" id="tbMap" title="Hole map">🗺️<span>Map</span></button>
+  </div>
+
   <div class="perfhud" id="perfHud" hidden></div>
   <div class="shotinfo" id="shotinfo"></div>
   <div class="toasts" id="toasts"></div>
@@ -140,7 +150,7 @@
       <div class="brand-mark">⛳</div>
       <div>
         <h1>Links <em>&amp;</em> Legends</h1>
-        <p class="sub">Online multiplayer golf — five courses, nine holes, up to eight friends</p>
+        <p class="sub">Five courses, nine holes each. Play a round on your own, or with up to eight friends.</p>
       </div>
     </div>
     <div class="identity" id="identityChip" hidden>
@@ -151,20 +161,30 @@
       </div>
       <button class="btn" id="btnNotYou">Change</button>
     </div>
+    <!-- Somebody who has just clicked a thumbnail has no friends here and no
+         room code.  One button puts them on the first tee; everything to do
+         with other people is secondary and folded away. -->
+    <button class="btn primary huge" id="btnPlay">Play now</button>
+    <p class="tiny playhint">Nine holes, on your own. No sign-up — your career is saved on this browser.</p>
+
     <label class="field" id="nameField"><span>Your name</span>
       <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
-    <div class="split">
-      <div class="split-col">
-        <button class="btn primary big" id="btnCreate">Host a round</button>
-        <p class="tiny">You pick the course, friends join with your link.</p>
+
+    <details class="friends" id="friendsBox">
+      <summary>Play with friends</summary>
+      <div class="split">
+        <div class="split-col">
+          <button class="btn primary big" id="btnCreate">Host a round</button>
+          <p class="tiny">You pick the course, friends join with your link.</p>
+        </div>
+        <div class="or"><span>or</span></div>
+        <div class="split-col">
+          <label class="field"><span>Room code</span>
+            <input id="inpCode" type="text" maxlength="5" placeholder="ABCD" autocomplete="off" spellcheck="false" class="code"></label>
+          <button class="btn big" id="btnJoin">Join friends</button>
+        </div>
       </div>
-      <div class="or"><span>or</span></div>
-      <div class="split-col">
-        <label class="field"><span>Room code</span>
-          <input id="inpCode" type="text" maxlength="5" placeholder="ABCD" autocomplete="off" spellcheck="false" class="code"></label>
-        <button class="btn big" id="btnJoin">Join friends</button>
-      </div>
-    </div>
+    </details>
     <p class="err" id="homeErr"></p>
 
     <!-- Your golfer lives HERE, not inside a room: it is who you are, not a

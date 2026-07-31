@@ -3,6 +3,14 @@
    ========================================================================= */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* The `hidden` ATTRIBUTE only sets display:none through the user-agent sheet,
+   so any author rule with a display of its own silently beats it — which is
+   why `.identity { display: flex }` left the "Playing as —" chip on screen for
+   brand-new players, and the name field showed at the same time as the chip
+   meant to replace it.  One rule settles it for every element, instead of
+   patching them one at a time as they are noticed. */
+[hidden] { display: none !important; }
+
 html, body {
   height: 100%; background: #0b1210; overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -303,6 +311,49 @@ input.code { text-transform: uppercase; letter-spacing: 6px; font-weight: 700; t
   .or { flex-direction: row; padding: 0; }
   .or::before, .or::after { width: auto; height: 1px; min-height: 0; }
 }
+
+/* ───────────────────────────────────── touch controls
+   Hidden on anything with a real pointer, because a keyboard is faster.  On a
+   phone these are the difference between a playable game and a slideshow: the
+   whole core loop (get to the ball, take the cart, see the hole) was bound to
+   keys that do not exist there. */
+/* Two triggers, because neither alone is reliable: a media query catches most
+   phones immediately, and the `touch` class — set the first time a real touch
+   happens — catches the rest, including tablets a browser reports as having a
+   fine pointer.  A mouse-only desktop never sees it. */
+.touchpad { display: none; }
+@media (pointer: coarse) {
+  .touchpad { position: absolute; left: 10px; bottom: 108px; z-index: 7;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+}
+html.touch .touchpad { position: absolute; left: 10px; bottom: 108px; z-index: 7;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+html.touch .touchpad[hidden] { display: none !important; }
+.tbtn { width: 62px; height: 54px; border-radius: 13px; cursor: pointer;
+  background: rgba(10,18,15,.82); border: 1px solid rgba(255,255,255,.15);
+  color: #e8f2ea; font: inherit; font-size: 19px; line-height: 1;
+  display: grid; place-items: center; gap: 1px; backdrop-filter: blur(8px);
+  -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+.tbtn span { font-size: 9.5px; letter-spacing: .4px; color: #a9c2ae; text-transform: uppercase; font-weight: 700; }
+.tbtn:active { transform: translateY(1px); background: rgba(255,255,255,.18); }
+.tbtn[disabled] { opacity: .35; }
+
+/* ────────────────────── the front door: one obvious way in */
+.btn.huge { width: 100%; font-size: 20px; padding: 18px 22px; letter-spacing: .2px; }
+.playhint { text-align: center; margin: 8px 0 14px; }
+/* Everything about other people folds away, so the first thing a new player
+   sees is a way to start playing rather than a lobby they cannot use. */
+.friends { margin: 6px 0 4px; border-radius: 12px;
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); }
+.friends > summary { cursor: pointer; padding: 11px 14px; font-size: 13.5px;
+  font-weight: 700; color: #b9d0be; list-style: none; user-select: none; }
+.friends > summary::-webkit-details-marker { display: none; }
+.friends > summary::before { content: '👥'; margin-right: 8px; }
+.friends > summary::after { content: '▾'; float: right; opacity: .6; }
+.friends[open] > summary::after { content: '▴'; }
+.friends > summary:hover { color: #e8f2ea; }
+.friends .split { padding: 0 14px 14px; }
 
 /* ─────────────────────────────── your golfer, on the front page */
 .homekit { margin: 16px 0 4px; padding: 14px; border-radius: 14px;

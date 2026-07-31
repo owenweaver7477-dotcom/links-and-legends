@@ -23,7 +23,7 @@ for (const id of [
   'shotinfo', 'toasts', 'mapwrap', 'mapc', 'minic', 'miniPanel',
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
-  'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace',
+  'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
   'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
@@ -187,6 +187,9 @@ HUD.setMeter = (m, enabled) => {
   }
 };
 HUD.showPlaybar = on => el.playbar.classList.toggle('show', !!on);
+
+/** The touch pad belongs to a live round, not to the menus over the top. */
+HUD.showTouchPad = on => { el.touchPad.hidden = !on; };
 
 /* ------------------------------------------------------------- perf HUD */
 HUD.showPerf = on => { el.perfHud.hidden = !on; };

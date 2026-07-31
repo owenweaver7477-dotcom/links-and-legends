@@ -1469,6 +1469,8 @@ Net.on('disconnect', () => HUD.toast('Lost the connection — reconnecting…', 
 /* ===================================================================== */
 function route() {
   const r = G.room;
+  // the touch pad belongs to a live round, never over a menu
+  HUD.showTouchPad(!!r && r.state === 'playing');
   if (!G.joined || !r) { G.screen = 'home'; HUD.show('home'); return; }
   if (r.state === 'lobby') {
     G.screen = 'lobby';
@@ -1576,6 +1578,26 @@ document.getElementById('btnBagReset').addEventListener('click', () => {
 
 HUD.el.boardRoom.addEventListener('click', copyLink);
 
+/* Mark the document the first time a real finger lands, so the touch controls
+   appear for devices whose pointer the browser reports as "fine" — plenty of
+   tablets and touchscreen laptops do — without ever showing them to a mouse. */
+window.addEventListener('touchstart', function once() {
+  document.documentElement.classList.add('touch');
+  window.removeEventListener('touchstart', once);
+}, { passive: true, once: true });
+
+/* The touch pad.  These call exactly the same functions the keys do, so there
+   is one implementation of each action and no second code path to drift. */
+for (const [id, fn] of [
+  ['tbBall', () => { if (carts.inCart) HUD.toast('Get out of the cart first.', 'warn', 1600); else jogToMyBall(); }],
+  ['tbCart', () => toggleCart()],
+  ['tbView', () => toggleView()],
+  ['tbMap',  () => toggleMap()]
+]) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('click', ev => { ev.preventDefault(); fn(); });
+}
+
 HUD.el.optQuality.value = HUD.quality;
 scene.setQuality(HUD.quality);
 
@@ -1621,12 +1643,46 @@ const nameValue = () => {
   return v || 'Golfer';
 };
 
+/**
+ * Rewrite the address bar with the room code, so a refresh comes back to the
+ * same game and the link is shareable.  Wrapped because a sandboxed iframe —
+ * which is how a game portal embeds this — throws on history writes from a
+ * different origin, and losing a cosmetic URL must never cost the round.
+ */
+function stampRoomUrl(code) {
+  try { history.replaceState(null, '', '/?room=' + code); } catch { /* embedded */ }
+}
+
+/**
+ * Play now: straight to the first tee, alone.
+ *
+ * Somebody arriving from a game portal has no friends here and no room code,
+ * and a lobby is a wall in front of the thing they came to do.  This makes
+ * the room and starts the round in one click; hosting and joining are still
+ * there for people who actually want company.
+ */
+document.getElementById('btnPlay').addEventListener('click', () => {
+  HUD.homeError('');
+  const btn = document.getElementById('btnPlay');
+  btn.disabled = true;                       // a double click must not make two rooms
+  HUD.show('load');
+  HUD.loading('Walking to the first tee…');
+  Net.create(nameValue(), COURSE_ORDER[0], res => {
+    btn.disabled = false;
+    if (!res.ok) { HUD.show('home'); return HUD.homeError(res.error); }
+    G.joined = true; G.myPid = res.pid; G.room = res.state;
+    stampRoomUrl(res.code);
+    Net.start();                             // no lobby: tee off
+    route();
+  });
+});
+
 document.getElementById('btnCreate').addEventListener('click', () => {
   HUD.homeError('');
   Net.create(nameValue(), COURSE_ORDER[0], res => {
     if (!res.ok) return HUD.homeError(res.error);
     G.joined = true; G.myPid = res.pid; G.room = res.state;
-    history.replaceState(null, '', '/?room=' + res.code);
+    stampRoomUrl(res.code);
     route();
   });
 });
@@ -1637,7 +1693,7 @@ document.getElementById('btnJoin').addEventListener('click', () => {
   Net.join(code, nameValue(), res => {
     if (!res.ok) return HUD.homeError(res.error);
     G.joined = true; G.myPid = res.pid; G.room = res.state;
-    history.replaceState(null, '', '/?room=' + res.code);
+    stampRoomUrl(res.code);
     route();
     if (res.spectator) HUD.toast("Round in progress — you're in at the next hole.", 'warn', 3400);
   });
