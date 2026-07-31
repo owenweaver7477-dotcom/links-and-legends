@@ -27,7 +27,10 @@ function ac() {
     master.gain.value = muted ? 0 : 0.8;
     master.connect(ctx.destination);
   }
-  if (ctx.state === 'suspended') ctx.resume();
+  // resume() REJECTS if it is called before the browser has seen a gesture,
+  // and an unhandled rejection every time a sound is attempted is exactly the
+  // sort of console noise that gets a game rejected from a portal.
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   return ctx;
 }
 

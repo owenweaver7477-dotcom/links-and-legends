@@ -403,6 +403,31 @@ const run = async () => {
   hB.close();
   await wait(200);
 
+  /* ------- 13. the server as a public endpoint (portal conditions) ------- */
+  // Published on a game portal this is reachable by anyone, so every handler
+  // has to survive every shape of nonsense, not just the ones a real client
+  // could send.  This is the cross product: every event, every junk payload.
+  const pA = mk('pA'); await wait(200);
+  const EVENTS = ['room:create', 'room:join', 'room:course', 'room:tees', 'player:prefs',
+                  'player:move', 'player:look', 'cart:hail', 'shop:buy', 'game:start',
+                  'game:swing', 'game:next', 'game:again', 'room:lobby'];
+  const JUNK = [null, undefined, 0, '', 'x', [], {}, true, NaN,
+                { a: { b: { c: 1 } } }, { item: '__proto__' }, { pid: null }, { code: null }];
+  for (const e of EVENTS) for (const j of JUNK) { try { pA.emit(e, j); } catch { /* ignore */ } }
+  await wait(900);
+  const pAlive = await rpc(pA, 'room:create', { pid: 'portal_a', name: 'A' });
+  check('every event survives every junk payload',
+    !!pAlive?.ok, `${EVENTS.length} events x ${JUNK.length} payloads`);
+  pA.close(); await wait(150);
+
+  // Drive-by loads: a portal sends a lot of people who open the page and leave.
+  for (let i = 0; i < 30; i++) { const s = mk('churn' + i); s.close(); }
+  await wait(900);
+  const pB = mk('pB'); await wait(250);
+  const pBAlive = await rpc(pB, 'room:create', { pid: 'portal_b', name: 'B' });
+  check('survives 30 connect/disconnect cycles', !!pBAlive?.ok);
+  pB.close(); await wait(150);
+
   /* ---------------- report ---------------- */
   const fails = results.filter(r => !r.pass);
   for (const r of results) console.log(`  ${r.pass ? 'PASS' : 'FAIL'}  ${r.name}${r.detail ? '   [' + r.detail + ']' : ''}`);
