@@ -951,11 +951,15 @@ export class GolfScene {
   _buildAimLine() {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(64 * 3), 3));
+    // Bright and solid, drawn over everything.  At 55% opacity against a lit
+    // green this washed out to nothing in sunlight — and the read line is the
+    // one piece of information a putt depends on.
     const mat = new THREE.LineDashedMaterial({
-      color: 0xffffff, dashSize: 1.6, gapSize: 1.1, transparent: true, opacity: 0.55, depthTest: false
+      color: 0xffffff, dashSize: 1.6, gapSize: 1.1, transparent: true, opacity: 0.95,
+      depthTest: false, toneMapped: false
     });
     const l = new THREE.Line(geo, mat);
-    l.renderOrder = 5;
+    l.renderOrder = 6;
     l.visible = false;
     l.frustumCulled = false;
     return l;
@@ -971,9 +975,19 @@ export class GolfScene {
     return l;
   }
 
-  setAimLine(points) {
+  setAimLine(points, thick = false) {
     const l = this.aimLine;
-    if (!points || points.length < 2) { l.visible = false; return; }
+    if (!points || points.length < 2) {
+      l.visible = false;
+      if (this._readRibbon) this._readRibbon.visible = false;
+      return;
+    }
+    // On the green the read is drawn as a RIBBON with real width in metres.
+    // A THREE.Line is one pixel on every platform that matters, and one white
+    // pixel over a sunlit green is not a line you can putt to.
+    if (thick) { l.visible = false; this._setReadRibbon(points); return; }
+    if (this._readRibbon) this._readRibbon.visible = false;
+
     const arr = l.geometry.attributes.position.array;
     const n = Math.min(points.length, 64);
     for (let i = 0; i < n; i++) {
@@ -983,6 +997,48 @@ export class GolfScene {
     l.geometry.attributes.position.needsUpdate = true;
     l.computeLineDistances();
     l.visible = true;
+  }
+
+  /** The putt read: a wide, bright band laid on the green along the path. */
+  _setReadRibbon(points) {
+    const MAX = 96;                       // path points the ribbon can carry
+    if (!this._readRibbon) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX * 2 * 3), 3));
+      const idx = [];
+      for (let i = 0; i < MAX - 1; i++) {
+        const a = i * 2;
+        idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
+      geo.setIndex(idx);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.92,
+        depthTest: false, depthWrite: false, side: THREE.DoubleSide, toneMapped: false
+      });
+      const m = new THREE.Mesh(geo, mat);
+      m.renderOrder = 7;
+      m.frustumCulled = false;
+      this._readRibbon = m;
+      this.scene.add(m);                  // persistent, like the other aids
+    }
+    const m = this._readRibbon;
+    const n = Math.min(points.length, MAX);
+    const arr = m.geometry.attributes.position.array;
+    const HALF = 0.075;                   // 15 cm wide — two ball widths
+    for (let i = 0; i < n; i++) {
+      const p = points[i];
+      const q = points[Math.min(i + 1, n - 1)];
+      let dx = q.x - p.x, dz = q.z - p.z;
+      const len = Math.hypot(dx, dz) || 1;
+      // perpendicular, in the ground plane
+      const nx = -dz / len * HALF, nz = dx / len * HALF;
+      const a = i * 2 * 3;
+      arr[a] = p.x - nx; arr[a + 1] = p.y; arr[a + 2] = p.z - nz;
+      arr[a + 3] = p.x + nx; arr[a + 4] = p.y; arr[a + 5] = p.z + nz;
+    }
+    m.geometry.setDrawRange(0, Math.max(0, (n - 1) * 6));
+    m.geometry.attributes.position.needsUpdate = true;
+    m.visible = true;
   }
 
   /**
@@ -1132,6 +1188,7 @@ export class GolfScene {
   /** Tint the preview line — the putt read runs green / amber / red. */
   setAimLineColor(hex) {
     if (this.aimLine) this.aimLine.material.color.set(hex);
+    if (this._readRibbon) this._readRibbon.material.color.set(hex);
   }
 
   /**

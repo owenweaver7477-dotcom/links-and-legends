@@ -166,8 +166,55 @@
       </div>
     </div>
     <p class="err" id="homeErr"></p>
+
+    <!-- Your golfer lives HERE, not inside a room: it is who you are, not a
+         setting for one round, and a change applies the moment you make it. -->
+    <div class="homekit">
+      <div class="hk-head">
+        <h4 class="lbl">Your golfer</h4>
+        <button class="btn" id="btnClubhouse">Clubhouse · <span id="homeCoins">🪙 0</span></button>
+      </div>
+      <div class="looker" id="lookPicker"></div>
+    </div>
+
     <div class="venues">
       <span>Claude National</span><i>·</i><span>Cairnmoor Links</span><i>·</i><span>Red Mesa</span><i>·</i><span>Hochkar Alpine</span><i>·</i><span>Palmera Cay</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ CLUBHOUSE — career, pro shop and your bag ══════════════ -->
+<div class="screen" id="screenShop" hidden>
+  <div class="card wide">
+    <div class="hk-head">
+      <h2>Clubhouse</h2>
+      <button class="btn" id="btnShopBack">← Back</button>
+    </div>
+
+    <div class="section">
+      <h4 class="lbl">Your career</h4>
+      <div class="career" id="careerBox"></div>
+    </div>
+
+    <div class="section">
+      <h4 class="lbl">Pro shop <span class="coinbal" id="coinBal"></span></h4>
+      <div id="shopList"></div>
+    </div>
+
+    <div class="section">
+      <h4 class="lbl">Your bag <span id="bagCount"></span></h4>
+      <div class="bag" id="bagList"></div>
+      <div class="bagbar">
+        <button class="btn" id="btnBagReset">Reset to standard</button>
+        <label class="unitsel"><input type="checkbox" id="optMetres"> distances in metres</label>
+        <label class="unitsel"><input type="checkbox" id="optSound"> sound</label>
+        <label class="unitsel">graphics
+          <select id="optQuality">
+            <option value="perf">Performance</option>
+            <option value="quality">Quality</option>
+          </select>
+        </label>
+      </div>
     </div>
   </div>
 </div>
@@ -192,18 +239,8 @@
     </div>
 
     <div class="section">
-      <h4 class="lbl">Your career</h4>
-      <div class="career" id="careerBox"></div>
-    </div>
-
-    <div class="section">
       <h4 class="lbl">On the tee <span id="lobbyCount"></span></h4>
       <div class="players" id="lobbyPlayers"></div>
-    </div>
-
-    <div class="section">
-      <h4 class="lbl">Pro shop <span class="coinbal" id="coinBal"></span></h4>
-      <div id="shopList"></div>
     </div>
 
     <div class="section">
@@ -215,31 +252,12 @@
       </div>
     </div>
 
+    <!-- The room decides the ROUND.  Who you are — your golfer, your bag,
+         your career and the shop — lives on the front page and in the
+         clubhouse, because it belongs to you and not to this game. -->
     <div class="section">
-      <h4 class="lbl">Your golfer</h4>
-      <div class="kitgrid">
-        <div>
-          <h5 class="sublbl">Outfit</h5>
-          <div class="looker" id="lookPicker"></div>
-        </div>
-        <div>
-          <h5 class="sublbl">Ball</h5>
-          <div class="swatches" id="ballColours"></div>
-        </div>
-      </div>
-      <h5 class="sublbl">Your bag <span id="bagCount"></span></h5>
-      <div class="bag" id="bagList"></div>
-      <div class="bagbar">
-        <button class="btn" id="btnBagReset">Reset to standard</button>
-        <label class="unitsel"><input type="checkbox" id="optMetres"> distances in metres</label>
-        <label class="unitsel"><input type="checkbox" id="optSound"> sound</label>
-        <label class="unitsel">graphics
-          <select id="optQuality">
-            <option value="perf">Performance</option>
-            <option value="quality">Quality</option>
-          </select>
-        </label>
-      </div>
+      <h4 class="lbl">Your ball</h4>
+      <div class="swatches" id="ballColours"></div>
     </div>
 
     <div class="lobby-actions">

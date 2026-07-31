@@ -12,7 +12,8 @@ import { toYards, clamp } from '../shared/rng.js';
 const $ = id => document.getElementById(id);
 const el = {};
 for (const id of [
-  'screenHome', 'screenLobby', 'screenResults', 'screenLoad', 'screenHoleOver',
+  'screenHome', 'screenLobby', 'screenResults', 'screenLoad', 'screenHoleOver', 'screenShop',
+  'btnClubhouse', 'btnShopBack', 'homeCoins',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
@@ -56,8 +57,10 @@ HUD.show = which => {
   el.screenResults.hidden = which !== 'results';
   el.screenHoleOver.hidden = which !== 'holeover';
   el.screenLoad.hidden = which !== 'load';
+  el.screenShop.hidden = which !== 'shop';
 };
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
+HUD.setHomeCoins = n => { el.homeCoins.textContent = '🪙 ' + (n || 0).toLocaleString(); };
 HUD.homeError = msg => { el.homeErr.textContent = msg || ''; };
 
 /* ----------------------------------------------------------------- toasts */

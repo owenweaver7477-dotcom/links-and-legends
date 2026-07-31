@@ -243,7 +243,7 @@ function refreshAimPreview(force) {
   }
   const last = path[path.length - 1];
   if (last) pts.push(new THREE.Vector3(last.x, G.T.heightAt(last.x, last.z) + 0.07, last.z));
-  scene.setAimLine(pts);
+  scene.setAimLine(pts, isPutt);       // putts get the wide, bright read band
   G.lastPreviewEnd = last ? { x: last.x, z: last.z } : null;
 
   // Putt difficulty, read off the simulation itself: how far the borrow
@@ -351,7 +351,11 @@ function updateAvatars(dt) {
       // number you are about to play
       if (mode() === 'swing') {
         av.setClub(clubKey, G.profile?.clubTier ?? 0);   // your club, your set
-        av.setAddress(true, swing.aim + Math.PI / 2);
+        // A RIGHT-handed golfer stands with the target off their LEFT
+        // shoulder.  In this frame heading h+90° points along h's left hand,
+        // so the stance that puts the target to the left is aim-90°; the
+        // stance was aim+90°, which is a left-hander.
+        av.setAddress(true, swing.aim - Math.PI / 2);
         const m = swing.meter();
         av.setBackswing(m.state === 'back' || m.state === 'down' ? m.power / 1.12 : 0);
       } else {
@@ -1432,8 +1436,7 @@ Net.on('pos', d => {
 Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
-  HUD.renderCareer(prof);
-  HUD.renderShop(prof, item => Net.buy(item));
+  renderClubhouse();
   previewKey = '';                     // gear may have changed the flight
   if (G.room?.state === 'lobby') renderLobbyAll(G.room);
   // the post-round payout, announced once the results are up
@@ -1483,13 +1486,39 @@ function route() {
 let bagDraft = null;
 let lookDraft = null;
 
-/** Redraw the appearance swatches, and push any change to the server. */
+/**
+ * Redraw the appearance swatches and push the change straight out.
+ *
+ * This lives on the FRONT PAGE, not inside a room: your golfer is who you
+ * are, not a setting for one game.  A change applies immediately — to the
+ * server if you are in a round, and to the local draft either way, so the
+ * next room you join already has it.
+ */
 function drawLookPicker() {
   HUD.renderLook(lookDraft, (key, hex) => {
     lookDraft = normaliseLook({ ...lookDraft, [key]: hex });
     drawLookPicker();
-    Net.setLook(lookDraft);
+    saveLook(lookDraft);
+    if (G.joined) Net.setLook(lookDraft);
   });
+}
+
+const LOOK_KEY = 'golf.look';
+const saveLook = look => { try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch { /* private mode */ } };
+const loadLook = () => {
+  try { return normaliseLook(JSON.parse(localStorage.getItem(LOOK_KEY) || 'null')); }
+  catch { return normaliseLook(null); }
+};
+
+/** The clubhouse: career, pro shop and the bag, all outside any room. */
+function renderClubhouse() {
+  const prof = G.profile;
+  HUD.renderCareer(prof);
+  HUD.renderShop(prof, item => Net.buy(item));
+  bagDraft = me()?.bag?.length ? me().bag.slice()
+    : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true }));
+  HUD.renderBag(bagDraft, toggleClubInBag);
+  HUD.setHomeCoins(prof?.coins ?? 0);
 }
 
 function renderLobbyAll(r) {
@@ -1500,9 +1529,9 @@ function renderLobbyAll(r) {
   HUD.renderTees(course.holes[0], r.teeSet || 'back', isHost, t => Net.pickTees(t));
   HUD.renderColours(r, G.myPid, hex => Net.prefs({ color: hex }), G.profile?.rating || 0);
   bagDraft = me()?.bag?.length ? me().bag.slice() : normaliseBag(DEFAULT_BAG, { pad: true });
-  HUD.renderBag(bagDraft, toggleClubInBag);
-  lookDraft = normaliseLook(me()?.look);
-  drawLookPicker();
+  // the room owns the round; the golfer came with us, so push what we already
+  // chose on the front page rather than reading it back off the server
+  if (lookDraft) Net.setLook(lookDraft);
 }
 
 /** Swap a club in or out. Fourteen is the legal maximum, so adding a
@@ -1645,6 +1674,20 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     try { localStorage.removeItem('lg_pid'); } catch { /* ignore */ }
   });
   (HUD.el.inpName.value ? HUD.el.inpCode : HUD.el.inpName).focus();
+
+  // Your golfer, restored from the last visit and editable right here on the
+  // front page — no room required, and a change shows up immediately.
+  lookDraft = loadLook();
+  drawLookPicker();
+  renderClubhouse();
+
+  // the clubhouse: career, pro shop and bag, reachable without hosting a game
+  HUD.el.btnClubhouse.addEventListener('click', () => {
+    renderClubhouse();
+    G.screen = 'shop';
+    HUD.show('shop');
+  });
+  HUD.el.btnShopBack.addEventListener('click', () => route());
 
   HUD.show('home');
   scene.resize();

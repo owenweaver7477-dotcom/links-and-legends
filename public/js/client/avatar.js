@@ -317,7 +317,8 @@ export class Avatar {
     const from = this.golf?.k ?? 0.85;
     this.golf = {
       k: from, strikeT: 0,
-      yawLock: aimYaw != null ? aimYaw + Math.PI / 2 : this.golf?.yawLock ?? null
+      // right-handed stance: the target sits off the LEFT shoulder (see main.js)
+      yawLock: aimYaw != null ? aimYaw - Math.PI / 2 : this.golf?.yawLock ?? null
     };
     return 0.8;
   }

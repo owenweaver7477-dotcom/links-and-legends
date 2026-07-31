@@ -304,6 +304,14 @@ input.code { text-transform: uppercase; letter-spacing: 6px; font-weight: 700; t
   .or::before, .or::after { width: auto; height: 1px; min-height: 0; }
 }
 
+/* ─────────────────────────────── your golfer, on the front page */
+.homekit { margin: 16px 0 4px; padding: 14px; border-radius: 14px;
+  background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.09); }
+.hk-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 10px; }
+.hk-head h2 { margin: 0; }
+.hk-head .lbl { margin: 0; }
+
 /* ─────────────────────────────────────────── tees · ball · bag (lobby) */
 .tees { display: flex; gap: 8px; flex-wrap: wrap; }
 .teebtn { flex: 1 1 150px; text-align: left; padding: 9px 12px; border-radius: 11px; cursor: pointer;
