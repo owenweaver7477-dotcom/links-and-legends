@@ -12,12 +12,13 @@
    corner.  One transform, one source of truth.
    ========================================================================= */
 
-import { CartBody, nearestDrivable, BOARD_RADIUS, CART_TTL_MS, SEATS }
+import { CartBody, nearestDrivable, BOARD_RADIUS, CART_TTL_MS, SEATS, ABS_MAX }
   from '../shared/cart.js';
 import { Cart3D } from './cart3d.js';
 
 const EASE_POS = 14;      // 1/s — tighter than a walker: a cart covers ground
 const EASE_TILT = 8;
+const WRECK_SECONDS = 2.6;   // how long a wrecked cart smokes before it goes
 
 const shortestArc = (from, to) => {
   let d = to - from;
@@ -45,6 +46,9 @@ export class CartManager {
     this.sinking = null;       // seconds under water, once you have driven in
     this._lastDry = null;
     this.hitFlash = 0;
+    this.damage = 0;           // 0 fine, ~0.5 smoking, 1 wrecked
+    this.wrecked = null;       // seconds since it gave up, once it has
+    this._lastDamageAt = 0;    // so one long scrape is one accident
   }
 
   get driving() { return this.seat === 'driver'; }
@@ -182,13 +186,29 @@ export class CartManager {
         const newSpeed = Math.hypot(bvx, bvz);
         if (newSpeed > 0.3) {
           b.heading = Math.atan2(bvx, bvz);
-          b.speed = Math.min(newSpeed, 24) * (1 - 0.3 * (1 - w));    // rammer bleeds a little
+          b.speed = Math.min(newSpeed, ABS_MAX) * (1 - 0.3 * (1 - w)); // rammer bleeds a little
         } else {
           b.speed *= -0.2;
         }
         const impact = Math.max(mine, theirs);
-        if (impact > 1.5) this.hitFlash = Math.max(this.hitFlash, Math.min(1, impact / 9));
+        if (impact > 1.5) this.hitFlash = Math.max(this.hitFlash, Math.min(1, impact / 5));
+        // Panels only take so much.  Damage accumulates with the CLOSING
+        // speed, and there is a cooldown so one long scrape is one accident
+        // rather than sixty frames of them.
+        if (impact > 2.2 && now - this._lastDamageAt > 700) {
+          this._lastDamageAt = now;
+          this.damage = Math.min(1.2, this.damage + Math.min(0.45, impact / 14));
+        }
       }
+    }
+
+    // A wrecked cart smokes, then lets go.  resolveWreck() hands the driver
+    // back out on foot, exactly as sinking does.
+    if (this.damage >= 1 && this.wrecked == null) this.wrecked = 0;
+    if (this.wrecked != null) {
+      this.wrecked += dt;
+      // it coughs and slows before it goes
+      this.body.speed *= Math.max(0, 1 - dt * 1.6);
     }
 
     if (this.body.hit > this.hitFlash) this.hitFlash = this.body.hit;
@@ -264,11 +284,31 @@ export class CartManager {
     if (this.sinking < 1.1) return null;          // still going under
     const at = this._lastDry || { x: this.body?.x || 0, z: this.body?.z || 0 };
     this.sinking = null;
+    this._scrap();
+    return { x: at.x, z: at.z };
+  }
+
+  /**
+   * The wreck, resolved: after a beat of smoke the cart lets go and the
+   * occupants step out where it stopped.  Returns the spot to stand on, or
+   * null while it is still smoking.
+   */
+  resolveWreck() {
+    if (this.wrecked == null) return null;
+    if (this.wrecked < WRECK_SECONDS) return null;
+    const at = { x: this.body?.x || 0, z: this.body?.z || 0 };
+    this.wrecked = null;
+    this.damage = 0;
+    this._scrap();
+    return at;
+  }
+
+  /** Destroy our own cart and put us back on foot. */
+  _scrap() {
     this.body = null;
     this.seat = null; this.rider = null; this.driver = null;
     const mine = this.meshes.get(this.myPid);
     if (mine) { this.group.remove(mine.root); mine.dispose(); this.meshes.delete(this.myPid); }
-    return { x: at.x, z: at.z };
   }
 
   /** Where a seat is on a remote cart. */
@@ -288,26 +328,49 @@ export class CartManager {
    */
   seatFor(pid, myPid) {
     if (pid === myPid) {
-      if (this.driving && this.body) return { ...this.body.seat('driver'), heading: this.body.heading };
+      if (this.driving && this.body) {
+        return this._ride(myPid, 'driver', { ...this.body.seat('driver'), heading: this.body.heading });
+      }
       if (this.riding) {
         const r = this.remote.get(this.driver);
-        return r ? { ...this._seatPos(r, 'passenger'), heading: r.heading } : null;
+        return r ? this._ride(this.driver, 'passenger',
+          { ...this._seatPos(r, 'passenger'), heading: r.heading }) : null;
       }
       return null;
     }
     // are they driving a cart we know about?
     const own = this.remote.get(pid);
-    if (own) return { ...this._seatPos(own, 'driver'), heading: own.heading };
+    if (own) return this._ride(pid, 'driver', { ...this._seatPos(own, 'driver'), heading: own.heading });
     // are they riding?  in our cart, or in somebody else's
     const ride = this.riders.get(pid);
     if (ride) {
       if (ride.driver === myPid && this.driving && this.body) {
-        return { ...this.body.seat('passenger'), heading: this.body.heading };
+        return this._ride(myPid, 'passenger',
+          { ...this.body.seat('passenger'), heading: this.body.heading });
       }
       const host = this.remote.get(ride.driver);
-      if (host) return { ...this._seatPos(host, 'passenger'), heading: host.heading };
+      if (host) return this._ride(ride.driver, 'passenger',
+        { ...this._seatPos(host, 'passenger'), heading: host.heading });
     }
     return null;
+  }
+
+  /**
+   * Attach the cart's suspension to the seat.  A rider bolted to the chassis
+   * origin looks like a mannequin; taking the mesh's live pitch and roll lets
+   * the golfer rise, dip and lean with the body the way a passenger does.
+   * `which` decides which side of the bench the roll lifts.
+   */
+  _ride(driverPid, which, seat) {
+    const m = this.meshes.get(driverPid);
+    if (!m) return seat;
+    const s = SEATS[which] || SEATS.driver;
+    seat.pitch = m.pitch;
+    seat.roll = m.roll;
+    // the seat is ahead of the pitch axis and off to one side of the roll
+    // axis, so the tilt becomes real vertical movement at the cushion
+    seat.y += -m.pitch * s.z + m.roll * s.x;
+    return seat;
   }
 
   /* ------------------------------------------------------------ rendering */

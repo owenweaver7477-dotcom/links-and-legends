@@ -1527,22 +1527,39 @@ class EffectPool {
     this.items = [];
   }
   burst(kind, x, y, z, n = 18) {
-    const colors = { splash: 0xd6f0fb, sand: 0xf0e2b8, grass: 0x4e8a3c, leaves: 0x3f7a37 };
-    const geo = new THREE.SphereGeometry(kind === 'splash' ? 0.09 : 0.06, 5, 4);
-    const mat = new THREE.MeshBasicMaterial({ color: colors[kind] || 0xffffff, transparent: true });
+    const colors = {
+      splash: 0xd6f0fb, sand: 0xf0e2b8, grass: 0x4e8a3c, leaves: 0x3f7a37,
+      fire: 0xffa33a, smoke: 0x4a4a4a
+    };
+    // smoke drifts up and hangs; fire and debris are thrown and fall
+    const rises = kind === 'smoke';
+    const size = kind === 'splash' ? 0.09 : kind === 'smoke' ? 0.30 : kind === 'fire' ? 0.13 : 0.06;
+    const geo = new THREE.SphereGeometry(size, 5, 4);
+    const mat = new THREE.MeshBasicMaterial({
+      color: colors[kind] || 0xffffff, transparent: true,
+      opacity: rises ? 0.55 : 1, depthWrite: false
+    });
     const inst = new THREE.InstancedMesh(geo, mat, n);
     inst.frustumCulled = false;
     const parts = [];
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + i * 0.7;
-      const sp = kind === 'splash' ? 2.2 + (i % 5) * 0.9 : 1.4 + (i % 4) * 0.6;
+      const sp = kind === 'splash' ? 2.2 + (i % 5) * 0.9
+        : kind === 'fire' ? 3.0 + (i % 5) * 1.2
+          : rises ? 0.5 + (i % 4) * 0.25 : 1.4 + (i % 4) * 0.6;
       parts.push({
         x, y, z,
-        vx: Math.cos(a) * sp * 0.6, vy: 2.2 + (i % 6) * 0.5, vz: Math.sin(a) * sp * 0.6
+        vx: Math.cos(a) * sp * 0.6,
+        vy: rises ? 1.1 + (i % 5) * 0.3 : (kind === 'fire' ? 3.4 : 2.2) + (i % 6) * 0.5,
+        vz: Math.sin(a) * sp * 0.6
       });
     }
     this.parent.add(inst);
-    this.items.push({ inst, parts, life: 1.15, age: 0, mat });
+    this.items.push({
+      inst, parts, life: rises ? 2.6 : kind === 'fire' ? 1.5 : 1.15,
+      age: 0, mat, gravity: rises ? -0.4 : 9.8, grow: rises ? 1.7 : 1,
+      baseOpacity: rises ? 0.55 : 1
+    });
   }
   update(dt) {
     const m4 = _m4;                 // module scratch — no per-frame allocation
@@ -1556,12 +1573,14 @@ class EffectPool {
         this.items.splice(i, 1);
         continue;
       }
-      it.mat.opacity = 1 - k;
+      it.mat.opacity = (it.baseOpacity ?? 1) * (1 - k);
+      const s = 1 + (it.grow - 1) * k;          // smoke swells as it rises
       for (let j = 0; j < it.parts.length; j++) {
         const p = it.parts[j];
-        p.vy -= 9.8 * dt;
+        p.vy -= it.gravity * dt;
         p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-        m4.makeTranslation(p.x, p.y, p.z);
+        m4.makeScale(s, s, s);
+        m4.setPosition(p.x, p.y, p.z);
         it.inst.setMatrixAt(j, m4);
       }
       it.inst.instanceMatrix.needsUpdate = true;

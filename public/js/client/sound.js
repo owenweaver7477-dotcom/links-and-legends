@@ -115,6 +115,12 @@ Sound.celebrate = tier => {
 
 Sound.crash = () => noiseBurst({ dur: 0.16, freq: 300, q: 0.6, gain: 0.5, sweep: -150 });
 
+/** The cart giving up: a low thump, then a long ragged tail. */
+Sound.explode = () => {
+  noiseBurst({ dur: 0.5, freq: 110, q: 0.4, gain: 0.75, sweep: -70 });
+  noiseBurst({ dur: 1.3, freq: 380, q: 0.25, gain: 0.4, sweep: -320 });
+};
+
 /* ------------------------------------------------------------------- cart */
 let cartOsc = null, cartGain = null, cartFilter = null;
 

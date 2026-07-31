@@ -59,7 +59,13 @@ export function normaliseLook(look, seedIndex = 0) {
 
 /** How close you have to be to the ball before you may play it. */
 export const SHOT_RADIUS = 2.6;          // metres
-export const WALK_SPEED = 4.6;           // m/s — a brisk walk
-export const SPRINT_SPEED = 9.2;         // m/s — holding Shift
+/* Human speeds, and they matter more than they look.
+   These were 4.6 and 9.2 m/s — 16 and 33 km/h, the second faster than the
+   world 100 m record — which is why a 400 metre hole felt like nothing and
+   the yardages read as decoration.  A brisk walk is 1.8 m/s and a jog with a
+   bag is about 4.  Now a drive genuinely leaves you a walk, the cart is worth
+   taking, and the numbers on the HUD mean something. */
+export const WALK_SPEED = 1.9;           // m/s — walking with a bag
+export const SPRINT_SPEED = 4.2;         // m/s — a jog, holding Shift
 export const AVATAR_HEIGHT = 1.78;       // metres, head to heel
 export const EYE_HEIGHT = 1.62;

@@ -8,8 +8,7 @@ import { Avatar } from './avatar.js';
 import { Walker } from './walker.js';
 import { CartManager } from './carts.js';
 import { reactionFor, REACTION_TIER } from './celebrations.js';
-import { mph } from './cart3d.js';
-import { BOARD_RADIUS } from '../shared/cart.js';
+import { BOARD_RADIUS, KMH, TOP_SPEED_KMH } from '../shared/cart.js';
 import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
@@ -175,6 +174,7 @@ function autoClub() {
   const lie = G.T.surfaceAt(b.x, b.z);
   clubKey = suggestClub(d, lie.id, lie.id === 'green', myBag(), reachMult()).key;
   swing.clubKey = clubKey;
+  swing.setLie(lie.id);              // the lie sets the strike bar's tempo
   const club = CLUB_BY_KEY[clubKey];
   HUD.setClub(club, lie.id, carryMult(club), bagEnds());
 }
@@ -186,8 +186,9 @@ function stepClub(dir) {
   swing.clubKey = clubKey;
   clubManual = true;
   const club = CLUB_BY_KEY[clubKey];
-  HUD.setClub(club, G.T ? G.T.surfaceAt(ballOf(G.myPid).x, ballOf(G.myPid).z).id : 'fairway',
-    carryMult(club), bagEnds());
+  const lieId = G.T ? G.T.surfaceAt(ballOf(G.myPid).x, ballOf(G.myPid).z).id : 'fairway';
+  swing.setLie(lieId);
+  HUD.setClub(club, lieId, carryMult(club), bagEnds());
   refreshAimPreview(true);
 }
 
@@ -330,6 +331,7 @@ function updateAvatars(dt) {
     if (seat) {
       av.setSeated(true);
       av.place(seat.x, G.T.heightAt(seat.x, seat.z) + seat.y, seat.z, seat.heading);
+      av.setRideTilt(seat.pitch || 0, seat.roll || 0);   // lean with the body
       av.update(dt, 0);
       av.setVisible(pl.pid !== G.myPid || G.view !== 'first');
       continue;
@@ -667,6 +669,7 @@ const celebrating = () => (G.celebUntil || 0) > performance.now();
 /*  FRAME                                                                 */
 /* ===================================================================== */
 let last = 0;
+let smokeAt = 0;                 // countdown between puffs from a damaged cart
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = last ? clamp((now - last) / 1000, 0, 0.1) : 0;
@@ -694,13 +697,33 @@ function frame(now) {
     if (carts.hitFlash > wasFlash + 0.3) Sound.crash();
     Sound.cart(carts.sinking != null ? 0.5 : carts.body?.speed ?? 0);
     if (carts.sinking != null && carts.sinking < dt * 2) Sound.splash();
-    const shore = carts.resolveSink(dt);
+    // A damaged cart smokes from the engine bay, harder the worse it is —
+    // your warning that the next shunt is the last one.
+    if (carts.damage > 0.45 && carts.body) {
+      smokeAt -= dt;
+      if (smokeAt <= 0) {
+        smokeAt = carts.wrecked != null ? 0.06 : lerp(0.5, 0.12, (carts.damage - 0.45) / 0.55);
+        const b = carts.body;
+        scene.fx.burst('smoke', b.x, G.T.heightAt(b.x, b.z) + 1.0, b.z, carts.wrecked != null ? 5 : 2);
+      }
+    }
+    const wasWrecked = carts.wrecked;
+    const shore = carts.resolveSink(dt) || carts.resolveWreck();
     if (shore) {
-      // resolveSink just destroyed the cart (carts.body is null now), so the
-      // seat read below must not run this frame — the walker takes over
+      // the cart is gone (carts.body is null now), so the seat read below must
+      // not run this frame — the walker takes over
       walker.reset(shore.x, shore.z, walker.heading);
       rig.handOff(walker.heading);
-      HUD.toast('🌊 The cart is at the bottom of the lake. You swam.', 'warn', 3600);
+      if (wasWrecked != null) {
+        const ey = G.T.heightAt(shore.x, shore.z) + 0.7;
+        scene.fx.burst('fire', shore.x, ey, shore.z, 26);
+        scene.fx.burst('smoke', shore.x, ey + 0.4, shore.z, 18);
+        rig.kick(1.1);
+        Sound.explode();
+        HUD.toast('💥 The cart is a write-off. You are walking.', 'warn', 3800);
+      } else {
+        HUD.toast('🌊 The cart is at the bottom of the lake. You swam.', 'warn', 3600);
+      }
     } else {
       // the golfer goes where the cart goes, so everything downstream — the
       // roster, the ball gate, the camera — keeps working unchanged
@@ -720,6 +743,11 @@ function frame(now) {
 
   stepAim(dt);
   stepAimButtons(dt);
+  // the strike bar sweeps in real time, at a rate the lie decides
+  if (swing.state === SWING.ACCURACY) {
+    swing.step(dt);
+    HUD.setMeter(swing.meter(), true);
+  }
   updateLandingDot(now);
   walker.update(dt, cameraYaw(), G.T, G.hole);
   carts.render(dt, G.T, G.myPid, tintOf, now);
@@ -827,10 +855,12 @@ function updateWalkPrompt() {
   // the cart panel, with speed and who is aboard
   if (seated) {
     const rider = carts.driving && carts.rider ? player(carts.rider)?.name : null;
-    const speed = carts.driving && carts.body ? mph(carts.body.speed) : 0;
+    const kmh = carts.driving && carts.body ? Math.abs(carts.body.speed) * KMH : 0;
     HUD.setCart({
       seat: carts.driving ? 'Driving' : 'Riding',
-      mph: speed,
+      kmh,
+      topKmh: TOP_SPEED_KMH,
+      damage: carts.driving ? carts.damage : 0,
       who: carts.driving ? (rider ? 'with ' + rider : 'solo') : 'passenger'
     });
   } else HUD.setCart(null);
@@ -841,7 +871,10 @@ function updateWalkPrompt() {
   }
   if (!mine || atMyBall()) { HUD.setWalkPrompt(null); return; }
   const d = walker.distanceTo(ballOf(G.myPid));
-  HUD.setWalkPrompt('Walk to your ball — ' + Math.round(HUD.dist(d)) + ' ' + HUD.unit() + ' away');
+  // Walking is a walk now, so past a certain range the honest advice is to
+  // drive — which is the whole reason there is a cart on the tee.
+  const far = d > 90 ? ' — take the cart (C)' : '';
+  HUD.setWalkPrompt('Walk to your ball — ' + Math.round(HUD.dist(d)) + ' ' + HUD.unit() + ' away' + far);
 }
 
 /* ------------------------------------------------------------- the cart */
@@ -939,9 +972,35 @@ canvas.addEventListener('pointerdown', ev => {
     return;
   }
   if (!canSwing()) return;
+  // the marker is already sweeping: this click IS the strike, not a new swing
+  if (swing.state === SWING.ACCURACY) { strike(); return; }
   swing.pointerDown(ev.clientX, ev.clientY);
   canvas.classList.add('swinging');
 });
+
+/**
+ * Stop the strike bar and play the shot.  Shared by the click and by Space,
+ * because "hit it" wants to be on the key your hand is already near.
+ */
+function strike() {
+  const shot = swing.commit();
+  swing.reset();
+  if (!shot || !canSwing()) { HUD.setMeter(swing.meter(), canSwing()); return; }
+  // call the strike the moment it leaves the face — a golfer knows
+  const t = shot.timing ?? 0;
+  if (t < 0.06) HUD.flash('FLUSHED', 'right out of the middle', '#8fe07a');
+  else if (Math.abs(shot.faceDeg) >= 6 || shot.power > 1.08) {
+    HUD.flash('MISHIT', Math.abs(shot.faceDeg) >= 6
+      ? (shot.faceDeg > 0 ? 'face wide open' : 'face shut') : 'overswung', '#ff6b52');
+  }
+  Net.swing({
+    clubKey: shot.clubKey, power: shot.power, aim: shot.aim,
+    faceDeg: shot.faceDeg, attackDeg: shot.attackDeg
+  });
+  swing.enabled = false;
+  HUD.showPlaybar(false);
+  HUD.setMeter(swing.meter(), canSwing());
+}
 
 let shiftLook = null;
 window.addEventListener('pointermove', ev => {
@@ -976,22 +1035,10 @@ window.addEventListener('pointermove', ev => {
 window.addEventListener('pointerup', () => {
   if (looking) { looking = null; canvas.classList.remove('looking'); return; }
   canvas.classList.remove('swinging');
-  if (swing.state === SWING.IDLE || swing.state === SWING.DONE) { swing.cancel(); return; }
-  const shot = swing.pointerUp();
-  swing.reset();
-  if (shot && canSwing()) {
-    // call the strike the moment it leaves the face — a golfer knows
-    const sev = Math.abs(shot.faceDeg);
-    if (sev >= 6 || shot.power > 1.08) {
-      HUD.flash('MISHIT', sev >= 6 ? (shot.faceDeg > 0 ? 'face wide open' : 'face shut') : 'overswung', '#ff6b52');
-    }
-    Net.swing({
-      clubKey: shot.clubKey, power: shot.power, aim: shot.aim,
-      faceDeg: shot.faceDeg, attackDeg: shot.attackDeg
-    });
-    swing.enabled = false;
-    HUD.showPlaybar(false);
-  }
+  // Releasing the drag locks the power and starts the strike bar; it does not
+  // play the shot.  The next click does that.
+  if (swing.state === SWING.BACK) swing.pointerUp();
+  else if (swing.state !== SWING.ACCURACY) swing.cancel();
   HUD.setMeter(swing.meter(), canSwing());
 });
 
@@ -1038,7 +1085,9 @@ window.addEventListener('keydown', ev => {
     if (k === '2') { rig.orbit = 0; rig.pitch = 0.42; rig.zoom = 1.35; G.view = 'third'; }
     if (k === '3') { rig.orbit = Math.PI / 2; rig.pitch = 0.05; rig.zoom = 1.1; G.view = 'third'; }
     if (k === '4') { G.view = 'first'; }
-    if (k === ' ') { rig.reset(); }        // frame reset, without touching the aim
+    // Space is the strike while the bar is sweeping — the key your hand is
+    // already on — and only re-frames the camera when no shot is waiting.
+    if (k === ' ') { if (swing.state === SWING.ACCURACY) strike(); else rig.reset(); }
   }
   if (k === 'c') toggleCart();
   if (k === 'g') hailRide();

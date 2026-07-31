@@ -59,7 +59,17 @@
   <!-- golf cart -->
   <div class="cartbar" id="cartbar">
     <div class="c-row"><b id="cartSeat">Driving</b><span id="cartWho">solo</span></div>
-    <div class="c-speed"><b id="cartMph">0</b><em>mph</em></div>
+    <!-- a real dial: 240° sweep, needle and a damage light -->
+    <div class="c-dial">
+      <svg viewBox="0 0 100 74" class="dial">
+        <path class="d-track" d="M12 64 A40 40 0 1 1 88 64"/>
+        <path class="d-fill" id="dialFill" d="M12 64 A40 40 0 1 1 88 64"/>
+        <g id="dialNeedle"><line class="d-needle" x1="50" y1="54" x2="50" y2="20"/></g>
+        <circle class="d-hub" cx="50" cy="54" r="4"/>
+      </svg>
+      <div class="d-read"><b id="cartKmh">0</b><em>km/h</em></div>
+    </div>
+    <div class="c-damage" id="cartDamage" hidden><span id="cartDamageTxt">Engine damage</span></div>
     <div class="c-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>Space</kbd> brake · <kbd>G</kbd> offer a lift · <kbd>C</kbd> get out</div>
   </div>
 
@@ -90,7 +100,7 @@
         <div class="m-fill" id="mFill"></div>
         <div class="m-mark" id="mMark"></div>
       </div>
-      <div class="m-face"><div class="m-face-zone"></div><div class="m-face-dot" id="mFaceDot"></div></div>
+      <div class="m-face" id="mFace"><div class="m-face-zone"></div><div class="m-face-dot" id="mFaceDot"></div></div>
       <div class="m-label" id="mLabel">Drag down to take the club back</div>
     </div>
 

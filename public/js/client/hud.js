@@ -22,6 +22,7 @@ for (const id of [
   'shotinfo', 'toasts', 'mapwrap', 'mapc', 'minic', 'miniPanel',
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
+  'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace',
   'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
@@ -141,27 +142,44 @@ HUD.setTargetPower = (p) => {
   mk.style.left = (clamp(p, 0, 1.12) / 1.12 * 100) + '%';
 };
 
+const LIE_WORDS = {
+  sand: 'Sand — slow bar, and the sand eats the ball',
+  rough: 'Light rough — the bar is quicker',
+  deep: 'Heavy rough — the bar is a blur',
+  waste: 'Waste — the bar is a blur',
+  green: 'On the green — a steady stroke'
+};
+
 HUD.setMeter = (m, enabled) => {
   const pct = clamp(m.power, 0, 1.12) / 1.12 * 100;
   el.mFill.style.width = pct + '%';
   // the number, riding the end of the bar — power is the whole game here
-  const live = enabled && (m.state === 'back' || m.state === 'down');
+  const live = enabled && (m.state === 'back' || m.state === 'accuracy');
   el.mPct.textContent = live ? Math.round(m.power * 100) + '%' : '';
   el.mPct.style.left = Math.min(pct, 86) + '%';
-  el.mFaceDot.style.left = `calc(${clamp(50 + m.face * 4.4, 2, 98)}% - 2px)`;
+
+  // The strike bar.  While you are dragging it shows the shape you are
+  // setting; once the power is locked it becomes the sweeping marker you
+  // have to stop, and the whole bar lights up to say it is live.
+  const striking = m.state === 'accuracy';
+  el.mFace.classList.toggle('live', striking);
+  const dotPct = striking ? 50 + clamp(m.sweep, -1, 1) * 48
+    : clamp(50 + m.face * 4.4, 2, 98);
+  el.mFaceDot.style.left = `calc(${dotPct}% - 2px)`;
+  el.mFaceDot.classList.toggle('sweeping', striking);
+
   if (!enabled) { el.mLabel.textContent = 'Waiting…'; el.mLabel.classList.remove('hot'); return; }
   if (m.state === 'back') {
     const sh = m.shape || 0, a = Math.abs(sh);
     el.mLabel.textContent = m.power > 1 ? 'Overswinging — accuracy is going'
-      : a < 1.5 ? 'Straight — release up through the ball'
+      : a < 1.5 ? 'Let go to lock the power'
       : (a < 4.5 ? (sh > 0 ? 'Fade ' : 'Draw ') : (sh > 0 ? 'SLICE ' : 'HOOK ')) + a.toFixed(0) + '°';
     el.mLabel.classList.toggle('hot', m.power > 1 || a >= 4.5);
-  } else if (m.state === 'down') {
-    const q = Math.abs(m.face);
-    el.mLabel.textContent = q < 1.2 ? 'Pure' : q < 4 ? (m.face < 0 ? 'Slight draw' : 'Slight fade') : (m.face < 0 ? 'Hook' : 'Slice');
-    el.mLabel.classList.toggle('hot', q >= 4);
+  } else if (striking) {
+    el.mLabel.textContent = 'CLICK to strike — stop it in the middle';
+    el.mLabel.classList.add('hot');
   } else {
-    el.mLabel.textContent = 'Drag down to take the club back';
+    el.mLabel.textContent = LIE_WORDS[m.lie] || 'Drag down to take the club back';
     el.mLabel.classList.remove('hot');
   }
 };
@@ -442,12 +460,32 @@ HUD.renderLook = (look, onPick) => {
  * The cart panel.  Pass null when the player is on foot.
  * @param c  { seat: 'Driving'|'Riding', mph: number, who: string }
  */
+/* The speedometer arc: 12,64 -> 88,64 over the top is a 240-degree sweep of a
+   40-unit radius, so the path is 2*pi*40*(240/360) long.  Needle angles run
+   -120 to +120 degrees about the hub. */
+const DIAL_LEN = 2 * Math.PI * 40 * (240 / 360);
+
 HUD.setCart = c => {
   el.cartbar.classList.toggle('show', !!c);
   if (!c) return;
   el.cartSeat.textContent = c.seat;
   el.cartWho.textContent = c.who;
-  el.cartMph.textContent = String(c.mph);
+  el.cartKmh.textContent = String(Math.round(c.kmh));
+
+  const f = clamp(c.kmh / (c.topKmh || 35), 0, 1);
+  el.dialFill.style.strokeDasharray = `${(DIAL_LEN * f).toFixed(1)} ${DIAL_LEN.toFixed(1)}`;
+  el.dialFill.classList.toggle('fast', f > 0.6 && f <= 0.92);
+  el.dialFill.classList.toggle('flat-out', f > 0.92);
+  el.dialNeedle.setAttribute('transform', `rotate(${(-120 + 240 * f).toFixed(1)} 50 54)`);
+
+  // the damage light: a warning while it still drives, then a wreck alarm
+  const dmg = c.damage || 0;
+  el.cartDamage.hidden = dmg <= 0.45;
+  el.cartDamage.classList.toggle('critical', dmg >= 0.85);
+  if (dmg > 0.45) {
+    el.cartDamageTxt.textContent = dmg >= 0.85
+      ? 'ENGINE FAILING — get out' : 'Engine damage — take it easy';
+  }
 };
 
 HUD.setWalkPrompt = (text) => {

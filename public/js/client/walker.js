@@ -10,8 +10,10 @@
 import { WALK_SPEED, SPRINT_SPEED, SHOT_RADIUS } from '../shared/avatars.js';
 import { clamp } from '../shared/rng.js';
 
-const AUTO_MAX_SECONDS = 4.0;    // a long trudge becomes a brisk cart ride
-const AUTO_MIN_SPEED = 9;
+/* Jogging to your ball is a JOG.  This used to scale its speed so that any
+   distance was covered in four seconds — 200 m at 50 m/s — which is the single
+   biggest reason the course felt miniature.  Walk out to a drive now and it
+   takes the time a walk takes, which is exactly why the cart is parked there. */
 const BODY_RADIUS = 0.34;
 
 export class Walker {
@@ -44,7 +46,7 @@ export class Walker {
   goTo(x, z) {
     const d = Math.hypot(x - this.x, z - this.z);
     if (d < 0.4) { this.auto = null; return; }
-    this.auto = { x, z, speed: Math.max(AUTO_MIN_SPEED, d / AUTO_MAX_SECONDS) };
+    this.auto = { x, z, speed: SPRINT_SPEED };
   }
   cancelAuto() { this.auto = null; }
 

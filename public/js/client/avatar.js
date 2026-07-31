@@ -329,8 +329,21 @@ export class Avatar {
   setSeated(on) {
     this.seated = !!on;
     if (this.seated) { this.cel = null; this.golf = null; this.club.visible = false; }
-    else { this.legL.scale.y = 1; this.legR.scale.y = 1; }   // stand back up
+    else {
+      this.legL.scale.y = 1; this.legR.scale.y = 1;         // stand back up
+      this.body.rotation.x = 0; this.body.rotation.z = 0;   // and straighten up
+    }
     this.blob.visible = !this.seated;
+  }
+
+  /**
+   * Lean with the cart.  A rider whose body ignores the suspension reads as
+   * cargo; taking a share of the chassis pitch and roll — less than all of it,
+   * because a person braces — is what sells them as a passenger.
+   */
+  setRideTilt(pitch, roll) {
+    this._ridePitch = pitch;
+    this._rideRoll = roll;
   }
 
   /**
@@ -503,6 +516,9 @@ export class Avatar {
     this._apply(P);
     this.legL.scale.y = SEATED_LEG;
     this.legR.scale.y = SEATED_LEG;
+    // a braced passenger takes roughly two thirds of the chassis movement
+    this.body.rotation.x = (this._ridePitch || 0) * 0.65;
+    this.body.rotation.z = (this._rideRoll || 0) * 0.65;
     this.phase = 0;
     this.swingAmp = 0;
   }

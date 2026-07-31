@@ -8,7 +8,7 @@
    ========================================================================= */
 
 import { CartBody, CART_SURF, surfFor, nearestDrivable, drivable,
-         MAX_FWD, ABS_MAX, WHEELBASE } from '../public/js/shared/cart.js';
+         MAX_FWD, ABS_MAX, WHEELBASE, MAX_BOOST, TOP_SPEED_KMH } from '../public/js/shared/cart.js';
 import { TerrainModel, SURFACES, terrainFor } from '../public/js/shared/terrain.js';
 import { Walker } from '../public/js/client/walker.js';
 import { allCourses } from '../public/js/shared/coursegen.js';
@@ -72,7 +72,7 @@ head('signs — these decide whether anything else means anything');
   ok('the two are mirror images', Math.abs(alongRight(c, 0) + alongRight(c2, 0)) < 1e-6);
 
   const c3 = new CartBody(0, 0, 0);
-  drive(T, c3, GO, 1.0);
+  drive(T, c3, GO, 2.5);            // a real cart takes a moment to gather itself
   ok('forward is +Z at heading 0', c3.z > 1 && Math.abs(c3.x) < 1e-6,
      `z ${c3.z.toFixed(2)}`);
 }
@@ -178,12 +178,12 @@ head('speed limits');
 {
   const c = new CartBody(0, 0, 0);
   drive(flat(), c, GO, 30);
-  ok('tops out near the governed speed', c.speed > 7.5 && c.speed <= MAX_FWD + 0.2,
-     `${c.speed.toFixed(2)} m/s (${(c.speed * 2.237).toFixed(1)} mph)`);
+  ok('a stock cart is governed like a real one', c.speed > MAX_FWD - 0.3 && c.speed <= MAX_FWD + 0.2,
+     `${(c.speed * 3.6).toFixed(1)} km/h`);
 
   const r = new CartBody(0, 0, 0);
   drive(flat(), r, { throttle: -1, steer: 0, handbrake: false }, 20);
-  ok('reverse is slow', r.speed < -1.5 && r.speed > -3.2, `${r.speed.toFixed(2)} m/s`);
+  ok('reverse is a crawl', r.speed < -0.8 && r.speed > -2.0, `${(r.speed * 3.6).toFixed(1)} km/h`);
 
   const rough = new CartBody(0, 0, 0);
   drive(flat({ surface: 'rough' }), rough, GO, 30);
@@ -323,19 +323,27 @@ head('shot shaping — the drag path is the shape');
   drag(Array.from({ length: 10 }, (_, i) => [-(i + 1) * 12, (i + 1) * 15]));
   ok('a hard pull left is a hook', sw.shapeDeg === -7, sw.shapeDeg + ' deg');
 
-  // shape chosen going back survives an early release at the top
+  // The shape you chose going back is carried into the strike: flush the
+  // timing and you get exactly the fade you asked for, nothing else.
   drag(Array.from({ length: 10 }, (_, i) => [(i + 1) * 4, (i + 1) * 17]));
-  const early = sw.pointerUp();
-  ok('early release keeps the deliberate shape',
-     !!early && Math.abs(early.faceDeg - fade) < 0.5,
-     early ? early.faceDeg.toFixed(1) + ' deg' : 'no shot');
+  sw.pointerUp();
+  sw.sweep = 0;
+  const clean = sw.commit();
+  ok('a flushed strike plays the shape you chose',
+     !!clean && Math.abs(clean.faceDeg - fade) < 0.5,
+     clean ? clean.faceDeg.toFixed(1) + ' deg' : 'no shot');
 
-  // and the through-stroke stacks error on top of the chosen shape
-  sw.enabled = true; sw.reset(); sw.pointerDown(500, 300);
+  // and a mistimed strike stacks its own error on top of that shape
+  sw.enabled = true; sw.reset();
+  sw.pointerDown(500, 300);
   for (let i = 1; i <= 10; i++) sw.pointerMove(500 + i * 4, 300 + i * 17);
-  for (let i = 9; i >= 4; i--) sw.pointerMove(500 + 40 + (9 - i) * 10, 300 + i * 17);
-  ok('through-stroke drift stacks on the shape', sw.faceDeg > sw.shapeDeg + 2,
-     sw.shapeDeg.toFixed(1) + ' -> ' + sw.faceDeg.toFixed(1) + ' deg');
+  const shape = sw.shapeDeg;
+  sw.pointerUp();
+  sw.sweep = 0.5;
+  const missed = sw.commit();
+  ok('a mistimed strike stacks error on top of the shape',
+     missed.faceDeg > shape + 2,
+     shape.toFixed(1) + ' -> ' + missed.faceDeg.toFixed(1) + ' deg');
 }
 
 /* ================================================= a pure strike spins more */
@@ -483,6 +491,65 @@ head('the caddie crew — hired stats that actually do things');
   // prototype-chain names must not hire phantoms or charge for them
   ok('caddie:constructor is refused',
      !!crewPurchase('caddie:constructor', { coins: 99999, crew: { ...NO_CREW } }).blocked);
+}
+
+/* ================================================ the two-beat swing */
+head('swing — power is a drag, the strike is a timing');
+{
+  const { SwingController, SWING, lieTempo } = await import('../public/js/client/swing.js');
+
+  // the lie sets the tempo, and these relationships are the mechanic
+  ok('sand gives you the most time to strike', lieTempo('sand') < lieTempo('tee'),
+     `sand ${lieTempo('sand')} vs tee ${lieTempo('tee')}`);
+  ok('light rough hurries you past the tee', lieTempo('rough') > lieTempo('tee'));
+  ok('heavy rough is faster still', lieTempo('deep') > lieTempo('rough'),
+     `deep ${lieTempo('deep')} vs rough ${lieTempo('rough')}`);
+  ok('an unknown lie falls back to the fairway tempo', lieTempo('nonsense') === lieTempo('fairway'));
+
+  const drag = (sw, px) => {
+    sw.pointerDown(500, 300);
+    for (let i = 1; i <= 10; i++) sw.pointerMove(500, 300 + px * i / 10);
+  };
+
+  // releasing the drag must NOT play the shot — it hands over to the strike bar
+  const sw = new SwingController();
+  sw.enabled = true; sw.setLie('fairway');
+  drag(sw, 190);
+  ok('dragging down builds power', sw.meter().power > 0.9, sw.meter().power.toFixed(2));
+  const onRelease = sw.pointerUp();
+  ok('letting go plays nothing', onRelease === null);
+  ok('letting go locks the power and starts the strike bar',
+     sw.state === SWING.ACCURACY && sw.meter().power > 0.9);
+
+  // the marker sweeps and turns around at the ends, never escaping the bar
+  let minS = 1, maxS = -1;
+  for (let i = 0; i < 400; i++) { sw.step(1 / 60); minS = Math.min(minS, sw.sweep); maxS = Math.max(maxS, sw.sweep); }
+  ok('the marker stays inside the bar', minS >= -1.0001 && maxS <= 1.0001,
+     `${minS.toFixed(2)} .. ${maxS.toFixed(2)}`);
+  ok('and actually sweeps the whole width', minS < -0.9 && maxS > 0.9);
+
+  // stopping dead centre flushes it; stopping wide opens the face
+  const strikeAt = (sweep, lie = 'fairway') => {
+    const s = new SwingController();
+    s.enabled = true; s.setLie(lie);
+    drag(s, 190); s.pointerUp(); s.sweep = sweep;
+    return s.commit();
+  };
+  const pure = strikeAt(0);
+  ok('a centred strike is dead straight', Math.abs(pure.faceDeg) < 0.01, pure.faceDeg.toFixed(2) + '°');
+  const wide = strikeAt(1);
+  ok('a strike at the edge is a full miss', wide.faceDeg > 8, wide.faceDeg.toFixed(1) + '°');
+  const other = strikeAt(-1);
+  ok('and the other edge misses the other way', other.faceDeg < -8, other.faceDeg.toFixed(1) + '°');
+  ok('a mistimed strike also comes out thin', wide.attackDeg < -1, wide.attackDeg.toFixed(2));
+  ok('a flushed one does not', Math.abs(pure.attackDeg) < 0.01);
+
+  // a twitch is not a swing
+  const tiny = new SwingController();
+  tiny.enabled = true;
+  tiny.pointerDown(500, 300); tiny.pointerMove(500, 304);
+  tiny.pointerUp();
+  ok('a twitch never arms the strike bar', tiny.state === SWING.IDLE);
 }
 
 /* ============================================== a hazard must never wedge a hole */
@@ -637,16 +704,17 @@ head('boost — the shop’s +6% per level must be real speed, not a clamp');
   const stock = new CartBody(0, 0, 0);
   drive(T, stock, GO, 30);
   const tuned = new CartBody(0, 0, 0);
-  tuned.boost = 1.6;                      // Pitstop 10 + the cart tune, capped
-  drive(T, tuned, GO, 20);                // 20 s stays inside the 900 m field
-  // aero drag equilibrates a 1.6 boost near 31 m/s — the point is that the
-  // old ABS_MAX = 26 clamp is gone and boost past ~1.18 buys real speed
-  ok('a fully boosted cart genuinely passes the old 26 m/s clamp',
-     tuned.speed > 28 && tuned.speed <= ABS_MAX,
-     `${tuned.speed.toFixed(1)} m/s (${(tuned.speed * 2.237).toFixed(0)} mph)`);
-  ok('and boost past 1.18 still adds speed',
-     tuned.speed > stock.speed + 5,
-     `stock ${stock.speed.toFixed(1)} -> boosted ${tuned.speed.toFixed(1)} m/s`);
+  tuned.boost = MAX_BOOST;                // Pitstop 10 + the cart tune, capped
+  drive(T, tuned, GO, 40);
+  // The headline number: a fully upgraded cart peaks at 35 km/h, which is what
+  // a tuned golf cart actually does.  Everything below it is a real gain.
+  const kmh = tuned.speed * 3.6;
+  ok('a fully upgraded cart peaks at 35 km/h', Math.abs(kmh - TOP_SPEED_KMH) < 1.0,
+     `${kmh.toFixed(1)} km/h`);
+  ok('and every boost level in between buys real speed',
+     tuned.speed > stock.speed * 1.4,
+     `stock ${(stock.speed * 3.6).toFixed(1)} -> boosted ${kmh.toFixed(1)} km/h`);
+  ok('nothing can exceed the hard ceiling', tuned.speed <= ABS_MAX);
 }
 
 /* ========================================================== celebrations */

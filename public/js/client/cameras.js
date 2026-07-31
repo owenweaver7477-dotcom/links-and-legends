@@ -41,11 +41,31 @@ export class CameraRig {
     const ballY = terrain.heightAt(ball.x, ball.z);
 
     this.tPos.set(bx, Math.max(groundY, ballY) + height, bz);
-    // look at a point out along the aim line, dropped by the pitch the player set
+
+    // Look along the AIM line, not the orbited one.  The camera position
+    // swings round the ball, but the thing it looks at has to stay the shot
+    // itself — orbiting the look point too swept the ball down to the bottom
+    // of the frame, straight behind the swing meter, on the side-on preset.
     const ahead = opts.ahead != null ? opts.ahead : 30;
-    const lx = ball.x + Math.sin(dir) * ahead;
-    const lz = ball.z + Math.cos(dir) * ahead;
-    this.tLook.set(lx, terrain.heightAt(lx, lz) + 2.2 + this.pitch * 26, lz);
+    const lx = ball.x + Math.sin(aimDir) * ahead;
+    const lz = ball.z + Math.cos(aimDir) * ahead;
+
+    /* Then SOLVE for the look height rather than guessing it.
+       The ball has to sit at a known fraction down the frame — never in the
+       bottom quarter, where the club, meter and aim controls live — and that
+       has to hold at every orbit, pitch and zoom.  Given the camera position,
+       the angle down to the ball is known, so the angle the camera must look
+       along is just that angle plus the offset we want on screen; the look
+       height follows from the horizontal distance.  The player's pitch still
+       tilts the view, but only within a band that keeps the ball clear. */
+    const camY = this.tPos.y;
+    const dBall = Math.max(0.5, Math.hypot(ball.x - bx, ball.z - bz));
+    const ballAng = Math.atan2(ballY - camY, dBall);
+    const fovY = (this.cam?.fov ?? 55) * Math.PI / 180;
+    const frac = clamp(0.56 - this.pitch * 0.22, 0.42, 0.62);   // 0.5 is dead centre
+    const wantAng = ballAng + (frac - 0.5) * fovY;
+    const dLook = Math.max(1, Math.hypot(lx - bx, lz - bz));
+    this.tLook.set(lx, camY + Math.tan(wantAng) * dLook, lz);
   }
 
   /** Crouched behind a putt: low, close, looking at the hole. */
@@ -102,7 +122,29 @@ export class CameraRig {
     const ahead = atBall ? 30 : 20;
     const lx = walker.x + Math.sin(yaw) * ahead;
     const lz = walker.z + Math.cos(yaw) * ahead;
-    this.tLook.set(lx, terrain.heightAt(lx, lz) + (atBall ? 2.0 : 1.5) + this.pitch * 22, lz);
+
+    if (!atBall) {
+      this.tLook.set(lx, terrain.heightAt(lx, lz) + 1.5 + this.pitch * 22, lz);
+      return;
+    }
+
+    /* Over the ball, SOLVE for the look height instead of guessing it.
+       The golfer and the ball have to sit clear of the bottom of the screen,
+       where the club, strike meter and aim controls live, and that has to hold
+       at every orbit, pitch and zoom the player can dial in.  The angle down
+       to the golfer's feet is known from the camera position, so the angle the
+       camera must look along is that plus the offset we want on screen, and
+       the look height falls out of the horizontal distance.  Pitch still
+       tilts the view, but inside a band that always keeps the shot visible. */
+    const camY = this.tPos.y;
+    const footY = terrain.heightAt(walker.x, walker.z);
+    const dGolfer = Math.max(0.5, Math.hypot(walker.x - bx, walker.z - bz));
+    const ang = Math.atan2(footY - camY, dGolfer);
+    const fovY = (this.cam?.fov ?? 55) * Math.PI / 180;
+    const frac = clamp(0.62 - this.pitch * 0.2, 0.46, 0.68);   // 0.5 is dead centre
+    const wantAng = ang + (frac - 0.5) * fovY;
+    const dLook = Math.max(1, Math.hypot(lx - bx, lz - bz));
+    this.tLook.set(lx, camY + Math.tan(wantAng) * dLook, lz);
   }
 
   /**

@@ -125,9 +125,18 @@ html, body {
 .m-pct { position: absolute; top: 50%; transform: translate(8px,-50%); left: 0;
   font-size: 11px; font-weight: 700; color: #eaf4ec; text-shadow: 0 1px 3px rgba(0,0,0,.9);
   pointer-events: none; white-space: nowrap; }
-.m-face { position: relative; height: 7px; margin-top: 6px; border-radius: 4px; background: rgba(255,255,255,.08); }
+.m-face { position: relative; height: 7px; margin-top: 6px; border-radius: 4px; background: rgba(255,255,255,.08);
+  transition: height .12s, background .12s; }
+/* live: the power is locked and the marker is sweeping — the bar grows and
+   lights so your eye is on it, not on the power fill you have finished with */
+.m-face.live { height: 15px; background: rgba(0,0,0,.5); box-shadow: inset 0 1px 4px rgba(0,0,0,.6); }
 .m-face-zone { position: absolute; left: 44%; right: 44%; top: 0; bottom: 0; background: rgba(120,220,150,.5); border-radius: 4px; }
+.m-face.live .m-face-zone { left: 47%; right: 47%; background: rgba(130,240,160,.9);
+  box-shadow: 0 0 10px rgba(120,230,150,.8); }
 .m-face-dot { position: absolute; top: -2px; width: 4px; height: 11px; border-radius: 2px; background: #fff; left: 50%; margin-left: -2px; transition: left .04s linear; }
+/* the sweeping marker must not lag its own animation, so no transition */
+.m-face-dot.sweeping { top: -3px; width: 5px; height: 21px; margin-left: -2.5px;
+  background: #fff; box-shadow: 0 0 10px rgba(255,255,255,.95); transition: none; }
 /* Two lines of room, reserved: the coaching line ("Drag down to take the club
    back") is the one piece of text a first-timer actually needs, and clipping
    it to an ellipsis on a narrow window hid the instruction. The height is
@@ -395,13 +404,33 @@ button.roomtag:active { transform: translateY(1px); }
 .cartbar .c-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .cartbar .c-row b { font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: #ffd76b; }
 .cartbar .c-row span { font-size: 11px; color: #a9c2ae; }
-.cartbar .c-speed { display: flex; align-items: baseline; gap: 5px; margin-top: 1px; }
-.cartbar .c-speed b { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
-.cartbar .c-speed em { font-style: normal; font-size: 10.5px; color: #93ad99; }
+/* the speedometer: a 240-degree dial with the reading inside it */
+.cartbar .c-dial { position: relative; margin: 2px 0 1px; }
+.cartbar .dial { width: 100%; height: auto; display: block; overflow: visible; }
+.d-track { fill: none; stroke: rgba(255,255,255,.13); stroke-width: 7; stroke-linecap: round; }
+.d-fill { fill: none; stroke: #6fd08a; stroke-width: 7; stroke-linecap: round;
+  transition: stroke .3s; }
+.d-fill.fast { stroke: #ffd15c; }
+.d-fill.flat-out { stroke: #ff7a5c; }
+.d-needle { stroke: #fff; stroke-width: 2.4; stroke-linecap: round; }
+.d-hub { fill: #e8f2ea; }
+.d-read { position: absolute; left: 0; right: 0; bottom: 2px; text-align: center;
+  display: flex; align-items: baseline; justify-content: center; gap: 4px; }
+.d-read b { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+.d-read em { font-style: normal; font-size: 10px; color: #93ad99; }
+.cartbar .c-damage { margin-top: 3px; font-size: 10.5px; font-weight: 700; color: #ffb35c;
+  display: flex; align-items: center; gap: 5px; }
+.cartbar .c-damage::before { content: '⚠'; }
+.cartbar .c-damage.critical { color: #ff6b52; animation: dmgblink .6s steps(2) infinite; }
+@keyframes dmgblink { 50% { opacity: .35; } }
 .cartbar .c-keys { font-size: 10px; color: #7e937f; margin-top: 4px; line-height: 1.5; }
 .cartbar kbd { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16);
   border-radius: 4px; padding: 0 4px; font: inherit; font-size: 9.5px; }
-@media (max-width: 900px) { .cartbar { display: none; } }
+/* On a narrow screen the dial and the seat line stay; only the key list goes. */
+@media (max-width: 900px) {
+  .cartbar { min-width: 130px; padding: 7px 9px; bottom: 96px; }
+  .cartbar .c-keys { display: none; }
+}
 
 /* a bigger, brighter flash for the rare scores */
 .shotinfo.tier2 { font-size: 46px; }

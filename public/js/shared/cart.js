@@ -32,24 +32,29 @@ export const SEATS = {
   passenger: { x:  0.40, y: -0.06, z: 0.545 }
 };
 
-/* --------------------------------------------------------------- motion */
-export const MAX_FWD = 22.0;      // m/s ≈ 49 mph. Fast enough to be genuinely fun, so
-export const MAX_REV = 3.0;       // driving genuinely beats running.
-export const A_DRIVE = 7.5;       // m/s² at full pull — see the heavy-start ramp below
-export const A_DRIVE_REV = 2.2;
-export const A_BRAKE = 11.0;      // ~2 s and ~22 m from flat out
-export const A_HAND = 9.0;        // handbrake
+/* --------------------------------------------------------------- motion
+   A golf cart is not a go-kart.  A real one is governed to about 24 km/h and a
+   tuned one tops out around 35, which is where these numbers now sit: 6.1 m/s
+   stock, and 9.72 m/s — exactly 35 km/h — with the cart tune and Pitstop at
+   Legend.  It was 22 m/s (79 km/h) before, which flattered the course scale
+   and made every drive across a fairway feel like a getaway. */
+export const KMH = 3.6;                        // m/s -> km/h, used all over the HUD
+export const TOP_SPEED_KMH = 35;               // fully upgraded, on a flat fairway
+export const MAX_BOOST = 1.6;                  // cart tune x Pitstop at Legend
+export const MAX_FWD = TOP_SPEED_KMH / KMH / MAX_BOOST;   // 6.08 m/s stock
+export const MAX_REV = 1.6;       // reverse is a crawl, as it should be
+export const A_DRIVE = 3.4;       // m/s² at full pull — see the heavy-start ramp below
+export const A_DRIVE_REV = 1.2;
+export const A_BRAKE = 5.5;       // about 1.8 s from flat out
+export const A_HAND = 6.0;        // handbrake
 export const ENGINE_BRAKE = 0.75; // coasting with the pedal up. Deliberately
                                   // weaker than gravity on anything above the
                                   // park grade, or a cart would sit on a hill
                                   // with the brake off and never roll.
-export const C_AERO = 0.012;      // 1/m — 1.11 m/s² at top speed
-export const ABS_MAX = 36.0;      // hard ceiling ABOVE the full boosted range
-                                  // (22 x 1.6 = 35.2, Pitstop 10 + the tune) —
-                                  // the shop's +6%/level must be real speed,
-                                  // not a promise the clamp silently eats.
-                                  // 36/240 = 0.15 m per substep, still well
-                                  // inside the 0.88 m capture radius
+export const C_AERO = 0.012;      // 1/m
+export const ABS_MAX = TOP_SPEED_KMH / KMH + 2;  // hard ceiling just above the
+                                  // fully boosted top speed, so a downhill run
+                                  // can overspeed a little but never fly
 
 /* --------------------------------------------------------------- slopes */
 export const G = 9.81;
