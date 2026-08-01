@@ -522,16 +522,103 @@ button.roomtag:active { transform: translateY(1px); }
 
 /* ------------------------------------------------------------- backdrop */
 .screen { background: linear-gradient(180deg, #0b1a12 0%, #0e2417 55%, #0a150e 100%); }
-.screen.home { overflow: hidden; }
-.scenery { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.sky-glow { position: absolute; left: 50%; top: -32%; width: 130%; height: 90%;
-  transform: translateX(-50%);
-  background: radial-gradient(ellipse at 50% 55%, rgba(255,214,120,.20), rgba(120,190,120,.07) 45%, transparent 70%); }
-.hills { position: absolute; left: -12%; right: -12%; border-radius: 48% 52% 0 0 / 100% 100% 0 0; }
-.hills.far { bottom: -28vh; height: 52vh; background: #12301d; opacity: .8;
-  transform: rotate(-1.6deg); }
-.hills.mid { bottom: -32vh; height: 50vh; background: #16402a; transform: rotate(1.2deg) translateX(4%); }
-.hills.near { bottom: -38vh; height: 52vh; background: #0d2617; transform: rotate(-.8deg) translateX(-3%); }
+
+/* ═══════════════════════ THE TITLE SCREEN ═══════════════════════
+   The home screen is TRANSPARENT: behind it the real first tee renders live,
+   your golfer standing on it.  The menu is a column pinned left over a scrim
+   that fades out toward the course, exactly like a game's title screen —
+   because it is one. */
+.screen.home { overflow: hidden; background: none; display: block; }
+.home-scrim { position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(4,9,7,.94) 0%, rgba(4,9,7,.86) 24%, rgba(4,9,7,.38) 52%, rgba(4,9,7,.04) 74%),
+    linear-gradient(0deg, rgba(4,9,7,.55) 0%, transparent 26%),
+    linear-gradient(180deg, rgba(4,9,7,.35) 0%, transparent 18%); }
+
+/* the menu column */
+.home-hero { position: absolute; left: clamp(18px, 4.5vw, 74px); top: 50%;
+  transform: translateY(-50%);
+  width: min(420px, calc(100vw - 36px));
+  max-height: 94vh; overflow-y: auto; scrollbar-width: none;
+  display: flex; flex-direction: column; gap: 13px;
+  animation: heroFade .7s ease both; }
+.home-hero::-webkit-scrollbar { display: none; }
+@keyframes heroFade { from { opacity: 0; } }
+
+/* the wordmark: big, tight, two-tone — a logo, not a heading */
+.wordmark { margin-bottom: 4px; }
+.wm-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 4px;
+  text-transform: uppercase; color: #8fd6a0; }
+.home-hero h1 { font-size: clamp(38px, 4.6vw, 56px); font-weight: 900;
+  letter-spacing: -2px; line-height: .98; margin-top: 4px;
+  text-shadow: 0 2px 0 rgba(0,0,0,.4), 0 14px 44px rgba(0,0,0,.65); }
+.home-hero h1 em { font-style: italic; color: #ffd94a; padding: 0 2px; }
+.wm-sub { font-size: 12.5px; color: #9fbfa8; margin-top: 7px; letter-spacing: .3px;
+  text-shadow: 0 1px 6px rgba(0,0,0,.7); }
+
+/* PLAY NOW: the one thing a visitor came to press */
+.btn.huge { width: 100%; padding: 16px 22px; font-size: 21px; font-weight: 800;
+  letter-spacing: .2px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  box-shadow: 0 14px 38px rgba(38,150,74,.42), inset 0 1px 0 rgba(255,255,255,.28);
+  animation: playGlow 3.2s ease-in-out infinite; }
+.btn.huge:hover { transform: translateY(-1px);
+  box-shadow: 0 18px 44px rgba(46,175,88,.55), inset 0 1px 0 rgba(255,255,255,.3); }
+.btn.huge:active { transform: translateY(1px); }
+.huge-sub { font-size: 11px; font-weight: 600; letter-spacing: .6px; color: rgba(235,255,240,.75);
+  text-transform: uppercase; }
+@keyframes playGlow {
+  50% { box-shadow: 0 14px 46px rgba(56,190,96,.6), inset 0 1px 0 rgba(255,255,255,.28); }
+}
+
+/* the clubhouse: one wide button that reads as a place, not a setting */
+.clubhouse-btn { width: 100%; display: flex; align-items: center; gap: 12px;
+  text-align: left; padding: 11px 14px; }
+.ch-ico { font-size: 22px; }
+.ch-txt { flex: 1; display: flex; flex-direction: column; line-height: 1.25; }
+.ch-txt small { font-size: 10px; color: #93ad99; letter-spacing: .6px; text-transform: uppercase; }
+.ch-coins { font-weight: 800; color: #ffd94a; font-size: 13.5px; }
+
+/* your golfer: a thin glass panel bottom-right, under the live preview */
+.home-golfer { position: absolute; right: clamp(14px, 3vw, 44px); bottom: 20px;
+  width: min(430px, calc(100vw - 28px));
+  background: rgba(7,14,10,.74); backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,.13); border-radius: 16px;
+  padding: 13px 16px 11px; box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  animation: heroFade .7s .12s ease both; }
+.home-golfer .lbl { margin: 0; }
+.hk-hint { margin-top: 8px; color: #7e937f; }
+.btn.mini { padding: 5px 10px; font-size: 15px; line-height: 1; }
+
+/* The home screen is transparent now, so the in-round chrome — panels,
+   meters, labels — must be gated on actually being in a round, or the hole
+   card and minimap of the BACKDROP hole leak through the title screen. */
+body:not(.playing) #stage .panel,
+body:not(.playing) .turnbar,
+body:not(.playing) .playbar,
+body:not(.playing) .walkbar,
+body:not(.playing) .cartbar,
+body:not(.playing) .hintbar,
+body:not(.playing) .labellayer,
+body:not(.playing) .shotinfo,
+body:not(.playing) .touchpad,
+body:not(.playing) .mapwrap { display: none !important; }
+
+/* swatches, sized for the front page: big enough to hit, ring when chosen */
+.home-golfer .looker { gap: 10px 18px; }
+.home-golfer .lookbtn { width: 27px; height: 27px; border-radius: 8px; }
+.home-golfer .lookgrp h5 { margin-bottom: 6px; }
+.home-hero .venues { justify-content: flex-start; border-top: none; padding-top: 2px;
+  margin-top: 2px; text-shadow: 0 1px 5px rgba(0,0,0,.85); }
+
+/* a phone stacks the two panels and scrolls */
+@media (max-width: 880px), (max-height: 560px) {
+  .screen.home { overflow-y: auto; }
+  .home-scrim { position: fixed; background: rgba(4,9,7,.78); }
+  .home-hero { position: relative; left: auto; top: auto; transform: none;
+    max-height: none; overflow: visible; margin: 6vh auto 14px; padding: 0 16px; }
+  .home-golfer { position: relative; right: auto; bottom: auto; margin: 0 auto 26px;
+    width: min(430px, calc(100vw - 32px)); }
+}
 
 /* ------------------------------------------------------------- the card */
 .card { background: linear-gradient(180deg, rgba(20,33,25,.97), rgba(11,19,14,.97));

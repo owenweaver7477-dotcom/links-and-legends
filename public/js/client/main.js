@@ -24,7 +24,7 @@ import { BIOMES, COURSE_ORDER } from '../shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
-import { normaliseLook, SHOT_RADIUS, EYE_HEIGHT } from '../shared/avatars.js';
+import { normaliseLook, SHOT_RADIUS, EYE_HEIGHT, CAPS, SHIRTS, SKINS, TROUSERS } from '../shared/avatars.js';
 
 const canvas = document.getElementById('gl');
 
@@ -97,6 +97,7 @@ function ballOf(pid) {
 function ensureHole(courseId, holeIndex) {
   const key = courseId + ':' + holeIndex;
   if (G.loadedKey === key) return false;
+  clearMenuBackdrop();               // a real round owns the scene from here
   HUD.show('load');
   HUD.loading('Shaping ' + (BIOMES[courseId]?.name || 'the course') + '…');
 
@@ -126,6 +127,87 @@ function ensureHole(courseId, holeIndex) {
  */
 function addressSpot(ball, aim) {
   return { x: ball.x - Math.cos(aim) * 1.15, z: ball.z + Math.sin(aim) * 1.15 };
+}
+
+/* ===================================================================== */
+/*  MENU BACKDROP — the course IS the title screen                        */
+/* ===================================================================== */
+/*
+ * The best-looking thing this game owns is the game, so the front page
+ * stands YOUR golfer on the first tee of Claude National, club in hand,
+ * ball teed up, while the camera drifts slowly around them.  Change a
+ * shirt swatch and the figure on the tee changes with it — the outfit
+ * picker becomes a character screen instead of a wall of coloured squares.
+ *
+ * It reuses the exact scene a round would build (same loadHole, same
+ * G.loadedKey), so pressing Play Now on the default course starts on a
+ * course that is ALREADY built — the title screen doubles as a preload.
+ */
+const menu = { key: null, av: null, t: 0 };
+
+function menuBackdrop() {
+  if (G.joined || menu.key) return;
+  // the actor group survives hole changes on purpose, so avatars from a round
+  // just left have to be shown out — or they loiter on the title screen
+  for (const [pid, av] of G.avatars) {
+    scene.actorGroup.remove(av.root); av.dispose();
+    G.avatars.delete(pid); G.remote.delete(pid);
+  }
+  const courseId = COURSE_ORDER[0];
+  G.course = getCourse(courseId);
+  G.hole = G.course.holes[0];
+  G.bio = BIOMES[courseId];
+  G.T = terrainFor(G.hole, G.bio);
+  scene.loadHole(G.hole, G.T, G.bio);
+  G.loadedKey = courseId + ':0';
+  menu.key = courseId;
+  menu.t = 0;
+  const tee = G.hole.tee;
+  scene.syncBalls([{ pid: 'menu', color: '#f6f9f4', spectator: false }]);
+  scene.setBall('menu', tee.x, G.T.heightAt(tee.x, tee.z) + BALL_RADIUS, tee.z);
+  refreshMenuAvatar();
+}
+
+/** Rebuild the tee-side golfer — called whenever a swatch changes. */
+function refreshMenuAvatar() {
+  if (!menu.key || !G.hole) return;
+  if (menu.av) { scene.actorGroup.remove(menu.av.root); menu.av.dispose(); menu.av = null; }
+  const tee = G.hole.tee;
+  const aim = Math.atan2(G.hole.pin.x - tee.x, G.hole.pin.z - tee.z);
+  const spot = addressSpot(tee, aim);
+  const av = menu.av = new Avatar(lookDraft || normaliseLook(null), '#f6f9f4');
+  scene.actorGroup.add(av.root);
+  av.place(spot.x, G.T.heightAt(spot.x, spot.z), spot.z, aim);
+  av.setClub('DR', G.profile?.clubTier ?? 0);
+  av.setAddress(true, aim + Math.PI / 2);
+  av.update(0.016, 0);
+}
+
+/** A real round is starting: the stand-in leaves the tee. */
+function clearMenuBackdrop() {
+  if (menu.av) { scene.actorGroup.remove(menu.av.root); menu.av.dispose(); menu.av = null; }
+  menu.key = null;
+}
+
+/** One frame of title screen: a slow, low orbit around the golfer. */
+function menuFrame(dt) {
+  menu.t += dt;
+  const tee = G.hole.tee;
+  const gy = G.T.heightAt(tee.x, tee.z);
+  const a = menu.t * 0.055 + 0.9;
+  const r = 8.2;
+  const cx = tee.x + Math.sin(a) * r, cz = tee.z + Math.cos(a) * r;
+  scene.camera.position.set(cx, gy + 2.35 + Math.sin(menu.t * 0.13) * 0.25, cz);
+  // Aim past the golfer's LEFT so they sit in the right-hand two thirds of
+  // the frame — the menu column owns the left of the screen.
+  const dx = tee.x - cx, dz = tee.z - cz;
+  const L = Math.hypot(dx, dz) || 1;
+  scene.camera.lookAt(tee.x + (dz / L) * 2.0, gy + 1.2, tee.z - (dx / L) * 2.0);
+  scene.setBall('menu', tee.x, gy + BALL_RADIUS, tee.z);   // keep its draw size right
+  menu.av?.update(dt, 0);
+  scene.windDir = 0.6;
+  scene.update(dt);
+  scene.render(scene.camera);
 }
 
 /** Point the aim straight at the flag (or at the fairway on a long hole). */
@@ -693,6 +775,9 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = last ? clamp((now - last) / 1000, 0, 0.1) : 0;
   last = now;
+  // the title screen: the course drifting behind the menu (and behind the
+  // lobby, for a host who has not started yet)
+  if (menu.key && G.hole && (!G.joined || G.room?.state === 'lobby')) { menuFrame(dt); return; }
   if (!G.hole) return;
 
   scene.windDir = G.wind.dir;
@@ -1407,6 +1492,9 @@ Net.on('state', s => {
 
   const becamePlaying = prev?.state !== 'playing' && s.state === 'playing';
   if (becamePlaying) {
+    // the round may reuse the very hole the title screen built, in which case
+    // ensureHole never ran — the stand-in golfer still has to leave the tee
+    clearMenuBackdrop();
     clubManual = false; autoClub(); aimAtPin(); rig.reset(); rig.snap();
     G.view = 'third';
   }
@@ -1471,7 +1559,11 @@ function route() {
   const r = G.room;
   // the touch pad belongs to a live round, never over a menu
   HUD.showTouchPad(!!r && r.state === 'playing');
-  if (!G.joined || !r) { G.screen = 'home'; HUD.show('home'); return; }
+  if (!G.joined || !r) {
+    G.screen = 'home'; HUD.show('home');
+    menuBackdrop();                  // back out of a room: the tee returns
+    return;
+  }
   if (r.state === 'lobby') {
     G.screen = 'lobby';
     HUD.show('lobby');
@@ -1516,6 +1608,7 @@ function drawLookPicker() {
     lookDraft = normaliseLook({ ...lookDraft, [key]: hex });
     drawLookPicker();
     saveLook(lookDraft);
+    refreshMenuAvatar();             // the golfer on the tee changes NOW
     if (G.joined) Net.setLook(lookDraft);
   });
 }
@@ -1769,6 +1862,20 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   lookDraft = loadLook();
   drawLookPicker();
   renderClubhouse();
+
+  // the dice: a whole outfit in one press, for people who hate picking
+  document.getElementById('btnRandomLook')?.addEventListener('click', () => {
+    const pick = arr => arr[(Math.random() * arr.length) | 0].hex;
+    lookDraft = normaliseLook({ cap: pick(CAPS), shirt: pick(SHIRTS), skin: pick(SKINS), trousers: pick(TROUSERS) });
+    saveLook(lookDraft);
+    drawLookPicker();
+    refreshMenuAvatar();
+    if (G.joined) Net.setLook(lookDraft);
+  });
+
+  // The title screen is the course itself — unless this visit is an invite
+  // link, which goes straight to its own room and will build its own hole.
+  if (!room) menuBackdrop();
 
   // the clubhouse: career, pro shop and bag, reachable without hosting a game
   HUD.el.btnClubhouse.addEventListener('click', () => {

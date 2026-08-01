@@ -58,6 +58,10 @@ HUD.show = which => {
   el.screenHoleOver.hidden = which !== 'holeover';
   el.screenLoad.hidden = which !== 'load';
   el.screenShop.hidden = which !== 'shop';
+  // `null` means the round itself is on screen.  The body class gates every
+  // piece of in-round chrome, so the transparent title screen never shows
+  // the backdrop hole's own scorecard and minimap through itself.
+  document.body.classList.toggle('playing', which == null);
 };
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
 HUD.setHomeCoins = n => { el.homeCoins.textContent = '🪙 ' + (n || 0).toLocaleString(); };

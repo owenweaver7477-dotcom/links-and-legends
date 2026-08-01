@@ -138,37 +138,34 @@
 
 <!-- ═══════════════════════════════ OVERLAYS ═════════════════════════════ -->
 
+<!-- The title screen.  Behind it the REAL first tee is rendered live, with
+     your golfer standing on it — the menu is a column on the left, and the
+     course sells the game the way no card of form fields can. -->
 <div class="screen home" id="screenHome">
-  <div class="scenery" aria-hidden="true">
-    <div class="sky-glow"></div>
-    <div class="hills far"></div>
-    <div class="hills mid"></div>
-    <div class="hills near"></div>
-  </div>
-  <div class="card home">
-    <div class="brand">
-      <div class="brand-mark">⛳</div>
-      <div>
-        <h1>Links <em>&amp;</em> Legends</h1>
-        <p class="sub">Five courses, nine holes each. Play a round on your own, or with up to eight friends.</p>
-      </div>
+  <div class="home-scrim" aria-hidden="true"></div>
+
+  <div class="home-hero">
+    <div class="wordmark">
+      <span class="wm-eyebrow">⛳ Online golf</span>
+      <h1>Links <em>&amp;</em> Legends</h1>
+      <p class="wm-sub">Five courses · nine holes · up to eight friends</p>
     </div>
+
     <div class="identity" id="identityChip" hidden>
       <div class="id-face">⛳</div>
       <div class="id-txt">
         <b>Playing as <span id="idName">—</span></b>
-        <span>Your career, coins and gear are remembered on this browser — no sign-in needed.</span>
+        <span>Career, coins and gear saved on this browser.</span>
       </div>
       <button class="btn" id="btnNotYou">Change</button>
     </div>
+    <label class="field" id="nameField"><span>Your name</span>
+      <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
+
     <!-- Somebody who has just clicked a thumbnail has no friends here and no
          room code.  One button puts them on the first tee; everything to do
          with other people is secondary and folded away. -->
-    <button class="btn primary huge" id="btnPlay">Play now</button>
-    <p class="tiny playhint">Nine holes, on your own. No sign-up — your career is saved on this browser.</p>
-
-    <label class="field" id="nameField"><span>Your name</span>
-      <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
+    <button class="btn primary huge" id="btnPlay">Play now<span class="huge-sub">straight onto the first tee</span></button>
 
     <details class="friends" id="friendsBox">
       <summary>Play with friends</summary>
@@ -185,21 +182,28 @@
         </div>
       </div>
     </details>
+
+    <button class="btn big clubhouse-btn" id="btnClubhouse">
+      <span class="ch-ico">🏌️</span>
+      <span class="ch-txt"><b>Clubhouse</b><small>career · pro shop · your bag</small></span>
+      <span class="ch-coins" id="homeCoins">🪙 0</span>
+    </button>
+
     <p class="err" id="homeErr"></p>
-
-    <!-- Your golfer lives HERE, not inside a room: it is who you are, not a
-         setting for one round, and a change applies the moment you make it. -->
-    <div class="homekit">
-      <div class="hk-head">
-        <h4 class="lbl">Your golfer</h4>
-        <button class="btn" id="btnClubhouse">Clubhouse · <span id="homeCoins">🪙 0</span></button>
-      </div>
-      <div class="looker" id="lookPicker"></div>
-    </div>
-
     <div class="venues">
       <span>Claude National</span><i>·</i><span>Cairnmoor Links</span><i>·</i><span>Red Mesa</span><i>·</i><span>Hochkar Alpine</span><i>·</i><span>Palmera Cay</span>
     </div>
+  </div>
+
+  <!-- Your golfer — the figure on the tee IS the preview, so this panel is
+       thin: swatches and a dice.  Every change lands on them instantly. -->
+  <div class="home-golfer">
+    <div class="hk-head">
+      <h4 class="lbl">Your golfer</h4>
+      <button class="btn mini" id="btnRandomLook" title="Surprise me">🎲</button>
+    </div>
+    <div class="looker" id="lookPicker"></div>
+    <p class="tiny hk-hint">That's them on the tee — changes show up instantly.</p>
   </div>
 </div>
 
