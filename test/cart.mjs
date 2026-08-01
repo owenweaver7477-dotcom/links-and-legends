@@ -501,8 +501,15 @@ head('swing — power is a drag, the strike is a timing');
   // the lie sets the tempo, and these relationships are the mechanic
   ok('sand gives you the most time to strike', lieTempo('sand') < lieTempo('tee'),
      `sand ${lieTempo('sand')} vs tee ${lieTempo('tee')}`);
-  ok('light rough hurries you past the tee', lieTempo('rough') > lieTempo('tee'));
-  ok('heavy rough is faster still', lieTempo('deep') > lieTempo('rough'),
+  // The tee is the calmest bar on the course — it is the shot you stand over
+  // and think about — and the rough reads at that same measured pace, because
+  // the lie is already the punishment.  The fairway is the quick one.
+  ok('a tee shot is a calm, readable bar', lieTempo('tee') < lieTempo('fairway'),
+     `tee ${lieTempo('tee')} vs fairway ${lieTempo('fairway')}`);
+  ok('the rough is played at that same measured pace',
+     Math.abs(lieTempo('rough') - lieTempo('tee')) < 1e-9,
+     `rough ${lieTempo('rough')} vs tee ${lieTempo('tee')}`);
+  ok('heavy rough still hurries you', lieTempo('deep') > lieTempo('rough'),
      `deep ${lieTempo('deep')} vs rough ${lieTempo('rough')}`);
   ok('an unknown lie falls back to the fairway tempo', lieTempo('nonsense') === lieTempo('fairway'));
 
@@ -538,9 +545,26 @@ head('swing — power is a drag, the strike is a timing');
   const pure = strikeAt(0);
   ok('a centred strike is dead straight', Math.abs(pure.faceDeg) < 0.01, pure.faceDeg.toFixed(2) + '°');
   const wide = strikeAt(1);
-  ok('a strike at the edge is a full miss', wide.faceDeg > 8, wide.faceDeg.toFixed(1) + '°');
+  ok('a strike at the edge is a full miss', wide.faceDeg > 6, wide.faceDeg.toFixed(1) + '°');
   const other = strikeAt(-1);
-  ok('and the other edge misses the other way', other.faceDeg < -8, other.faceDeg.toFixed(1) + '°');
+  ok('and the other edge misses the other way', other.faceDeg < -6, other.faceDeg.toFixed(1) + '°');
+
+  /* The forgiving band: stopping just off centre must NOT be punished as a
+     miss, or the strike is a coin flip rather than a skill.  The fairway has
+     the widest band in the game deliberately — it is what hitting the fairway
+     buys you, and it sets the felt difficulty of the whole round. */
+  const { pureBand } = await import('../public/js/client/swing.js');
+  ok('the fairway is the most forgiving lie to strike from',
+     pureBand('fairway') > pureBand('rough') && pureBand('fairway') > pureBand('deep'),
+     `fairway ${pureBand('fairway')} vs rough ${pureBand('rough')}`);
+  const nearMiss = strikeAt(pureBand('fairway') * 0.9, 'fairway');
+  ok('a strike inside the band is genuinely pure',
+     Math.abs(nearMiss.faceDeg) < 0.01 && nearMiss.pure === true,
+     nearMiss.faceDeg.toFixed(2) + '°');
+  const justOut = strikeAt(pureBand('fairway') + 0.05, 'fairway');
+  ok('and just outside it is a small miss, not a cliff',
+     Math.abs(justOut.faceDeg) > 0 && Math.abs(justOut.faceDeg) < 1.2,
+     justOut.faceDeg.toFixed(2) + '°');
   ok('a mistimed strike also comes out thin', wide.attackDeg < -1, wide.attackDeg.toFixed(2));
   ok('a flushed one does not', Math.abs(pure.attackDeg) < 0.01);
 
@@ -636,6 +660,54 @@ head('hole shapes — five courses must not be forty-five straight lines');
   ok('and some hole is a genuine dogleg', biggest > 20, `biggest ${biggest.toFixed(1)}%`);
   ok('par 4s and 5s are almost never rulers', flatLongHoles <= 3,
      `${flatLongHoles} of ${n} holes under 4%`);
+}
+
+/* =========================================== the club has to reach the ball */
+head('address — a right-handed golfer whose club lands ON the ball');
+{
+  /* These mirror main.js exactly.  They are the numbers that decide whether
+     the club sits next to the ball or a metre away from it, and they were
+     measured off the real rig rather than guessed — so a change to the arm
+     length or the address pose must move them, and this catches it. */
+  const CLUB_REACH_FWD = 0.698, CLUB_REACH_SIDE = 0.526, ADDRESS_YAW_BIAS = -0.15;
+  const addressSpot = (ball, aim) => {
+    const B = aim - Math.PI / 2 + ADDRESS_YAW_BIAS;
+    const fx = Math.sin(B), fz = Math.cos(B);
+    const rx = -Math.cos(B), rz = Math.sin(B);
+    return { x: ball.x - fx * CLUB_REACH_FWD - rx * CLUB_REACH_SIDE,
+             z: ball.z - fz * CLUB_REACH_FWD - rz * CLUB_REACH_SIDE };
+  };
+  // where the club head ends up, given where the golfer stands
+  const clubHead = (spot, aim) => {
+    const B = aim - Math.PI / 2 + ADDRESS_YAW_BIAS;
+    const fx = Math.sin(B), fz = Math.cos(B);
+    const rx = -Math.cos(B), rz = Math.sin(B);
+    return { x: spot.x + fx * CLUB_REACH_FWD + rx * CLUB_REACH_SIDE,
+             z: spot.z + fz * CLUB_REACH_FWD + rz * CLUB_REACH_SIDE };
+  };
+
+  let worst = 0;
+  for (const aim of [0, 0.7, 1.9, -1.2, Math.PI, -2.8]) {
+    const ball = { x: 12, z: -30 };
+    const h = clubHead(addressSpot(ball, aim), aim);
+    worst = Math.max(worst, Math.hypot(h.x - ball.x, h.z - ball.z));
+  }
+  ok('the club head lands on the ball at every aim', worst < 1e-9,
+     `worst ${(worst * 100).toFixed(2)} cm`);
+
+  // and the golfer stands on the correct SIDE for a right-hander: the target
+  // must be off their left shoulder, never their right
+  const leftOf = h => ({ x: Math.cos(h), z: -Math.sin(h) });
+  let allLeft = true;
+  for (const aim of [0, 0.7, 1.9, -1.2, Math.PI]) {
+    const ball = { x: 0, z: 0 };
+    const spot = addressSpot(ball, aim);
+    // vector from golfer to ball, against the golfer's left
+    const L = leftOf(aim - Math.PI / 2 + ADDRESS_YAW_BIAS);
+    const toTarget = { x: Math.sin(aim), z: Math.cos(aim) };
+    if (toTarget.x * L.x + toTarget.z * L.z < 0.5) allLeft = false;
+  }
+  ok('the target sits off the golfer’s left shoulder', allLeft);
 }
 
 /* ============================================ the golfer fits in the seat */

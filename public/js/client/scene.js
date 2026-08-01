@@ -1031,7 +1031,7 @@ export class GolfScene {
       }
       geo.setIndex(idx);
       const mat = new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0.92,
+        color: 0xffffff, transparent: true, opacity: 1.0,
         depthTest: false, depthWrite: false, side: THREE.DoubleSide, toneMapped: false
       });
       const m = new THREE.Mesh(geo, mat);
@@ -1043,14 +1043,23 @@ export class GolfScene {
     const m = this._readRibbon;
     const n = Math.min(points.length, MAX);
     const arr = m.geometry.attributes.position.array;
-    const HALF = 0.075;                   // 15 cm wide — two ball widths
+    /* Thin and DASHED, but still measured in metres rather than pixels.
+       A one-pixel THREE.Line disappears against a sunlit green, so the read
+       keeps real width — just 5 cm of it, about a ball and a half, broken
+       into dashes so it reads as a light guide rather than a painted stripe.
+       Gap segments collapse both edges onto the centre line, which makes them
+       degenerate triangles: no pixels, no extra draw call, no index rebuild. */
+    const HALF = 0.025;                   // 5 cm wide
+    const ON = 3, PERIOD = 5;             // three samples drawn, two skipped
     for (let i = 0; i < n; i++) {
       const p = points[i];
       const q = points[Math.min(i + 1, n - 1)];
       let dx = q.x - p.x, dz = q.z - p.z;
       const len = Math.hypot(dx, dz) || 1;
       // perpendicular, in the ground plane
-      const nx = -dz / len * HALF, nz = dx / len * HALF;
+      const gap = (i % PERIOD) >= ON;
+      const w = gap ? 0 : HALF;
+      const nx = -dz / len * w, nz = dx / len * w;
       const a = i * 2 * 3;
       arr[a] = p.x - nx; arr[a + 1] = p.y; arr[a + 2] = p.z - nz;
       arr[a + 3] = p.x + nx; arr[a + 4] = p.y; arr[a + 5] = p.z + nz;

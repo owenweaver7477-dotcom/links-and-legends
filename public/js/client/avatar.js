@@ -132,10 +132,17 @@ export class Avatar {
       if (endMat) g.add(part(endMat, w * 1.05, endLen, w * 1.5, 0, -len - endLen / 2, 0.02));
       return g;
     };
-    this.armL = limb(this.mats.shirt, 0.115, H * 0.30, -0.262, H * 0.775, this.mats.skin, H * 0.06);
-    this.armR = limb(this.mats.shirt, 0.115, H * 0.30, 0.262, H * 0.775, this.mats.skin, H * 0.06);
-    this.legL = limb(this.mats.trousers, 0.145, H * 0.42, -0.105, H * 0.47, this.mats.shoe, H * 0.05);
-    this.legR = limb(this.mats.trousers, 0.145, H * 0.42, 0.105, H * 0.47, this.mats.shoe, H * 0.05);
+    /* Mind the sign — this is why the golfer was left-handed.
+       A rotation about Y by heading h maps local +x to (cos h, -sin h), which
+       in this project's frame is the avatar's LEFT (see test/cart.mjs, where
+       left(h) = (cos h, -sin h)).  So a limb authored at local +x renders on
+       the LEFT, and the club — parented to armR — hung off the wrong side,
+       reaching across the golfer instead of down to the ball.  The limbs are
+       now placed so their names match the side they actually appear on. */
+    this.armL = limb(this.mats.shirt, 0.115, H * 0.30, 0.262, H * 0.775, this.mats.skin, H * 0.06);
+    this.armR = limb(this.mats.shirt, 0.115, H * 0.30, -0.262, H * 0.775, this.mats.skin, H * 0.06);
+    this.legL = limb(this.mats.trousers, 0.145, H * 0.42, 0.105, H * 0.47, this.mats.shoe, H * 0.05);
+    this.legR = limb(this.mats.trousers, 0.145, H * 0.42, -0.105, H * 0.47, this.mats.shoe, H * 0.05);
     this.body.add(this.armL, this.armR, this.legL, this.legR);
 
     /* --- the club: grip, shaft and an interchangeable head ---------------

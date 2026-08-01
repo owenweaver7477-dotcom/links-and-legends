@@ -39,7 +39,10 @@ export const SEATS = {
    Legend.  It was 22 m/s (79 km/h) before, which flattered the course scale
    and made every drive across a fairway feel like a getaway. */
 export const KMH = 3.6;                        // m/s -> km/h, used all over the HUD
-export const TOP_SPEED_KMH = 35;               // fully upgraded, on a flat fairway
+export const TOP_SPEED_KMH = 24;               // fully upgraded, on a flat fairway
+// 24 km/h flat out with everything bought, ~15 stock: a real golf cart is
+// governed to about this, and at 35 it crossed a fairway faster than the
+// course reads, which is what made it feel arcade rather than plausible.
 export const MAX_BOOST = 1.6;                  // cart tune x Pitstop at Legend
 export const MAX_FWD = TOP_SPEED_KMH / KMH / MAX_BOOST;   // 6.08 m/s stock
 export const MAX_REV = 1.6;       // reverse is a crawl, as it should be

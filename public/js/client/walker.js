@@ -43,10 +43,10 @@ export class Walker {
   clearKeys() { this.keys.clear(); }
 
   /** Start jogging to a point; speed scales so it never takes forever. */
-  goTo(x, z) {
+  goTo(x, z, speed = SPRINT_SPEED) {
     const d = Math.hypot(x - this.x, z - this.z);
     if (d < 0.4) { this.auto = null; return; }
-    this.auto = { x, z, speed: SPRINT_SPEED };
+    this.auto = { x, z, speed };
   }
   cancelAuto() { this.auto = null; }
 

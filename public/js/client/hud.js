@@ -170,6 +170,11 @@ HUD.setMeter = (m, enabled) => {
   // have to stop, and the whole bar lights up to say it is live.
   const striking = m.state === 'accuracy';
   el.mFace.classList.toggle('live', striking);
+  // the green zone IS the forgiving band, so what you see is what forgives
+  if (striking) {
+    const pct = (1 - (m.band ?? 0.2)) * 50;
+    el.mFace.querySelector('.m-face-zone').style.cssText = `left:${pct}%;right:${pct}%`;
+  }
   const dotPct = striking ? 50 + clamp(m.sweep, -1, 1) * 48
     : clamp(50 + m.face * 4.4, 2, 98);
   el.mFaceDot.style.left = `calc(${dotPct}% - 2px)`;
@@ -177,11 +182,16 @@ HUD.setMeter = (m, enabled) => {
 
   if (!enabled) { el.mLabel.textContent = 'Waiting…'; el.mLabel.classList.remove('hot'); return; }
   if (m.state === 'back') {
+    /* The pull-back chooses a SHAPE — a deliberate draw or fade.  It is not a
+       hook or a slice, because those are strike ERRORS and no strike has
+       happened yet: the accuracy phase has not even started.  Calling it a
+       hook here was reporting a result out of order, and it read as the game
+       punishing a shot the player had not taken. */
     const sh = m.shape || 0, a = Math.abs(sh);
     el.mLabel.textContent = m.power > 1 ? 'Overswinging — accuracy is going'
       : a < 1.5 ? 'Let go to lock the power'
-      : (a < 4.5 ? (sh > 0 ? 'Fade ' : 'Draw ') : (sh > 0 ? 'SLICE ' : 'HOOK ')) + a.toFixed(0) + '°';
-    el.mLabel.classList.toggle('hot', m.power > 1 || a >= 4.5);
+      : 'Shaping a ' + (sh > 0 ? 'fade ' : 'draw ') + a.toFixed(0) + '°';
+    el.mLabel.classList.toggle('hot', m.power > 1);
   } else if (striking) {
     el.mLabel.textContent = 'CLICK to strike — stop it in the middle';
     el.mLabel.classList.add('hot');
@@ -340,10 +350,57 @@ HUD.renderCareer = (prof) => {
  * and the Pro Shop (the club-tier ladder, refinements, and balls).
  */
 let shopTab = 'crew';
+
+/* ─────────────── what your money has actually bought ─────────────── */
+const CLUB_LOOK_ICON = { wood: '🪵', rust: '🔩', steel: '⚙️', carbon: '🖤', tour: '🏅', titanium: '💠', signature: '👑' };
+
+function buildPayoff(prof) {
+  const wrap = document.createElement('div');
+  wrap.className = 'payoff';
+  const crew = prof?.crew || {};
+  const tier = prof?.clubTier ?? 0;
+  const refine = prof?.refine ?? 0;
+  const set = CLUB_TIERS[Math.max(0, Math.min(6, tier))];
+
+  // the four things a player actually feels, each 0..1
+  const lvl = k => (crew[k] || 0) / CADDIE_MAX;
+  const bars = [
+    ['Power',       Math.min(1, (tier / 6) * 0.6 + lvl('bruiser') * 0.4), '💪'],
+    ['Accuracy',    Math.min(1, lvl('ace') * 0.6 + (tier / 6) * 0.4),     '🎯'],
+    ['Forgiveness', Math.min(1, (set.faceDamp / 0.33) * 0.7 + lvl('steady') * 0.3), '🛡️'],
+    ['Short game',  Math.min(1, lvl('roller') * 0.7 + lvl('lucky') * 0.3), '⛳'],
+    ['Cart',        lvl('pitstop'),                                        '🛺']
+  ];
+
+  wrap.innerHTML = `
+    <div class="po-set">
+      <span class="po-icon">${CLUB_LOOK_ICON[set.look] || '🏌️'}</span>
+      <div class="po-settxt">
+        <b>${escapeHtml(set.name)}</b>
+        <span>Tier ${tier + 1}/7${refine ? ' · Refinement ' + ['I', 'II', 'III'][refine - 1] : ''}</span>
+      </div>
+      <div class="po-tiers">${CLUB_TIERS.map((t, i) =>
+        `<i class="${i < tier ? 'done' : i === tier ? 'now' : ''}" title="${escapeHtml(t.name)}"></i>`).join('')}</div>
+    </div>
+    <div class="po-bars">${bars.map(([name, v, ico]) => `
+      <div class="po-bar">
+        <span class="po-name">${ico} ${name}</span>
+        <span class="po-track"><i style="width:${Math.round(v * 100)}%"></i></span>
+        <span class="po-pct">${Math.round(v * 100)}%</span>
+      </div>`).join('')}</div>`;
+  return wrap;
+}
+
 HUD.renderShop = (prof, onBuy) => {
   if (!el.shopList) return;
   el.coinBal.textContent = prof ? '🪙 ' + (prof.coins || 0) : '';
   el.shopList.innerHTML = '';
+
+  /* The payoff panel.  An upgrade that only moves a hidden number is not an
+     upgrade the player can feel, so every purchase shows up here immediately:
+     the bars grow, the club-set silhouette changes tier, and the crew badges
+     light.  It is the same data the simulation uses, read straight back. */
+  el.shopList.appendChild(buildPayoff(prof));
 
   const tabs = document.createElement('div');
   tabs.className = 'shoptabs';

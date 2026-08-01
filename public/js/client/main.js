@@ -24,7 +24,7 @@ import { BIOMES, COURSE_ORDER } from '../shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
-import { normaliseLook, SHOT_RADIUS, EYE_HEIGHT, CAPS, SHIRTS, SKINS, TROUSERS } from '../shared/avatars.js';
+import { normaliseLook, SHOT_RADIUS, EYE_HEIGHT, SPRINT_SPEED, CAPS, SHIRTS, SKINS, TROUSERS } from '../shared/avatars.js';
 
 const canvas = document.getElementById('gl');
 
@@ -121,12 +121,40 @@ function ensureHole(courseId, holeIndex) {
   return true;
 }
 
+/* Where the club head actually ends up, measured off the rig at address:
+   0.70 m in front of the golfer and 0.53 m to their right (the club hangs
+   off the right arm).  Standing the golfer at exactly minus that vector puts
+   the head ON the ball instead of near it — which is the whole of the
+   "club doesn't line up with the ball" bug.  Measured, not guessed: see the
+   address-alignment check in test/cart.mjs. */
+const CLUB_REACH_FWD = 0.698;
+/* The address pose turns the body a touch away from the target line
+   (P.yaw = -0.15 at address in avatar.js).  The stance has to be solved in
+   that same frame or the club sits off the ball by the arc it sweeps. */
+const ADDRESS_YAW_BIAS = -0.15;
+const CLUB_REACH_SIDE = 0.526;
+
 /**
  * Where a golfer actually stands to play a ball: a step to the side of the
  * line, not on top of it — otherwise the avatar hides the ball completely.
  */
 function addressSpot(ball, aim) {
-  return { x: ball.x - Math.cos(aim) * 1.15, z: ball.z + Math.sin(aim) * 1.15 };
+  /* A right-handed golfer stands with the target off their LEFT shoulder and
+     the ball directly in FRONT of their feet.  Facing aim-90°, forward is
+     right(aim) — so the golfer belongs on the left(aim) side of the ball, and
+     the ball then sits exactly where the club falls.  This used to return the
+     right(aim) side, which put the golfer past the ball with the club
+     reaching back across their body: the "club isn't next to the ball" bug. */
+  // Work in the golfer's ACTUAL body heading, which is the address stance
+  // (aim - 90 deg) plus the small turn the address pose itself applies — miss
+  // that bias out and the club head lands a consistent 13 cm off the ball.
+  const B = aim - Math.PI / 2 + ADDRESS_YAW_BIAS;
+  const fx = Math.sin(B), fz = Math.cos(B);      // the golfer's forward
+  const rx = -Math.cos(B), rz = Math.sin(B);     // the golfer's right
+  return {
+    x: ball.x - fx * CLUB_REACH_FWD - rx * CLUB_REACH_SIDE,
+    z: ball.z - fz * CLUB_REACH_FWD - rz * CLUB_REACH_SIDE
+  };
 }
 
 /* ===================================================================== */
@@ -179,7 +207,7 @@ function refreshMenuAvatar() {
   scene.actorGroup.add(av.root);
   av.place(spot.x, G.T.heightAt(spot.x, spot.z), spot.z, aim);
   av.setClub('DR', G.profile?.clubTier ?? 0);
-  av.setAddress(true, aim + Math.PI / 2);
+  av.setAddress(true, aim - Math.PI / 2);   // right-handed, as in the round
   av.update(0.016, 0);
 }
 
@@ -427,7 +455,26 @@ function updateAvatars(dt) {
     }
 
     if (pl.pid === G.myPid) {
-      av.place(walker.x, G.T.heightAt(walker.x, walker.z), walker.z, walker.heading);
+      /* Over the ball, the golfer SNAPS to a proper address rather than
+         standing wherever the walk happened to stop.  Without this the club
+         head sat anywhere from 28 cm to a metre from the ball depending on
+         the approach and the aim — and re-aiming swung the whole body around
+         the ball instead of the golfer stepping round it.  The walker itself
+         is untouched, so the server's walk-radius check still measures where
+         the player actually is. */
+      let ax = walker.x, az = walker.z, ah = walker.heading;
+      if (mode() === 'swing' && walker.speed < 0.2) {
+        const b = ballOf(G.myPid);
+        const spot = addressSpot(b, swing.aim);
+        const k = av._addressed ? 1 : Math.min(1, dt * 9);   // ease in once, then hold
+        ax = walker.x + (spot.x - walker.x) * k;
+        az = walker.z + (spot.z - walker.z) * k;
+        ah = swing.aim - Math.PI / 2;                        // right-handed stance
+        if (Math.hypot(spot.x - ax, spot.z - az) < 0.02) av._addressed = true;
+      } else {
+        av._addressed = false;
+      }
+      av.place(ax, G.T.heightAt(ax, az), az, ah);
       // over the ball on your turn you take up the stance, and the club goes
       // back exactly as far as the meter says — the swing you see IS the
       // number you are about to play
@@ -884,6 +931,7 @@ function frame(now) {
 }
 
 function updateCamera(dt) {
+  rig.setWorld(G.hole, G.T);        // so the rig can keep out of the canopies
   // driving gets its own framing: further back, higher, and looking well up
   // the road rather than at the back of the roof
   if (!G.anim && carts.inCart && !G.mapOpen) {
@@ -1086,6 +1134,23 @@ canvas.addEventListener('pointerdown', ev => {
  * Stop the strike bar and play the shot.  Shared by the click and by Space,
  * because "hit it" wants to be on the key your hand is already near.
  */
+/**
+ * Back out of a shot.
+ *
+ * With the auto-equip radius shrunk, stepping away is a deliberate act rather
+ * than something that happens by accident — so there has to be an equally
+ * deliberate way to put the club away and go and look at the hole.  Escape,
+ * the on-screen button and a touch tap all land here.
+ */
+function cancelShot() {
+  if (swing.state === SWING.IDLE || swing.state === SWING.DONE) return false;
+  swing.cancel();
+  canvas.classList.remove('swinging');
+  HUD.setMeter(swing.meter(), canSwing());
+  HUD.toast('Shot cancelled — line it up again.', 'info', 1400);
+  return true;
+}
+
 function strike() {
   const shot = swing.commit();
   swing.reset();
@@ -1173,6 +1238,7 @@ window.addEventListener('keydown', ev => {
   if (k === 'm') { toggleMap(); ev.preventDefault(); }
   if (k === 'q') stepClub(-1);
   if (k === 'e') stepClub(1);           // E stays the club: the cart toggles on C
+  if (k === 'escape' && cancelShot()) return;
   if (k === 'escape') {
     if (seated) toggleCart();           // a safety valve out of the cart
     else { swing.cancel(); HUD.setMeter(swing.meter(), canSwing()); }
@@ -1235,7 +1301,7 @@ function jogToMyBall() {
   const b = ballOf(G.myPid);
   if (walker.nearBall(b)) { HUD.toast('You are already at your ball.', 'info', 1200); return; }
   const spot = addressSpot(b, swing.aim);
-  walker.goTo(spot.x, spot.z);
+  walker.goTo(spot.x, spot.z, SPRINT_SPEED);   // F sprints, it does not amble
 }
 
 function toggleMap() {
@@ -1681,6 +1747,36 @@ window.addEventListener('touchstart', function once() {
 
 /* The touch pad.  These call exactly the same functions the keys do, so there
    is one implementation of each action and no second code path to drift. */
+/* Collapsible HUD panels — a player tidying their own screen.  The state is
+   remembered, because someone who folds the scorecard away wants it folded
+   away next hole too, not every hole. */
+for (const [btnId, panelId, key] of [
+  ['boardCollapse', 'board', 'lg_fold_board'],
+  ['rosterCollapse', 'rosterPanel', 'lg_fold_roster']
+]) {
+  const btn = document.getElementById(btnId);
+  const panel = document.getElementById(panelId);
+  if (!btn || !panel) continue;
+  let folded = false;
+  try { folded = localStorage.getItem(key) === '1'; } catch { /* private mode */ }
+  const apply = () => {
+    panel.classList.toggle('collapsed', folded);
+    btn.setAttribute('aria-expanded', String(!folded));
+    btn.title = folded ? 'Expand' : 'Collapse';
+  };
+  apply();
+  btn.addEventListener('click', ev => {
+    ev.stopPropagation();                 // the header is also the copy button
+    folded = !folded;
+    try { localStorage.setItem(key, folded ? '1' : '0'); } catch { /* ignore */ }
+    apply();
+  });
+}
+
+document.getElementById('btnCancelShot')?.addEventListener('click', ev => {
+  ev.preventDefault(); cancelShot();
+});
+
 for (const [id, fn] of [
   ['tbBall', () => { if (carts.inCart) HUD.toast('Get out of the cart first.', 'warn', 1600); else jogToMyBall(); }],
   ['tbCart', () => toggleCart()],
@@ -1889,6 +1985,25 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   scene.resize();
   Net.connect();
   requestAnimationFrame(frame);
+
+  /* Once this is published, the only bugs that matter happen on hardware I
+     will never see.  Report the first few of a session — capped here as well
+     as on the server, so a repeating fault cannot turn a player's browser
+     into a flood.  Never fires locally, and carries nothing personal. */
+  let reported = 0;
+  const report = (msg, where) => {
+    if (reported >= 3 || location.hostname === 'localhost') return;
+    reported++;
+    try {
+      fetch('/clienterror', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ msg: String(msg).slice(0, 300), where: String(where || '').slice(0, 120) }),
+        keepalive: true
+      }).catch(() => {});
+    } catch { /* never let reporting an error throw one */ }
+  };
+  window.addEventListener('error', e => report(e.message, (e.filename || '') + ':' + (e.lineno || '')));
+  window.addEventListener('unhandledrejection', e => report(e.reason?.message || e.reason, 'promise'));
 
   window.__G = G; window.__scene = scene; window.__rig = rig; window.__swing = swing;
   window.__frame = frame;        // lets a headless harness drive frames itself

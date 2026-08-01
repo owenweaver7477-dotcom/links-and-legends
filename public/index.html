@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0b1210">
 <title>Links &amp; Legends — Online Golf</title>
+<meta name="description" content="Five courses, nine holes each. Play a round on your own or with up to eight friends — no sign-up, straight into the game.">
+<!-- This game travels by shared link: an invite in a chat, a portal listing.
+     Without these the preview is a grey box that reads as broken. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Links &amp; Legends">
+<meta property="og:title" content="Links &amp; Legends — Online Golf">
+<meta property="og:description" content="Five courses, nine holes each. Play on your own or with up to eight friends. No sign-up.">
+<meta property="og:image" content="/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Links &amp; Legends — Online Golf">
+<meta name="twitter:description" content="Five courses, nine holes. Play solo or with friends — no sign-up.">
+<meta name="twitter:image" content="/og.png">
 <link rel="stylesheet" href="/css/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>⛳</text></svg>">
 </head>
@@ -43,13 +57,20 @@
 
   <!-- scorecard -->
   <div class="panel board" id="board">
-    <div class="board-head"><h4>Scorecard</h4><button class="roomtag" id="boardRoom" title="Copy the invite link">—</button></div>
+    <div class="board-head">
+      <button class="collapse" id="boardCollapse" title="Collapse the scorecard" aria-expanded="true">▾</button>
+      <h4>Scorecard</h4>
+      <button class="roomtag" id="boardRoom" title="Copy the invite link">—</button>
+    </div>
     <div id="boardRows"></div>
   </div>
 
   <!-- live roster: who is where -->
   <div class="panel roster" id="rosterPanel">
-    <div class="board-head"><h4>On the course</h4></div>
+    <div class="board-head">
+      <button class="collapse" id="rosterCollapse" title="Collapse" aria-expanded="true">▾</button>
+      <h4>On the course</h4>
+    </div>
     <div id="rosterList"></div>
   </div>
 
@@ -103,6 +124,8 @@
       <div class="m-face" id="mFace"><div class="m-face-zone"></div><div class="m-face-dot" id="mFaceDot"></div></div>
       <div class="m-label" id="mLabel">Drag down to take the club back</div>
     </div>
+
+    <button class="cancelshot" id="btnCancelShot" title="Back out of this shot (Esc)">✕<span>Cancel</span></button>
 
     <div class="aimsel">
       <button class="cbtn" id="aimL" title="Aim left (←)">◄</button>

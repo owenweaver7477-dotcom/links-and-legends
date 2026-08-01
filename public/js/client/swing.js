@@ -30,7 +30,11 @@ export const SWING = {
 
 const BACKSWING_PX = 190;      // full power drag length
 const MAX_OVER = 1.12;         // you can overswing this far
-const FACE_MAX = 9.5;          // degrees of face angle at maximum miss
+const FACE_MAX = 7.4;          // degrees of face angle at maximum miss
+// A dead-centre band that actually forgives: inside this fraction of the
+// bar the strike counts as pure, so a good stop is rewarded rather than
+// merely being less bad.  Widened again on the fairway (see PURE_BAND).
+const PURE_BASE = 0.10;
 const SHAPE_MAX = 7.0;         // degrees available from the backswing path
 const SHAPE_GAIN = 2.6;        // how fast path angle becomes shape
 
@@ -38,14 +42,29 @@ const SHAPE_GAIN = 2.6;        // how fast path angle becomes shape
    One "sweep" is a full there-and-back, so 1.0 means the marker crosses the
    middle twice a second. */
 export const LIE_TEMPO = {
-  tee: 1.15, fairway: 1.15, path: 1.15,
-  fringe: 1.05, green: 0.8,          // putting is a stroke, not a swipe
-  rough: 1.55,                       // light rough hurries you
-  deep: 2.1, waste: 2.1,             // heavy rough is a blur
-  sand: 0.62,                        // slow to time, brutal to escape
-  water: 1.15, ob: 1.55
+  // A tee shot is the one you stand over and think about, so it is the
+  // CALMEST bar on the course — it used to be as quick as a fairway shot,
+  // which made the opening stroke of every hole the twitchiest.  The rough
+  // reads at that same measured pace: you are already being punished by the
+  // lie, and doubling that with an unreadable bar was the difficulty spike.
+  tee: 0.78, rough: 0.78,
+  fairway: 1.05, path: 1.05,         // the quick one, as it was
+  fringe: 0.95, green: 0.72,         // putting is a stroke, not a swipe
+  deep: 1.35, waste: 1.35,           // heavy rough still hurries you
+  sand: 0.55,                        // slow to time, brutal to escape
+  water: 1.05, ob: 1.35
 };
-export const lieTempo = id => LIE_TEMPO[id] ?? 1.15;
+export const lieTempo = id => LIE_TEMPO[id] ?? 1.05;
+
+/* How wide the "pure" band is, as a fraction of half the bar.  The fairway is
+   deliberately the most forgiving surface in the game — it is the reward for
+   hitting the fairway in the first place, and it is where most shots are
+   played from, so it sets the felt difficulty of the whole round. */
+export const PURE_BAND = {
+  fairway: 0.26, tee: 0.22, fringe: 0.20, green: 0.18,
+  rough: 0.16, deep: 0.12, waste: 0.12, sand: 0.20, path: 0.22
+};
+export const pureBand = id => PURE_BAND[id] ?? PURE_BASE;
 
 export class SwingController {
   constructor() {
@@ -154,14 +173,19 @@ export class SwingController {
     if (this.state !== SWING.ACCURACY) return null;
     const power = this.peak;
 
-    // where you stopped the marker IS the face: dead centre flushes it,
-    // the edges are a full open or shut face
-    const timing = clamp(this.sweep, -1, 1);
+    // Where you stopped the marker IS the face — but the middle of the bar is
+    // a BAND, not a point.  Inside it the strike is flush and the face error
+    // is zero; outside it the error ramps from the edge of the band, so a
+    // near-miss is a small miss rather than a cliff.
+    const raw = clamp(this.sweep, -1, 1);
+    const band = pureBand(this.lie);
+    const over = Math.max(0, Math.abs(raw) - band) / Math.max(1e-6, 1 - band);
+    const timing = Math.sign(raw) * over;
     const error = timing * FACE_MAX;
 
     // overswinging past full costs accuracy — the face gets harder to control
-    const over = Math.max(0, power - 1);
-    const face = clamp((this.shapeDeg + error) * (1 + over * 2.5),
+    const overswing = Math.max(0, power - 1);
+    const face = clamp((this.shapeDeg + error) * (1 + overswing * 2.5),
       -FACE_MAX * 1.8, FACE_MAX * 1.8);
 
     // a mistimed strike is also a thinner one: caught low on the face, it
@@ -175,7 +199,8 @@ export class SwingController {
       attackDeg: this.attackDeg,
       aim: this.aim,
       clubKey: this.clubKey,
-      timing: Math.abs(timing)          // for the strike call-out
+      timing: Math.abs(timing),         // 0 = flush, 1 = worst
+      pure: Math.abs(raw) <= band       // did it land in the band?
     };
     this.state = SWING.DONE;
     this.result = shot;
@@ -199,7 +224,8 @@ export class SwingController {
       over: Math.max(0, this.peak - 1),
       sweep: this.sweep,
       tempo: this.tempo,
-      lie: this.lie
+      lie: this.lie,
+      band: pureBand(this.lie)
     };
   }
 }

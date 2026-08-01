@@ -208,9 +208,20 @@ export class CameraRig {
       px += Math.sin(dt * 977 + this.shake * 41) * s;
       py += Math.cos(dt * 811 + this.shake * 57) * s;
     }
+    // Do not let a canopy swallow the shot.  The hole and terrain are handed
+    // to the rig each frame by the game; without them this is a no-op, so the
+    // menu backdrop and the map camera are unaffected.
+    if (this.hole) {
+      const clear = resolveCameraOcclusion(
+        this.cam, this.look, { x: px, y: py, z: pz }, this.hole, this.terrain);
+      px = clear.x; py = clear.y; pz = clear.z;
+    }
     this.cam.position.set(px, py, pz);
     this.cam.lookAt(this.look);
   }
+
+  /** The game supplies the world each frame so the rig can avoid the trees. */
+  setWorld(hole, terrain) { this.hole = hole; this.terrain = terrain; }
 
   snap() { this.snapNext = true; }
   kick(amount) { this.shake = Math.min(1.2, this.shake + amount); }
@@ -218,6 +229,51 @@ export class CameraRig {
 }
 
 /** Fit an orthographic camera to look straight down at the whole hole. */
+/**
+ * Keep the camera out of the trees.
+ *
+ * There was no occlusion handling at all, which is why a canopy could fill the
+ * screen with no trunk anywhere near the view: the camera simply flew INSIDE
+ * the leaves.  A tree's visual canopy is a blob roughly 0.55 of its height in
+ * radius, centred about 0.72 of the way up — that is the bound to respect, not
+ * the thin trunk the ball collides with.  If the desired camera position sits
+ * inside one, slide it back along the ray toward whatever it is looking at
+ * until it is clear, so the shot stays framed instead of going green.
+ *
+ * @param cam     the camera about to be placed
+ * @param look    the point it is looking at (the golfer or the ball)
+ * @param want    where it would like to be
+ * @param hole    hole data, for the tree list
+ * @param terrain for ground height under each tree
+ */
+export function resolveCameraOcclusion(cam, look, want, hole, terrain) {
+  if (!hole || !hole.trees || !hole.trees.length) return want;
+  const dx = want.x - look.x, dy = want.y - look.y, dz = want.z - look.z;
+  const dist = Math.hypot(dx, dz) || 1e-6;
+  let closest = 1;                       // fraction of the way out we may sit
+
+  for (const t of hole.trees) {
+    // cheap reject: only trees whose canopy could reach the camera at all
+    const R = t.r * 1.02 + 0.45;         // canopy radius + a little clearance
+    const dxt = t.x - want.x, dzt = t.z - want.z;
+    if (Math.abs(dxt) > R + dist || Math.abs(dzt) > R + dist) continue;
+
+    const groundY = terrain ? terrain.heightAt(t.x, t.z) : 0;
+    const cy = groundY + t.h * 0.72;     // canopy centre, matching the mesh
+
+    // march back along the ray and take the earliest fraction that is clear
+    for (let f = 1; f > 0.25; f -= 0.06) {
+      const px = look.x + dx * f, py = look.y + dy * f, pz = look.z + dz * f;
+      const d2 = (px - t.x) ** 2 + (py - cy) ** 2 * 0.55 + (pz - t.z) ** 2;
+      if (d2 > R * R) { if (f < closest) closest = f; break; }
+    }
+  }
+  if (closest >= 1) return want;
+  // never jam the camera into the golfer's back
+  const f = Math.max(0.28, closest);
+  return { x: look.x + dx * f, y: look.y + dy * f, z: look.z + dz * f };
+}
+
 export function fitMapCamera(cam, hole, aspect) {
   const b = hole.bounds;
   const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;

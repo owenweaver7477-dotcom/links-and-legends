@@ -12,6 +12,9 @@
 import path from 'node:path';
 import http from 'node:http';
 import os from 'node:os';
+import fs from 'node:fs';
+import zlib from 'node:zlib';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
@@ -52,24 +55,188 @@ const COURSES = allCourses();
 calibrateCarries();
 loadProfiles();
 
-// No max-age: the client is a handful of small files and an ETag revalidation
-// is cheap, whereas a stale module after a deploy is a genuinely confusing bug.
-app.use(express.static(path.join(__dirname, 'public'), { etag: true, maxAge: 0 }));
+/* ═══════════════════════════════════════════════════════════════ assets ═══
+   Everything under public/ is read, hashed and COMPRESSED once at boot, then
+   served from memory.  Compressing per request would burn CPU on a free-tier
+   box for a file that never changes; doing it here costs a few hundred
+   milliseconds at startup and turns 672 KB of three.js into about 150 KB on
+   the wire — which on a phone is the difference between a game that loads and
+   one the player abandons.
+   ═══════════════════════════════════════════════════════════════════════ */
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json'
+};
+// text compresses; images and fonts are already compressed and would only grow
+const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.svg', '.webmanifest']);
+const assets = new Map();          // '/js/client/main.js' -> { body, br, gz, type, etag }
+
+function loadAssets(dir, prefix = '') {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) { loadAssets(full, prefix + '/' + entry.name); continue; }
+    const ext = path.extname(entry.name).toLowerCase();
+    const body = fs.readFileSync(full);
+    const rec = {
+      body,
+      type: MIME[ext] || 'application/octet-stream',
+      etag: '"' + crypto.createHash('sha1').update(body).digest('base64').slice(0, 22) + '"'
+    };
+    if (COMPRESSIBLE.has(ext) && body.length > 512) {
+      rec.gz = zlib.gzipSync(body, { level: 9 });
+      rec.br = zlib.brotliCompressSync(body, {
+        params: {
+          [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+          [zlib.constants.BROTLI_PARAM_SIZE_HINT]: body.length
+        }
+      });
+    }
+    assets.set(prefix + '/' + entry.name, rec);
+  }
+}
+loadAssets(path.join(__dirname, 'public'));
+
+/* In development the files on disk are the truth: reading them at boot only
+   is right for production but means an edit does not show up until a restart.
+   NODE_ENV=production (what Render sets) keeps the fast in-memory path. */
+const DEV = process.env.NODE_ENV !== 'production';
+if (DEV) console.log('  dev mode: assets re-read from disk, browser caching off');
+
+/** Serve one precompressed asset, honouring the client's encodings and ETag. */
+function sendAsset(req, res, rec) {
+  res.setHeader('Content-Type', rec.type);
+  res.setHeader('ETag', rec.etag);
+  res.setHeader('Vary', 'Accept-Encoding');
+  // The HTML is the only file whose URL never changes but whose content must
+  // be picked up the instant a deploy lands, so it always revalidates.  The
+  // rest may sit in cache briefly; the ETag makes the recheck a 304.
+  // In dev nothing may be cached by the browser either, or an edit sits behind
+  // a ten-minute max-age and you debug a file you are no longer running.
+  res.setHeader('Cache-Control', DEV ? 'no-store'
+    : rec.type.startsWith('text/html') ? 'no-cache'
+    : 'public, max-age=600, must-revalidate');
+
+  if (req.headers['if-none-match'] === rec.etag) return res.status(304).end();
+
+  const accept = String(req.headers['accept-encoding'] || '');
+  if (rec.br && /\bbr\b/.test(accept)) {
+    res.setHeader('Content-Encoding', 'br');
+    return res.end(req.method === 'HEAD' ? undefined : rec.br);
+  }
+  if (rec.gz && /\bgzip\b/.test(accept)) {
+    res.setHeader('Content-Encoding', 'gzip');
+    return res.end(req.method === 'HEAD' ? undefined : rec.gz);
+  }
+  res.end(req.method === 'HEAD' ? undefined : rec.body);
+}
+
+/* In development the files on disk are the truth: reading them at boot only
+   is right for production but means an edit does not show up until a restart,
+   which is a genuinely confusing way to lose ten minutes.  NODE_ENV=production
+   (what Render sets) keeps the fast in-memory path. */
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  // Security headers a published game should carry.  Note the DELIBERATE
+  // absence of X-Frame-Options and the wide frame-ancestors: this game is
+  // meant to be embedded by portals, and locking that down would break the
+  // very thing it is published for.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+    "script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors *");
+  const key = req.path === '/' ? '/index.html' : req.path;
+  if (DEV) {                       // pick up edits without a restart
+    try {
+      const full = path.join(__dirname, 'public', key);
+      if (full.startsWith(path.join(__dirname, 'public')) && fs.existsSync(full)
+          && fs.statSync(full).isFile()) {
+        const ext = path.extname(key).toLowerCase();
+        const body = fs.readFileSync(full);
+        return sendAsset(req, res, {
+          body, type: MIME[ext] || 'application/octet-stream',
+          etag: '"' + crypto.createHash('sha1').update(body).digest('base64').slice(0, 22) + '"'
+        });
+      }
+    } catch { /* fall through to the cached copy */ }
+  }
+  const rec = assets.get(key);
+  if (!rec) return next();
+  sendAsset(req, res, rec);
+});
 app.get('/healthz', (_req, res) => res.json({
   ok: true, rooms: rooms.size,
   players: [...rooms.values()].reduce((n, r) => n + r.players.length, 0),
   courses: COURSES.map(c => ({ id: c.id, name: c.name, par: c.par, yards: c.yards })),
   uptime: Math.round(process.uptime())
 }));
-app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+/**
+ * A field-error beacon.
+ *
+ * Once this is published the only bugs that matter are the ones happening on
+ * hardware I will never see.  The client posts anything it throws here and it
+ * lands in the server log, rate-limited hard so it can never become a way to
+ * flood the box.  Body is capped by express, the message is truncated, and
+ * nothing is stored or forwarded anywhere.
+ */
+const errSeen = new Map();          // ip -> { n, at }
+app.post('/clienterror', express.json({ limit: '4kb' }), (req, res) => {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  const rec = errSeen.get(ip) || { n: 0, at: now };
+  if (now - rec.at > 60000) { rec.n = 0; rec.at = now; }
+  rec.n++; errSeen.set(ip, rec);
+  if (errSeen.size > 500) errSeen.clear();          // never grows without bound
+  if (rec.n <= 5) {
+    const d = req.body || {};
+    console.error('  CLIENT —', String(d.msg || '').slice(0, 300),
+      '|', String(d.where || '').slice(0, 120),
+      '|', String(req.headers['user-agent'] || '').slice(0, 90));
+  }
+  res.status(204).end();
+});
+
+app.get('*', (req, res) => {
+  const rec = assets.get('/index.html');
+  if (rec) return sendAsset(req, res, rec);
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 /* ------------------------------------------------------------------- rooms */
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const EMPTY_ROOM_TTL = 20 * 60 * 1000;
 const HOLE_SUMMARY_MS = 20000;
 
+/* A published game is a public one, and every visitor who presses Play Now
+   creates a room.  The reaper collects idle ones after 20 minutes, but that
+   is a floor, not a ceiling: this is the ceiling.  Well above any plausible
+   real load, and low enough that a script cannot exhaust the box. */
+const MAX_ROOMS = 600;
+
 const rooms = new Map();
 const sockets = new Map();          // socket.id -> {code, pid}
+
+/**
+ * Make room for a new game when the table is full: drop the emptiest, oldest
+ * room first.  Returns false only if every single room is genuinely occupied,
+ * which is the one case where refusing is the honest answer.
+ */
+function evictIfFull() {
+  if (rooms.size < MAX_ROOMS) return true;
+  let worst = null;
+  for (const [code, r] of rooms) {
+    if (r.players.some(p => p.connected)) continue;        // never evict a live game
+    const idle = r.emptySince ?? 0;
+    if (!worst || idle < worst.idle) worst = { code, idle };
+  }
+  if (!worst) return false;
+  const doomed = rooms.get(worst.code);
+  clearTimeout(doomed?.summaryTimer);
+  rooms.delete(worst.code);
+  return true;
+}
 
 const makeCode = () => {
   for (let i = 0; i < 500; i++) {
@@ -389,6 +556,9 @@ io.on('connection', socket => {
     const reply = typeof ack === 'function' ? ack : () => {};
     const pid = cleanPid(data?.pid);
     if (!pid) return reply({ ok: false, error: 'Bad client id — refresh the page.' });
+    if (!evictIfFull()) {
+      return reply({ ok: false, error: 'The course is completely full right now — try again in a minute.' });
+    }
     unbind();
     const room = createRoom(makeCode(), data?.courseId);
     rollWind(room);
