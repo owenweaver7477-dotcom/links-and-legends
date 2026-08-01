@@ -404,6 +404,9 @@ function finishHole(room) {
       gir: !!p.holeGir
     });
     p.afterBad = p.scores[room.holeIndex] > h.par;    // Grit steadies the next tee
+    // coins are banked hole by hole, so the counter should move hole by hole
+    const sock = p.socketId && io.sockets.sockets.get(p.socketId);
+    if (sock) sock.emit('profile', publicProfile(p.pid));
   }
   room.state = 'holeover';
   room.turnPid = null;
@@ -731,6 +734,16 @@ io.on('connection', socket => {
    * and pressing C, which is what they would do anyway, so there is nothing
    * here that can deadlock or leak.
    */
+  /* Your career before you have joined anything.
+     The profile used to arrive only when a socket bound to a room, so the
+     title screen showed 0 coins to a returning player with thousands — you
+     could not see your own credits until you were already playing. */
+  socket.on('profile:me', (d) => {
+    const pid = cleanPid(d?.pid);
+    if (!pid) return;
+    socket.emit('profile', publicProfile(pid));
+  });
+
   socket.on('cart:hail', () => {
     const ref = sockets.get(socket.id); if (!ref) return;
     const room = rooms.get(ref.code); if (!room || room.state !== 'playing') return;

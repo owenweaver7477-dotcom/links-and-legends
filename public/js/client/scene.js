@@ -30,7 +30,7 @@ export class GolfScene {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 1.05;   // the key light carries it now
     // Shadow maps are the single most expensive thing here — a whole extra
     // pass over every caster — so they are OFF by default.  Avatars and balls
     // carry blob shadows instead, which cost one transparent quad each.
@@ -128,11 +128,17 @@ export class GolfScene {
     g.add(hemi);
 
     const sunDir = dirFromAngles(bio.sunElev, bio.sunAzim);
-    const sun = new THREE.DirectionalLight(new THREE.Color(P.sun), 1.55);
+    // a brighter key against a slightly cooler fill reads as sunlight rather
+// than as a uniformly lit model
+    const sun = new THREE.DirectionalLight(new THREE.Color(P.sun), 1.78);
     sun.position.set(sunDir.x * 600, sunDir.y * 600, sunDir.z * 600);
     sun.castShadow = this.quality === 'quality';
-    sun.shadow.mapSize.set(1536, 1536);
-    const SH = 70;                       // metres of shadow coverage around the camera
+    // 2048 over 1536: the shadow frustum covers 70 m, so this is the
+    // difference between a golfer's shadow having edges and having a smear.
+    sun.shadow.mapSize.set(2048, 2048);
+    const SH = 52;                       // metres of shadow coverage around the camera
+    // tighter than the old 70: the same texels over less ground is a sharper
+    // shadow everywhere you are actually looking
     sun.shadow.camera.left = -SH; sun.shadow.camera.right = SH;
     sun.shadow.camera.top = SH; sun.shadow.camera.bottom = -SH;
     sun.shadow.camera.near = 1; sun.shadow.camera.far = 420;

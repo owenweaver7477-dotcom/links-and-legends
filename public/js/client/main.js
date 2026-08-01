@@ -1723,6 +1723,7 @@ function renderClubhouse() {
     : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true }));
   HUD.renderBag(bagDraft, toggleClubInBag);
   HUD.setHomeCoins(prof?.coins ?? 0);
+  HUD.setCoins(prof?.coins ?? 0);
 }
 
 function renderLobbyAll(r) {

@@ -24,6 +24,7 @@ for (const id of [
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
+  'coinHud', 'coinHudN',
   'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
@@ -34,8 +35,14 @@ export const HUD = { el };
 /* ------------------------------------------------------------------ units */
 HUD.metric = false;
 try { HUD.metric = localStorage.getItem('lg_metric') === '1'; } catch { /* private mode */ }
-HUD.quality = 'perf';
-try { HUD.quality = localStorage.getItem('lg_quality') || 'perf'; } catch { /* private mode */ }
+/* Sun shadows ON by default.  This defaulted to the blob-shadow path, which
+   was the cautious choice before there was any measurement — a full course
+   now renders in about 0.2 ms of frame CPU with 51 draw calls, so the machine
+   that cannot afford a shadow map is the exception rather than the rule.  The
+   auto-downgrade in main.js watches real frame times and eases back to blobs
+   once, saying so, if this turns out to be wrong on a given machine. */
+HUD.quality = 'quality';
+try { HUD.quality = localStorage.getItem('lg_quality') || 'quality'; } catch { /* private mode */ }
 HUD.setQuality = q => {
   HUD.quality = q === 'quality' ? 'quality' : 'perf';
   try { localStorage.setItem('lg_quality', HUD.quality); } catch { /* ignore */ }
@@ -65,6 +72,19 @@ HUD.show = which => {
 };
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
 HUD.setHomeCoins = n => { el.homeCoins.textContent = '🪙 ' + (n || 0).toLocaleString(); };
+
+/** The in-round balance.  Bumps when it goes UP, so a payout is felt. */
+let lastCoins = null;
+HUD.setCoins = n => {
+  const v = n || 0;
+  el.coinHudN.textContent = v.toLocaleString();
+  if (lastCoins != null && v > lastCoins) {
+    el.coinHud.classList.remove('bump');
+    void el.coinHud.offsetWidth;
+    el.coinHud.classList.add('bump');
+  }
+  lastCoins = v;
+};
 HUD.homeError = msg => { el.homeErr.textContent = msg || ''; };
 
 /* ----------------------------------------------------------------- toasts */

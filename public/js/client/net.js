@@ -33,6 +33,7 @@ Net.connect = () => {
   Net.socket.on('disconnect', () => fire('disconnect'));
   Net.socket.on('room:state', s => fire('state', s));
   Net.socket.on('players:pos', d => fire('pos', d));
+  Net.socket.on('connect', () => Net.fetchProfile());
   Net.socket.on('game:started', d => fire('started', d));
   Net.socket.on('game:shot', d => fire('shot', d));
   Net.socket.on('game:hole', d => fire('hole', d));
@@ -71,6 +72,11 @@ Net.start = () => Net.socket.emit('game:start');
    way to do it: the server's disconnect path already releases the seat, hands
    the room on if you were the host, and keeps your scorecard if the round is
    live — so there is no second teardown path to get out of step. */
+/** Ask the server for our career, without needing to be in a room. */
+Net.fetchProfile = () => {
+  try { Net.socket?.emit('profile:me', { pid: Net.pid }); } catch { /* not up yet */ }
+};
+
 Net.leave = () => {
   try { Net.socket?.disconnect(); } catch { /* already gone */ }
   Net.code = null;

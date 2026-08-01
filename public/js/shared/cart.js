@@ -33,22 +33,21 @@ export const SEATS = {
 };
 
 /* --------------------------------------------------------------- motion
-   A golf cart is not a go-kart.  A real one is governed to about 24 km/h and a
-   tuned one tops out around 35, which is where these numbers now sit: 6.1 m/s
-   stock, and 9.72 m/s — exactly 35 km/h — with the cart tune and Pitstop at
-   Legend.  It was 22 m/s (79 km/h) before, which flattered the course scale
-   and made every drive across a fairway feel like a getaway. */
+   BASE_SPEED_KMH is the number to change, and it is what a cart with nothing
+   bought actually does.  It was derived the wrong way round before: 24 was
+   the FULLY UPGRADED top, which left a stock cart at 15 km/h — most players
+   own no upgrades, so most players got the slowest cart in the game.  Now 24
+   is the floor everyone gets, and the shop takes it to 31 rather than being
+   the price of admission to a usable speed. */
 export const KMH = 3.6;                        // m/s -> km/h, used all over the HUD
-export const TOP_SPEED_KMH = 24;               // fully upgraded, on a flat fairway
-// 24 km/h flat out with everything bought, ~15 stock: a real golf cart is
-// governed to about this, and at 35 it crossed a fairway faster than the
-// course reads, which is what made it feel arcade rather than plausible.
-export const MAX_BOOST = 1.6;                  // cart tune x Pitstop at Legend
-export const MAX_FWD = TOP_SPEED_KMH / KMH / MAX_BOOST;   // 6.08 m/s stock
-export const MAX_REV = 1.6;       // reverse is a crawl, as it should be
-export const A_DRIVE = 3.4;       // m/s² at full pull — see the heavy-start ramp below
-export const A_DRIVE_REV = 1.2;
-export const A_BRAKE = 5.5;       // about 1.8 s from flat out
+export const BASE_SPEED_KMH = 24;              // stock, on a flat fairway
+export const MAX_BOOST = 1.3;                  // cart tune x Pitstop at Legend
+export const TOP_SPEED_KMH = BASE_SPEED_KMH * MAX_BOOST;   // 31.2 fully upgraded
+export const MAX_FWD = BASE_SPEED_KMH / KMH;   // 6.67 m/s stock
+export const MAX_REV = 1.8;       // reverse is a crawl, as it should be
+export const A_DRIVE = 3.9;       // m/s² at full pull — see the heavy-start ramp below
+export const A_DRIVE_REV = 1.3;
+export const A_BRAKE = 6.0;       // about 1.8 s from flat out
 export const A_HAND = 6.0;        // handbrake
 export const ENGINE_BRAKE = 0.75; // coasting with the pedal up. Deliberately
                                   // weaker than gravity on anything above the

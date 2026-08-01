@@ -528,7 +528,15 @@ button.roomtag:active { transform: translateY(1px); }
    your golfer standing on it.  The menu is a column pinned left over a scrim
    that fades out toward the course, exactly like a game's title screen —
    because it is one. */
-.screen.home { overflow: hidden; background: none; display: block; }
+/* A fallback landscape UNDER the live course.  The 3D tee is the real
+   backdrop, but `background: none` meant that if it had not built yet — or
+   could not, on a machine without WebGL — the whole menu sat on black.  This
+   is the floor: a dusk sky over hills, in the game's own palette, always
+   painted, and simply hidden behind the course when the course is there. */
+.screen.home { overflow: hidden; display: block;
+  background:
+    radial-gradient(120% 80% at 72% 62%, rgba(255,214,150,.20), transparent 62%),
+    linear-gradient(180deg, #1a3654 0%, #2d5570 34%, #3f7a5a 56%, #2b6540 74%, #1d4a2c 100%); }
 .home-scrim { position: absolute; inset: 0; pointer-events: none;
   background:
     linear-gradient(90deg, rgba(4,9,7,.94) 0%, rgba(4,9,7,.86) 24%, rgba(4,9,7,.38) 52%, rgba(4,9,7,.04) 74%),
@@ -979,3 +987,19 @@ body.playing .quitbtn { display: block; }
 .quitbtn:hover { background: rgba(64,20,18,.9); color: #ffd0c6; }
 .quitbtn.confirm { color: #fff; background: rgba(150,36,30,.92); border-color: #ff8a72; }
 @media (max-width: 560px) { .quitbtn { bottom: auto; top: 8px; right: 8px; padding: 6px 10px; font-size: 10.5px; } }
+
+/* your balance while you play — it moves hole by hole, so it is worth showing */
+.coinhud { position: absolute; right: 14px; bottom: 52px; z-index: 8; display: none;
+  padding: 6px 12px 6px 10px; border-radius: 999px; font-size: 13px; font-weight: 800;
+  color: #ffd94a; background: rgba(10,18,15,.8); border: 1px solid rgba(255,217,74,.28);
+  backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  font-variant-numeric: tabular-nums; }
+.coinhud::before { content: '🪙 '; }
+body.playing .coinhud { display: block; }
+.coinhud.bump { animation: coinBump .55s ease-out; }
+@keyframes coinBump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.18); color: #fff2a8; }
+  100% { transform: scale(1); }
+}
+@media (max-width: 560px) { .coinhud { bottom: auto; top: 40px; right: 8px; font-size: 11.5px; padding: 4px 9px 4px 8px; } }
