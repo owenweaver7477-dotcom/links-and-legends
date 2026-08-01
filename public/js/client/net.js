@@ -66,6 +66,16 @@ Net.move = (x, z, rot, moving, cart) => Net.socket.emit('player:move', { x, z, r
 Net.hail = () => Net.socket.emit('cart:hail');
 Net.buy = item => Net.socket.emit('shop:buy', { item });
 Net.start = () => Net.socket.emit('game:start');
+
+/* Leave the room you are in.  Dropping and remaking the socket is the honest
+   way to do it: the server's disconnect path already releases the seat, hands
+   the room on if you were the host, and keeps your scorecard if the round is
+   live — so there is no second teardown path to get out of step. */
+Net.leave = () => {
+  try { Net.socket?.disconnect(); } catch { /* already gone */ }
+  Net.code = null;
+  setTimeout(() => { try { Net.socket?.connect(); } catch { /* ignore */ } }, 120);
+};
 Net.next = () => Net.socket.emit('game:next');
 Net.again = () => Net.socket.emit('game:again');
 Net.lobby = () => Net.socket.emit('room:lobby');

@@ -151,6 +151,9 @@
     <button class="tbtn" id="tbMap" title="Hole map">🗺️<span>Map</span></button>
   </div>
 
+  <!-- There was no way to leave a round at all once you were in one. -->
+  <button class="quitbtn" id="btnQuitRound" title="Leave this round (back to the menu)">✕ Leave</button>
+
   <div class="perfhud" id="perfHud" hidden></div>
   <div class="shotinfo" id="shotinfo"></div>
   <div class="toasts" id="toasts"></div>
@@ -188,6 +191,13 @@
     <!-- Somebody who has just clicked a thumbnail has no friends here and no
          room code.  One button puts them on the first tee; everything to do
          with other people is secondary and folded away. -->
+    <!-- Play now goes straight to the tee, so the course has to be choosable
+         HERE — otherwise a solo player can only ever play the first one. -->
+    <div class="coursepick">
+      <span class="cp-label">Course</span>
+      <div class="cp-row" id="homeCourses"></div>
+    </div>
+
     <button class="btn primary huge" id="btnPlay">Play now<span class="huge-sub">straight onto the first tee</span></button>
 
     <details class="friends" id="friendsBox">

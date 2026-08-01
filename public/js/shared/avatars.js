@@ -58,8 +58,10 @@ export function normaliseLook(look, seedIndex = 0) {
 }
 
 /** How close you have to be to the ball before you may play it. */
-export const SHOT_RADIUS = 1.5;          // metres — see main.js: paired
-                                        // with an explicit way out of a shot
+export const SHOT_RADIUS = 4.0;          // metres.  1.5 was too tight to walk
+                                        // into comfortably; 4 picks the club up
+                                        // when you have genuinely arrived, and
+                                        // the Cancel control is the way out.
 /* Human speeds, and they matter more than they look.
    These were 4.6 and 9.2 m/s — 16 and 33 km/h, the second faster than the
    world 100 m record — which is why a 400 metre hole felt like nothing and

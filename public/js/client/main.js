@@ -172,6 +172,11 @@ function addressSpot(ball, aim) {
  * course that is ALREADY built — the title screen doubles as a preload.
  */
 const menu = { key: null, av: null, t: 0 };
+/* Which course the title screen is showing and Play now will start.
+   Remembered, so someone who likes the links does not re-pick it. */
+let pickedCourse = COURSE_ORDER[0];
+try { const c = localStorage.getItem('lg_course');
+      if (c && COURSE_ORDER.includes(c)) pickedCourse = c; } catch { /* private mode */ }
 
 function menuBackdrop() {
   if (G.joined || menu.key) return;
@@ -181,7 +186,7 @@ function menuBackdrop() {
     scene.actorGroup.remove(av.root); av.dispose();
     G.avatars.delete(pid); G.remote.delete(pid);
   }
-  const courseId = COURSE_ORDER[0];
+  const courseId = pickedCourse;
   G.course = getCourse(courseId);
   G.hole = G.course.holes[0];
   G.bio = BIOMES[courseId];
@@ -1143,11 +1148,34 @@ canvas.addEventListener('pointerdown', ev => {
  * the on-screen button and a touch tap all land here.
  */
 function cancelShot() {
-  if (swing.state === SWING.IDLE || swing.state === SWING.DONE) return false;
+  if (G.screen !== 'game') return false;
+
+  // Mid-swing: throw the swing away but stay over the ball.
+  if (swing.state !== SWING.IDLE && swing.state !== SWING.DONE) {
+    swing.cancel();
+    canvas.classList.remove('swinging');
+    HUD.setMeter(swing.meter(), canSwing());
+    HUD.toast('Swing cancelled — line it up again.', 'info', 1400);
+    return true;
+  }
+
+  /* Standing over the ball with no swing started: this is the case that did
+     nothing at all, which is what "the cancel button doesn't work" means.
+     Backing out has to actually back you OUT — step clear of the ball so the
+     club goes away and the camera is yours again.  Stepping back down the
+     target line keeps the hole in front of you. */
+  if (!canSwing()) return false;
+  const b = ballOf(G.myPid);
+  const back = SHOT_RADIUS + 1.6;
+  const x = b.x - Math.sin(swing.aim) * back;
+  const z = b.z - Math.cos(swing.aim) * back;
+  walker.cancelAuto();
+  walker.reset(x, z, swing.aim);
   swing.cancel();
-  canvas.classList.remove('swinging');
-  HUD.setMeter(swing.meter(), canSwing());
-  HUD.toast('Shot cancelled — line it up again.', 'info', 1400);
+  swing.enabled = false;
+  HUD.showPlaybar(false);
+  HUD.setMeter(swing.meter(), false);
+  HUD.toast('Stepped away — walk back in (F) when you are ready.', 'info', 2200);
   return true;
 }
 
@@ -1773,6 +1801,35 @@ for (const [btnId, panelId, key] of [
   });
 }
 
+/* Leaving a round.  Two taps, because a mis-click that dumps you out of a
+   hole you are six shots into would be worse than no button at all.  Your
+   coins are already banked hole by hole, so nothing earned is lost. */
+const quitBtn = document.getElementById('btnQuitRound');
+if (quitBtn) {
+  let armed = 0;
+  quitBtn.addEventListener('click', () => {
+    const now = Date.now();
+    if (now - armed > 3000) {
+      armed = now;
+      quitBtn.classList.add('confirm');
+      quitBtn.textContent = 'Leave — tap again';
+      HUD.toast('Coins from finished holes are already saved.', 'info', 2600);
+      setTimeout(() => {
+        quitBtn.classList.remove('confirm');
+        quitBtn.textContent = '✕ Leave';
+      }, 3000);
+      return;
+    }
+    Net.leave?.();
+    G.joined = false; G.room = null; G.anim = null; G.queue.length = 0;
+    carts.clear();
+    quitBtn.classList.remove('confirm');
+    quitBtn.textContent = '✕ Leave';
+    stampRoomUrl('');
+    route();
+  });
+}
+
 document.getElementById('btnCancelShot')?.addEventListener('click', ev => {
   ev.preventDefault(); cancelShot();
 });
@@ -1839,7 +1896,7 @@ const nameValue = () => {
  * different origin, and losing a cosmetic URL must never cost the round.
  */
 function stampRoomUrl(code) {
-  try { history.replaceState(null, '', '/?room=' + code); } catch { /* embedded */ }
+  try { history.replaceState(null, '', code ? '/?room=' + code : '/'); } catch { /* embedded */ }
 }
 
 /**
@@ -1856,7 +1913,7 @@ document.getElementById('btnPlay').addEventListener('click', () => {
   btn.disabled = true;                       // a double click must not make two rooms
   HUD.show('load');
   HUD.loading('Walking to the first tee…');
-  Net.create(nameValue(), COURSE_ORDER[0], res => {
+  Net.create(nameValue(), pickedCourse, res => {
     btn.disabled = false;
     if (!res.ok) { HUD.show('home'); return HUD.homeError(res.error); }
     G.joined = true; G.myPid = res.pid; G.room = res.state;
@@ -1868,7 +1925,7 @@ document.getElementById('btnPlay').addEventListener('click', () => {
 
 document.getElementById('btnCreate').addEventListener('click', () => {
   HUD.homeError('');
-  Net.create(nameValue(), COURSE_ORDER[0], res => {
+  Net.create(nameValue(), pickedCourse, res => {
     if (!res.ok) return HUD.homeError(res.error);
     G.joined = true; G.myPid = res.pid; G.room = res.state;
     stampRoomUrl(res.code);
@@ -1958,6 +2015,33 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   lookDraft = loadLook();
   drawLookPicker();
   renderClubhouse();
+
+  /* The course strip.  Choosing one rebuilds the title-screen backdrop, so
+     the picture behind the menu IS the course you are about to play. */
+  const drawCourses = () => {
+    const row = document.getElementById('homeCourses');
+    if (!row) return;
+    row.innerHTML = '';
+    for (const c of COURSES) {
+      const b = document.createElement('button');
+      b.className = 'cpbtn' + (c.id === pickedCourse ? ' on' : '');
+      b.textContent = c.name;
+      const sub = document.createElement('small');
+      sub.textContent = `${c.region} · par ${c.par}`;
+      b.appendChild(sub);
+      b.addEventListener('click', () => {
+        if (c.id === pickedCourse) return;
+        pickedCourse = c.id;
+        try { localStorage.setItem('lg_course', c.id); } catch { /* ignore */ }
+        drawCourses();
+        clearMenuBackdrop();     // drop the old tee...
+        G.loadedKey = null;
+        menuBackdrop();          // ...and stand on the new one
+      });
+      row.appendChild(b);
+    }
+  };
+  drawCourses();
 
   // the dice: a whole outfit in one press, for people who hate picking
   document.getElementById('btnRandomLook')?.addEventListener('click', () => {

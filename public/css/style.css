@@ -948,3 +948,34 @@ body:not(.playing) .hintbar { display: none; }
   /* scorecard sits low-left, above the touch pad, and starts folded */
   .board { top: auto; bottom: 172px; left: 8px; right: auto; font-size: 10.5px; min-width: 0; max-width: 46vw; }
 }
+
+/* ═══════════ REVAMP 2: choose a course, and be able to leave ═══════════ */
+
+/* Play now skips the lobby, so the course is chosen on the title screen. */
+.coursepick { display: flex; flex-direction: column; gap: 6px; }
+.cp-label { font-size: 10px; font-weight: 800; letter-spacing: 2px;
+  text-transform: uppercase; color: #8fb69a; }
+.cp-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.cpbtn { flex: 1 1 auto; min-width: 0; padding: 8px 10px; border-radius: 11px;
+  cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 700;
+  text-align: left; line-height: 1.25; color: #cfe4d3;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+  transition: .14s; -webkit-user-select: none; user-select: none; }
+.cpbtn small { display: block; font-size: 9.5px; font-weight: 600; color: #8fa694;
+  letter-spacing: .3px; }
+.cpbtn:hover { background: rgba(255,255,255,.11); }
+.cpbtn.on { color: #fff; border-color: rgba(150,236,172,.65);
+  background: linear-gradient(180deg, rgba(76,180,102,.38), rgba(46,125,67,.26));
+  box-shadow: 0 0 14px rgba(110,220,140,.3); }
+
+/* Leaving a round.  Sits out of the way, top-right under the roster. */
+.quitbtn { position: absolute; right: 14px; bottom: 14px; z-index: 8;
+  display: none; padding: 8px 13px; border-radius: 11px; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 700; color: #ffb3a3;
+  background: rgba(28,12,12,.82); border: 1px solid rgba(255,120,100,.3);
+  backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+body.playing .quitbtn { display: block; }
+.quitbtn:hover { background: rgba(64,20,18,.9); color: #ffd0c6; }
+.quitbtn.confirm { color: #fff; background: rgba(150,36,30,.92); border-color: #ff8a72; }
+@media (max-width: 560px) { .quitbtn { bottom: auto; top: 8px; right: 8px; padding: 6px 10px; font-size: 10.5px; } }
