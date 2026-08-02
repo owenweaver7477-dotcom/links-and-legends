@@ -24,11 +24,11 @@ import { initCG, loadingStart, loadingStop, gameplayStart, gameplayStop,
 loadingStart();
 import { Sound } from './sound.js';
 
-import { allCourses, getCourse } from '../shared/coursegen.js';
+import { allCourses, getCourse, defaultAim } from '../shared/coursegen.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
 import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf } from '../shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
-import { CLUBS, CLUB_BY_KEY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
+import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
 import { normaliseLook, randomLook, SHOT_RADIUS, EYE_HEIGHT, SPRINT_SPEED } from '../shared/avatars.js';
 
@@ -249,11 +249,16 @@ function menuFrame(dt) {
   scene.render(scene.camera);
 }
 
-/** Point the aim straight at the flag (or at the fairway on a long hole). */
+/**
+ * Point the aim down the hole — which is not always at the flag.  The rule
+ * itself lives in coursegen.js beside the routes it reads, so the tests can
+ * check every tee on every course; this only supplies the player's reach.
+ */
 function aimAtPin() {
   const b = ballOf(G.myPid);
-  const h = G.hole;
-  swing.setAim(Math.atan2(h.pin.x - b.x, h.pin.z - b.z));
+  const club = CLUB_BY_KEY[clubKey];
+  const reach = (CARRY[clubKey] || 200) * carryMult(club);
+  swing.setAim(defaultAim(G.hole, b.x, b.z, reach));
 }
 
 /* ===================================================================== */

@@ -652,3 +652,72 @@ function makeSignatureHole(bio) {
   }
   return hole;
 }
+
+/**
+ * Where to point a shot by default, from anywhere on a hole.
+ *
+ * NOT simply "at the flag".  On a dogleg the straight line to the pin cuts
+ * across the corner and into the trees — on the opening hole of Claude
+ * National it pointed at a maple thirty metres from the tee, so every
+ * player's first drive in the game was a flushed shot into a trunk, which
+ * reads as a broken swing rather than a wrong aim.
+ *
+ * The default follows the fairway route out to roughly as far as the club can
+ * carry, and switches to the flag once the flag is the nearer thing.  On a
+ * straight hole the route is the line to the pin, so this changes nothing.
+ *
+ * @param hole    a generated hole, with .route and .pin
+ * @param x,z     where the ball is
+ * @param reach   how far the club in hand actually carries, in metres
+ * @returns heading in radians, in this project's (sin h, cos h) convention
+ */
+export function defaultAim(hole, x, z, reach = 200) {
+  const straight = Math.atan2(hole.pin.x - x, hole.pin.z - z);
+  const route = hole.route;
+  if (!Array.isArray(route) || route.length < 2) return straight;
+
+  // nearest point on the fairway route to where the ball actually is
+  let near = 0, nd = Infinity;
+  for (let i = 0; i < route.length; i++) {
+    const dx = route[i][0] - x, dz = route[i][1] - z;
+    const d = dx * dx + dz * dz;
+    if (d < nd) { nd = d; near = i; }
+  }
+
+  /* Walk forward and take the FURTHEST route point we can still reach in a
+     straight line without leaving the fairway corridor.  Picking the point at
+     exactly the club's carry is not enough on its own: past the corner of a
+     dogleg that line goes through the trees again, just further along.  This
+     asks the only question that matters — does the ball stay over short grass
+     all the way there — and stops at the corner when the answer turns no. */
+  const STEP = 3;                             // the route is sampled ~3 m apart
+  const CORRIDOR = 16;                        // metres either side of the route
+  const maxAhead = Math.max(1, Math.round(reach / STEP));
+  let best = Math.min(route.length - 1, near + 1);
+
+  for (let k = 2; k <= maxAhead; k++) {
+    const i = near + k;
+    if (i > route.length - 1) break;
+    const tx = route[i][0], tz = route[i][1];
+    const dx = tx - x, dz = tz - z;
+    const len = Math.hypot(dx, dz) || 1;
+    // does the straight line to this point stay near the route the whole way?
+    let clear = true;
+    for (let j = 1; j < k; j++) {
+      const t = j / k;
+      const lx = x + dx * t, lz = z + dz * t;
+      const rx = route[near + j][0], rz = route[near + j][1];
+      if (Math.hypot(lx - rx, lz - rz) > CORRIDOR) { clear = false; break; }
+    }
+    if (!clear) break;
+    best = i;
+  }
+
+  const tx = route[best][0], tz = route[best][1];
+  // Once the flag is as close as the point we would aim at — or that point is
+  // effectively the green anyway — aim at the flag.
+  const toPin = Math.hypot(hole.pin.x - x, hole.pin.z - z);
+  const toRoute = Math.hypot(tx - x, tz - z);
+  if (toPin <= toRoute || Math.hypot(tx - hole.pin.x, tz - hole.pin.z) < 20) return straight;
+  return Math.atan2(tx - x, tz - z);
+}
