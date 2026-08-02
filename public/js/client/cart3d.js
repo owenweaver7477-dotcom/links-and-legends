@@ -12,7 +12,7 @@
    about two avatars.
    ========================================================================= */
 
-import * as THREE from '/vendor/three.module.js';
+import * as THREE from '../../vendor/three.module.js';
 import { sharedBlobTexture, sharedBlobGeo } from './avatar.js';
 import {
   WHEELBASE, TRACK, WHEEL_R, SEATS, MAX_FWD

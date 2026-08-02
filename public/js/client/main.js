@@ -2,7 +2,7 @@
    main.js — the client: input, camera, shot playback, screen routing
    ========================================================================= */
 
-import * as THREE from '/vendor/three.module.js';
+import * as THREE from '../../vendor/three.module.js';
 import { GolfScene } from './scene.js';
 import { Avatar } from './avatar.js';
 import { Walker } from './walker.js';
@@ -2111,7 +2111,15 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   loadingStop();                    // the download is done; gameplay may start
 
   Net.restoreFrom = () => { try { return storeGet('lg_save'); } catch { return null; } };
-  Net.connect();
+  /* If the game server cannot be reached the page must SAY so.  Silently
+     sitting on a dead menu is the worst outcome, and on a portal it is also
+     the most likely one — a static bundle depends on the backend being awake
+     (a free-tier host sleeps when idle and takes ~30 s to come back). */
+  Net.on('offline', () => {
+    HUD.homeError('Cannot reach the game server. It may be waking up — retrying…');
+    setTimeout(() => Net.connect(), 4000);
+  });
+  await Net.connect();
   requestAnimationFrame(frame);
 
   /* Once this is published, the only bugs that matter happen on hardware I

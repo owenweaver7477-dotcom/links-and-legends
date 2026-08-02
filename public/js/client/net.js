@@ -26,14 +26,70 @@ function loadPid() {
 Net.on = (evt, fn) => { Net.h[evt] = fn; };
 const fire = (evt, d) => Net.h[evt]?.(d);
 
-Net.connect = () => {
+/* ────────────────────────────── where the server lives ──────────────────
+   This build runs in two very different places.
+
+   Served BY the game server (localhost, or the Render deployment) the server
+   is simply the page's own origin.  Uploaded to a game portal as a static
+   bundle there is NO server on that origin at all — the files sit on the
+   portal's CDN — so the socket has to be told, explicitly, to talk back to
+   the deployment.  Getting this wrong is silent: the page loads and then
+   nothing ever connects.
+
+   Change BACKEND if the deployment moves. */
+const BACKEND = 'https://links-and-legends.onrender.com';
+
+/* Which origin actually answered.  Guessing from the hostname is not good
+   enough — "localhost" might be our server or might be any static host — so
+   this TRIES same-origin first and falls back to the deployment.  Whichever
+   one serves the socket.io client is the one we then connect to, which means
+   the same build works served by the server, uploaded to a portal, or opened
+   from a plain static host, with no build-time switch. */
+let resolvedOrigin = null;
+
+/* The socket.io CLIENT is served by the game server, so on a static bundle it
+   has to be fetched from the backend too — there is no /socket.io/ on a CDN.
+   Loaded on demand rather than with a fixed script tag for exactly that
+   reason, and awaited so `io` is guaranteed to exist before we use it. */
+const loadScript = src => new Promise(resolve => {
+  const el = document.createElement('script');
+  el.src = src; el.async = true;
+  el.onload = () => resolve(typeof window.io === 'function');
+  el.onerror = () => resolve(false);
+  document.head.appendChild(el);
+});
+
+let ioLoading = null;
+function ensureIo() {
+  if (typeof window.io === 'function') return Promise.resolve(true);
+  if (ioLoading) return ioLoading;
+  ioLoading = (async () => {
+    // Nudge a sleeping host awake: a free-tier instance cold-starts on the
+    // first request, and the script tag can time out before it is up.
+    try { fetch(BACKEND + '/healthz', { mode: 'no-cors' }).catch(() => {}); } catch { /* ignore */ }
+    // same origin first — that is the case when the server serves the page
+    if (await loadScript('socket.io/socket.io.js')) { resolvedOrigin = ''; return true; }
+    // otherwise we are a static bundle: talk back to the deployment
+    if (await loadScript(BACKEND + '/socket.io/socket.io.js')) { resolvedOrigin = BACKEND; return true; }
+    return false;
+  })();
+  return ioLoading;
+}
+
+Net.connect = async () => {
   Net.pid = loadPid();
-  Net.socket = io({ transports: ['websocket', 'polling'], reconnectionDelayMax: 4000 });
+  if (!(await ensureIo())) {
+    fire('offline');
+    return;
+  }
+  Net.socket = resolvedOrigin
+    ? io(resolvedOrigin, { transports: ['websocket', 'polling'], reconnectionDelayMax: 4000 })
+    : io({ transports: ['websocket', 'polling'], reconnectionDelayMax: 4000 });
 
   Net.socket.on('connect', () => {
     fire('connect');
     if (Net.code && Net.lastName) {
-      Net.socket.emit('room:join', { code: Net.code, name: Net.lastName, pid: Net.pid }, res => {
+      Net.socket?.emit('room:join', { code: Net.code, name: Net.lastName, pid: Net.pid }, res => {
         if (res?.ok) fire('state', res.state);
       });
     }
@@ -53,7 +109,7 @@ Net.connect = () => {
 
 Net.create = (name, courseId, cb) => {
   Net.lastName = name;
-  Net.socket.emit('room:create', { name, courseId, pid: Net.pid }, res => {
+  Net.socket?.emit('room:create', { name, courseId, pid: Net.pid }, res => {
     if (res?.ok) Net.code = res.code;
     cb(res || { ok: false, error: 'No response from the server.' });
   });
@@ -61,20 +117,20 @@ Net.create = (name, courseId, cb) => {
 
 Net.join = (code, name, cb) => {
   Net.lastName = name;
-  Net.socket.emit('room:join', { code, name, pid: Net.pid }, res => {
+  Net.socket?.emit('room:join', { code, name, pid: Net.pid }, res => {
     if (res?.ok) Net.code = res.code;
     cb(res || { ok: false, error: 'No response from the server.' });
   });
 };
 
-Net.pickCourse = courseId => Net.socket.emit('room:course', { courseId });
-Net.pickTees = teeSet => Net.socket.emit('room:tees', { teeSet });
-Net.prefs = p => Net.socket.emit('player:prefs', p);
-Net.setLook = look => Net.socket.emit('player:look', { look });
-Net.move = (x, z, rot, moving, cart) => Net.socket.emit('player:move', { x, z, rot, moving, cart });
-Net.hail = () => Net.socket.emit('cart:hail');
-Net.buy = item => Net.socket.emit('shop:buy', { item });
-Net.start = () => Net.socket.emit('game:start');
+Net.pickCourse = courseId => Net.socket?.emit('room:course', { courseId });
+Net.pickTees = teeSet => Net.socket?.emit('room:tees', { teeSet });
+Net.prefs = p => Net.socket?.emit('player:prefs', p);
+Net.setLook = look => Net.socket?.emit('player:look', { look });
+Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, rot, moving, cart });
+Net.hail = () => Net.socket?.emit('cart:hail');
+Net.buy = item => Net.socket?.emit('shop:buy', { item });
+Net.start = () => Net.socket?.emit('game:start');
 
 /* Leave the room you are in.  Dropping and remaking the socket is the honest
    way to do it: the server's disconnect path already releases the seat, hands
@@ -83,6 +139,7 @@ Net.start = () => Net.socket.emit('game:start');
 /** Ask the server for our career, without needing to be in a room. */
 Net.restoreFrom = null;      // set by main.js: our Data-module snapshot
 Net.fetchProfile = () => {
+  if (!Net.socket) return;
   try {
     Net.socket?.emit('profile:me', {
       pid: Net.pid,
@@ -99,7 +156,7 @@ Net.leave = () => {
   Net.code = null;
   setTimeout(() => { try { Net.socket?.connect(); } catch { /* ignore */ } }, 120);
 };
-Net.next = () => Net.socket.emit('game:next');
-Net.again = () => Net.socket.emit('game:again');
-Net.lobby = () => Net.socket.emit('room:lobby');
-Net.swing = shot => Net.socket.emit('game:swing', shot);
+Net.next = () => Net.socket?.emit('game:next');
+Net.again = () => Net.socket?.emit('game:again');
+Net.lobby = () => Net.socket?.emit('room:lobby');
+Net.swing = shot => Net.socket?.emit('game:swing', shot);

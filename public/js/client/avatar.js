@@ -8,7 +8,7 @@
    same joints, so a birdie fist-pump adds no geometry at all.
    ========================================================================= */
 
-import * as THREE from '/vendor/three.module.js';
+import * as THREE from '../../vendor/three.module.js';
 import { AVATAR_HEIGHT } from '../shared/avatars.js';
 import { CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
 import { CLUB_BY_KEY } from '../shared/clubs.js';

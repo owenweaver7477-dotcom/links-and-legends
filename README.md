@@ -59,8 +59,22 @@ of the 23 MB target and well under the 150 MB cap. There are no textures,
 audio files or meshes to compress: the courses, the sound and every mesh are
 generated at runtime.
 
-**One thing to know:** this needs a live Node process for the multiplayer
-server, so it is not a static zip upload — it is submitted as a hosted URL.
+**Either submission route works.** The multiplayer server needs a live Node
+process, but the *game* does not have to be served by it:
+
+- **Hosted URL** — point CrazyGames at the deployment. Page and server share an
+  origin and nothing special happens.
+- **Static zip** — upload `public/` on its own. Two things make this work, and
+  both were learned the hard way. CrazyGames serves an uploaded bundle from a
+  **subdirectory**, so every path in the build is relative; an absolute
+  `/css/style.css` resolves against the portal's own root and 404s, which
+  renders as an unstyled white page with the SDK reported as missing. And with
+  the page on their domain, `net.js` finds the server by *trying*: same origin
+  first, then the `BACKEND` constant at the top of that file. Point `BACKEND`
+  at the deployment before zipping.
+
+`npm run verify:bundle` serves `public/` from a subdirectory the way the portal
+does and fails if anything in the build assumes otherwise.
 
 ---
 

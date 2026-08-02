@@ -32,35 +32,47 @@ export const CG = {
 
 let onMuteChange = null;
 
-/**
- * Bring the SDK up.  Always resolves — a portal that is slow, blocked or
- * simply not there must not stop the game from starting.
- */
-export async function initCG({ onMute } = {}) {
-  onMuteChange = onMute || null;
+/* The SDK ignores every call made before init() resolves, and the portal
+   measures loading from as early as it can — so init starts the instant this
+   module is imported, not when the game gets around to asking.  Everything
+   else queues behind it.  The SDK script tag is a classic script, so it has
+   already run by the time this module (which is deferred) evaluates. */
+const booted = (async () => {
   const sdk = SDK();
   if (!sdk?.init) { CG.ready = true; return CG; }
   try {
-    // Their init is async and the SDK is unusable until it resolves, but a
-    // hung portal must not hang the game — hence the race.
-    await Promise.race([
-      sdk.init(),
-      new Promise(r => setTimeout(r, 4000))
-    ]);
+    // A hung portal must not hang the game, hence the race.
+    await Promise.race([sdk.init(), new Promise(r => setTimeout(r, 4000))]);
     CG.present = true;
-    CG.muted = !!sdk.game?.settings?.muteAudio;
-    sdk.game?.addSettingsChangeListener?.(s => {
+  } catch { /* not on the portal, or it failed: play on regardless */ }
+  CG.ready = true;
+  return CG;
+})();
+
+/** Run something against the SDK once it is up; never throws, never blocks. */
+const after = fn => { booted.then(() => { try { fn(SDK()); } catch { /* no SDK */ } }); };
+
+/**
+ * Attach the platform-mute bridge and wait for init.  Init itself is already
+ * in flight (above); this is where the game finds out how it went.
+ */
+export async function initCG({ onMute } = {}) {
+  onMuteChange = onMute || null;
+  await booted;
+  try {
+    const sdk = SDK();
+    CG.muted = !!sdk?.game?.settings?.muteAudio;
+    sdk?.game?.addSettingsChangeListener?.(s => {
       CG.muted = !!s?.muteAudio;
       onMuteChange?.(CG.muted);
     });
-  } catch { /* not on the portal, or it failed: play on regardless */ }
-  CG.ready = true;
+  } catch { /* no SDK */ }
   return CG;
 }
 
 /* ------------------------------------------------------------- lifecycle */
-export const loadingStart = () => { try { SDK()?.game?.loadingStart?.(); } catch { /* no SDK */ } };
-export const loadingStop = () => { try { SDK()?.game?.loadingStop?.(); } catch { /* no SDK */ } };
+export const loadingStart = () => after(sdk => sdk?.game?.loadingStart?.());
+export const loadingStop  = () => after(sdk => sdk?.game?.loadingStop?.());
 
 /* Their ad scheduling keys off these, so they must bracket real play only —
    not menus, not the clubhouse, not the results card. */
@@ -68,16 +80,16 @@ let playing = false;
 export function gameplayStart() {
   if (playing) return;
   playing = true;
-  try { SDK()?.game?.gameplayStart?.(); } catch { /* no SDK */ }
+  after(sdk => sdk?.game?.gameplayStart?.());
 }
 export function gameplayStop() {
   if (!playing) return;
   playing = false;
-  try { SDK()?.game?.gameplayStop?.(); } catch { /* no SDK */ }
+  after(sdk => sdk?.game?.gameplayStop?.());
 }
 
 /** A genuinely good moment — the portal plays its own celebration. */
-export const happytime = () => { try { SDK()?.game?.happytime?.(); } catch { /* no SDK */ } };
+export const happytime = () => after(sdk => sdk?.game?.happytime?.());
 
 /* ------------------------------------------------------------- invites ---
    On the portal a shared ?room=CODE query string does not reach the game:
@@ -89,7 +101,7 @@ export function inviteLink(code) {
     const l = SDK()?.game?.inviteLink?.({ room: code });
     if (l) return l;
   } catch { /* fall through to our own URL */ }
-  return location.origin + '/?room=' + code;
+  return (globalThis.location?.origin || '') + '/?room=' + code;
 }
 
 export function invitedRoom() {

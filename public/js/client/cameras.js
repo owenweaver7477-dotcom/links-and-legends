@@ -7,7 +7,7 @@
    3D golf game feel like a spreadsheet.
    ========================================================================= */
 
-import * as THREE from '/vendor/three.module.js';
+import * as THREE from '../../vendor/three.module.js';
 import { clamp, lerp } from '../shared/rng.js';
 
 const EYE = 1.62;          // a golfer's eye height

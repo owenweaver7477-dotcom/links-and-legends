@@ -9,7 +9,7 @@
    far cheaper than sprites and stays crisp at any resolution.
    ========================================================================= */
 
-import * as THREE from '/vendor/three.module.js';
+import * as THREE from '../../vendor/three.module.js';
 import { HUD } from './hud.js';
 
 const _v = new THREE.Vector3();

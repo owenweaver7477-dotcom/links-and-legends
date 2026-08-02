@@ -6,7 +6,7 @@
    instanced trees, flagstick and cup, and the player balls.
    ========================================================================= */
 
-import * as THREE from '/vendor/three.module.js';
+import * as THREE from '../../vendor/three.module.js';
 import { buildSurfaceTexture } from './surfacemap.js';
 import { mulberry32, clamp, lerp, fbm, smoothstep } from '../shared/rng.js';
 import { BALL_RADIUS } from '../shared/ballistics.js';
