@@ -8,6 +8,7 @@ import { CAPS, SHIRTS, SKINS, TROUSERS } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { toYards, clamp } from '../shared/rng.js';
+import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 
 const $ = id => document.getElementById(id);
 const el = {};
@@ -374,6 +375,39 @@ let shopTab = 'crew';
 /* ─────────────── what your money has actually bought ─────────────── */
 const CLUB_LOOK_ICON = { wood: '🪵', rust: '🔩', steel: '⚙️', carbon: '🖤', tour: '🏅', titanium: '💠', signature: '👑' };
 
+/* What the equipment is worth in YARDS, measured rather than asserted.
+   The stat bars below are honest but abstract — a player who has just spent
+   1,200 coins wants to see a number move, and "Accuracy 62%" does not tell
+   them whether anything happened.  This flies the real simulation on a flat
+   range with the gear they own and with nothing, and reports the difference,
+   so the shop and the course cannot disagree.
+
+   Cached: it is a dozen full flight integrations, and the shop re-renders on
+   every purchase. */
+let rangeT = null;
+const carryCache = new Map();
+function carryYds(clubKey, prof) {
+  const key = clubKey + '|' + (prof?.clubTier ?? 0) + '|' + (prof?.refine ?? 0) + '|' +
+    JSON.stringify(prof?.gear || {}) + '|' + JSON.stringify(prof?.crew || {});
+  if (carryCache.has(key)) return carryCache.get(key);
+  let v = 0;
+  try {
+    rangeT = rangeT || makeFlatRange();
+    const r = new ShotSim(rangeT, {
+      x: 0, z: 0, clubKey, power: 1, aim: 0, faceDeg: 0, attackDeg: 0,
+      wind: { dir: 0, speed: 0 },
+      gear: prof?.gear || null, crew: prof?.crew || null,
+      clubTier: prof?.clubTier ?? 0, refine: prof?.refine ?? 0
+    }).runToEnd();
+    v = Math.round(toYards(r.carry));
+  } catch { v = 0; }
+  carryCache.set(key, v);
+  return v;
+}
+
+/** The same player with nothing bought — the honest baseline to compare to. */
+const BARE = { clubTier: 0, refine: 0, gear: { ball: 0, irons: 0, woods: 0, putter: 0 }, crew: {} };
+
 function buildPayoff(prof) {
   const wrap = document.createElement('div');
   wrap.className = 'payoff';
@@ -402,6 +436,14 @@ function buildPayoff(prof) {
       <div class="po-tiers">${CLUB_TIERS.map((t, i) =>
         `<i class="${i < tier ? 'done' : i === tier ? 'now' : ''}" title="${escapeHtml(t.name)}"></i>`).join('')}</div>
     </div>
+    <div class="po-carry">${[['Driver', 'DR'], ['7 iron', 'I7'], ['Wedge', 'PW']].map(([label, k]) => {
+      const now = carryYds(k, prof), base = carryYds(k, BARE), d = now - base;
+      return `<div class="po-c">
+        <span class="po-cl">${label}</span>
+        <b>${now}<em>yds</em></b>
+        <span class="po-cd${d > 0 ? ' up' : ''}">${d > 0 ? '+' + d + ' vs stock' : 'stock set'}</span>
+      </div>`;
+    }).join('')}</div>
     <div class="po-bars">${bars.map(([name, v, ico]) => `
       <div class="po-bar">
         <span class="po-name">${ico} ${name}</span>

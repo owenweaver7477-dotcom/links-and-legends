@@ -877,6 +877,17 @@ body:not(.playing) .hintbar { display: none; }
   background: linear-gradient(160deg, rgba(46,125,67,.22), rgba(10,20,14,.5));
   border: 1px solid rgba(140,230,160,.22);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
+/* Carry in yards, measured from the real flight model — the one number in
+   the shop that a player can go and verify on the course. */
+.po-carry { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 4px; }
+.po-c { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.07);
+  border-radius: 10px; padding: 9px 10px; display: flex; flex-direction: column; gap: 2px; }
+.po-cl { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #8fa694; font-weight: 700; }
+.po-c b { font-size: 21px; line-height: 1; color: #eaf3ea; font-variant-numeric: tabular-nums; }
+.po-c b em { font-size: 10px; font-style: normal; color: #8fa694; margin-left: 3px; font-weight: 600; }
+.po-cd { font-size: 10.5px; color: #6f8375; }
+.po-cd.up { color: #8fe07a; font-weight: 700; }
+
 .po-set { display: flex; align-items: center; gap: 12px; }
 .po-icon { font-size: 30px; width: 52px; height: 52px; border-radius: 14px;
   display: grid; place-items: center; background: rgba(0,0,0,.28);
@@ -963,7 +974,21 @@ body:not(.playing) .hintbar { display: none; }
 .coursepick { display: flex; flex-direction: column; gap: 6px; }
 .cp-label { font-size: 10px; font-weight: 800; letter-spacing: 2px;
   text-transform: uppercase; color: #8fb69a; }
-.cp-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-row { display: flex; flex-direction: column; gap: 11px; }
+
+/* Courses grouped by where in the world they are.  The heading carries the
+   region's character so the choice reads as "which kind of golf today" rather
+   than as a list of names. */
+.cp-region { display: flex; flex-direction: column; gap: 5px; }
+.cp-rhead { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  padding-bottom: 1px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.cp-flag { font-size: 13px; line-height: 1; }
+.cp-rname { font-size: 10.5px; font-weight: 800; letter-spacing: 1.4px;
+  text-transform: uppercase; color: #cfe4d3; }
+.cp-rblurb { flex: 1 1 140px; min-width: 0; font-size: 9.5px; font-weight: 600;
+  color: #7d9484; letter-spacing: .2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-rlist { display: flex; flex-wrap: wrap; gap: 6px; }
 .cpbtn { flex: 1 1 auto; min-width: 0; padding: 8px 10px; border-radius: 11px;
   cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 700;
   text-align: left; line-height: 1.25; color: #cfe4d3;

@@ -14,6 +14,7 @@ export const BIOMES = {
     name: 'Claude National',
     blurb: 'Tree-lined parkland. Generous fairways, water in play, fast bentgrass greens.',
     region: 'Georgia, USA',
+    continent: 'north-america',
     relief: 7,                  // metres of terrain amplitude
     reliefScale: 190,           // metres per noise unit — bigger = broader hills
     ridged: 0,
@@ -47,6 +48,7 @@ export const BIOMES = {
     name: 'Cairnmoor Links',
     blurb: 'Wind-scoured coastal links. Firm running fairways, deep pot bunkers, no trees to hide behind.',
     region: 'Ayrshire, Scotland',
+    continent: 'europe',
     relief: 6.5,
     reliefScale: 85,            // tight, choppy dunes
     ridged: 0.65,
@@ -82,6 +84,7 @@ export const BIOMES = {
     name: 'Red Mesa',
     blurb: 'Target golf carved out of the canyon floor. Miss the grass and you are in the sand and scrub.',
     region: 'Arizona, USA',
+    continent: 'north-america',
     relief: 11,
     reliefScale: 150,
     ridged: 0.45,
@@ -117,6 +120,7 @@ export const BIOMES = {
     name: 'Hochkar Alpine',
     blurb: 'Cut into a mountain valley. Big elevation changes — read the slope or the ball will not stop.',
     region: 'Tyrol, Austria',
+    continent: 'europe',
     relief: 16,                 // the big one
     reliefScale: 210,
     ridged: 0.3,
@@ -151,6 +155,7 @@ export const BIOMES = {
     name: 'Palmera Cay',
     blurb: 'Ocean on one side, lagoons on the other. Soft greens that hold, but water everywhere.',
     region: 'Quintana Roo, Mexico',
+    continent: 'latin-america',
     relief: 4,
     reliefScale: 160,
     ridged: 0,
@@ -181,6 +186,39 @@ export const BIOMES = {
 };
 
 export const COURSE_ORDER = ['parkland', 'links', 'desert', 'alpine', 'tropical'];
+
+/* -------------------------------------------------------------- regions ---
+   Courses are chosen by where in the world they are, not from a flat list.
+   This is the only place that mapping lives: to add a course, give it a
+   `continent` in BIOMES above and it appears under that heading — and a
+   continent with no courses yet is simply skipped, so the list below can be
+   filled in ahead of the courses that will go in it.
+
+   `blurb` is what the region is like to play, not a geography lesson. */
+export const REGIONS = [
+  { id: 'north-america', name: 'North America', flag: '🌎',
+    blurb: 'Parkland and desert — generous off the tee, punishing around the green' },
+  { id: 'europe', name: 'Europe', flag: '🌍',
+    blurb: 'Wind off the sea and thin mountain air' },
+  { id: 'latin-america', name: 'Latin America', flag: '🏝️',
+    blurb: 'Water, palms and soft greens that hold' },
+  { id: 'asia-pacific', name: 'Asia Pacific', flag: '🌏',
+    blurb: 'Coming soon' }
+];
+
+/** Courses grouped by region, in REGIONS order, with empty regions dropped. */
+export function coursesByRegion() {
+  return REGIONS.map(r => ({
+    ...r,
+    courses: COURSE_ORDER
+      .filter(id => BIOMES[id]?.continent === r.id)
+      .map(id => ({ id, ...BIOMES[id] }))
+  })).filter(r => r.courses.length > 0);
+}
+
+/** Which region a course belongs to, or null if it has not been placed. */
+export const regionOf = id =>
+  REGIONS.find(r => r.id === BIOMES[id]?.continent) || null;
 
 /* Ball colours — eight distinct, all readable against grass. */
 export const BALL_COLORS = [

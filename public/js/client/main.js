@@ -26,7 +26,7 @@ import { Sound } from './sound.js';
 
 import { allCourses, getCourse } from '../shared/coursegen.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
-import { BIOMES, COURSE_ORDER } from '../shared/biomes.js';
+import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf } from '../shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
@@ -2100,23 +2100,48 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     const row = document.getElementById('homeCourses');
     if (!row) return;
     row.innerHTML = '';
-    for (const c of COURSES) {
-      const b = document.createElement('button');
-      b.className = 'cpbtn' + (c.id === pickedCourse ? ' on' : '');
-      b.textContent = c.name;
-      const sub = document.createElement('small');
-      sub.textContent = `${c.region} · par ${c.par}`;
-      b.appendChild(sub);
-      b.addEventListener('click', () => {
-        if (c.id === pickedCourse) return;
-        pickedCourse = c.id;
-        try { localStorage.setItem('lg_course', c.id); } catch { /* ignore */ }
-        drawCourses();
-        clearMenuBackdrop();     // drop the old tee...
-        G.loadedKey = null;
-        menuBackdrop();          // ...and stand on the new one
-      });
-      row.appendChild(b);
+
+    /* Grouped by where in the world the course is, because "Scotland or
+       Arizona?" is a question a player can answer and "course 2 or course 4?"
+       is not.  The grouping is data — a course declares its continent in
+       biomes.js and lands here automatically, so adding one is a one-line
+       change and empty regions never render. */
+    for (const region of coursesByRegion()) {
+      const group = document.createElement('div');
+      group.className = 'cp-region';
+
+      const head = document.createElement('div');
+      head.className = 'cp-rhead';
+      head.innerHTML = `<span class="cp-flag">${region.flag}</span>` +
+        `<span class="cp-rname">${region.name}</span>` +
+        `<span class="cp-rblurb">${region.blurb}</span>`;
+      group.appendChild(head);
+
+      const list = document.createElement('div');
+      list.className = 'cp-rlist';
+      for (const c of region.courses) {
+        const meta = COURSES.find(x => x.id === c.id) || {};
+        const b = document.createElement('button');
+        b.className = 'cpbtn' + (c.id === pickedCourse ? ' on' : '');
+        b.type = 'button';
+        b.setAttribute('aria-pressed', c.id === pickedCourse ? 'true' : 'false');
+        b.textContent = c.name;
+        const sub = document.createElement('small');
+        sub.textContent = `${c.region} · par ${meta.par ?? 36}`;
+        b.appendChild(sub);
+        b.addEventListener('click', () => {
+          if (c.id === pickedCourse) return;
+          pickedCourse = c.id;
+          try { localStorage.setItem('lg_course', c.id); } catch { /* ignore */ }
+          drawCourses();
+          clearMenuBackdrop();     // drop the old tee...
+          G.loadedKey = null;
+          menuBackdrop();          // ...and stand on the new one
+        });
+        list.appendChild(b);
+      }
+      group.appendChild(list);
+      row.appendChild(group);
     }
   };
   drawCourses();
