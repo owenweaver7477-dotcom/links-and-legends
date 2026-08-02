@@ -62,10 +62,10 @@ const loadScript = src => new Promise(resolve => {
 let ioLoading = null;
 function ensureIo() {
   if (typeof window.io === 'function') return Promise.resolve(true);
-  if (ioLoading) return ioLoading;
+  if (ioLoading) return ioLoading;            // one attempt in flight at a time
   ioLoading = (async () => {
     // Nudge a sleeping host awake: a free-tier instance cold-starts on the
-    // first request, and the script tag can time out before it is up.
+    // first request, and the script tag can give up before it is up.
     try { fetch(BACKEND + '/healthz', { mode: 'no-cors' }).catch(() => {}); } catch { /* ignore */ }
     // same origin first — that is the case when the server serves the page
     if (await loadScript('socket.io/socket.io.js')) { resolvedOrigin = ''; return true; }
@@ -73,6 +73,12 @@ function ensureIo() {
     if (await loadScript(BACKEND + '/socket.io/socket.io.js')) { resolvedOrigin = BACKEND; return true; }
     return false;
   })();
+  /* Clear the cache on FAILURE.  Holding a resolved-false promise here would
+     make every retry return that same false without touching the network, so
+     the reconnect loop could never succeed — which is precisely the case that
+     matters, because a sleeping free-tier host takes ~30 s to answer and the
+     first attempt is EXPECTED to fail. */
+  ioLoading.then(ok => { if (!ok) ioLoading = null; });
   return ioLoading;
 }
 

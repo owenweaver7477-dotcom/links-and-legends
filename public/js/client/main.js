@@ -2115,10 +2115,20 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      sitting on a dead menu is the worst outcome, and on a portal it is also
      the most likely one — a static bundle depends on the backend being awake
      (a free-tier host sleeps when idle and takes ~30 s to come back). */
+  let wakeTries = 0;
   Net.on('offline', () => {
-    HUD.homeError('Cannot reach the game server. It may be waking up — retrying…');
-    setTimeout(() => Net.connect(), 4000);
+    /* Almost always a sleeping host rather than a dead one: a free-tier
+       instance takes about half a minute to cold-start, so the FIRST attempt
+       failing is expected, not exceptional.  Say so, keep a visible count so
+       the wait reads as progress rather than a hung menu, and never stop
+       retrying — the player has nothing else to do here. */
+    wakeTries++;
+    HUD.homeError(wakeTries < 12
+      ? `Waking the game server up… this takes about half a minute on a cold start. (attempt ${wakeTries})`
+      : 'Still cannot reach the game server. It may be down — this page will keep trying.');
+    setTimeout(() => Net.connect(), Math.min(3000 + wakeTries * 1000, 10000));
   });
+  Net.on('connect', () => { wakeTries = 0; HUD.homeError(''); });
   await Net.connect();
   requestAnimationFrame(frame);
 
