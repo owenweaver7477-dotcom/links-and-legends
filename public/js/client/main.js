@@ -16,6 +16,12 @@ import { CameraRig, fitMapCamera } from './cameras.js';
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
 import { Net } from './net.js';
+import { initCG, loadingStart, loadingStop, gameplayStart, gameplayStop,
+         happytime, inviteLink, invitedRoom, storeGet, storeSet, CG } from './crazygames.js';
+
+// The portal measures the download between here and the first gameplay
+// start, so this is the first thing the module does.
+loadingStart();
 import { Sound } from './sound.js';
 
 import { allCourses, getCourse } from '../shared/coursegen.js';
@@ -812,7 +818,11 @@ function fireReaction(pid, strokes, par, capped) {
   const dur = av.play(name);
   if (dur) {
     G.celebUntil = Math.max(G.celebUntil || 0, performance.now() + dur * 1000);
-    Sound.celebrate(REACTION_TIER[name] || 0);
+    const tier = REACTION_TIER[name] || 0;
+    Sound.celebrate(tier);
+    // an eagle, an albatross or an ace is a genuine milestone — the portal
+    // has its own celebration for those, and this is what triggers it
+    if (tier >= 2 && pid === G.myPid) happytime();
   }
 }
 
@@ -1652,7 +1662,11 @@ Net.on('disconnect', () => HUD.toast('Lost the connection — reconnecting…', 
 function route() {
   const r = G.room;
   // the touch pad belongs to a live round, never over a menu
-  HUD.showTouchPad(!!r && r.state === 'playing');
+  const inPlay = !!r && r.state === 'playing';
+  HUD.showTouchPad(inPlay);
+  /* The portal schedules its ads around these, so they have to mean actual
+     play: not the title screen, not the clubhouse, not the hole summary. */
+  if (inPlay) gameplayStart(); else gameplayStop();
   if (!G.joined || !r) {
     G.screen = 'home'; HUD.show('home');
     menuBackdrop();                  // back out of a room: the tee returns
@@ -1724,6 +1738,21 @@ function renderClubhouse() {
   HUD.renderBag(bagDraft, toggleClubInBag);
   HUD.setHomeCoins(prof?.coins ?? 0);
   HUD.setCoins(prof?.coins ?? 0);
+  /* Back the career up where the PLAYER's platform keeps it.
+     The server is the source of truth while it is running, but its profile
+     file lives on an ephemeral disk — a free-tier host wipes it on every
+     deploy and restart, which would silently reset everyone's coins and
+     crew.  A snapshot in the Data module survives that, and the server only
+     ever uses it to seed a profile it has never seen. */
+  if (prof) {
+    try {
+      storeSet('lg_save', JSON.stringify({
+        v: 1, coins: prof.coins, rating: prof.rating, crew: prof.crew,
+        gear: prof.gear, clubTier: prof.clubTier, refine: prof.refine,
+        stars: prof.stars, rounds: prof.rounds, best: prof.best
+      }));
+    } catch { /* over quota or no store: the server still has it */ }
+  }
 }
 
 function renderLobbyAll(r) {
@@ -1986,9 +2015,12 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 /* ===================================================================== */
 /*  BOOT                                                                  */
 /* ===================================================================== */
-(function boot() {
+(async function boot() {
   const q = new URLSearchParams(location.search);
-  const room = (q.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+  /* On the portal the address bar belongs to CrazyGames, so a ?room= link
+     never reaches us — their invite parameters are the supported channel. */
+  const room = invitedRoom()
+    || (q.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
   if (room) HUD.el.inpCode.value = room;
   // Returning players are recognised, not interrogated: the same browser
   // key that pins your career also pins your name, so the front door says
@@ -2068,6 +2100,17 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
   HUD.show('home');
   scene.resize();
+
+  /* Bring the portal up before we connect, so the Data module is ready when
+     net.js asks it for our player id.  It always resolves — off-portal this
+     is a no-op and the game plays exactly as it does now. */
+  await initCG({
+    onMute: muted => Sound.setPlatformMute(muted)
+  });
+  if (CG.muted) Sound.setPlatformMute(true);
+  loadingStop();                    // the download is done; gameplay may start
+
+  Net.restoreFrom = () => { try { return storeGet('lg_save'); } catch { return null; } };
   Net.connect();
   requestAnimationFrame(frame);
 

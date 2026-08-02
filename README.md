@@ -22,6 +22,48 @@ any host that runs a long-lived Node process.
 
 ---
 
+## Publishing on CrazyGames
+
+The portal integration lives entirely in `public/js/client/crazygames.js`, and
+every entry point is safe to call when the SDK is absent — the same build runs
+on crazygames.com, on Render, and on localhost, and only the first has an SDK.
+
+| Submission field | Answer |
+|---|---|
+| Game engine | **HTML5** (vanilla JS + three.js, no engine) |
+| Does your game save progress? | **Yes, using the Data Module from the CrazyGames SDK** |
+| The game supports mobile devices | **Yes** |
+| The game is an online multiplayer game | **Yes** |
+| The game supports CrazyGames muting audio through SDK | **Yes** |
+
+**Why the Data Module answer.** Stats are computed server-side and stored in
+`data/profiles.json`, keyed by a player id. That id used to live only in
+`localStorage` — which a portal partitions per-visit, so every session would
+have looked like a brand-new player with no career. The id now lives in the
+Data Module, which survives that and follows a signed-in CrazyGames user
+between devices. A snapshot of the career is mirrored there too, because a
+free-tier host wipes its disk on every deploy; the server restores from that
+snapshot **only** for a player id it has no record of, and only through a
+clamp, so it can never be used to inflate an existing career.
+
+**What is wired:** `loadingStart` at module load and `loadingStop` once the
+scene is up; `gameplayStart`/`gameplayStop` bracketing real play only (not the
+title screen, clubhouse or hole summary, since their ad timing depends on it);
+`happytime` on an eagle or better; `settings.muteAudio` honoured with priority
+over the in-game toggle, via `addSettingsChangeListener`; and `inviteLink` /
+`getInviteParam` carrying the room code, because a `?room=` query string does
+not reach a game inside their iframe.
+
+**Size.** 1.3 MB on disk, about 400 KB over the wire with brotli — roughly 2%
+of the 23 MB target and well under the 150 MB cap. There are no textures,
+audio files or meshes to compress: the courses, the sound and every mesh are
+generated at runtime.
+
+**One thing to know:** this needs a live Node process for the multiplayer
+server, so it is not a static zip upload — it is submitted as a hosted URL.
+
+---
+
 ## The courses
 
 | Course | Where | What defines it |

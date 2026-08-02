@@ -60,6 +60,57 @@ export function getProfile(pid) {
   return p;
 }
 
+/**
+ * Seed a profile the server has never seen from the player's own backup.
+ *
+ * The server is authoritative while it is running, but its file sits on an
+ * ephemeral disk: a free-tier deploy wipes it, and without this every player
+ * would silently lose their career.  The client keeps a snapshot in the
+ * platform's save store, and this restores it — but ONLY for a pid with no
+ * record here, and only through a clamp.  An existing career can never be
+ * raised by a client, so this cannot become a way to mint coins: the worst a
+ * forged snapshot achieves is starting a NEW player part-way up, which costs
+ * nothing real and is bounded well below what a real player accumulates.
+ *
+ * Returns true if it actually seeded.
+ */
+const CLAMP = {
+  coins: 400000, rating: 98, clubTier: 6, refine: 3, rounds: 2000, crewLevel: 10
+};
+const num = (v, max, dflt = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.min(n, max) : dflt;
+};
+
+export function seedProfile(pid, snap) {
+  if (!pid || !snap || profiles.has(pid)) return false;
+  let d = snap;
+  if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return false; } }
+  if (!d || typeof d !== 'object' || d.v !== 1) return false;
+
+  const p = getProfile(pid);                 // creates the blank profile
+  p.coins = num(d.coins, CLAMP.coins);
+  p.rating = Math.max(2, num(d.rating, CLAMP.rating, 20));
+  p.clubTier = num(d.clubTier, CLAMP.clubTier);
+  p.refine = num(d.refine, CLAMP.refine);
+  p.rounds = num(d.rounds, CLAMP.rounds);
+  if (Number.isFinite(Number(d.best))) p.best = Number(d.best);
+  if (d.crew && typeof d.crew === 'object') {
+    for (const k of Object.keys(p.crew)) p.crew[k] = num(d.crew[k], CLAMP.crewLevel);
+  }
+  if (d.gear && typeof d.gear === 'object') {
+    for (const k of Object.keys(p.gear)) p.gear[k] = num(d.gear[k], 3);
+  }
+  if (d.stars && typeof d.stars === 'object') {
+    p.stars = {};
+    for (const [c, n] of Object.entries(d.stars)) {
+      if (typeof c === 'string' && c.length <= 24) p.stars[c] = num(n, 500);
+    }
+  }
+  saveSoon();
+  return true;
+}
+
 /** What the lobby shows and the client caches. */
 export function publicProfile(pid) {
   const p = getProfile(pid);

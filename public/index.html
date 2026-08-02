@@ -19,6 +19,10 @@
 <meta name="twitter:title" content="Links &amp; Legends — Online Golf">
 <meta name="twitter:description" content="Five courses, nine holes. Play solo or with friends — no sign-up.">
 <meta name="twitter:image" content="/og.png">
+<!-- The CrazyGames SDK.  Deliberately NOT async/defer-blocking the game:
+     crazygames.js feature-detects it, so if this 404s off-portal (or a
+     blocker eats it) everything still runs, minus the portal integration. -->
+<script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
 <link rel="stylesheet" href="/css/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>⛳</text></svg>">
 </head>

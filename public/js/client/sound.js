@@ -24,7 +24,7 @@ function ac() {
     if (!AC) return null;
     ctx = new AC();
     master = ctx.createGain();
-    master.gain.value = muted ? 0 : 0.8;
+    master.gain.value = (muted || platformMuted) ? 0 : 0.8;
     master.connect(ctx.destination);
   }
   // resume() REJECTS if it is called before the browser has seen a gesture,
@@ -36,16 +36,26 @@ function ac() {
 
 export const Sound = {};
 
-Sound.muted = () => muted;
+/* CrazyGames can mute a game from their own chrome, and their requirements
+   say that must take priority over the game's own setting.  Keeping it as a
+   separate flag means unmuting on their side restores whatever the player
+   had chosen here, rather than clobbering it. */
+let platformMuted = false;
+Sound.setPlatformMute = on => {
+  platformMuted = !!on;
+  if (master) master.gain.value = (muted || platformMuted) ? 0 : 0.8;
+};
+
+Sound.muted = () => muted || platformMuted;
 Sound.setMuted = on => {
   muted = !!on;
   try { localStorage.setItem('lg_muted', muted ? '1' : '0'); } catch { /* ignore */ }
-  if (master) master.gain.value = muted ? 0 : 0.8;
+  if (master) master.gain.value = (muted || platformMuted) ? 0 : 0.8;
 };
 
 /** One burst of shaped noise through a bandpass — the building block. */
 function noiseBurst({ dur = 0.1, freq = 2000, q = 1, gain = 0.5, sweep = 0 }) {
-  const c = ac(); if (!c || muted) return;
+  const c = ac(); if (!c || muted || platformMuted) return;
   const n = c.createBufferSource();
   const len = Math.max(1, (dur * c.sampleRate) | 0);
   const buf = c.createBuffer(1, len, c.sampleRate);
@@ -64,7 +74,7 @@ function noiseBurst({ dur = 0.1, freq = 2000, q = 1, gain = 0.5, sweep = 0 }) {
 
 /** A clean sine ping, for the good news. */
 function ping(freq, dur = 0.3, gain = 0.25, delay = 0) {
-  const c = ac(); if (!c || muted) return;
+  const c = ac(); if (!c || muted || platformMuted) return;
   const o = c.createOscillator();
   o.type = 'sine'; o.frequency.value = freq;
   const g = c.createGain();
@@ -156,5 +166,5 @@ Sound.cart = (speed) => {
   const s = Math.abs(speed);
   cartOsc.frequency.value = 42 + s * 6.5;
   cartFilter.frequency.value = 220 + s * 40;
-  cartGain.gain.value = muted ? 0 : Math.min(0.10, 0.03 + s * 0.006);
+  cartGain.gain.value = (muted || platformMuted) ? 0 : Math.min(0.10, 0.03 + s * 0.006);
 };

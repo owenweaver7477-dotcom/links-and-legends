@@ -27,7 +27,7 @@ import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
-import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem } from './server/profiles.js';
+import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound } from './server/profiles.js';
@@ -144,9 +144,18 @@ app.use((req, res, next) => {
   // very thing it is published for.
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  /* The CSP has to let the CrazyGames SDK in, or the portal build silently
+     loses save-data, ad timing and audio muting — the script would simply be
+     blocked and every SDK call would no-op.  Their SDK also talks to their
+     own origins, hence the connect-src entries.  frame-ancestors stays wide
+     open because being embedded is the point. */
   res.setHeader('Content-Security-Policy',
-    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
-    "script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors *");
+    "default-src 'self'; " +
+    "img-src 'self' data: https://images.crazygames.com; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "script-src 'self' https://sdk.crazygames.com; " +
+    "connect-src 'self' ws: wss: https://*.crazygames.com https://sdk.crazygames.com; " +
+    "frame-ancestors *");
   const key = req.path === '/' ? '/index.html' : req.path;
   if (DEV) {                       // pick up edits without a restart
     try {
@@ -741,6 +750,12 @@ io.on('connection', socket => {
   socket.on('profile:me', (d) => {
     const pid = cleanPid(d?.pid);
     if (!pid) return;
+    // A player we have never seen may be a genuinely new player, or the same
+    // player after this host wiped its disk on a deploy.  seedProfile tells
+    // those apart safely: it only ever fills a blank, and only within clamps.
+    if (d?.restore) {
+      try { seedProfile(pid, d.restore); } catch { /* malformed: ignore */ }
+    }
     socket.emit('profile', publicProfile(pid));
   });
 

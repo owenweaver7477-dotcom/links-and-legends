@@ -3,14 +3,22 @@
    carries messages and keeps a stable identity across refreshes.
    ========================================================================= */
 
+import { storeGet, storeSet } from './crazygames.js';
+
 export const Net = { socket: null, pid: null, code: null, lastName: null, h: {} };
 
 function loadPid() {
-  let pid = null;
-  try { pid = localStorage.getItem('lg_pid'); } catch { /* private mode */ }
+  /* Identity goes through the portal's Data module when there is one.
+     localStorage alone is not enough on a game portal: the page runs in a
+     partitioned third-party iframe, so the key can be dropped between visits
+     and every session looks like a brand-new player with no career.  The
+     Data module survives that, and for a signed-in CrazyGames user it
+     follows them to another device.  storeGet/storeSet fall back to
+     localStorage everywhere else, so this one path covers every host. */
+  let pid = storeGet('lg_pid');
   if (!pid || !/^[A-Za-z0-9_-]{8,40}$/.test(pid)) {
     pid = 'p' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-6);
-    try { localStorage.setItem('lg_pid', pid); } catch { /* ignore */ }
+    storeSet('lg_pid', pid);
   }
   return pid;
 }
@@ -73,8 +81,17 @@ Net.start = () => Net.socket.emit('game:start');
    the room on if you were the host, and keeps your scorecard if the round is
    live — so there is no second teardown path to get out of step. */
 /** Ask the server for our career, without needing to be in a room. */
+Net.restoreFrom = null;      // set by main.js: our Data-module snapshot
 Net.fetchProfile = () => {
-  try { Net.socket?.emit('profile:me', { pid: Net.pid }); } catch { /* not up yet */ }
+  try {
+    Net.socket?.emit('profile:me', {
+      pid: Net.pid,
+      // Offered, never trusted: the server uses this ONLY to seed a profile
+      // it has no record of, which is what happens after the host wipes its
+      // disk on a deploy.  An existing career is never overwritten by it.
+      restore: Net.restoreFrom?.() || null
+    });
+  } catch { /* not up yet */ }
 };
 
 Net.leave = () => {
