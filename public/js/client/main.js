@@ -1189,8 +1189,53 @@ function cancelShot() {
   return true;
 }
 
+/* Shot telemetry.  Power and shape used to be tuned by feel, which is how a
+   meter that disagreed with the shot went unnoticed for so long — every
+   number here is the one actually committed, read back off the controller
+   after the fact.  Off unless asked for: ?debug=1 in the URL, or Ctrl+Shift+D
+   in play.  Survives a reload so a whole round can be watched. */
+let shotDebug = (() => {
+  try {
+    if (new URLSearchParams(location.search).get('debug') === '1') return true;
+    return localStorage.getItem('lg_shotdebug') === '1';
+  } catch { return false; }
+})();
+let dbgEl = null;
+function shotDebugPanel() {
+  if (dbgEl) return dbgEl;
+  dbgEl = document.createElement('pre');
+  dbgEl.id = 'shotDebug';
+  dbgEl.style.cssText =
+    'position:fixed;left:12px;bottom:74px;z-index:60;margin:0;padding:8px 10px;' +
+    'font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#8fe07a;' +
+    'background:rgba(6,12,10,.82);border:1px solid rgba(143,224,122,.28);' +
+    'border-radius:8px;pointer-events:none;white-space:pre;max-width:46vw';
+  document.body.appendChild(dbgEl);
+  return dbgEl;
+}
+function reportShot(d) {
+  if (!d) return;
+  const line =
+    `power    ${String(d.powerPct).padStart(5)} %   (${d.club} from ${d.lie})\n` +
+    `accuracy ${String(d.accuracyPct).padStart(5)} %   stop ${d.strikeAt >= 0 ? '+' : ''}` +
+    `${d.strikeAt.toFixed(3)}  band ±${d.band}\n` +
+    `shape    ${d.shape.padStart(8)}   face ${d.faceDeg >= 0 ? '+' : ''}` +
+    `${d.faceDeg.toFixed(2)}°  ${d.pure ? 'PURE' : ''}`;
+  shotDebugPanel().textContent = line;
+  console.log('[shot]', d);
+}
+window.addEventListener('keydown', ev => {
+  if (!(ev.ctrlKey && ev.shiftKey && ev.code === 'KeyD')) return;
+  ev.preventDefault();
+  shotDebug = !shotDebug;
+  try { localStorage.setItem('lg_shotdebug', shotDebug ? '1' : '0'); } catch { /* private mode */ }
+  if (!shotDebug && dbgEl) { dbgEl.remove(); dbgEl = null; }
+  else shotDebugPanel().textContent = 'shot telemetry on — play a shot';
+});
+
 function strike() {
   const shot = swing.commit();
+  if (shotDebug) reportShot(swing.debug());   // BEFORE reset, which clears it
   swing.reset();
   if (!shot || !canSwing()) { HUD.setMeter(swing.meter(), canSwing()); return; }
   // call the strike the moment it leaves the face — a golfer knows

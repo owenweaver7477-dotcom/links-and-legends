@@ -306,47 +306,45 @@ head('spawning');
 }
 
 /* ============================================================ the swing */
-head('shot shaping — the drag path is the shape');
+head('the swing — the meter is the shot');
 {
   const { SwingController } = await import('../public/js/client/swing.js');
   const sw = new SwingController();
   const drag = pts => { sw.enabled = true; sw.reset(); sw.pointerDown(500, 300);
     for (const [dx, dy] of pts) sw.pointerMove(500 + dx, 300 + dy); };
 
-  drag(Array.from({ length: 10 }, (_, i) => [0, (i + 1) * 17]));
-  ok('a straight pull back is a straight ball', sw.shapeDeg === 0);
-
-  drag(Array.from({ length: 10 }, (_, i) => [(i + 1) * 4, (i + 1) * 17]));
-  const fade = sw.shapeDeg;
-  ok('a gentle pull right is a fade', fade > 2 && fade < 6, fade.toFixed(1) + ' deg');
-
+  /* The drag used to add a shape of its own, taken from the angle of the
+     pull.  It meant ordinary sideways drift curved a shot the player had
+     struck perfectly, with no visible cause — so the strike bar is now the
+     only thing that bends the ball.  test/swing.mjs covers this in full;
+     these are the two properties the rest of this file leans on. */
   drag(Array.from({ length: 10 }, (_, i) => [(i + 1) * 12, (i + 1) * 17]));
-  ok('a hard pull right is a slice, capped', sw.shapeDeg === 7, sw.shapeDeg + ' deg');
-
-  drag(Array.from({ length: 10 }, (_, i) => [-(i + 1) * 12, (i + 1) * 15]));
-  ok('a hard pull left is a hook', sw.shapeDeg === -7, sw.shapeDeg + ' deg');
-
-  // The shape you chose going back is carried into the strike: flush the
-  // timing and you get exactly the fade you asked for, nothing else.
-  drag(Array.from({ length: 10 }, (_, i) => [(i + 1) * 4, (i + 1) * 17]));
-  sw.pointerUp();
-  sw.sweep = 0;
+  sw.pointerUp(); sw.sweep = 0;
   const clean = sw.commit();
-  ok('a flushed strike plays the shape you chose',
-     !!clean && Math.abs(clean.faceDeg - fade) < 0.5,
+  ok('a flushed strike is straight however the drag wandered',
+     !!clean && clean.faceDeg === 0,
      clean ? clean.faceDeg.toFixed(1) + ' deg' : 'no shot');
 
-  // and a mistimed strike stacks its own error on top of that shape
   sw.enabled = true; sw.reset();
   sw.pointerDown(500, 300);
-  for (let i = 1; i <= 10; i++) sw.pointerMove(500 + i * 4, 300 + i * 17);
-  const shape = sw.shapeDeg;
+  for (let i = 1; i <= 10; i++) sw.pointerMove(500, 300 + i * 17);
   sw.pointerUp();
   sw.sweep = 0.5;
   const missed = sw.commit();
-  ok('a mistimed strike stacks error on top of the shape',
-     missed.faceDeg > shape + 2,
-     shape.toFixed(1) + ' -> ' + missed.faceDeg.toFixed(1) + ' deg');
+  ok('missing the bar right opens the face', missed.faceDeg > 2,
+     missed.faceDeg.toFixed(1) + ' deg');
+
+  // Power is read at the moment of release, not at the deepest point of the
+  // drag — overshooting and easing back to the number you want is the whole
+  // reason to have a drag meter.
+  sw.enabled = true; sw.reset();
+  sw.pointerDown(500, 300);
+  sw.pointerMove(500, 300 + 190 * 1.0);
+  sw.pointerMove(500, 300 + 190 * 0.6);
+  sw.pointerUp(); sw.sweep = 0;
+  const eased = sw.commit();
+  ok('easing back off a full swing commits the eased number',
+     Math.abs(eased.power - 0.6) < 0.02, (eased.power * 100).toFixed(0) + '%');
 }
 
 /* ================================================= a pure strike spins more */
@@ -398,7 +396,12 @@ head('the coin economy — the document’s shape, at PAYOUT_SCALE');
   ok('eagle pays 80 x scale', holeCoins(3, 5) === 80 * K, String(holeCoins(3, 5)));
   ok('an ace pays 170 x scale', holeCoins(1, 3) === 170 * K, String(holeCoins(1, 3)));
   ok('bogey pays 15 x scale', holeCoins(5, 4) === 15 * K, String(holeCoins(5, 4)));
-  ok('a blow-up hole never goes negative', holeCoins(11, 4) === 0);
+  /* A hole you finished always pays. The over-par penalty used to eat the
+     whole appearance fee — zero coins from four over, and holes cap at par+6,
+     so every blow-up paid nothing and the economy read as broken. */
+  ok('a blow-up hole never goes negative', holeCoins(11, 4) > 0, String(holeCoins(11, 4)));
+  ok('the worst hole still pays the floor', holeCoins(10, 4) === 5 * K, String(holeCoins(10, 4)));
+  ok('and it is worse than a bogey', holeCoins(10, 4) < holeCoins(5, 4));
   const par4 = { strokes: 4, par: 4 }, birdie = { strokes: 3, par: 4 };
   const flat9 = roundCoins(Array(9).fill(par4));
   ok('nine pars: holes + the round bonus, no streak',

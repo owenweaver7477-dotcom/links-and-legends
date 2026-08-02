@@ -382,6 +382,46 @@ function pickNextToPlay(room, teeOff = false) {
   room.turnPid = best.pid;
 }
 
+/**
+ * A room must always be continuable by somebody.  Three things can strand it,
+ * and all three come from the same event — the last connected player dropping:
+ *
+ *   - hostPid goes null, because the heir search only considers CONNECTED
+ *     players and there were none.  Nothing restored it on the way back in, so
+ *     the player reconnected into a room with no host, and every screen that
+ *     waits on one ("Waiting for the host…", game:next) waited forever.  This
+ *     is the reported "stuck waiting for host to finish hole".
+ *   - turnPid goes null, because nobody was eligible to play.
+ *   - the hole-summary timer is the only thing that can advance a holeover,
+ *     so if it is ever lost the summary is permanent.
+ *
+ * Rather than patch each caller, every path that changes who is in the room
+ * ends here.  Idempotent and cheap.
+ */
+function ensureContinuable(room) {
+  const present = room.players.filter(p => p.connected);
+  if (!present.length) return;                 // nobody to hand anything to
+
+  // The host must be someone actually here.  A disconnected host cannot press
+  // Continue, which makes it identical to having no host at all.
+  const host = room.players.find(p => p.pid === room.hostPid);
+  if (!host || !host.connected) {
+    room.hostPid = present[0].pid;
+    if (host && host.pid !== room.hostPid) toast(room, present[0].name + ' is now the host.');
+  }
+
+  if (room.state === 'playing') {
+    const cur = room.players.find(p => p.pid === room.turnPid);
+    if (!cur || !cur.connected || cur.finished) {
+      if (everyoneDone(room)) finishHole(room);
+      else pickNextToPlay(room);
+    }
+  } else if (room.state === 'holeover' && !room.summaryTimer) {
+    // Re-arm the fallback: the summary must always be on its way out.
+    room.summaryTimer = setTimeout(() => nextHole(room), HOLE_SUMMARY_MS);
+  }
+}
+
 function everyoneDone(room) {
   const a = active(room).filter(p => p.connected);
   return a.length > 0 && a.every(p => p.finished);
@@ -531,6 +571,8 @@ io.on('connection', socket => {
     sockets.set(socket.id, { code: room.code, pid: player.pid });
     socket.join(room.code);
     room.emptySince = null;
+    // Arriving is one of the two events that can un-strand a room.
+    ensureContinuable(room);
     socket.emit('profile', publicProfile(player.pid));
   }
 
@@ -551,15 +593,7 @@ io.on('connection', socket => {
     p.connected = false;
     p.socketId = null;
     dropIfNeverPlayed(room, p);
-    if (room.hostPid === p.pid) {
-      const heir = room.players.find(x => x.connected);
-      room.hostPid = heir?.pid ?? null;
-      if (heir) toast(room, heir.name + ' is now the host.');
-    }
-    if (room.state === 'playing') {
-      if (everyoneDone(room)) finishHole(room);
-      else pickNextToPlay(room);
-    }
+    ensureContinuable(room);
     if (!room.players.some(x => x.connected)) room.emptySince = Date.now();
     broadcastState(room);
   }
@@ -593,12 +627,7 @@ io.on('connection', socket => {
     let p = room.players.find(x => x.pid === pid);
     if (p) {
       p.name = cleanName(data?.name);
-      bind(room, p);
-      // the room may have frozen with no turn while everyone was away
-      if (room.state === 'playing') {
-        const cur = room.players.find(x => x.pid === room.turnPid);
-        if (!cur || !cur.connected || cur.finished) pickNextToPlay(room);
-      }
+      bind(room, p);      // ensureContinuable inside covers a frozen room
       reply({ ok: true, code, pid, state: snapshot(room), rejoined: true });
       broadcastState(room);
       return;
@@ -929,17 +958,9 @@ io.on('connection', socket => {
     p.connected = false;
     p.socketId = null;
     dropIfNeverPlayed(room, p);
-    if (room.hostPid === p.pid) {
-      const heir = room.players.find(x => x.connected);
-      room.hostPid = heir?.pid ?? null;
-      if (heir) toast(room, heir.name + ' is now the host.');
-    }
-    if (room.state === 'playing') {
-      // Never tear down a round because connections blipped — park it and let
-      // them come back to the same scorecard.
-      if (everyoneDone(room)) finishHole(room);
-      else pickNextToPlay(room);
-    }
+    // Never tear down a round because connections blipped — park it and let
+    // them come back to the same scorecard.
+    ensureContinuable(room);
     if (!room.players.some(x => x.connected)) room.emptySince = Date.now();
     broadcastState(room);
   });

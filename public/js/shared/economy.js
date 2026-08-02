@@ -23,17 +23,27 @@
 
 export const PAYOUT_SCALE = 8;
 
+/* Finishing a hole is worth something no matter how it went.  The appearance
+   fee used to be eaten alive by the over-par penalty — at four over it hit
+   exactly zero, and a hole caps at par + 6, so every blow-up paid literally
+   nothing.  A player having a bad round therefore earned nothing for it,
+   which reads as the economy being broken rather than as a penalty.  The
+   penalty now shaves the fee and stops, so the worst hole in the game still
+   pays something for holing out. */
+const SHOW_UP = 20;          // paid for finishing the hole, whatever the score
+const WORST_PENALTY = -15;   // never more than this, so the floor is 5
+
 /** Coins for one finished hole.  `rel` = strokes minus par. */
 export function holeCoins(strokes, par) {
   if (!(strokes > 0) || !(par > 0)) return 0;
   const rel = strokes - par;
-  let c = 20;                                       // showing up to the green
-  if (strokes === 1) c += 150;                      // the once-a-year one
-  else if (rel <= -2) c += 60;
-  else if (rel === -1) c += 30;
-  else if (rel === 0) c += 15;
-  else c -= rel * 5;                                // soft penalty over par
-  return Math.max(0, c) * PAYOUT_SCALE;
+  let bonus;
+  if (strokes === 1) bonus = 150;                   // the once-a-year one
+  else if (rel <= -2) bonus = 60;
+  else if (rel === -1) bonus = 30;
+  else if (rel === 0) bonus = 15;
+  else bonus = Math.max(WORST_PENALTY, -rel * 5);   // soft penalty, with a bottom
+  return Math.max(0, SHOW_UP + bonus) * PAYOUT_SCALE;
 }
 
 /**

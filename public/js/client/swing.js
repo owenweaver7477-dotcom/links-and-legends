@@ -4,13 +4,22 @@
    Aim with ←/→ (Shift = ultra-fine), pick a club, then play the shot in two
    distinct beats, because they are two distinct skills:
 
-     1. POWER — press and drag DOWN.  How far you pull is how hard you hit,
-        and the ANGLE of the pull is the shape of the shot, exactly like a
-        swing plane: straight back is straight, angled is a draw or a fade.
+     1. POWER — press and drag DOWN.  How far you are pulling WHEN YOU LET GO
+        is how hard you hit.  Not how far you pulled at some point during the
+        drag: overshooting and easing back to the number you wanted is the
+        whole reason a drag meter beats a button, so the release is what
+        counts and the meter never disagrees with the shot.
 
      2. ACCURACY — let go, and a marker sweeps across the strike bar.  Click
         (or Space) to strike.  Stop it in the middle and you flush it; stop it
         wide and the face is open or shut by that much.
+
+   The strike bar is the ONLY thing that curves the ball.  The drag used to
+   contribute a shape of its own, taken from the angle of the pull, which
+   meant a few pixels of ordinary sideways drift put a slice on a shot the
+   player had struck perfectly — a curve with no visible cause and no way to
+   correct it.  Shape now comes from where you stopped the marker and nowhere
+   else, so a flush strike is straight every single time.
 
    The sweep's SPEED is the lie.  Off a tee or fairway it is brisk; light
    rough hurries it; heavy rough is a blur you can barely time.  Sand is the
@@ -35,8 +44,6 @@ const FACE_MAX = 7.4;          // degrees of face angle at maximum miss
 // bar the strike counts as pure, so a good stop is rewarded rather than
 // merely being less bad.  Widened again on the fairway (see PURE_BAND).
 const PURE_BASE = 0.10;
-const SHAPE_MAX = 7.0;         // degrees available from the backswing path
-const SHAPE_GAIN = 2.6;        // how fast path angle becomes shape
 
 /* Sweeps per second across the strike bar, by what you are standing in.
    One "sweep" is a full there-and-back, so 1.0 means the marker crosses the
@@ -78,7 +85,6 @@ export class SwingController {
     this.state = SWING.IDLE;
     this.power = 0;
     this.faceDeg = 0;
-    this.shapeDeg = 0;
     this.downX = 0;
     this.attackDeg = 0;
     this.startX = 0; this.startY = 0;
@@ -87,6 +93,7 @@ export class SwingController {
     this.tempoT = 0;
     this.result = null;
     this.sweep = 0;            // -1..1, where the strike marker is
+    this.strikeAt = 0;         // where it was stopped, for debug()
     this.sweepDir = 1;
     this.tempo = 1.15;         // sweeps per second, set by the lie
     this.lie = 'fairway';
@@ -119,7 +126,7 @@ export class SwingController {
     this.state = SWING.BACK;
     this.startX = x; this.startY = y;
     this.curX = x; this.curY = y;
-    this.power = 0; this.peak = 0; this.faceDeg = 0; this.shapeDeg = 0;
+    this.power = 0; this.peak = 0; this.faceDeg = 0;
     this.downX = x;
   }
 
@@ -127,24 +134,16 @@ export class SwingController {
     if (this.state !== SWING.BACK) return;    // once released, aim is fixed
     this.curX = x; this.curY = y;
     const dy = y - this.startY;
-    const dx = x - this.startX;
 
-    {
-      // pulling down fills the backswing
-      this.power = clamp(dy / BACKSWING_PX, 0, MAX_OVER);
-      this.peak = Math.max(this.peak, this.power);
+    // Pulling down fills the backswing, and easing back up empties it again.
+    // `peak` is remembered ONLY to tell a real swing from a twitch — it must
+    // never become the shot, or a player who corrects an overshoot is
+    // silently given the overshoot.
+    this.power = clamp(dy / BACKSWING_PX, 0, MAX_OVER);
+    this.peak = Math.max(this.peak, this.power);
 
-      // The ANGLE of the pull is the shape of the shot.  Normalising by how
-      // far back you are makes it a direction, not a distance — a 15° pull
-      // is the same fade from a half swing as from a full one.  It only
-      // starts reading once the swing is properly under way, so the first
-      // wobble of the drag does not decide your shot.
-      if (this.power > 0.15) {
-        const pathAngle = dx / Math.max(dy, 30);
-        this.shapeDeg = clamp(pathAngle * SHAPE_MAX * SHAPE_GAIN, -SHAPE_MAX, SHAPE_MAX);
-      }
-      this.faceDeg = this.shapeDeg;      // so the meter and the ring show it live
-    }
+    // Sideways drift is not a shot shape.  The face is decided at the strike.
+    this.faceDeg = 0;
   }
 
   /**
@@ -155,7 +154,7 @@ export class SwingController {
   pointerUp() {
     if (this.state !== SWING.BACK) return null;
     if (this.peak < 0.06) { this.reset(); return null; }   // a twitch, not a swing
-    this.power = this.peak;
+    // whatever the meter was reading at the instant of release IS the shot
     this.state = SWING.ACCURACY;
     this.tempo = lieTempo(this.lie);
     // always start from the middle heading out, so the first sweep is the
@@ -171,21 +170,24 @@ export class SwingController {
    */
   commit() {
     if (this.state !== SWING.ACCURACY) return null;
-    const power = this.peak;
+    const power = this.power;
 
     // Where you stopped the marker IS the face — but the middle of the bar is
     // a BAND, not a point.  Inside it the strike is flush and the face error
     // is zero; outside it the error ramps from the edge of the band, so a
     // near-miss is a small miss rather than a cliff.
     const raw = clamp(this.sweep, -1, 1);
+    this.strikeAt = raw;
     const band = pureBand(this.lie);
     const over = Math.max(0, Math.abs(raw) - band) / Math.max(1e-6, 1 - band);
     const timing = Math.sign(raw) * over;
     const error = timing * FACE_MAX;
 
-    // overswinging past full costs accuracy — the face gets harder to control
+    // Overswinging past full costs accuracy — the face gets harder to
+    // control.  It multiplies the strike error rather than adding a curve of
+    // its own, so a flush strike stays flush however hard you swung.
     const overswing = Math.max(0, power - 1);
-    const face = clamp((this.shapeDeg + error) * (1 + overswing * 2.5),
+    const face = clamp(error * (1 + overswing * 2.5),
       -FACE_MAX * 1.8, FACE_MAX * 1.8);
 
     // a mistimed strike is also a thinner one: caught low on the face, it
@@ -207,6 +209,30 @@ export class SwingController {
     return shot;
   }
 
+  /**
+   * What the last swing ACTUALLY committed — the three numbers that were
+   * being guessed at when power and shape could disagree with the meter.
+   * accuracyPct is 100 for a flush strike and falls off to 0 at the far edge
+   * of the bar, so it reads the way a player would describe it.
+   */
+  debug() {
+    const r = this.result;
+    if (!r) return null;
+    const band = pureBand(this.lie);
+    const off = Math.abs(clamp(this.strikeAt, -1, 1));
+    return {
+      powerPct: Math.round(r.power * 1000) / 10,
+      accuracyPct: Math.round(Math.max(0, 1 - off) * 1000) / 10,
+      strikeAt: Math.round(this.strikeAt * 1000) / 1000,
+      band: Math.round(band * 1000) / 1000,
+      pure: r.pure,
+      faceDeg: r.faceDeg,
+      shape: r.faceDeg > 0.05 ? 'slice' : r.faceDeg < -0.05 ? 'hook' : 'straight',
+      lie: this.lie,
+      club: r.clubKey
+    };
+  }
+
   cancel() { this.reset(); }
 
   /* --------------------------------------------------------------- aim */
@@ -217,10 +243,9 @@ export class SwingController {
   meter() {
     return {
       state: this.state,
-      power: this.state === SWING.BACK ? this.power : this.peak,
+      power: this.power,
       peak: this.peak,
       face: this.faceDeg,
-      shape: this.shapeDeg,
       over: Math.max(0, this.peak - 1),
       sweep: this.sweep,
       tempo: this.tempo,

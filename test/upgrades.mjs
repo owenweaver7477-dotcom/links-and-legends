@@ -1,0 +1,170 @@
+/* =========================================================================
+   upgrades.mjs — buying something must change something
+   -------------------------------------------------------------------------
+   Reported: "upgrades currently don't do anything when purchased — no stat
+   change, no visual change, nothing in-game reflects the purchase."
+
+   Three separate things have to hold for an upgrade to feel real, and this
+   checks all three rather than assuming the first implies the rest:
+
+     1. the purchase is recorded against the player and survives
+     2. the client is TOLD about it, in the profile payload it renders from
+     3. the simulation the server rules with actually flies a different ball
+
+   Plus the economy that pays for it: every finished hole must pay something,
+   because a blow-up hole that pays zero reads as the shop being unreachable.
+
+   Needs a server on localhost:3000.
+   ========================================================================= */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { io } from 'socket.io-client';
+import { holeCoins } from '../public/js/shared/economy.js';
+import { SHOP, gearEffect } from '../public/js/shared/gear.js';
+import { CLUB_BY_KEY } from '../public/js/shared/clubs.js';
+import { ShotSim, calibrateCarries } from '../public/js/shared/ballistics.js';
+import { allCourses } from '../public/js/shared/coursegen.js';
+import { terrainFor } from '../public/js/shared/terrain.js';
+import { BIOMES } from '../public/js/shared/biomes.js';
+
+calibrateCarries();
+
+const URL = 'http://localhost:3000';
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const pid = t => t + '-' + Math.random().toString(36).slice(2, 9);
+
+const connect = () => new Promise((resolve, reject) => {
+  const s = io(URL, { transports: ['websocket'], forceNew: true, timeout: 4000 });
+  s.once('connect', () => resolve(s));
+  s.once('connect_error', reject);
+});
+const ask = (s, ev, d) => new Promise(r => s.emit(ev, d, r));
+
+/* ------------------------------------------------------------- economy --- */
+
+test('every finished hole pays something, however badly it went', () => {
+  for (const par of [3, 4, 5]) {
+    for (let s = 1; s <= par + 6; s++) {
+      const c = holeCoins(s, par);
+      assert.ok(c > 0,
+        `par ${par} in ${s} strokes paid ${c} — a hole you finished must never ` +
+        `pay nothing, or a bad round reads as a broken economy`);
+    }
+  }
+});
+
+test('the payout still rewards good golf', () => {
+  assert.ok(holeCoins(3, 4) > holeCoins(4, 4), 'a birdie must beat a par');
+  assert.ok(holeCoins(4, 4) > holeCoins(5, 4), 'a par must beat a bogey');
+  assert.ok(holeCoins(5, 4) > holeCoins(7, 4), 'over par must still slope down');
+  assert.ok(holeCoins(1, 4) > holeCoins(2, 4) * 1.5, 'an ace must feel like one');
+});
+
+/* ------------------------------------------------------------- physics --- */
+
+test('each upgrade changes the ball the server actually simulates', () => {
+  const c = allCourses()[0], h = c.holes[1];
+  const T = terrainFor(h, BIOMES.parkland);
+  const aim = Math.atan2(h.pin.x - h.tee.x, h.pin.z - h.tee.z);
+  const carry = (clubKey, extra) => new ShotSim(T, {
+    x: h.tee.x, z: h.tee.z, clubKey, power: 1, aim,
+    faceDeg: 0, attackDeg: 0, wind: { dir: 0, speed: 0 }, ...extra
+  }).runToEnd().carry;
+
+  const NONE = { ball: 0, irons: 0, woods: 0, putter: 0 };
+  const base = k => carry(k, { gear: NONE, crew: null, clubTier: 0, refine: 0 });
+
+  // A wood upgrade must show up on a wood, an iron upgrade on an iron.
+  const withGear = (k, slot, tier) =>
+    carry(k, { gear: { ...NONE, [slot]: tier }, crew: null, clubTier: 0, refine: 0 });
+
+  assert.ok(withGear('DR', 'woods', 1) - base('DR') > 2,
+    'Carbon woods must add real distance off the tee');
+  assert.ok(withGear('I7', 'irons', 1) - base('I7') > 1,
+    'Forged irons must add real distance on an iron');
+  assert.ok(withGear('DR', 'ball', 1) - base('DR') > 1,
+    'a Tour ball must be longer than the one it replaces');
+  assert.ok(withGear('DR', 'ball', 2) > withGear('DR', 'ball', 1),
+    'the Pro ball must beat the Tour ball');
+
+  // ...and must NOT show up where it has no business.
+  assert.equal(withGear('DR', 'irons', 1), base('DR'), 'irons must not lengthen a driver');
+  assert.equal(withGear('I7', 'woods', 1), base('I7'), 'woods must not lengthen an iron');
+
+  // The club ladder is the big one, and must climb monotonically.
+  const ladder = [0, 1, 2, 3].map(t =>
+    carry('DR', { gear: NONE, crew: null, clubTier: t, refine: 0 }));
+  for (let i = 1; i < ladder.length; i++) {
+    assert.ok(ladder[i] > ladder[i - 1] + 2,
+      `club tier ${i} must beat tier ${i - 1} by a felt margin ` +
+      `(${ladder[i - 1].toFixed(1)}m -> ${ladder[i].toFixed(1)}m)`);
+  }
+});
+
+test('gearEffect is exactly neutral with no gear', () => {
+  for (const k of Object.keys(CLUB_BY_KEY)) {
+    const fx = gearEffect(null, CLUB_BY_KEY[k]);
+    assert.equal(fx.speed, 1);
+    assert.equal(fx.spin, 1);
+  }
+});
+
+/* --------------------------------------------------------------- flow ---- */
+
+test('buying an item is recorded and reported back to the client', async () => {
+  const me = pid('shop');
+  const s = await connect();
+
+  let profile = null;
+  s.on('profile', p => { profile = p; });
+  const created = await ask(s, 'room:create', { name: 'Shopper', pid: me, courseId: 'parkland' });
+  assert.ok(created.ok);
+  await wait(300);
+  assert.ok(profile, 'the server must push a profile on joining');
+
+  // A brand-new player cannot afford anything, and that is correct — so this
+  // asserts the REFUSAL is honest rather than silent.
+  const before = { ...profile };
+  const toasts = [];
+  s.on('toast', t => toasts.push(t));
+  s.emit('shop:buy', { item: 'ball_tour' });
+  await wait(300);
+
+  if ((before.coins || 0) < SHOP.ball_tour.cost) {
+    assert.ok(toasts.some(t => t.kind === 'warn' && /coins/i.test(t.msg)),
+      `a purchase you cannot afford must say so; toasts were ` +
+      JSON.stringify(toasts));
+    assert.equal(profile.gear?.ball || 0, 0, 'and must not hand over the item');
+  } else {
+    assert.equal(profile.gear?.ball, 1, 'an affordable purchase must land');
+  }
+
+  // The profile the client renders from must actually carry the fields the
+  // shop screen needs, or a successful purchase can never be shown.
+  assert.ok(profile.gear && typeof profile.gear === 'object',
+    'profile must expose gear, or the shop cannot show what is owned');
+  assert.ok('coins' in profile, 'profile must expose coins');
+  assert.ok('clubTier' in profile, 'profile must expose the club ladder tier');
+
+  s.disconnect();
+});
+
+test('a rejected purchase never charges the player', async () => {
+  const me = pid('nocharge');
+  const s = await connect();
+  let profile = null;
+  s.on('profile', p => { profile = p; });
+  await ask(s, 'room:create', { name: 'NoCharge', pid: me, courseId: 'parkland' });
+  await wait(300);
+  const coinsBefore = profile.coins || 0;
+
+  for (const bad of ['', 'constructor', '__proto__', 'nope', 'ball_pro']) {
+    s.emit('shop:buy', { item: bad });
+  }
+  await wait(400);
+  assert.equal(profile.coins || 0, coinsBefore,
+    'a refused purchase must leave the balance untouched');
+  assert.ok(Number.isFinite(profile.coins), 'and must never NaN the balance');
+
+  s.disconnect();
+});
