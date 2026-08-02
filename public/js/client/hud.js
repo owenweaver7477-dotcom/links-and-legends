@@ -4,7 +4,8 @@
 
 import { CARRY, CLUBS, CLUB_BY_KEY, BAG_SIZE, DEFAULT_BAG } from '../shared/clubs.js';
 import { HOLES_PER_COURSE, BALL_COLORS } from '../shared/biomes.js';
-import { CAPS, SHIRTS, SKINS, TROUSERS } from '../shared/avatars.js';
+import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
+         HAT_STYLES, HAIR_STYLES, ACCESSORIES } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { toYards, clamp } from '../shared/rng.js';
@@ -338,9 +339,19 @@ HUD.renderBag = (bag, onToggle) => {
   }
 };
 
+/* The wardrobe, in the order a player thinks about it: who they are, then
+   what they are wearing, then the details.  `swatch` groups are colours;
+   `style` groups are shapes and show their name instead. */
 const LOOK_GROUPS = [
-  ['cap', 'Cap', CAPS], ['shirt', 'Shirt', SHIRTS],
-  ['skin', 'Skin', SKINS], ['trousers', 'Trousers', TROUSERS]
+  { key: 'skin',      title: 'Skin',        list: SKINS,       kind: 'swatch' },
+  { key: 'hair',      title: 'Hair',        list: HAIR_STYLES, kind: 'style'  },
+  { key: 'hairColor', title: 'Hair colour', list: HAIR_COLORS, kind: 'swatch' },
+  { key: 'hat',       title: 'Headwear',    list: HAT_STYLES,  kind: 'style'  },
+  { key: 'cap',       title: 'Hat colour',  list: CAPS,        kind: 'swatch' },
+  { key: 'shirt',     title: 'Shirt',       list: SHIRTS,      kind: 'swatch' },
+  { key: 'trousers',  title: 'Trousers',    list: TROUSERS,    kind: 'swatch' },
+  { key: 'shoes',     title: 'Shoes',       list: SHOES,       kind: 'swatch' },
+  { key: 'accessory', title: 'Accessory',   list: ACCESSORIES, kind: 'style'  }
 ];
 /**
  * Your career, from the server's book of record.  Nothing here is client
@@ -566,17 +577,26 @@ HUD.renderShop = (prof, onBuy) => {
 
 HUD.renderLook = (look, onPick) => {
   el.lookPicker.innerHTML = '';
-  for (const [key, title, list] of LOOK_GROUPS) {
+  for (const grp of LOOK_GROUPS) {
     const g = document.createElement('div');
-    g.className = 'lookgrp';
-    const h = document.createElement('h5'); h.textContent = title;
+    g.className = 'lookgrp' + (grp.kind === 'style' ? ' style' : '');
+    const h = document.createElement('h5'); h.textContent = grp.title;
     const row = document.createElement('div'); row.className = 'lookrow';
-    for (const c of list) {
+    for (const c of grp.list) {
       const b = document.createElement('button');
-      b.className = 'lookbtn' + (look[key] === c.hex ? ' on' : '');
-      b.style.background = c.hex;
-      b.title = c.name;
-      b.addEventListener('click', () => onPick(key, c.hex));
+      b.type = 'button';
+      if (grp.kind === 'style') {
+        // a shape has no colour to show, so it says what it is
+        b.className = 'lookpill' + (look[grp.key] === c.id ? ' on' : '');
+        b.textContent = c.name;
+        b.addEventListener('click', () => onPick(grp.key, c.id));
+      } else {
+        b.className = 'lookbtn' + (look[grp.key] === c.hex ? ' on' : '');
+        b.style.background = c.hex;
+        b.title = c.name;
+        b.setAttribute('aria-label', grp.title + ' ' + c.name);
+        b.addEventListener('click', () => onPick(grp.key, c.hex));
+      }
       row.appendChild(b);
     }
     g.append(h, row);

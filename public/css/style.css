@@ -428,11 +428,28 @@ html.touch .touchpad[hidden] { display: none !important; }
 .walkbar #walkText { font-weight: 600; color: #ffd76b; }
 
 /* appearance picker */
-.looker { display: flex; flex-wrap: wrap; gap: 14px; }
+/* The wardrobe.  Nine groups now rather than four, so it scrolls inside the
+   panel instead of pushing the card off the screen, and the style groups get
+   a full row to themselves because their labels need the width. */
+.looker { display: flex; flex-wrap: wrap; gap: 11px 14px;
+  max-height: min(46vh, 340px); overflow-y: auto; overflow-x: hidden;
+  padding-right: 4px; scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.18) transparent; }
+.looker::-webkit-scrollbar { width: 6px; }
+.looker::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 3px; }
 .lookgrp { }
+.lookgrp.style { flex: 1 1 100%; }
+.lookgrp.style .lookrow { flex-wrap: wrap; }
+.lookpill { padding: 4px 9px; border-radius: 999px; cursor: pointer; font: inherit;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .2px; color: #b9cfbe;
+  background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.13);
+  transition: .13s; -webkit-user-select: none; user-select: none; white-space: nowrap; }
+.lookpill:hover { background: rgba(255,255,255,.12); color: #eaf3ea; }
+.lookpill.on { color: #06210f; background: #8fe07a; border-color: #8fe07a;
+  box-shadow: 0 0 12px rgba(143,224,122,.32); }
 .lookgrp h5 { font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: #8fa694;
   font-weight: 700; margin-bottom: 5px; }
-.lookrow { display: flex; gap: 5px; }
+.lookrow { display: flex; gap: 5px; flex-wrap: wrap; }
 .lookbtn { width: 24px; height: 24px; border-radius: 6px; cursor: pointer; padding: 0;
   border: 2px solid rgba(255,255,255,.16); transition: .13s; }
 .lookbtn:hover { transform: scale(1.1); }

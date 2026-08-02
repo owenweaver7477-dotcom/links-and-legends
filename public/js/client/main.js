@@ -30,7 +30,7 @@ import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf } from '../shared/biome
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
-import { normaliseLook, SHOT_RADIUS, EYE_HEIGHT, SPRINT_SPEED, CAPS, SHIRTS, SKINS, TROUSERS } from '../shared/avatars.js';
+import { normaliseLook, randomLook, SHOT_RADIUS, EYE_HEIGHT, SPRINT_SPEED } from '../shared/avatars.js';
 
 const canvas = document.getElementById('gl');
 
@@ -1757,8 +1757,8 @@ let lookDraft = null;
  * next room you join already has it.
  */
 function drawLookPicker() {
-  HUD.renderLook(lookDraft, (key, hex) => {
-    lookDraft = normaliseLook({ ...lookDraft, [key]: hex });
+  HUD.renderLook(lookDraft, (key, value) => {
+    lookDraft = normaliseLook({ ...lookDraft, [key]: value });
     drawLookPicker();
     saveLook(lookDraft);
     refreshMenuAvatar();             // the golfer on the tee changes NOW
@@ -2148,8 +2148,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
   // the dice: a whole outfit in one press, for people who hate picking
   document.getElementById('btnRandomLook')?.addEventListener('click', () => {
-    const pick = arr => arr[(Math.random() * arr.length) | 0].hex;
-    lookDraft = normaliseLook({ cap: pick(CAPS), shirt: pick(SHIRTS), skin: pick(SKINS), trousers: pick(TROUSERS) });
+    lookDraft = randomLook();      // the whole wardrobe, not just the colours
     saveLook(lookDraft);
     drawLookPicker();
     refreshMenuAvatar();

@@ -94,7 +94,8 @@ export class Avatar {
     this.mats = {
       cap: M(look.cap), shirt: M(look.shirt),
       skin: M(look.skin), trousers: M(look.trousers),
-      shoe: M('#2b2b2f'), accent: M(ballColor)
+      shoe: M(look.shoes || '#2b2b2f'), accent: M(ballColor),
+      hair: M(look.hairColor || '#241c18'), lens: M('#20262e')
     };
 
     /* --- torso and head ------------------------------------------------ */
@@ -116,12 +117,17 @@ export class Avatar {
     face.scale.set(0.20, 0.20, 1);
     face.position.set(0, H * 0.0625, 0.1135);
     this.head.add(face);
+    /* Hair, then headwear over it — both built from the same boxes as the
+       rest of the golfer.  Nothing is loaded: a hairstyle is three or four
+       scaled cubes, which is why a wardrobe this size adds no bytes at all to
+       the build.  Kept on the `hat` pivot so a celebration can still doff it. */
+    this.hair = new THREE.Group();
+    this.head.add(this.hair);
     this.hat = new THREE.Group();
-    // cap crown + peak, so you can read a player's colour from behind
-    this.hat.add(part(this.mats.cap, 0.24, H * 0.05, 0.24, 0, H * 0.1355, 0));
-    this.hat.add(part(this.mats.cap, 0.22, H * 0.016, 0.12, 0, H * 0.1195, 0.16));
-    this.hat.add(part(this.mats.accent, 0.06, H * 0.024, 0.014, 0, H * 0.1355, 0.122));
     this.head.add(this.hat);
+    this.accessory = new THREE.Group();
+    this.head.add(this.accessory);
+    this.buildHeadwear(look);
     this.body.add(this.head);
 
     /* --- limbs, pivoted at the shoulder / hip so they can swing --------- */
@@ -144,6 +150,12 @@ export class Avatar {
     this.legL = limb(this.mats.trousers, 0.145, H * 0.42, 0.105, H * 0.47, this.mats.shoe, H * 0.05);
     this.legR = limb(this.mats.trousers, 0.145, H * 0.42, -0.105, H * 0.47, this.mats.shoe, H * 0.05);
     this.body.add(this.armL, this.armR, this.legL, this.legR);
+
+    /* Worn accessories that hang off the body rather than the head.  Built
+       after the limbs, because the glove goes ON one of them. */
+    this.worn = new THREE.Group();
+    this.body.add(this.worn);
+    this.buildWorn(look);
 
     /* --- the club: grip, shaft and an interchangeable head ---------------
        The same five boxes serve every club in the bag; setClub() reshapes
@@ -211,6 +223,87 @@ export class Avatar {
   }
   get celebrating() { return !!this.cel; }
   cancelCelebration() { this.cel = null; }
+
+  /** Glove and towel — the two accessories that are not on the head. */
+  buildWorn(look) {
+    const g = this.worn;
+    while (g.children.length) g.remove(g.children[0]);
+    const acc = look.accessory || 'none';
+    if (acc === 'glove') {
+      // over the LEAD hand, which for a right-hander is the left
+      this.mats.glove = this.mats.glove || this.mats.cap;
+      g.add(part(this.mats.glove, 0.126, H * 0.062, 0.126, 0.262, H * 0.445, 0));
+    } else if (acc === 'towel') {
+      // tucked at the belt, and it reads clearly from behind
+      g.add(part(this.mats.cap, 0.075, H * 0.085, 0.022, 0.165, H * 0.505, -0.115));
+    }
+  }
+
+  /* ------------------------------------------------------- head styling ---
+     Rebuilds hair, hat and accessory from a look.  Cheap enough to call on
+     every change (the customiser previews live), and the only allocation is a
+     handful of boxes sharing materials that already exist. */
+  buildHeadwear(look) {
+    const clear = g => { while (g.children.length) g.remove(g.children[0]); };
+    clear(this.hair); clear(this.hat); clear(this.accessory);
+
+    const hairMat = this.mats.hair, capMat = this.mats.cap;
+    const style = look.hair || 'short';
+    const hat = look.hat || 'cap';
+    // A beanie or a bucket swallows the top of the head, so the crown of the
+    // hair is skipped under them — otherwise it pokes through the hat.
+    const covered = hat === 'beanie' || hat === 'bucket';
+
+    if (style !== 'bald') {
+      const W = 0.238, TOP = H * 0.1215;
+      if (!covered) this.hair.add(part(hairMat, W, H * 0.022, W, 0, TOP, 0));
+      // the back of the head, which reads from behind while walking
+      if (style !== 'buzz') this.hair.add(part(hairMat, W, H * 0.055, 0.03, 0, H * 0.075, -0.112));
+      if (style === 'swept') this.hair.add(part(hairMat, W * 0.9, H * 0.018, 0.10, 0.02, TOP + H * 0.008, 0.055));
+      if (style === 'ponytail') {
+        this.hair.add(part(hairMat, 0.055, H * 0.10, 0.055, 0, H * 0.045, -0.145));
+      } else if (style === 'bun') {
+        this.hair.add(part(hairMat, 0.10, H * 0.045, 0.09, 0, H * 0.125, -0.125));
+      } else if (style === 'afro') {
+        this.hair.add(part(hairMat, 0.30, H * 0.085, 0.30, 0, H * 0.105, -0.006));
+      } else if (style === 'long') {
+        this.hair.add(part(hairMat, W + 0.012, H * 0.115, 0.045, 0, H * 0.045, -0.118));
+        this.hair.add(part(hairMat, 0.035, H * 0.10, 0.16, 0.115, H * 0.055, -0.02));
+        this.hair.add(part(hairMat, 0.035, H * 0.10, 0.16, -0.115, H * 0.055, -0.02));
+      }
+    }
+
+    // headwear.  The ball-coloured flash stays on anything with a front, so a
+    // player is still identifiable from across the fairway.
+    if (hat === 'cap') {
+      this.hat.add(part(capMat, 0.24, H * 0.05, 0.24, 0, H * 0.1355, 0));
+      this.hat.add(part(capMat, 0.22, H * 0.016, 0.12, 0, H * 0.1195, 0.16));
+      this.hat.add(part(this.mats.accent, 0.06, H * 0.024, 0.014, 0, H * 0.1355, 0.122));
+    } else if (hat === 'visor') {
+      this.hat.add(part(capMat, 0.245, H * 0.020, 0.245, 0, H * 0.1235, 0));
+      this.hat.add(part(capMat, 0.22, H * 0.014, 0.13, 0, H * 0.1185, 0.165));
+      this.hat.add(part(this.mats.accent, 0.05, H * 0.016, 0.013, 0, H * 0.1235, 0.126));
+    } else if (hat === 'bucket') {
+      this.hat.add(part(capMat, 0.245, H * 0.052, 0.245, 0, H * 0.1330, 0));
+      this.hat.add(part(capMat, 0.34, H * 0.014, 0.34, 0, H * 0.1090, 0));
+    } else if (hat === 'beanie') {
+      this.hat.add(part(capMat, 0.245, H * 0.062, 0.245, 0, H * 0.1300, 0));
+      this.hat.add(part(this.mats.accent, 0.252, H * 0.014, 0.252, 0, H * 0.1010, 0));
+    } else if (hat === 'flat') {
+      this.hat.add(part(capMat, 0.242, H * 0.030, 0.240, 0, H * 0.1270, -0.012));
+      this.hat.add(part(capMat, 0.20, H * 0.012, 0.10, 0, H * 0.1160, 0.150));
+    }
+
+    // accessories.  Glasses sit just proud of the face decal.
+    const acc = look.accessory || 'none';
+    if (acc === 'glasses' || acc === 'shades') {
+      const lens = acc === 'shades' ? this.mats.lens : this.mats.chromeLens ||
+        (this.mats.chromeLens = this.mats.lens);
+      this.accessory.add(part(lens, 0.072, H * 0.020, 0.012, 0.052, H * 0.0705, 0.117));
+      this.accessory.add(part(lens, 0.072, H * 0.020, 0.012, -0.052, H * 0.0705, 0.117));
+      this.accessory.add(part(lens, 0.036, H * 0.005, 0.010, 0, H * 0.0705, 0.117));
+    }
+  }
 
   /**
    * Reshape the club in hand to match the club being played.  No meshes are
