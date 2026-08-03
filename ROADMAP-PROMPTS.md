@@ -17,9 +17,9 @@ Two things to settle before Prompt 1, because they change what's possible:
 
 ---
 
-## Prompt 1 — Movement, carts, and the sprint that got lost
+## Prompt 1 — Carts, getting to your ball, and water
 
-> Three movement changes, plus a bug.
+> Four things, all about how it feels to move around a hole.
 >
 > **Carts.** Raise the base cart speed. It's currently `BASE_SPEED_KMH = 24`
 > in `public/js/shared/cart.js` with a 1.3× boost ceiling. Take the base to
@@ -29,12 +29,31 @@ Two things to settle before Prompt 1, because they change what's possible:
 > speed the steering and the collision response both need to still feel
 > controlled, not skittish.
 >
-> **Sprint.** There are two speeds today, `WALK_SPEED` and `SPRINT_SPEED`, in
-> `public/js/shared/avatars.js`, and Shift is the run key. I want a third,
-> faster tier bound to **F** — a real dash, clearly quicker than Shift-run,
-> for crossing a fairway. Shift stays exactly as it is. Decide whether F is a
-> hold or a toggle and say which you chose and why. If it needs a cost or a
-> cooldown to stop it replacing the cart entirely, add one and explain it.
+> **The F key — getting to your ball.** F is the go-to-your-ball key
+> (`jogToMyBall()` in `public/js/client/main.js`, which calls
+> `walker.goTo(spot.x, spot.z, SPRINT_SPEED)`). It currently travels at
+> `SPRINT_SPEED`, 8.4 m/s, and on a long hole that is a tedious wait with
+> nothing to do. Make it genuinely fast — this is a convenience action, not a
+> skill test, and nobody should be watching their golfer trudge 200 metres.
+>
+> Pick a speed that makes a full-drive walk feel brief rather than absent,
+> and say what you chose. Keep it clearly distinct from the Shift free-sprint,
+> which stays exactly as it is — F is the fast automatic route to the ball,
+> Shift is manual running under the player's own control. Make sure the
+> camera keeps up cleanly at the higher speed and doesn't judder or clip
+> through trees, and that arriving still lands the golfer correctly on the
+> address spot.
+>
+> **Cart collisions.** These look bad and I want them properly fixed. Go and
+> read the current collision response in `public/js/client/cart3d.js` before
+> changing anything, and tell me what's wrong with it. What I want to see:
+> a cart that hits a tree stops or deflects with real weight rather than
+> sliding or jittering; glancing blows that scrape and turn the cart instead
+> of stopping it dead; some visible reaction — a lurch, a bounce, the body
+> rocking on its suspension; and no clipping through solid things at the new
+> higher speed. Cart-to-cart collisions should shove both carts believably
+> rather than one passing through the other. Check it still behaves when two
+> players collide over the network, where each client owns its own cart.
 >
 > **Water.** Water is wrong and I want it properly fixed — both how it looks
 > and how it plays. Go and look at the current implementation in
@@ -76,32 +95,58 @@ Two things to settle before Prompt 1, because they change what's possible:
 
 ---
 
-## Prompt 3 — The wardrobe: women, body types, and emotes
+## Prompt 3 — Body types, emotes, and a level to earn them
 
-> **Women.** The golfer is currently one body type. Add a proper body-shape
-> choice to the customiser — at minimum a feminine build alongside the
-> current one, built the same procedural way the rest of the avatar is (see
-> `buildHeadwear` in `public/js/client/avatar.js` and the slot system in
-> `public/js/shared/avatars.js`). Different proportions, not just a different
-> shirt. Make sure the swing animation, the address stance and the seated
-> cart pose all still work on the new build — the address solve is sensitive,
-> so check it.
+> **Body types.** The golfer is one build today and everyone looks male. Add
+> body shape as a proper customiser slot with a clearly different feminine
+> option — the silhouette has to read as different from across the fairway,
+> not just up close.
 >
-> This must go through `normaliseLook`, stay backward compatible with looks
-> people already have saved, and be covered in `test/wardrobe.mjs`.
+> Concretely, the feminine build wants: a bust, narrower shoulders, a defined
+> waist with wider hips, and slightly shorter overall height with
+> proportionally longer legs. The masculine build keeps the current squarer
+> shoulders and straighter torso. Keep both tasteful and proportionate — this
+> is a stylised low-poly game, so the goal is a silhouette that reads
+> instantly at distance, not anatomy. Consider a third, heavier build too, so
+> it's a range of body shapes rather than a binary.
 >
-> **Emotes.** Add an emote wheel, bound to a key, with the emotes bought from
-> the Pro Shop for coins. There's already a celebration system in
-> `public/js/client/celebrations.js` — reuse its animation approach. Emotes
-> must replicate to other players over the existing socket channels. Six to
-> eight to start: a wave, a club twirl, a shrug, a fist pump, a slow clap,
-> a bow.
+> Build it the same procedural way as everything else — see the box-based
+> construction and `buildHeadwear` in `public/js/client/avatar.js`, and the
+> slot system in `public/js/shared/avatars.js`. No new assets.
 >
-> Keep it all procedural. The build is 1.31 MB and there are no texture or
-> mesh assets in this project — that's what keeps it inside CrazyGames'
-> budget. Don't introduce any.
-
----
+> Then check every animation still works on every build, because the rig
+> changes underneath them: the swing, the walk cycle, the address stance
+> (that solve is sensitive — `addressSpot()` and `ADDRESS_YAW_BIAS` in
+> `main.js` were hard-won, so verify the club still meets the ball), and the
+> seated cart pose. Shirts and trousers must fit each build without clipping.
+>
+> This goes through `normaliseLook`, stays backward compatible with saved
+> looks, and gets covered in `test/wardrobe.mjs`.
+>
+> **Five emotes, unlocked by level.** Add an emote wheel on a key, with
+> exactly five emotes to start: a wave, a fist pump, a club twirl, a shrug,
+> and a slow clap. Reuse the animation approach in
+> `public/js/client/celebrations.js`, and replicate them to other players
+> over the existing socket channels so everyone sees them.
+>
+> **An XP and level system**, which is what gates the emotes. XP is awarded
+> for finishing a hole and again, more substantially, for finishing a full
+> round — with better golf worth more, the same shape as the coin payout in
+> `public/js/shared/economy.js`. Levels unlock the emotes one at a time, so
+> there is a reason to keep playing beyond coins.
+>
+> Design the curve so the first emote arrives quickly — within a round or two
+> — and the fifth is a genuine grind. Show me the XP-per-level table and
+> roughly how many rounds each unlock takes. Show level and an XP bar in the
+> clubhouse and on the results screen, and make levelling up an actual moment
+> on screen rather than a number quietly changing.
+>
+> XP lives on the server profile beside coins, and must survive a reconnect
+> and a wiped server the same way coins do — see `seedProfile` and the
+> snapshot in `renderClubhouse`, and add XP and level to both.
+>
+> Keep it all procedural. The build is 1.31 MB with no texture or mesh assets,
+> and that is what keeps it inside CrazyGames' budget. Don't introduce any.
 
 ## Prompt 4 — Persistence, course records, and presence
 
