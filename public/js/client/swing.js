@@ -63,13 +63,53 @@ export const LIE_TEMPO = {
 };
 export const lieTempo = id => LIE_TEMPO[id] ?? 1.05;
 
+/* How hard you decided to hit it also drives the bar.
+   -------------------------------------------------------------------------
+   The lie says how hard the shot is to TIME; the power says how hard it is to
+   CONTROL, and until now the second half did not exist — a delicate 30 % chip
+   and a full-blooded driver read the same bar at the same pace, so there was
+   never a reason not to swing out of your shoes.
+
+   Now there is.  A full swing runs the marker about 17 % faster than it used
+   to, and a soft one is calmer than anything the game had before, which turns
+   "can I get there with a smooth 8 iron instead?" into a real question.
+
+   Deliberately multiplicative on top of the lie rather than replacing it, so
+   every relationship the lie already sets survives: sand is still the slowest
+   bar on the course, and the tee shot at FULL power (0.78 x 1.17 = 0.91) is
+   still calmer than a fairway shot used to be at any power.  That matters —
+   the tee was slowed on purpose because a twitchy opening stroke on every
+   hole was the old difficulty spike, and this must not quietly undo it. */
+const POWER_CALM = 0.62;   // the multiplier at a dead-soft touch shot
+const POWER_GAIN = 0.55;   // ...rising to 1.17 at a full swing
+/* A hard ceiling on the bar, whatever the lie and power multiply out to.
+   Heavy rough at a full swing came to 1.58 sweeps/s, which is past the point
+   where a human is timing anything — the marker crosses the pure band in
+   under a tenth of a second and the strike becomes a coin toss.  A lie can be
+   the worst place on the course without being a lottery. */
+const TEMPO_CEILING = 1.45;
+
+/** Sweeps per second for this lie at this power. */
+export const barTempo = (id, power = 1) =>
+  Math.min(TEMPO_CEILING,
+    lieTempo(id) * (POWER_CALM + POWER_GAIN * clamp(power, 0, MAX_OVER)));
+
 /* How wide the "pure" band is, as a fraction of half the bar.  The fairway is
    deliberately the most forgiving surface in the game — it is the reward for
    hitting the fairway in the first place, and it is where most shots are
    played from, so it sets the felt difficulty of the whole round. */
 export const PURE_BAND = {
   fairway: 0.26, tee: 0.22, fringe: 0.20, green: 0.18,
-  rough: 0.16, deep: 0.12, waste: 0.12, sand: 0.20, path: 0.22
+  /* A bad lie is now punished through PRECISION as well as distance.  The
+     rough took a fifth off the ball speed and then handed you almost the
+     fairway's target, so the only thing it really cost was carry.  Missing
+     the fairway should mean the strike is harder to find, not merely shorter.
+
+     Sand keeps the trade it was built around: the SLOWEST bar on the course
+     (see LIE_TEMPO) and now the smallest target on it. Easy to time, hard to
+     hit — which is a different kind of hard from the rough, and the reason a
+     bunker shot feels like its own skill. */
+  rough: 0.13, deep: 0.11, waste: 0.11, sand: 0.13, path: 0.22
 };
 export const pureBand = id => PURE_BAND[id] ?? PURE_BASE;
 
@@ -102,7 +142,7 @@ export class SwingController {
   /** The lie decides how fast the strike bar sweeps.  Set before the swing. */
   setLie(id) {
     this.lie = id || 'fairway';
-    if (this.state === SWING.IDLE) this.tempo = lieTempo(this.lie);
+    if (this.state === SWING.IDLE) this.tempo = barTempo(this.lie, 1);
   }
 
   /**
@@ -154,9 +194,10 @@ export class SwingController {
   pointerUp() {
     if (this.state !== SWING.BACK) return null;
     if (this.peak < 0.06) { this.reset(); return null; }   // a twitch, not a swing
-    // whatever the meter was reading at the instant of release IS the shot
+    // whatever the meter was reading at the instant of release IS the shot,
+    // and it is also what sets the pace of the bar you now have to stop
     this.state = SWING.ACCURACY;
-    this.tempo = lieTempo(this.lie);
+    this.tempo = barTempo(this.lie, this.power);
     // always start from the middle heading out, so the first sweep is the
     // same shape for everyone and nobody gets a free flush
     this.sweep = 0;
@@ -248,7 +289,12 @@ export class SwingController {
       face: this.faceDeg,
       over: Math.max(0, this.peak - 1),
       sweep: this.sweep,
-      tempo: this.tempo,
+      /* During the drag this must be the bar you are about to GET, not the
+         one the lie alone implies — the whole point of the power coupling is
+         that the player can see it coming while they still have a choice. */
+      tempo: this.state === SWING.BACK ? barTempo(this.lie, this.power) : this.tempo,
+      calmTempo: barTempo(this.lie, 0.25),
+      fastTempo: barTempo(this.lie, 1),
       lie: this.lie,
       band: pureBand(this.lie)
     };

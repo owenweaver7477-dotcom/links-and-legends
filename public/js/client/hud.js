@@ -204,16 +204,23 @@ HUD.setMeter = (m, enabled) => {
 
   if (!enabled) { el.mLabel.textContent = 'Waiting…'; el.mLabel.classList.remove('hot'); return; }
   if (m.state === 'back') {
-    /* The pull-back chooses a SHAPE — a deliberate draw or fade.  It is not a
-       hook or a slice, because those are strike ERRORS and no strike has
-       happened yet: the accuracy phase has not even started.  Calling it a
-       hook here was reporting a result out of order, and it read as the game
-       punishing a shot the player had not taken. */
-    const sh = m.shape || 0, a = Math.abs(sh);
+    /* Tell the player what their POWER is about to cost them, while they can
+       still do something about it.  The bar's speed now rises with the swing,
+       so the honest thing to show mid-drag is how hard the strike is going to
+       be to time — otherwise the mechanic is invisible and just feels like
+       full swings randomly going wrong.
+
+       (This used to describe a draw or fade shaped by the angle of the drag.
+       That shaping was removed when the strike bar became the only thing that
+       bends the ball, and the label has been quietly dead ever since.) */
+    const t = m.tempo || 0, calm = m.calmTempo || 0, fast = m.fastTempo || t;
+    const heat = fast > calm ? clamp((t - calm) / (fast - calm), 0, 1) : 0;
     el.mLabel.textContent = m.power > 1 ? 'Overswinging — accuracy is going'
-      : a < 1.5 ? 'Let go to lock the power'
-      : 'Shaping a ' + (sh > 0 ? 'fade ' : 'draw ') + a.toFixed(0) + '°';
-    el.mLabel.classList.toggle('hot', m.power > 1);
+      : m.power < 0.12 ? 'Drag down to take the club back'
+      : heat > 0.75 ? 'Full swing — the strike bar will be quick'
+      : heat > 0.35 ? 'Three quarters — a steady bar'
+      : 'Smooth — the bar will be slow and kind';
+    el.mLabel.classList.toggle('hot', m.power > 1 || heat > 0.75);
   } else if (striking) {
     el.mLabel.textContent = 'CLICK to strike — stop it in the middle';
     el.mLabel.classList.add('hot');

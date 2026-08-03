@@ -13,7 +13,8 @@
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SwingController, SWING, BACKSWING_PX } from '../public/js/client/swing.js';
+import { SwingController, SWING, BACKSWING_PX,
+         barTempo, lieTempo, pureBand } from '../public/js/client/swing.js';
 
 /** Drag through a list of [x,y] samples, as a real pointer stream would. */
 function drag(sw, samples) {
@@ -159,4 +160,94 @@ test('the debug readout reports what was actually committed', () => {
   assert.ok(d.accuracyPct >= 0 && d.accuracyPct <= 100);
   assert.equal(d.shape, 'hook', `left of centre is a hook, got ${d.shape}`);
   assert.ok(Math.abs(d.faceDeg - shot.faceDeg) < 1e-9);
+});
+
+/* ----------------------------------------------------------- the bar ---- */
+
+test('how hard you swing sets how fast the bar runs', () => {
+  const soft = barTempo('fairway', 0.25);
+  const full = barTempo('fairway', 1.0);
+  assert.ok(full > soft * 1.4,
+    `a full swing must be meaningfully harder to time than a touch shot ` +
+    `(${soft.toFixed(2)} vs ${full.toFixed(2)} sweeps/s)`);
+  // and it must be monotonic, or the meter would be lying about the trade
+  let prev = 0;
+  for (const p of [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]) {
+    const t = barTempo('fairway', p);
+    assert.ok(t > prev, `tempo fell going from below ${p} power`);
+    prev = t;
+  }
+});
+
+test('the lie still sets the character of the bar, at every power', () => {
+  for (const p of [0.3, 0.7, 1.0]) {
+    assert.ok(barTempo('sand', p) < barTempo('green', p),
+      'sand must stay the slowest bar on the course');
+    assert.ok(barTempo('deep', p) > barTempo('fairway', p),
+      'heavy rough must stay quicker than the fairway');
+    assert.ok(barTempo('tee', p) < barTempo('fairway', p),
+      'the tee must stay calmer than a fairway shot');
+  }
+});
+
+test('a full swing off the tee is still calmer than the old fairway bar', () => {
+  /* The tee was deliberately slowed because a twitchy opening stroke on every
+     hole was the game's difficulty spike.  Multiplying tempo by power could
+     quietly undo that, so it is pinned. */
+  assert.ok(barTempo('tee', 1.0) < 1.05,
+    `a full driver reads ${barTempo('tee', 1.0).toFixed(2)}, at or past the ` +
+    `old fairway pace — the opening tee shot is twitchy again`);
+});
+
+test('no lie at any power becomes an unreadable blur', () => {
+  for (const lie of Object.keys({ tee: 1, fairway: 1, rough: 1, deep: 1, waste: 1, sand: 1, green: 1, fringe: 1 })) {
+    for (const p of [0.5, 1.0, 1.12]) {
+      assert.ok(barTempo(lie, p) <= 1.45 + 1e-9,
+        `${lie} at ${p} power runs at ${barTempo(lie, p).toFixed(2)} sweeps/s — ` +
+        `past the ceiling the strike is a coin toss, not a skill`);
+    }
+  }
+});
+
+test('a bad lie is punished through precision, not just distance', () => {
+  assert.ok(pureBand('rough') < pureBand('fairway') * 0.6,
+    'the rough must offer a meaningfully smaller target than the fairway');
+  assert.ok(pureBand('sand') < pureBand('fairway') * 0.6,
+    'so must sand');
+  assert.ok(pureBand('deep') < pureBand('rough'),
+    'and heavy rough must be tighter still');
+});
+
+test('sand keeps its trade: the slowest bar, the smallest target', () => {
+  assert.ok(barTempo('sand', 1) < barTempo('tee', 1),
+    'sand must be slow to time');
+  assert.ok(pureBand('sand') <= pureBand('rough'),
+    'but must not be easy to hit');
+});
+
+test('the controller actually uses the power-aware tempo', () => {
+  const play = frac => {
+    const sw = new SwingController();
+    sw.setLie('fairway');
+    sw.enabled = true;
+    sw.pointerDown(500, 100);
+    sw.pointerMove(500, 100 + BACKSWING_PX * frac);
+    sw.pointerUp();
+    return sw.tempo;
+  };
+  assert.ok(play(1.0) > play(0.3) * 1.4,
+    'a full swing must hand the player a faster bar than a soft one');
+});
+
+test('the meter previews the bar you are about to get', () => {
+  const sw = new SwingController();
+  sw.setLie('fairway');
+  sw.enabled = true;
+  sw.pointerDown(500, 100);
+  sw.pointerMove(500, 100 + BACKSWING_PX * 0.3);
+  const soft = sw.meter().tempo;
+  sw.pointerMove(500, 100 + BACKSWING_PX * 1.0);
+  const full = sw.meter().tempo;
+  assert.ok(full > soft,
+    'mid-drag the meter must show the tempo rising, or the trade is invisible');
 });
