@@ -20,6 +20,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
 import { holeCoins } from '../public/js/shared/economy.js';
+import { getProfile, seedProfile, STARTING_COINS } from '../server/profiles.js';
 import { SHOP, gearEffect } from '../public/js/shared/gear.js';
 import { CLUB_BY_KEY } from '../public/js/shared/clubs.js';
 import { ShotSim, calibrateCarries } from '../public/js/shared/ballistics.js';
@@ -225,4 +226,55 @@ test('every item in the shop is reachable and does something', async () => {
     assert.ok(slots.has(s2), `nothing in the shop sells the ${s2} slot`);
   }
   s.disconnect();
+});
+
+/* ------------------------------------------------------------- restore --- */
+
+test('a wiped server restores a career from the player\'s own snapshot', () => {
+  /* Reported: "everything reset on my mates laptop — coins and all the
+     upgrades."  The host keeps profiles on an ephemeral disk, so a redeploy
+     wipes them; the player's device holds a snapshot to put it back.
+
+     seedProfile used to refuse whenever a profile already EXISTED. That
+     sounds safe and was the bug: the profile is created the instant anything
+     asks for it — joining a room, reading stats, the welcome purse — which on
+     a freshly wiped host happens BEFORE the restore snapshot arrives. Restore
+     was blocked forever and the career was gone. */
+  const pid = 'restore-' + Math.random().toString(36).slice(2, 8);
+  const snap = JSON.stringify({
+    v: 1, coins: 12000, rating: 61, rounds: 24, best: -3,
+    crew: { ace: 4, bruiser: 3, steady: 2, roller: 1, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
+    gear: { ball: 2, irons: 1, woods: 1, putter: 1, cart: 1 },
+    clubTier: 3, refine: 2, stars: {}
+  });
+
+  // something touches the profile FIRST — this is what used to kill it
+  getProfile(pid);
+  assert.equal(seedProfile(pid, snap), true, 'restore was refused');
+
+  const p = getProfile(pid);
+  assert.equal(p.coins, 12000, 'coins were not restored');
+  assert.equal(p.clubTier, 3, 'club set was not restored');
+  assert.equal(p.refine, 2);
+  assert.equal(p.rounds, 24);
+  assert.equal(p.crew.ace, 4, 'crew was not restored');
+  assert.equal(p.gear.ball, 2, 'gear was not restored');
+});
+
+test('a live career is never overwritten by a snapshot', () => {
+  const pid = 'live-' + Math.random().toString(36).slice(2, 8);
+  const p = getProfile(pid);
+  p.rounds = 9; p.coins = 300; p.clubTier = 5;
+
+  const fat = JSON.stringify({ v: 1, coins: 999999, rating: 90, rounds: 500,
+    crew: {}, gear: {}, clubTier: 6, refine: 3, stars: {} });
+  assert.equal(seedProfile(pid, fat), false, 'a played profile was seeded over');
+  assert.equal(p.coins, 300, 'coins were overwritten');
+  assert.equal(p.clubTier, 5, 'club set was overwritten');
+});
+
+test('a new player arrives able to buy something', () => {
+  const pid = 'purse-' + Math.random().toString(36).slice(2, 8);
+  assert.ok(getProfile(pid).coins >= STARTING_COINS,
+    'a new player with no coins sees a shop of disabled buttons');
 });

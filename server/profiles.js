@@ -102,8 +102,33 @@ const num = (v, max, dflt = 0) => {
   return Number.isFinite(n) && n >= 0 ? Math.min(n, max) : dflt;
 };
 
+/**
+ * Has this profile got anything worth protecting?  A profile that exists but
+ * has never played and never bought anything is indistinguishable from a
+ * blank one, so restoring over it loses nothing.
+ */
+function untouched(p) {
+  if (!p) return true;
+  if ((p.rounds || 0) > 0 || (p.holes || 0) > 0) return false;
+  if ((p.clubTier || 0) > 0 || (p.refine || 0) > 0) return false;
+  if (p.gear && Object.values(p.gear).some(v => (v || 0) > 0)) return false;
+  if (p.crew && Object.values(p.crew).some(v => (v || 0) > 0)) return false;
+  return (p.coins || 0) <= STARTING_COINS;      // the welcome purse only
+}
+
 export function seedProfile(pid, snap) {
-  if (!pid || !snap || profiles.has(pid)) return false;
+  if (!pid || !snap) return false;
+  /* This used to refuse whenever a profile already EXISTED, which sounds
+     safe and was the whole reset bug: the profile gets created the moment
+     anything asks for it — joining a room, the welcome purse, a stats read —
+     and on a host that has just wiped its disk that happens before the
+     client's restore snapshot arrives. Restore was then blocked forever and
+     the player's coins, clubs and crew were gone for good.
+
+     What actually matters is whether there is progress to protect, not
+     whether a record exists.  A blank profile is safe to restore over; one
+     with a single round played is not, and still wins. */
+  if (profiles.has(pid) && !untouched(profiles.get(pid))) return false;
   let d = snap;
   if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return false; } }
   if (!d || typeof d !== 'object' || d.v !== 1) return false;
