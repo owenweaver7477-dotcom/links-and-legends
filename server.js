@@ -56,7 +56,10 @@ const io = new Server(httpServer, {
 /* Build every course and the yardage table once, at boot. */
 const COURSES = allCourses();
 calibrateCarries();
-loadProfiles();
+/* The store may be a database now, so bringing it up is async. Everything
+   below depends on profiles existing, so this is awaited at the top level
+   rather than fired and forgotten. */
+await loadProfiles();
 loadRecords();
 
 /* ═══════════════════════════════════════════════════════════════ assets ═══

@@ -11,39 +11,34 @@
    profile is a record of what actually happened, not what a client claimed.
    ========================================================================= */
 
-import fs from 'node:fs';
 import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp } from '../public/js/shared/economy.js';
-import path from 'node:path';
+import { openStore, touch, saveSoon as storeSaveSoon } from './store.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
    moment a player opens it rather than after several rounds. */
 export const STARTING_COINS = 900;
 
-const FILE = path.join(process.cwd(), 'data', 'profiles.json');
 
 const profiles = new Map();
-let saveTimer = null;
 
-export function loadProfiles() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    for (const [pid, p] of Object.entries(raw)) profiles.set(pid, p);
-    console.log(`  profiles: ${profiles.size} loaded`);
-  } catch { /* first boot: no file yet */ }
+/** Bring the store up. Async now — the database has to connect. */
+export async function loadProfiles() {
+  await openStore(profiles);
 }
 
+/* Every mutation funnels through here, which is what lets the store write
+   only the profiles that actually changed instead of the whole world. The
+   pid is worked out by identity: a profile object IS its row. */
+let lastTouched = null;
 function saveSoon() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      fs.mkdirSync(path.dirname(FILE), { recursive: true });
-      fs.writeFileSync(FILE, JSON.stringify(Object.fromEntries(profiles)), 'utf8');
-    } catch (e) { console.error('  profiles: save failed —', e.message); }
-  }, 800);
-  saveTimer.unref?.();
+  if (lastTouched) touch(lastTouched);
+  storeSaveSoon(profiles);
 }
+/** Called by getProfile so saveSoon knows whose row to mark. */
+function marking(pid) { lastTouched = pid; }
 
 export function getProfile(pid) {
+  marking(pid);
   let p = profiles.get(pid);
   if (!p) {
     p = {

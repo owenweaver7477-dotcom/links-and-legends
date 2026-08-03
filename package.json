@@ -15,7 +15,8 @@
     "share": "node share.mjs",
     "test:cart": "node test/cart.mjs",
     "verify:bundle": "node tools/verify-bundle.mjs",
-    "test:portal": "node --test test/portal.test.mjs"
+    "test:portal": "node --test test/portal.test.mjs",
+    "migrate:db": "node tools/migrate-db.mjs"
   },
   "engines": {
     "node": ">=18"
@@ -28,5 +29,8 @@
   "type": "module",
   "devDependencies": {
     "socket.io-client": "^4.8.1"
+  },
+  "optionalDependencies": {
+    "pg": "^8.13.1"
   }
 }
