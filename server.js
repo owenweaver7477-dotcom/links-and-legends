@@ -30,6 +30,7 @@ import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
 import { EMOTES } from './public/js/client/celebrations.js';
+import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allowChat, PHRASES } from './server/chat.js';
 import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound } from './server/profiles.js';
@@ -530,6 +531,7 @@ function snapshot(room) {
     wind: room.wind,
     records: recordsFor(room.courseId),
     maxPlayers: MAX_PLAYERS,
+    noShove: !!room.noShove,
     holes: HOLES_PER_COURSE,
     players: room.players.map(p => ({
       pid: p.pid, name: p.name, color: p.color, colorName: p.colorName,
@@ -610,6 +612,7 @@ io.on('connection', socket => {
     const ref = sockets.get(socket.id);
     if (!ref) return;
     sockets.delete(socket.id);
+    forgetChat(ref.pid);
     socket.leave(ref.code);
     const room = rooms.get(ref.code); if (!room) return;
     const p = room.players.find(x => x.pid === ref.pid);
@@ -749,6 +752,18 @@ io.on('connection', socket => {
     p.az = clamp(az, b.minZ, b.maxZ);
     p.arot = isFinite(ar) ? ar : p.arot;
     p.amov = !!d.moving;
+    /* Speed, derived from the positions they report rather than taken on
+       trust from a number they send. A shove's strength comes from this, so
+       it is worth computing rather than believing. */
+    const tNow = Date.now();
+    if (p.moveAt) {
+      const dt = (tNow - p.moveAt) / 1000;
+      if (dt > 0.02) {
+        const d = Math.hypot(p.ax - (p.moveX ?? p.ax), p.az - (p.moveZ ?? p.az));
+        p.aspeed = Math.min(12, d / dt);
+      }
+    }
+    p.moveAt = tNow; p.moveX = p.ax; p.moveZ = p.az;
 
     // The cart rides the position channel rather than getting its own: it is
     // the same data at the same rate about the same player, and reusing the
@@ -850,6 +865,96 @@ io.on('connection', socket => {
      share the same device").  Presence is fine on that basis — it only has
      to be true right now — but a durable FRIENDS list is not, and that is
      why this ships and the friend list waits for a real account. */
+  /* ------------------------------------------------------------ melee ----
+     Shoving another golfer, with a real positional effect. The griefing risk
+     was raised and accepted, so this moves people for real — including off a
+     green. Two guards remain, kept on their merits rather than as hedging:
+
+       - you cannot shove someone who is standing over their ball on their
+         turn. That is the difference between griefing and stealing a stroke,
+         and it costs nothing to prevent. The server can tell: it knows whose
+         turn it is and where their ball is.
+       - the host can switch it off for their room.
+
+     Everything is checked here. Range, cooldown and strength all come from
+     the server's own view of where people are — a client that lies about its
+     position is already constrained by the walk-to-your-ball rule. */
+  socket.on('player:shove', (d) => {
+    const ref = sockets.get(socket.id); if (!ref) return;
+    const room = rooms.get(ref.code); if (!room) return;
+    if (room.noShove) return;
+    const me = room.players.find(x => x.pid === ref.pid); if (!me) return;
+    const target = room.players.find(x => x.pid === cleanPid(d?.pid));
+    if (!target || target.pid === me.pid || !target.connected) return;
+    if (inCart(me) || inCart(target)) return;          // carts have their own rules
+
+    const now = Date.now();
+    if (now - (me.shoveAt || 0) < 1500) return;         // cooldown
+
+    const dx = (target.ax ?? target.x) - (me.ax ?? me.x);
+    const dz = (target.az ?? target.z) - (me.az ?? me.z);
+    const dist = Math.hypot(dx, dz);
+    if (dist > 2.4 || dist < 1e-3) return;              // out of reach
+
+    /* Standing over their own ball, on their own turn: hands off. */
+    const atBall = room.turnPid === target.pid &&
+      Math.hypot((target.ax ?? 0) - target.x, (target.az ?? 0) - target.z) <= SHOT_RADIUS + 0.5;
+    if (atBall) {
+      return socket.emit('toast', { msg: 'Not while they are over the ball.', kind: 'warn' });
+    }
+
+    me.shoveAt = now;
+    // a sprinting barge moves someone properly; a standing nudge does not
+    const speed = Math.min(9, me.aspeed || 0);
+    const power = 0.9 + speed * 0.42;
+    io.to(room.code).emit('player:shoved', {
+      from: me.pid, pid: target.pid,
+      nx: dx / dist, nz: dz / dist, power
+    });
+  });
+
+  /* The host's switch. Default is ON — the risk was accepted — but a lobby
+     that turns sour can shut it off without anyone having to leave. */
+  socket.on('room:shove', (d) => {
+    const ref = sockets.get(socket.id); if (!ref) return;
+    const room = rooms.get(ref.code); if (!room) return;
+    if (ref.pid !== room.hostPid) return;
+    room.noShove = !d?.on;
+    toast(room, room.noShove ? 'Shoving is off in this room.' : 'Shoving is on.');
+    broadcastState(room);
+  });
+
+  /* ------------------------------------------------------------- chat ----
+     Filtered, rate limited and rebroadcast from HERE. The client escapes on
+     render; this is the only place a check is worth anything, because this
+     is where the message is copied to everyone else. */
+  socket.on('chat:say', (d) => {
+    const ref = sockets.get(socket.id); if (!ref) return;
+    const room = rooms.get(ref.code); if (!room) return;
+    const p = room.players.find(x => x.pid === ref.pid); if (!p) return;
+
+    // a quick phrase is fixed text we wrote, so it skips the filter entirely
+    const quick = d?.phrase ? phraseText(String(d.phrase)) : null;
+    let text, hits = 0;
+    if (quick) {
+      /* Fixed text we wrote, so it skips the FILTER — but not the rate limit.
+         Skipping both made the phrase wheel an unlimited spam channel, which
+         is the same problem free text has, just with politer words. */
+      const gate = allowChat(ref.pid);
+      if (!gate.ok) return socket.emit('toast', { msg: gate.why, kind: 'warn' });
+      text = quick;
+    } else {
+      const res = prepareChat(ref.pid, d?.text);
+      if (!res) return;                               // empty after cleaning
+      if (res.error) return socket.emit('toast', { msg: res.error, kind: 'warn' });
+      text = res.text; hits = res.hits;
+    }
+    io.to(room.code).emit('chat:msg', {
+      pid: p.pid, name: p.name, color: p.color, text,
+      at: Date.now(), filtered: hits > 0
+    });
+  });
+
   socket.on('presence:who', (d, ack) => {
     if (typeof ack !== 'function') return;
     const out = [];

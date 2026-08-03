@@ -10,7 +10,7 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { AVATAR_HEIGHT, BODIES } from '../shared/avatars.js';
-import { CLIPS, EMOTE_CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
+import { CLIPS, EMOTE_CLIPS, SHOVE_CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
 import { CLUB_BY_KEY } from '../shared/clubs.js';
 
 /* One unit box, reused by every part of every avatar.
@@ -246,7 +246,7 @@ export class Avatar {
        contract, same blend in and out, same thirteen boxes.  A chosen emote
        and an earned celebration are the same kind of thing to the renderer,
        so there is one code path and one place for it to go wrong. */
-    const c = CLIPS[name] || EMOTE_CLIPS[name];
+    const c = CLIPS[name] || EMOTE_CLIPS[name] || SHOVE_CLIPS[name];
     if (!c || this.seated) return 0;      // never celebrate from a cart seat
     this.cel = { name, t: 0, dur: c.dur, in: c.in, out: c.out, clip: c };
     return c.dur;

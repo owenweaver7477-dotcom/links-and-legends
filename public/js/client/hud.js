@@ -28,7 +28,7 @@ for (const id of [
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
   'coinHud', 'coinHudN',
-  'emoteWheel', 'recordBox', 'onlineNow', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
+  'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -919,3 +919,62 @@ HUD.renderOnline = (list, myPid, onJoin) => {
     box.appendChild(note);
   }
 };
+
+/* -------------------------------------------------------------- chat ----- */
+/* Muting is per player, for this session, held on the CLIENT. That is the
+   right place for it: it is a decision about what I want to see, it needs no
+   server round trip, and it works instantly even if the person muted is
+   mid-sentence. */
+const muted = new Set();
+HUD.isMuted = pid => muted.has(pid);
+HUD.toggleMute = pid => { muted.has(pid) ? muted.delete(pid) : muted.add(pid); };
+
+const MAX_LOG = 6;
+HUD.chatMessage = (m, myPid) => {
+  if (!el.chatLog || !m) return;
+  if (muted.has(m.pid) && m.pid !== myPid) return;
+
+  const div = document.createElement('div');
+  div.className = 'chatmsg';
+  /* escapeHtml on BOTH the name and the text. The server filters words, but
+     escaping is what stops markup, and a chat box is the most obvious XSS
+     surface in the game — the name is player-supplied too. */
+  div.innerHTML = `<b style="color:${/^#[0-9a-f]{6}$/i.test(m.color || '') ? m.color : '#8fe07a'}">` +
+    `${escapeHtml(m.name)}</b>${escapeHtml(m.text)}`;
+  if (m.pid !== myPid) {
+    const mute = document.createElement('span');
+    mute.className = 'chatmute'; mute.textContent = '🔇'; mute.title = 'Mute ' + m.name;
+    mute.addEventListener('click', () => {
+      HUD.toggleMute(m.pid);
+      HUD.toast(HUD.isMuted(m.pid) ? `Muted ${m.name}` : `Unmuted ${m.name}`, 'info', 1800);
+      div.remove();
+    });
+    div.appendChild(mute);
+  }
+  el.chatLog.appendChild(div);
+  while (el.chatLog.children.length > MAX_LOG) el.chatLog.firstChild.remove();
+
+  // messages fade out on their own; a permanent log would cover the course
+  setTimeout(() => { div.classList.add('fading'); setTimeout(() => div.remove(), 700); }, 11000);
+};
+
+HUD.renderPhrases = (phrases, onSay) => {
+  if (!el.phraseBar) return;
+  el.phraseBar.innerHTML = '';
+  for (const p of phrases) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'phrasebtn'; b.textContent = p.text;
+    b.addEventListener('click', () => onSay(p.id));
+    el.phraseBar.appendChild(b);
+  }
+};
+
+HUD.chatOpen = () => el.chatInput && !el.chatInput.hidden;
+HUD.showChat = on => {
+  if (!el.chatInput) return;
+  el.chatInput.hidden = !on;
+  if (on) { el.chatText.value = ''; el.chatText.focus(); }
+  else el.chatText.blur();
+};
+HUD.chatValue = () => el.chatText?.value || '';
+HUD.showChatPanel = on => { if (el.chatPanel) el.chatPanel.style.display = on ? '' : 'none'; };

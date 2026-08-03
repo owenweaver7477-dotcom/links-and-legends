@@ -107,6 +107,28 @@ export class Walker {
       this.heading = Math.atan2(vx, vz);
       this._step(vx * this.speed * dt, vz * this.speed * dt, terrain, hole);
     }
+
+    /* Being shoved. Applied as a decaying velocity rather than a teleport, so
+       you skid and recover instead of blinking sideways — and it goes through
+       _step, so a shove cannot push anyone through a tree or out of bounds. */
+    if (this.knock) {
+      const k = this.knock;
+      this._step(k.x * dt, k.z * dt, terrain, hole);
+      const decay = Math.max(0, 1 - dt * 4.2);
+      k.x *= decay; k.z *= decay;
+      if (Math.hypot(k.x, k.z) < 0.12) this.knock = null;
+    }
+  }
+
+  /**
+   * Take a shove. (nx,nz) is the direction, `power` its strength in m/s.
+   * Cancels an auto-walk: being barged off your route should feel like being
+   * barged off your route, not like a train ignoring you.
+   */
+  shove(nx, nz, power) {
+    const p = Math.max(0, Math.min(8, power || 0));
+    this.knock = { x: nx * p, z: nz * p };
+    this.auto = null;
   }
 
   /** Move, then push back out of anything solid. */

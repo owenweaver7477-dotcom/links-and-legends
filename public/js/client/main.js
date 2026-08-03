@@ -1355,6 +1355,24 @@ window.addEventListener('keydown', ev => {
     if (seated) HUD.toast('Get out of the cart first.', 'warn', 1600);
     else jogToMyBall();
   }
+  // Enter opens the box; the box itself handles send and close (see above).
+  if (k === 'enter' && G.screen === 'game') { HUD.showChat(true); return; }
+  if (k === 'r' && !seated && G.screen === 'game') {
+    /* Shove whoever is nearest and in reach. No target picking: at barging
+       distance there is only ever one person you could mean, and a wheel
+       would turn a physical act into a menu. */
+    let best = null, bestD = 2.4;
+    for (const pl of (G.room?.players || [])) {
+      if (pl.pid === G.myPid || !pl.connected) continue;
+      const d = Math.hypot((pl.ax ?? pl.x) - walker.x, (pl.az ?? pl.z) - walker.z);
+      if (d < bestD) { bestD = d; best = pl; }
+    }
+    if (best) {
+      Net.shove(best.pid);
+      G.avatars.get(G.myPid)?.play('shoving');     // the barge, locally, at once
+    }
+    return;
+  }
   if (k === 't' && !seated) {
     // hold T for the wheel; it closes on keyup or once something is picked
     if (!HUD.emotesOpen()) {
@@ -1723,6 +1741,22 @@ function levelUpMoment(from, to) {
 }
 
 Net.on('levelup', d => { if (d?.to) levelUpMoment(d.from || 1, d.to); });
+
+/* Somebody got shoved. The stagger plays on whoever took it, on every
+   screen; the PUSH only applies to our own golfer, because each client owns
+   its own position and applying it to a remote avatar would fight the
+   position updates already arriving for them. */
+Net.on('shoved', d => {
+  G.avatars.get(d.pid)?.play('staggered');
+  G.avatars.get(d.from)?.play('shoving');
+  if (d.pid === G.myPid) {
+    walker.shove(d.nx, d.nz, d.power);
+    rig.kick(0.35);
+    Sound.thud?.();
+  }
+});
+
+Net.on('chat', d => HUD.chatMessage(d, G.myPid));
 
 Net.on('emote', d => {
   const av = G.avatars?.get(d?.pid);
@@ -2277,6 +2311,28 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   Net.on('connect', () => { wakeTries = 0; HUD.homeError(''); });
   await Net.connect();
   watchPresence();
+  /* The quick phrases. Fixed text we wrote, so they skip the filter — and on
+     a phone they are the only realistic way to say anything at all. */
+  HUD.el.chatText?.addEventListener('keydown', ev => {
+    /* The game's key handler bails out on INPUT targets — correctly, so that
+       typing never walks the golfer — which means send and close have to be
+       handled on the box itself. */
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      const t = HUD.chatValue().trim();
+      if (t) Net.say(t);
+      HUD.showChat(false);
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault();
+      HUD.showChat(false);
+    }
+    ev.stopPropagation();
+  });
+  HUD.renderPhrases(
+    [{ id: 'nice', text: 'Nice shot!' }, { id: 'unlucky', text: 'Unlucky.' },
+     { id: 'yourturn', text: 'Your turn.' }, { id: 'goodluck', text: 'Good luck!' },
+     { id: 'sorry', text: 'Sorry!' }, { id: 'thanks', text: 'Thanks!' }],
+    id => Net.phrase(id));
   requestAnimationFrame(frame);
 
   /* Once this is published, the only bugs that matter happen on hardware I

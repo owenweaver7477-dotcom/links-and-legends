@@ -232,3 +232,36 @@ export const EMOTE_CLIPS = {
     }
   }
 };
+
+/* A shove, from both ends. Not in EMOTES — these are not chosen from a
+   wheel, they are what happens to you. */
+export const SHOVE_CLIPS = {
+  /** The barge: shoulder drops, arms come through, body turns into it. */
+  shoving: {
+    dur: 0.62, in: 0.08, out: 0.22,
+    pose(P, k) {
+      const e = env(k, 2.2);
+      const push = k < 0.35 ? k / 0.35 : Math.max(0, 1 - (k - 0.35) / 0.65);
+      P.armLx = -1.5 * push; P.armRx = -1.5 * push;
+      P.armLz = 0.30 * push; P.armRz = -0.30 * push;
+      P.bodyRx = -0.20 * push;
+      P.bodyRz = 0.10 * e;
+      P.yaw = 0.14 * e;
+    }
+  },
+  /** Taking one: knocked back, arms out for balance, then recovering. */
+  staggered: {
+    dur: 0.85, in: 0.05, out: 0.34,
+    pose(P, k) {
+      const e = env(k, 2.0);
+      const hit = Math.max(0, 1 - k / 0.4);
+      P.bodyRx = 0.34 * hit;                 // rocked backwards
+      P.bodyRz = -0.16 * e;
+      P.armLx = -1.1 * e; P.armRx = -0.9 * e;
+      P.armLz = 0.72 * e; P.armRz = -0.62 * e;
+      P.legLx = 0.42 * hit; P.legRx = -0.30 * hit;
+      P.headRx = 0.22 * hit;
+      P.bodyY = -0.06 * hit;
+    }
+  }
+};

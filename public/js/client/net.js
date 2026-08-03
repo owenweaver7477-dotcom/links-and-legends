@@ -111,6 +111,8 @@ Net.connect = async () => {
   Net.socket.on('toast', d => fire('toast', d));
   Net.socket.on('player:emote', d => fire('emote', d));
   Net.socket.on('levelup', d => fire('levelup', d));
+  Net.socket.on('chat:msg', d => fire('chat', d));
+  Net.socket.on('player:shoved', d => fire('shoved', d));
   Net.socket.on('profile', d => fire('profile', d));
   Net.socket.on('kicked', d => fire('kicked', d));
 };
@@ -138,6 +140,10 @@ Net.setLook = look => Net.socket?.emit('player:look', { look });
 Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, rot, moving, cart });
 Net.hail = () => Net.socket?.emit('cart:hail');
 Net.emote = id => Net.socket?.emit('player:emote', { id });
+Net.say = text => Net.socket?.emit('chat:say', { text });
+Net.shove = pid => Net.socket?.emit('player:shove', { pid });
+Net.setShove = on => Net.socket?.emit('room:shove', { on });
+Net.phrase = id => Net.socket?.emit('chat:say', { phrase: id });
 /** The global record board. Answers with {} if we are not connected yet. */
 Net.records = cb => {
   if (!Net.socket) return cb({});

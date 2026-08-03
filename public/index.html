@@ -164,6 +164,17 @@
          one appears here the moment it is added. -->
     <div class="emotewheel" id="emoteWheel" hidden></div>
 
+    <!-- Chat.  Sits on the LEFT, clear of the shot controls along the bottom
+         and the roster top-right.  Enter opens the box, Escape closes it. -->
+    <div class="chatpanel" id="chatPanel">
+      <div class="chatlog" id="chatLog"></div>
+      <div class="chatinput" id="chatInput" hidden>
+        <input id="chatText" maxlength="140" autocomplete="off"
+               placeholder="Say something — Enter to send, Esc to close">
+      </div>
+      <div class="phrasebar" id="phraseBar"></div>
+    </div>
+
     <button class="quitbtn" id="btnQuitRound" title="Leave this round (back to the menu)">✕ Leave</button>
 
   <div class="perfhud" id="perfHud" hidden></div>

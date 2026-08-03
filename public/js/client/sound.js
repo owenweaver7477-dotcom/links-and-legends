@@ -108,6 +108,20 @@ Sound.bounce = (surf, speed = 5) => {
   else noiseBurst({ dur: 0.05, freq: 700, q: 0.9, gain: 0.18 * s, sweep: -250 });
 };
 
+/** A body check: short, low, no tail. */
+Sound.thud = () => {
+  const c = ac(); if (!c || muted || platformMuted) return;
+  const o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(150, c.currentTime);
+  o.frequency.exponentialRampToValueAtTime(52, c.currentTime + 0.13);
+  f.type = 'lowpass'; f.frequency.value = 420;
+  g.gain.setValueAtTime(0.22, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.19);
+  o.connect(f); f.connect(g); g.connect(master);
+  o.start(); o.stop(c.currentTime + 0.2);
+};
+
 Sound.splash = () => {
   noiseBurst({ dur: 0.30, freq: 1200, q: 0.6, gain: 0.5, sweep: -900 });
   noiseBurst({ dur: 0.55, freq: 500, q: 0.5, gain: 0.3, sweep: -350 });
