@@ -569,6 +569,7 @@ io.on('connection', socket => {
       if (old) { try { old.emit('kicked', { reason: 'Opened in another tab' }); old.disconnect(true); } catch { /* gone */ } }
     }
     sockets.set(socket.id, { code: room.code, pid: player.pid });
+    socket.data.pid = player.pid;
     socket.join(room.code);
     room.emptySince = null;
     // Arriving is one of the two events that can un-strand a room.
@@ -779,6 +780,10 @@ io.on('connection', socket => {
   socket.on('profile:me', (d) => {
     const pid = cleanPid(d?.pid);
     if (!pid) return;
+    // Remember who this socket belongs to.  The clubhouse — career, pro shop,
+    // the bag — is deliberately OUTSIDE any room, so room membership cannot be
+    // the only way we know a player's identity.
+    socket.data.pid = pid;
     // A player we have never seen may be a genuinely new player, or the same
     // player after this host wiped its disk on a deploy.  seedProfile tells
     // those apart safely: it only ever fills a blank, and only within clamps.
@@ -816,11 +821,18 @@ io.on('connection', socket => {
    */
   socket.on('shop:buy', (d) => {
     const item = d?.item;
-    const ref = sockets.get(socket.id); if (!ref) return;
-    const why = buyItem(ref.pid, String(item || ''), SHOP, purchaseBlocked, crewPurchase);
+    /* Identity, NOT room membership.  This used to read the room binding and
+       bail out when there was none — and the shop lives in the clubhouse,
+       which is outside every room, so on the title screen every single
+       purchase returned here silently.  No coins spent, no item granted, no
+       error shown: the player clicked Hire and absolutely nothing happened.
+       That is the whole of "the upgrades don't work". */
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return socket.emit('toast', { msg: 'Still connecting — try again in a second.', kind: 'warn' });
+    const why = buyItem(pid, String(item || ''), SHOP, purchaseBlocked, crewPurchase);
     if (why) return socket.emit('toast', { msg: why, kind: 'warn' });
     socket.emit('toast', { msg: 'In the bag.', kind: 'good' });
-    socket.emit('profile', publicProfile(ref.pid));
+    socket.emit('profile', publicProfile(pid));
   });
 
   socket.on('game:start', () => {

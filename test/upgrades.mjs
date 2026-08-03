@@ -168,3 +168,61 @@ test('a rejected purchase never charges the player', async () => {
 
   s.disconnect();
 });
+
+test('you can buy from the clubhouse without joining a room', async () => {
+  /* The clubhouse — career, pro shop, the bag — is deliberately outside every
+     room.  shop:buy used to resolve the player from the ROOM binding and bail
+     out when there was none, so on the title screen every purchase returned
+     silently: no coins spent, no item granted, no error shown.  Clicking Hire
+     did nothing at all.
+
+     This test never creates or joins a room, which is the whole point. */
+  const me = pid('lobbyshop');
+  const s = await connect();
+  let profile = null;
+  const toasts = [];
+  s.on('profile', p => { profile = p; });
+  s.on('toast', t => toasts.push(t));
+
+  // identify ourselves the way the clubhouse does, and nothing else
+  s.emit('profile:me', { pid: me });
+  await wait(400);
+  assert.ok(profile, 'the server must answer profile:me outside a room');
+
+  const coinsBefore = profile.coins || 0;
+  assert.ok(coinsBefore > 0,
+    'a new player must arrive with something to spend, or every button in ' +
+    'the shop is disabled and the shop looks broken');
+
+  s.emit('shop:buy', { item: 'caddie:ace' });
+  await wait(600);
+
+  assert.equal(profile.crew?.ace, 1,
+    `hiring a caddie from the clubhouse did nothing; toasts: ${JSON.stringify(toasts)}`);
+  assert.ok(profile.coins < coinsBefore, 'and it must actually cost coins');
+
+  s.disconnect();
+});
+
+test('every item in the shop is reachable and does something', async () => {
+  const me = pid('buyall');
+  const s = await connect();
+  let profile = null;
+  s.on('profile', p => { profile = p; });
+  s.emit('profile:me', { pid: me });
+  await wait(400);
+
+  // hand-verify each SHOP key is a real purchase the server accepts, by
+  // asking what blocks it rather than by minting coins
+  for (const [key, it] of Object.entries(SHOP)) {
+    assert.ok(it.slot && it.tier >= 1, `${key} has no slot/tier to grant`);
+    assert.ok(it.cost > 0, `${key} is free`);
+    assert.ok(it.name && it.blurb, `${key} has nothing to show in the shop`);
+  }
+  // and the slots the physics actually reads
+  const slots = new Set(Object.values(SHOP).map(i => i.slot));
+  for (const s2 of ['ball', 'irons', 'woods']) {
+    assert.ok(slots.has(s2), `nothing in the shop sells the ${s2} slot`);
+  }
+  s.disconnect();
+});

@@ -15,6 +15,10 @@ import fs from 'node:fs';
 import { holeCoins, roundCoins } from '../public/js/shared/economy.js';
 import path from 'node:path';
 
+/* Enough for the first Forged irons or a caddie, so the shop is usable the
+   moment a player opens it rather than after several rounds. */
+export const STARTING_COINS = 900;
+
 const FILE = path.join(process.cwd(), 'data', 'profiles.json');
 
 const profiles = new Map();
@@ -47,7 +51,12 @@ export function getProfile(pid) {
       fairways: 0, fairwayChances: 0, gir: 0,
       birdies: 0, eagles: 0, aces: 0,
       best: null,               // best round relative to par
-      coins: 0, rating: 20,
+      /* A welcome purse.  Starting at zero meant every button in the shop
+         was disabled on a new player's first visit — nothing to click, no way
+         to see that upgrades do anything, and no reason to believe the shop
+         worked at all.  This buys the first real upgrade immediately, which
+         is the moment the whole progression makes sense. */
+      coins: STARTING_COINS, rating: 20,
       gear: { ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 },
       crew: { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
       clubTier: 0, refine: 0, cleared: [],
@@ -56,6 +65,17 @@ export function getProfile(pid) {
       history: []               // last 20 rounds, [relToPar]
     };
     profiles.set(pid, p);
+  }
+  /* Pay the welcome purse ONCE, to existing players as well as new ones.
+     Seeding it only in the default above would have missed everybody who
+     already had a profile — including every player stuck at zero coins with a
+     shop full of dead buttons, which is the exact complaint. The flag, not
+     the balance, is what makes it one-time: a player who has legitimately
+     spent down to nothing is not topped up again. */
+  if (!p.welcomed) {
+    p.welcomed = true;
+    if ((p.coins || 0) < STARTING_COINS) p.coins = STARTING_COINS;
+    saveSoon();
   }
   return p;
 }

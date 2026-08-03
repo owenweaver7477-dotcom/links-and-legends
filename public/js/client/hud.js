@@ -513,10 +513,11 @@ HUD.renderShop = (prof, onBuy) => {
       } else {
         const can = coins >= cost;
         btn.className = 'btn' + (can ? ' primary' : '');
-        btn.textContent = (lvl ? 'Level up · ' : 'Hire · ') + '🪙 ' + cost;
+        btn.textContent = can
+          ? (lvl ? 'Level up · ' : 'Hire · ') + '🪙 ' + cost
+          : `🪙 ${cost} · need ${cost - coins} more`;
         btn.disabled = !can;
-        if (!can) btn.title = 'Costs ' + cost + ' coins — you have ' + coins;
-        else btn.addEventListener('click', () => onBuy('caddie:' + key));
+        if (can) btn.addEventListener('click', () => onBuy('caddie:' + key));
       }
       card.appendChild(btn);
       grid.appendChild(card);
@@ -533,7 +534,9 @@ HUD.renderShop = (prof, onBuy) => {
       const rc = REFINE_COSTS(tier)[refine];
       const rb = document.createElement('button');
       rb.className = 'btn' + (coins >= rc ? ' primary' : '');
-      rb.textContent = 'Refine ' + ['I','II','III'][refine] + ' · 🪙 ' + rc;
+      rb.textContent = coins >= rc
+        ? 'Refine ' + ['I','II','III'][refine] + ' · 🪙 ' + rc
+        : `🪙 ${rc} · need ${rc - coins} more`;
       rb.disabled = coins < rc;
       if (coins >= rc) rb.addEventListener('click', () => onBuy('club:refine'));
       curCard.appendChild(rb);
@@ -548,25 +551,35 @@ HUD.renderShop = (prof, onBuy) => {
         <span class="cad-now">Refinements reset on upgrade — a new set starts raw</span>`;
       const nb = document.createElement('button');
       nb.className = 'btn' + (coins >= nxt.cost ? ' primary' : '');
-      nb.textContent = 'Upgrade set · 🪙 ' + nxt.cost;
+      nb.textContent = coins >= nxt.cost
+        ? 'Upgrade set · 🪙 ' + nxt.cost
+        : `🪙 ${nxt.cost} · need ${nxt.cost - coins} more`;
       nb.disabled = coins < nxt.cost;
       if (coins >= nxt.cost) nb.addEventListener('click', () => onBuy('club:tier'));
       nc.appendChild(nb);
       grid.appendChild(nc);
     }
 
-    // the legacy ball and cart lines still live here
+    /* EVERY item in the shop.  Three of the six — forged irons, carbon woods
+       and the milled putter — used to be skipped here as "legacy", so they
+       were unbuyable in the UI while still costing coins and changing the
+       ball flight if bought over the wire.  If it is in SHOP it is for sale. */
     const gear = prof?.gear || {};
     for (const [key, it] of Object.entries(SHOP)) {
-      if (it.slot === 'irons' || it.slot === 'woods' || it.slot === 'putter') continue;
       const owned = (gear[it.slot] || 0) >= it.tier;
       const blocked = prof ? purchaseBlocked(key, { coins, gear }) : 'Join first.';
       const card = document.createElement('div');
       card.className = 'shopcard' + (owned ? ' owned' : '');
-      card.innerHTML = `<b>${it.name}</b><span class="sc-blurb">${it.blurb}</span>`;
+      card.innerHTML = `<b>${escapeHtml(it.name)}</b><span class="sc-blurb">${escapeHtml(it.blurb)}</span>`;
       const btn = document.createElement('button');
       btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
-      btn.textContent = owned ? 'In the bag ✓' : '🪙 ' + it.cost;
+      // A dead grey button with a price on it tells the player nothing about
+      // WHY they cannot press it.  Say the actual reason.
+      const short = coins < it.cost ? `🪙 ${it.cost} · need ${it.cost - coins} more` : null;
+      btn.textContent = owned ? 'In the bag ✓'
+        : short ? short
+          : blocked ? blocked
+            : '🪙 ' + it.cost;
       btn.disabled = owned || !!blocked;
       if (!owned && !blocked) btn.addEventListener('click', () => onBuy(key));
       card.appendChild(btn);
