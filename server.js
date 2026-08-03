@@ -29,6 +29,8 @@ import { normaliseLook, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
+import { EMOTES } from './public/js/client/celebrations.js';
+import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound } from './server/profiles.js';
 
@@ -481,9 +483,13 @@ function nextHole(room) {
       if (sock && prof) {
         sock.emit('profile', prof);
         const bits = ['🪙 +' + rc.total + ' this round'];
+        if (rc.xp) bits.push('+' + rc.xp + ' XP');
         if (rc.streakPct) bits.push('streak +' + rc.streakPct + '%');
         if (rc.firstClearBonus) bits.push('first clear +500');
         sock.emit('toast', { msg: bits.join(' · '), kind: 'good' });
+        /* Only the server knows what the level was BEFORE this round was
+           folded in, so the level-up has to be announced from here. */
+        if (rc.leveledUp) sock.emit('levelup', rc.leveledUp);
       }
     }
     broadcastState(room);
@@ -791,6 +797,29 @@ io.on('connection', socket => {
       try { seedProfile(pid, d.restore); } catch { /* malformed: ignore */ }
     }
     socket.emit('profile', publicProfile(pid));
+  });
+
+  /* Emotes.  Relayed rather than trusted: the server checks the id is one we
+     ship AND that this player's level has actually unlocked it, so a modified
+     client cannot broadcast an emote it has not earned — the unlock is the
+     whole reward, and it would be worth nothing if it could be skipped.
+     Rate-limited because it is a broadcast anyone can trigger at will. */
+  socket.on('player:emote', (d) => {
+    const ref = sockets.get(socket.id); if (!ref) return;
+    const room = rooms.get(ref.code); if (!room) return;
+    const p = room.players.find(x => x.pid === ref.pid); if (!p) return;
+
+    const id = String(d?.id || '');
+    const e = EMOTES.find(x => x.id === id);
+    if (!e) return;
+    const lvl = levelFromXp(getProfile(ref.pid).xp || 0).level;
+    if (lvl < e.at) {
+      return socket.emit('toast', { msg: `${e.name} unlocks at level ${e.at}.`, kind: 'warn' });
+    }
+    const now = Date.now();
+    if (now - (p.lastEmoteAt || 0) < 1200) return;      // one at a time
+    p.lastEmoteAt = now;
+    io.to(room.code).emit('player:emote', { pid: p.pid, id });
   });
 
   socket.on('cart:hail', () => {

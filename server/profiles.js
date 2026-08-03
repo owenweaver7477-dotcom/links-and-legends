@@ -12,7 +12,7 @@
    ========================================================================= */
 
 import fs from 'node:fs';
-import { holeCoins, roundCoins } from '../public/js/shared/economy.js';
+import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp } from '../public/js/shared/economy.js';
 import path from 'node:path';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
@@ -56,7 +56,7 @@ export function getProfile(pid) {
          to see that upgrades do anything, and no reason to believe the shop
          worked at all.  This buys the first real upgrade immediately, which
          is the moment the whole progression makes sense. */
-      coins: STARTING_COINS, rating: 20,
+      coins: STARTING_COINS, rating: 20, xp: 0,
       gear: { ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 },
       crew: { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
       clubTier: 0, refine: 0, cleared: [],
@@ -95,7 +95,8 @@ export function getProfile(pid) {
  * Returns true if it actually seeded.
  */
 const CLAMP = {
-  coins: 400000, rating: 98, clubTier: 6, refine: 3, rounds: 2000, crewLevel: 10
+  coins: 400000, rating: 98, clubTier: 6, refine: 3, rounds: 2000, crewLevel: 10,
+  xp: 4000000
 };
 const num = (v, max, dflt = 0) => {
   const n = Number(v);
@@ -109,7 +110,7 @@ const num = (v, max, dflt = 0) => {
  */
 function untouched(p) {
   if (!p) return true;
-  if ((p.rounds || 0) > 0 || (p.holes || 0) > 0) return false;
+  if ((p.rounds || 0) > 0 || (p.holes || 0) > 0 || (p.xp || 0) > 0) return false;
   if ((p.clubTier || 0) > 0 || (p.refine || 0) > 0) return false;
   if (p.gear && Object.values(p.gear).some(v => (v || 0) > 0)) return false;
   if (p.crew && Object.values(p.crew).some(v => (v || 0) > 0)) return false;
@@ -135,6 +136,9 @@ export function seedProfile(pid, snap) {
 
   const p = getProfile(pid);                 // creates the blank profile
   p.coins = num(d.coins, CLAMP.coins);
+  /* XP too, or a wiped host takes every emote a player has unlocked with it —
+     the same failure coins already had, and the reason this list is checked. */
+  p.xp = num(d.xp, CLAMP.xp);
   p.rating = Math.max(2, num(d.rating, CLAMP.rating, 20));
   p.clubTier = num(d.clubTier, CLAMP.clubTier);
   p.refine = num(d.refine, CLAMP.refine);
@@ -161,6 +165,7 @@ export function publicProfile(pid) {
   const p = getProfile(pid);
   return {
     rounds: p.rounds, best: p.best, coins: p.coins, rating: Math.round(p.rating),
+    xp: p.xp || 0, ...levelFromXp(p.xp || 0),
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
     crew: p.crew || { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
@@ -192,6 +197,7 @@ export function recordHole(pid, h) {
   else if (rel === -1) p.birdies++;
   // the economy document's per-hole payout, shared with the test suite
   p.coins += holeCoins(h.strokes, h.par);
+  p.xp = (p.xp || 0) + holeXp(h.strokes, h.par);
   saveSoon();
 }
 
@@ -253,6 +259,18 @@ export function settleRound(pid, courseId, holeScores) {
   const firstClear = courseId && !(p.cleared || []).includes(courseId) && full;
   const rc = roundCoins(holeScores, firstClear);
   p.coins += rc.total - rc.holes;                  // holes already paid live
+
+  /* XP: the holes already paid as they were played (recordHole), so this is
+     the completion bonus only — same split as the coins.  The level BEFORE
+     and AFTER go back with the settlement so the results screen can make a
+     moment of it rather than a number quietly changing. */
+  const before = levelFromXp(p.xp || 0).level;
+  const holeXpPaid = holeScores.reduce((a, h) => a + holeXp(h.strokes, h.par), 0);
+  rc.xp = roundXp(holeScores) - holeXpPaid;
+  p.xp = (p.xp || 0) + rc.xp;
+  const after = levelFromXp(p.xp).level;
+  rc.level = after;
+  rc.leveledUp = after > before ? { from: before, to: after } : null;
   if (firstClear) { p.cleared = p.cleared || []; p.cleared.push(courseId); }
 
   // one star for going round the whole thing, however you scored

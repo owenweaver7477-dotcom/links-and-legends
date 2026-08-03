@@ -136,3 +136,99 @@ export function reactionFor(strokes, par, capped) {
 
 /** Seconds a reaction runs for, or 0 if there is no such clip. */
 export const clipDuration = name => CLIPS[name]?.dur || 0;
+
+/* =========================================================================
+   EMOTES — the ones you choose, rather than the ones the scorecard chooses
+   -------------------------------------------------------------------------
+   Same pose contract as the celebrations above: authored on k in [0,1],
+   neutral at both ends, writing into a caller-supplied object.  They cost no
+   geometry and no download — an emote is a few numbers moving the thirteen
+   boxes the golfer already has.
+
+   Unlocked by LEVEL, not bought, so there is a reason to keep playing that
+   coins do not already cover.  `at` is the level each one arrives at.
+   ========================================================================= */
+export const EMOTES = [
+  { id: 'wave', name: 'Wave', icon: '👋', at: 2,
+    blurb: 'A friendly one for the tee box' },
+  { id: 'fistpump', name: 'Fist pump', icon: '💪', at: 3,
+    blurb: 'For when it drops from distance' },
+  { id: 'twirl', name: 'Club twirl', icon: '🌀', at: 4,
+    blurb: 'Pure showboating, and it is earned' },
+  { id: 'shrug', name: 'Shrug', icon: '🤷', at: 5,
+    blurb: 'No idea what happened there either' },
+  { id: 'clap', name: 'Slow clap', icon: '👏', at: 6,
+    blurb: 'Sincere. Mostly.' }
+];
+
+/** Which emotes a player of this level has. */
+export const emotesAt = level =>
+  EMOTES.filter(e => e.at <= (Number(level) || 1));
+
+export const EMOTE_CLIPS = {
+  wave: {
+    dur: 1.45, in: 0.16, out: 0.30,
+    pose(P, k) {
+      const e = env(k);
+      // arm up and out, hand swinging from the shoulder
+      P.armRx = UP * 0.78 * e;
+      P.armRz = -0.30 * e + Math.sin(k * Math.PI * 6) * 0.34 * e;
+      P.headRy = 0.12 * e;
+      P.bodyRz = -0.04 * e;
+    }
+  },
+
+  fistpump: {
+    dur: 1.15, in: 0.12, out: 0.26,
+    pose(P, k) {
+      const pump = env(k, 1.9) * Math.abs(Math.sin(Math.PI * 2.5 * k));
+      P.armRx = UP * 0.92 * pump;
+      P.armRz = -0.18 * pump;
+      P.armLx = 0.34 * pump;
+      P.bodyRx = -0.13 * pump;
+      P.headRx = -0.16 * pump;
+      P.bodyY = 0.06 * pump;
+    }
+  },
+
+  twirl: {
+    dur: 1.60, in: 0.14, out: 0.32,
+    pose(P, k) {
+      const e = env(k);
+      // the club hand spins through a full turn, the body rides it
+      P.armRx = -1.15 * e + Math.sin(k * Math.PI * 2) * 0.55 * e;
+      P.armRz = -Math.cos(k * Math.PI * 2) * 0.7 * e;
+      P.armLx = 0.20 * e;
+      P.yaw = Math.sin(k * Math.PI * 2) * 0.30 * e;
+      P.bodyRx = -0.06 * e;
+      P.headRy = Math.sin(k * Math.PI * 2) * 0.18 * e;
+    }
+  },
+
+  shrug: {
+    dur: 1.35, in: 0.20, out: 0.34,
+    pose(P, k) {
+      // hold at the top rather than pulsing — a shrug is a pause, not a wave
+      const hold = Math.min(1, Math.sin(Math.PI * k) * 2.6);
+      P.armLx = -0.62 * hold; P.armRx = -0.62 * hold;
+      P.armLz = 0.85 * hold; P.armRz = -0.85 * hold;
+      P.bodyY = 0.045 * hold;
+      P.headRx = 0.16 * hold;
+      P.headRy = -0.10 * hold;
+    }
+  },
+
+  clap: {
+    dur: 1.75, in: 0.16, out: 0.30,
+    pose(P, k) {
+      const e = env(k);
+      // hands meet in front, slowly, four times
+      const beat = (Math.cos(k * Math.PI * 8) + 1) * 0.5;
+      P.armLx = -1.42 * e; P.armRx = -1.42 * e;
+      P.armLz = (0.10 + 0.42 * beat) * e;
+      P.armRz = -(0.10 + 0.42 * beat) * e;
+      P.headRx = -0.08 * e;
+      P.bodyRx = -0.05 * e;
+    }
+  }
+};

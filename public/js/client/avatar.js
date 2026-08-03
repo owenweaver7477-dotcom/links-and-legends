@@ -9,8 +9,8 @@
    ========================================================================= */
 
 import * as THREE from '../../vendor/three.module.js';
-import { AVATAR_HEIGHT } from '../shared/avatars.js';
-import { CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
+import { AVATAR_HEIGHT, BODIES } from '../shared/avatars.js';
+import { CLIPS, EMOTE_CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
 import { CLUB_BY_KEY } from '../shared/clubs.js';
 
 /* One unit box, reused by every part of every avatar.
@@ -99,9 +99,28 @@ export class Avatar {
     };
 
     /* --- torso and head ------------------------------------------------ */
-    // proportions: legs to 0.46H, torso to 0.80H, head on top
+    /* The torso used to be a single box, which can only ever be a rectangle —
+       there is nowhere for a waist to be.  It is three stacked segments now,
+       so hips, waist and chest can each have their own width and the
+       silhouette actually reads as a body shape from behind, which is the
+       view you spend a whole round looking at.
+
+       proportions: legs to 0.46H, torso to 0.80H, head on top */
+    const B = BODIES.find(b => b.id === (look.body || 'straight')) || BODIES[0];
+    this.build = B;
+    const W = 0.42, D = 0.24;                    // the base rig's torso
     this.body = new THREE.Group();
-    this.body.add(part(this.mats.shirt, 0.42, H * 0.32, 0.24, 0, H * 0.63, 0));
+    // hips -> waist -> chest, spanning the same H*0.47 .. H*0.79 as before
+    this.body.add(part(this.mats.trousers, W * B.hips, H * 0.075, D * B.depth, 0, H * 0.5075, 0));
+    this.body.add(part(this.mats.shirt, W * B.waist, H * 0.105, D * 0.95 * B.depth, 0, H * 0.5975, 0));
+    this.body.add(part(this.mats.shirt, W * B.chest, H * 0.140, D * B.depth, 0, H * 0.7200, 0));
+    if (B.bust > 0) {
+      // sits proud of the chest front, so it reads in silhouette rather than
+      // only head-on; two boxes rather than one so it is not a shelf
+      const bw = W * B.chest * 0.34, by = H * 0.700, bz = D * B.depth * 0.5;
+      this.body.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, bw * 0.52, by, bz));
+      this.body.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, -bw * 0.52, by, bz));
+    }
 
     // The head and hat hang off pivots at the neck so a celebration can nod,
     // shake and doff the cap.  Groups cost nothing — they are never submitted
@@ -145,10 +164,17 @@ export class Avatar {
        the LEFT, and the club — parented to armR — hung off the wrong side,
        reaching across the golfer instead of down to the ball.  The limbs are
        now placed so their names match the side they actually appear on. */
-    this.armL = limb(this.mats.shirt, 0.115, H * 0.30, 0.262, H * 0.775, this.mats.skin, H * 0.06);
-    this.armR = limb(this.mats.shirt, 0.115, H * 0.30, -0.262, H * 0.775, this.mats.skin, H * 0.06);
-    this.legL = limb(this.mats.trousers, 0.145, H * 0.42, 0.105, H * 0.47, this.mats.shoe, H * 0.05);
-    this.legR = limb(this.mats.trousers, 0.145, H * 0.42, -0.105, H * 0.47, this.mats.shoe, H * 0.05);
+    /* ARMS ARE THE SAME ON EVERY BUILD, and deliberately so.  The club is
+       parented to armR and the stance is solved from a measured reach; change
+       the shoulder anchor or the arm length here and the club stops landing
+       on the ball on every build but one.  Only the sleeve thickness varies. */
+    const aw = 0.115 * (0.94 + 0.06 * B.limb);
+    this.armL = limb(this.mats.shirt, aw, H * 0.30, 0.262, H * 0.775, this.mats.skin, H * 0.06);
+    this.armR = limb(this.mats.shirt, aw, H * 0.30, -0.262, H * 0.775, this.mats.skin, H * 0.06);
+    // legs are free to change: nothing is mounted to them
+    const lw = 0.145 * B.limb, lx = 0.105 * B.hipSpread, ll = H * 0.42 * B.legLen;
+    this.legL = limb(this.mats.trousers, lw, ll, lx, H * 0.47, this.mats.shoe, H * 0.05);
+    this.legR = limb(this.mats.trousers, lw, ll, -lx, H * 0.47, this.mats.shoe, H * 0.05);
     this.body.add(this.armL, this.armR, this.legL, this.legR);
 
     /* Worn accessories that hang off the body rather than the head.  Built
@@ -216,9 +242,13 @@ export class Avatar {
    * no such clip.  Restarting an already-running clip re-triggers it.
    */
   play(name) {
-    const c = CLIPS[name];
+    /* Emotes ride the exact same player as the celebrations — same pose
+       contract, same blend in and out, same thirteen boxes.  A chosen emote
+       and an earned celebration are the same kind of thing to the renderer,
+       so there is one code path and one place for it to go wrong. */
+    const c = CLIPS[name] || EMOTE_CLIPS[name];
     if (!c || this.seated) return 0;      // never celebrate from a cart seat
-    this.cel = { name, t: 0, dur: c.dur, in: c.in, out: c.out };
+    this.cel = { name, t: 0, dur: c.dur, in: c.in, out: c.out, clip: c };
     return c.dur;
   }
   get celebrating() { return !!this.cel; }
@@ -568,7 +598,7 @@ export class Avatar {
       } else {
         const k = cel.t / cel.dur;
         const C = blankPose(this._clip);
-        CLIPS[cel.name].pose(C, k);
+        (cel.clip || CLIPS[cel.name]).pose(C, k);
         // Ramp in, ramp out.  w hits exactly 0 at the end, and because the
         // walk pose above is recomputed live every frame, the release lands
         // on the current stride with no pop — the blend-out IS the release.
@@ -615,8 +645,13 @@ export class Avatar {
     P.armLz = 0.12; P.armRz = -0.12;
     P.bodyY = -0.24;                       // the torso drops onto the cushion
     this._apply(P);
-    this.legL.scale.y = SEATED_LEG;
-    this.legR.scale.y = SEATED_LEG;
+    /* Divided by the build's leg length so every golfer tucks the SAME
+       absolute shin into the footwell.  A flat scale would let the
+       longer-legged builds spear the bonnet, since the seat is a fixed size
+       and their legs are not. */
+    const tuck = SEATED_LEG / (this.build?.legLen || 1);
+    this.legL.scale.y = tuck;
+    this.legR.scale.y = tuck;
     // a braced passenger takes roughly two thirds of the chassis movement
     this.body.rotation.x = (this._ridePitch || 0) * 0.65;
     this.body.rotation.z = (this._rideRoll || 0) * 0.65;

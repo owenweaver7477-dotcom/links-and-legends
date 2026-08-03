@@ -109,6 +109,39 @@ export const HAIR_COLORS = [
   { name: 'Silver',   hex: '#d6d8da' }
 ];
 
+/* -------------------------------------------------------------- builds ---
+   Body shape, as its own slot.  Everyone was one figure with square
+   shoulders, which is a poor showing for a game where you look at your
+   golfer from behind for an entire round.
+
+   Named for the SILHOUETTE rather than for a gender: a player picks the shape
+   they want to see, and that is a shorter list of decisions and a kinder one.
+
+   The numbers are multipliers on the base rig, and one thing is deliberately
+   NOT among them — the shoulders. The club hangs off the right arm, and the
+   stance is solved from a MEASURED reach of 0.698 m forward and 0.526 m to
+   the side (CLUB_REACH_FWD / CLUB_REACH_SIDE in main.js). Move the shoulder
+   anchor and the club stops landing on the ball, which is a bug that took a
+   long time to find the first time. So every build shares an identical
+   shoulder position, arm length and club mount; the difference is all in the
+   torso, hips and leg proportion, which is plenty to read at distance. */
+export const BODIES = [
+  { id: 'straight', name: 'Straight',
+    chest: 1.00, waist: 0.95, hips: 0.98, bust: 0,
+    hipSpread: 1.00, legLen: 1.00, limb: 1.00, depth: 1.00 },
+  { id: 'curved', name: 'Curved',
+    // narrower through the shoulders, a real waist, wider hips, and legs
+    // that take up more of the same overall height
+    chest: 0.88, waist: 0.76, hips: 1.04, bust: 0.075,
+    hipSpread: 1.16, legLen: 1.06, limb: 0.92, depth: 0.94 },
+  { id: 'broad', name: 'Broad',
+    chest: 1.12, waist: 1.14, hips: 1.10, bust: 0,
+    hipSpread: 1.06, legLen: 0.96, limb: 1.14, depth: 1.16 },
+  { id: 'slight', name: 'Slight',
+    chest: 0.90, waist: 0.84, hips: 0.88, bust: 0,
+    hipSpread: 0.94, legLen: 1.03, limb: 0.88, depth: 0.90 }
+];
+
 export const ACCESSORIES = [
   { id: 'none',    name: 'None' },
   { id: 'glasses', name: 'Glasses' },
@@ -147,6 +180,7 @@ export function normaliseLook(look, seedIndex = 0) {
     hair: pickId(HAIR_STYLES, l.hair, seedIndex + 1),
     hairColor: pick(HAIR_COLORS, l.hairColor, seedIndex),
     accessory: pickId(ACCESSORIES, l.accessory, 0),
+    body: pickId(BODIES, l.body, 0),
     shoes: pick(SHOES, l.shoes, 0)
   };
 }
@@ -158,7 +192,8 @@ export function randomLook() {
     cap: any(CAPS).hex, shirt: any(SHIRTS).hex, skin: any(SKINS).hex,
     trousers: any(TROUSERS).hex, hat: any(HAT_STYLES).id,
     hair: any(HAIR_STYLES).id, hairColor: any(HAIR_COLORS).hex,
-    accessory: any(ACCESSORIES).id, shoes: any(SHOES).hex
+    accessory: any(ACCESSORIES).id, shoes: any(SHOES).hex,
+    body: any(BODIES).id
   });
 }
 

@@ -13,6 +13,7 @@ import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REF
 import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
+import { EMOTES } from './celebrations.js';
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
 import { Net } from './net.js';
@@ -1354,15 +1355,23 @@ window.addEventListener('keydown', ev => {
     if (seated) HUD.toast('Get out of the cart first.', 'warn', 1600);
     else jogToMyBall();
   }
+  if (k === 't' && !seated) {
+    // hold T for the wheel; it closes on keyup or once something is picked
+    if (!HUD.emotesOpen()) {
+      HUD.renderEmotes(G.profile?.level ?? 1, id => { Net.emote(id); HUD.showEmotes(false); });
+      HUD.showEmotes(true);
+    }
+  }
   if (k === 'p') HUD.showPerf(!HUD.perfVisible());
 });
 window.addEventListener('keyup', ev => {
   const k = ev.key.toLowerCase();
+  if (k === 't') HUD.showEmotes(false);
   keys.delete(k);
   walker.key(k, false);
 });
 // a lost focus must not leave someone sprinting forever
-window.addEventListener('blur', () => { keys.clear(); walker.clearKeys(); carts.clearInput(); });
+window.addEventListener('blur', () => { keys.clear(); walker.clearKeys(); carts.clearInput(); HUD.showEmotes(false); });
 
 /* continuous aim while a key is held */
 /*
@@ -1694,6 +1703,32 @@ Net.on('pos', d => {
   r.tx = d.x; r.tz = d.z; r.trot = d.rot; r.moving = !!d.moving;
 });
 
+/* Somebody emoted.  The server has already checked they own it, so this just
+   plays it on whoever's avatar it belongs to — including our own, so what we
+   see is the same thing everyone else sees rather than a local guess. */
+/* Levelling up is a moment, not a number quietly changing.  The server tells
+   us when it happened as part of the round settlement, because only it knows
+   what the level was before the round was folded in. */
+function levelUpMoment(from, to) {
+  const el = document.createElement('div');
+  el.className = 'levelup';
+  const gained = EMOTES.filter(e => e.at > from && e.at <= to);
+  el.innerHTML = `<div><b>LEVEL ${to}</b><span>` +
+    (gained.length
+      ? gained.map(g => g.icon + ' ' + g.name + ' unlocked').join(' · ')
+      : 'Keep going') + `</span></div>`;
+  document.body.appendChild(el);
+  try { Sound.celebrate?.('birdie'); } catch { /* audio may be blocked */ }
+  setTimeout(() => el.remove(), 2700);
+}
+
+Net.on('levelup', d => { if (d?.to) levelUpMoment(d.from || 1, d.to); });
+
+Net.on('emote', d => {
+  const av = G.avatars?.get(d?.pid);
+  if (av) av.play(d.id);
+});
+
 Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
@@ -1803,7 +1838,8 @@ function renderClubhouse() {
       storeSet('lg_save', JSON.stringify({
         v: 1, coins: prof.coins, rating: prof.rating, crew: prof.crew,
         gear: prof.gear, clubTier: prof.clubTier, refine: prof.refine,
-        stars: prof.stars, rounds: prof.rounds, best: prof.best
+        stars: prof.stars, rounds: prof.rounds, best: prof.best,
+        xp: prof.xp                       // or a wiped host eats every unlock
       }));
     } catch { /* over quota or no store: the server still has it */ }
   }

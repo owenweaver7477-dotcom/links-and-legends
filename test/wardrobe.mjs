@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import {
   normaliseLook, randomLook,
   CAPS, SHIRTS, SKINS, TROUSERS, SHOES,
-  HAIR_COLORS, HAT_STYLES, HAIR_STYLES, ACCESSORIES
+  HAIR_COLORS, HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES
 } from '../public/js/shared/avatars.js';
 
 const COLOUR_SLOTS = [
@@ -28,7 +28,8 @@ const COLOUR_SLOTS = [
   ['trousers', TROUSERS], ['hairColor', HAIR_COLORS], ['shoes', SHOES]
 ];
 const STYLE_SLOTS = [
-  ['hat', HAT_STYLES], ['hair', HAIR_STYLES], ['accessory', ACCESSORIES]
+  ['hat', HAT_STYLES], ['hair', HAIR_STYLES], ['accessory', ACCESSORIES],
+  ['body', BODIES]
 ];
 
 /** Every slot present, and every value one the renderer actually knows. */
@@ -140,4 +141,49 @@ test('the wardrobe is big enough to be worth having', () => {
     .reduce((n, [, list]) => n * list.length, 1);
   assert.ok(combos > 1e6,
     `only ${combos.toLocaleString()} distinct golfers`);
+});
+
+/* ---------------------------------------------------------------- builds */
+
+test('every build shares the shoulders, arms and club mount', () => {
+  /* The club hangs off the right arm, and the stance is solved from a reach
+     MEASURED off that rig (CLUB_REACH_FWD / CLUB_REACH_SIDE in main.js). If a
+     build moved the shoulder anchor or changed the arm length, the club would
+     stop landing on the ball for that build — a bug that was expensive to
+     find the first time. So no build is allowed a shoulder or arm multiplier
+     at all; the shape lives entirely in the torso, hips and legs. */
+  for (const b of BODIES) {
+    for (const banned of ['shoulder', 'armLen', 'reach', 'arm']) {
+      assert.equal(b[banned], undefined,
+        `build "${b.id}" defines ${banned}, which would move the club off the ball`);
+    }
+  }
+});
+
+test('the builds are actually different shapes', () => {
+  const straight = BODIES.find(b => b.id === 'straight');
+  const curved = BODIES.find(b => b.id === 'curved');
+  const broad = BODIES.find(b => b.id === 'broad');
+  assert.ok(curved, 'there must be a curved build');
+
+  // it has to read as a different silhouette, not a recolour
+  assert.ok(curved.waist < straight.waist * 0.9, 'curved needs a real waist');
+  assert.ok(curved.hips > curved.waist, 'and hips wider than that waist');
+  assert.ok(curved.chest < straight.chest, 'with narrower shoulders through the chest');
+  assert.ok(curved.bust > 0, 'and a bust, or it is the same figure in a different shirt');
+  assert.ok(curved.legLen > straight.legLen, 'legs take more of the same height');
+
+  assert.ok(broad.waist > straight.waist && broad.limb > straight.limb,
+    'broad must be genuinely heavier, not just wider');
+});
+
+test('every build has sane, finite proportions', () => {
+  for (const b of BODIES) {
+    for (const k of ['chest', 'waist', 'hips', 'hipSpread', 'legLen', 'limb', 'depth']) {
+      const v = b[k];
+      assert.ok(Number.isFinite(v) && v > 0.5 && v < 1.8,
+        `${b.id}.${k} = ${v} is outside anything that renders as a person`);
+    }
+    assert.ok(b.bust >= 0 && b.bust < 0.2, `${b.id}.bust = ${b.bust}`);
+  }
 });

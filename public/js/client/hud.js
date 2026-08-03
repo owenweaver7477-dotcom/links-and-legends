@@ -5,9 +5,10 @@
 import { CARRY, CLUBS, CLUB_BY_KEY, BAG_SIZE, DEFAULT_BAG } from '../shared/clubs.js';
 import { HOLES_PER_COURSE, BALL_COLORS } from '../shared/biomes.js';
 import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
-         HAT_STYLES, HAIR_STYLES, ACCESSORIES } from '../shared/avatars.js';
+         HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
+import { EMOTES } from './celebrations.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 
@@ -27,7 +28,7 @@ for (const id of [
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
   'coinHud', 'coinHudN',
-  'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
+  'emoteWheel', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -350,6 +351,7 @@ HUD.renderBag = (bag, onToggle) => {
    what they are wearing, then the details.  `swatch` groups are colours;
    `style` groups are shapes and show their name instead. */
 const LOOK_GROUPS = [
+  { key: 'body',      title: 'Build',       list: BODIES,      kind: 'style'  },
   { key: 'skin',      title: 'Skin',        list: SKINS,       kind: 'swatch' },
   { key: 'hair',      title: 'Hair',        list: HAIR_STYLES, kind: 'style'  },
   { key: 'hairColor', title: 'Hair colour', list: HAIR_COLORS, kind: 'swatch' },
@@ -364,16 +366,31 @@ const LOOK_GROUPS = [
  * Your career, from the server's book of record.  Nothing here is client
  * arithmetic on trust — every number came from shots the server simulated.
  */
+/** The level badge and XP bar, as markup — used by the career and results. */
+function levelRow(prof) {
+  const lvl = prof?.level ?? 1;
+  const into = Math.round(prof?.into ?? 0), need = Math.round(prof?.need ?? 1);
+  const pct = Math.round((prof?.progress ?? 0) * 100);
+  return `<div class="lvlrow">
+    <span class="lvlbadge">LV ${lvl}</span>
+    <span class="lvlbar"><i style="width:${pct}%"></i></span>
+    <span class="lvlnum">${into} / ${need} XP</span>
+  </div>`;
+}
+HUD.levelRow = levelRow;
+
 HUD.renderCareer = (prof) => {
   const box = el.careerBox;
   if (!box) return;
   if (!prof || !prof.rounds) {
-    box.innerHTML = '<p class="career-empty">Your first round starts your career — stats, a skill rating and coins live here.</p>';
+    box.innerHTML = levelRow(prof) +
+      '<p class="career-empty">Your first round starts your career — stats, a skill rating and coins live here.</p>';
     return;
   }
   const rel = v => v == null ? '—' : v > 0 ? '+' + v : v === 0 ? 'E' : String(v);
   const cell = (v, l) => `<div class="cstatc"><b>${v}</b><span>${l}</span></div>`;
   box.innerHTML =
+    levelRow(prof) +
     cell(prof.rating, 'rating') +
     cell('🪙 ' + prof.coins, 'coins') +
     cell(prof.rounds, 'rounds') +
@@ -794,3 +811,29 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 HUD.escapeHtml = escapeHtml;
+
+/* ------------------------------------------------------------- emotes --- */
+/**
+ * The emote wheel.  Everything you have is pickable; everything you have not
+ * is shown greyed with the level it needs, because a locked slot you can SEE
+ * is a reason to play another round and a hidden one is not.
+ */
+HUD.renderEmotes = (level, onPick) => {
+  if (!el.emoteWheel) return;
+  el.emoteWheel.innerHTML = '';
+  const lvl = Number(level) || 1;
+  for (const e of EMOTES) {
+    const locked = lvl < e.at;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'emote' + (locked ? ' locked' : '');
+    b.innerHTML = `<span class="em-ico">${e.icon}</span>` +
+      `<span class="em-name">${escapeHtml(e.name)}</span>` +
+      `<span class="em-sub">${locked ? 'Level ' + e.at : escapeHtml(e.blurb)}</span>`;
+    b.disabled = locked;
+    if (!locked) b.addEventListener('click', () => onPick(e.id));
+    el.emoteWheel.appendChild(b);
+  }
+};
+HUD.showEmotes = on => { if (el.emoteWheel) el.emoteWheel.hidden = !on; };
+HUD.emotesOpen = () => el.emoteWheel && !el.emoteWheel.hidden;

@@ -69,3 +69,74 @@ export function roundCoins(holeScores, firstClear = false) {
     total: holes + roundBonus + streakBonus + firstClearBonus
   };
 }
+
+/* =========================================================================
+   XP AND LEVELS
+   -------------------------------------------------------------------------
+   Coins buy things; XP unlocks them.  The two are deliberately separate
+   currencies with different shapes: coins are a budget you spend down to
+   nothing and rebuild, XP only ever goes up, so a bad session still moves
+   something forward.  That matters more than it sounds — a player who blows
+   up a round and earns 400 coins they immediately want to spend has nothing
+   to show for the hour otherwise.
+
+   The award follows the same shape as the coin payout: showing up is worth
+   something, good golf is worth much more.
+   ========================================================================= */
+
+/** XP for finishing one hole. */
+export function holeXp(strokes, par) {
+  if (!(strokes > 0) || !(par > 0)) return 0;
+  const rel = strokes - par;
+  let xp = 10;                                      // finishing it at all
+  if (strokes === 1) xp += 120;                     // an ace is a story
+  else if (rel <= -2) xp += 45;
+  else if (rel === -1) xp += 25;
+  else if (rel === 0) xp += 12;
+  else xp += Math.max(0, 6 - rel);                  // over par still counts
+  return xp;
+}
+
+/** XP for finishing a whole round, on top of the holes. */
+export function roundXp(holeScores) {
+  if (!Array.isArray(holeScores) || !holeScores.length) return 0;
+  const holes = holeScores.reduce((a, h) => a + holeXp(h.strokes, h.par), 0);
+  const played = holeScores.length;
+  const rel = holeScores.reduce((a, h) => a + (h.strokes - h.par), 0);
+  // Finishing is the point: a completed round is worth roughly a third again
+  // on top of its holes, and beating par adds to that.
+  const completion = played >= 9 ? 120 : Math.round(played * 8);
+  const underPar = Math.max(0, -rel) * 15;
+  return holes + completion + underPar;
+}
+
+/* The curve.  Level 1 is where everyone starts.
+   Tuned so the first unlock lands inside a round or two and the last is a
+   genuine grind — see tools/xp.mjs for the table this produces. */
+const XP_BASE = 260;
+const XP_GROWTH = 1.55;
+
+/** Total XP needed to REACH this level from zero. */
+export function xpForLevel(level) {
+  const L = Math.max(1, Math.floor(level));
+  let total = 0;
+  for (let i = 1; i < L; i++) total += Math.round(XP_BASE * Math.pow(XP_GROWTH, i - 1));
+  return total;
+}
+
+/** Level, and how far through it, from a lifetime XP total. */
+export function levelFromXp(xp) {
+  const x = Math.max(0, Number(xp) || 0);
+  let level = 1;
+  while (level < 99 && x >= xpForLevel(level + 1)) level++;
+  const base = xpForLevel(level);
+  const next = xpForLevel(level + 1);
+  const span = Math.max(1, next - base);
+  return {
+    level,
+    into: x - base,
+    need: span,
+    progress: Math.max(0, Math.min(1, (x - base) / span)),
+    nextAt: next
+  };
+}

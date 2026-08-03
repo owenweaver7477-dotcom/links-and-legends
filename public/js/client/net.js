@@ -109,6 +109,8 @@ Net.connect = async () => {
   Net.socket.on('game:hole', d => fire('hole', d));
   Net.socket.on('game:reset', d => fire('reset', d));
   Net.socket.on('toast', d => fire('toast', d));
+  Net.socket.on('player:emote', d => fire('emote', d));
+  Net.socket.on('levelup', d => fire('levelup', d));
   Net.socket.on('profile', d => fire('profile', d));
   Net.socket.on('kicked', d => fire('kicked', d));
 };
@@ -135,6 +137,7 @@ Net.prefs = p => Net.socket?.emit('player:prefs', p);
 Net.setLook = look => Net.socket?.emit('player:look', { look });
 Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, rot, moving, cart });
 Net.hail = () => Net.socket?.emit('cart:hail');
+Net.emote = id => Net.socket?.emit('player:emote', { id });
 Net.buy = item => Net.socket?.emit('shop:buy', { item });
 Net.start = () => Net.socket?.emit('game:start');
 

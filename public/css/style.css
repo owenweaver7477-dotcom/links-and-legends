@@ -1045,3 +1045,50 @@ body.playing .coinhud { display: block; }
   100% { transform: scale(1); }
 }
 @media (max-width: 560px) { .coinhud { bottom: auto; top: 40px; right: 8px; font-size: 11.5px; padding: 4px 9px 4px 8px; } }
+
+/* ---------------------------------------------------------- emote wheel ---
+   Sits above the play bar, out of the way of the shot controls, and only
+   while T is held. */
+.emotewheel { position: absolute; left: 50%; bottom: 148px; transform: translateX(-50%);
+  z-index: 12; display: flex; gap: 8px; padding: 10px;
+  background: rgba(6,12,10,.86); border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px; backdrop-filter: blur(9px);
+  box-shadow: 0 10px 34px rgba(0,0,0,.45); }
+.emote { width: 96px; padding: 9px 8px; border-radius: 12px; cursor: pointer;
+  font: inherit; text-align: center; color: #eaf3ea; line-height: 1.25;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.13);
+  display: flex; flex-direction: column; gap: 3px; transition: .13s; }
+.emote:hover:not(.locked) { background: rgba(143,224,122,.20);
+  border-color: rgba(143,224,122,.55); transform: translateY(-2px); }
+.em-ico { font-size: 22px; line-height: 1.1; }
+.em-name { font-size: 11.5px; font-weight: 700; }
+.em-sub { font-size: 9.5px; color: #8fa694; }
+.emote.locked { opacity: .45; cursor: default; }
+.emote.locked .em-sub { color: #d9a24a; font-weight: 700; }
+
+/* ------------------------------------------------------------ xp / level --
+   The career's second currency. Coins go down; this only ever goes up. */
+.lvlrow { display: flex; align-items: center; gap: 10px; margin: 10px 0 2px; }
+.lvlbadge { flex: none; min-width: 46px; padding: 5px 9px; border-radius: 10px;
+  text-align: center; font-size: 11px; font-weight: 800; letter-spacing: .4px;
+  color: #06210f; background: linear-gradient(180deg, #b9f0a0, #7fd06a); }
+.lvlbar { flex: 1; height: 9px; border-radius: 999px; overflow: hidden;
+  background: rgba(255,255,255,.10); }
+.lvlbar i { display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #6fd06a, #b9f0a0); transition: width .5s ease; }
+.lvlnum { flex: none; font-size: 10.5px; color: #8fa694; font-variant-numeric: tabular-nums; }
+
+/* the level-up moment */
+.levelup { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center;
+  pointer-events: none; animation: lvlpop 2.6s ease forwards; }
+.levelup b { font-size: 44px; font-weight: 900; letter-spacing: -1px; color: #eaffe4;
+  text-shadow: 0 0 40px rgba(143,224,122,.75), 0 6px 26px rgba(0,0,0,.6); }
+.levelup span { display: block; font-size: 14px; font-weight: 700; color: #b9f0a0;
+  text-align: center; margin-top: 6px; }
+@keyframes lvlpop {
+  0% { opacity: 0; transform: scale(.86); }
+  12% { opacity: 1; transform: scale(1.04); }
+  22% { transform: scale(1); }
+  78% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.02); }
+}
