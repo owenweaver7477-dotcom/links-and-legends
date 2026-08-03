@@ -30,7 +30,8 @@ import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf } from '../shared/biome
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
-import { normaliseLook, randomLook, SHOT_RADIUS, EYE_HEIGHT, SPRINT_SPEED } from '../shared/avatars.js';
+import { normaliseLook, randomLook, SHOT_RADIUS, EYE_HEIGHT, SPRINT_SPEED,
+         ballDashSpeed } from '../shared/avatars.js';
 
 const canvas = document.getElementById('gl');
 
@@ -1389,7 +1390,10 @@ function jogToMyBall() {
   const b = ballOf(G.myPid);
   if (walker.nearBall(b)) { HUD.toast('You are already at your ball.', 'info', 1200); return; }
   const spot = addressSpot(b, swing.aim);
-  walker.goTo(spot.x, spot.z, SPRINT_SPEED);   // F sprints, it does not amble
+  // Scaled to the distance, so the walk is short whether the ball is thirty
+  // metres away or two hundred — see ballDashSpeed.
+  const d = Math.hypot(spot.x - walker.x, spot.z - walker.z);
+  walker.goTo(spot.x, spot.z, ballDashSpeed(d));
 }
 
 function toggleMap() {

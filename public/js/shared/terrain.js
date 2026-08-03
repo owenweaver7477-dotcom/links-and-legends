@@ -153,13 +153,26 @@ export class TerrainModel {
       }
     }
 
-    // water: carve the basin so the pond has a bed under it
+    /* Water: carve a basin that is actually UNDER its own water.
+       The old profile eased from the bed depth to the natural ground across
+       0..1.15, which put the bed only 12% of the way down by the time it
+       reached q=0.9 — still inside the pond.  The result was a bed sitting a
+       metre and a half ABOVE the water surface around the whole rim: the
+       ground punched up through the water plane, and the exposed ring of
+       shadowed bowl is the dark band that made every pond look wrong.
+
+       Now the bowl is parabolic and meets the waterline exactly at the
+       ellipse edge, then climbs to the natural bank just outside it. Inside
+       the pond the ground is always below the water; outside, it is the
+       course again within a quarter of a radius. */
     for (let i = 0; i < hole.waters.length; i++) {
       const w = hole.waters[i];
       const q = ellipseQ(x, z, w);
-      if (q < 1.35) {
-        const inner = 1 - smoothstep(0.0, 1.15, q);
-        h = lerp(h, this.waterLevels[i] - (w.depth || 2.2), inner);
+      if (q < 1.3) {
+        const lvl = this.waterLevels[i];
+        const t = Math.min(1, q);
+        const bed = Math.min(lvl - 0.06, lvl - (w.depth || 2.2) * (1 - t * t));
+        h = lerp(h, bed, 1 - smoothstep(1.0, 1.3, q));
       }
     }
     return h;

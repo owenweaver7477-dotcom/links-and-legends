@@ -188,6 +188,7 @@ export class Cart3D {
 
     // suspension state: visual only, and it must never feed back into motion
     this.pitch = 0; this.pitchV = 0;
+    this._lastHit = 0;
     this.roll = 0; this.rollV = 0;
     this.heave = 0; this.heaveV = 0;
     this._lastSpeed = 0;
@@ -216,6 +217,25 @@ export class Cart3D {
     // squat under power, dive under braking, lean out of a corner
     const wantPitch = clampN(-0.020 * accel, -MAX_TILT, MAX_TILT);
     const wantRoll = clampN(-0.022 * latA, -MAX_TILT, MAX_TILT);
+
+    /* The crunch.  `body.hit` spikes to 0..1 the frame something is struck
+       and then decays, but nothing was ever done with it here — so a cart
+       could slam into an oak and the chassis would not so much as twitch,
+       which is most of why collisions looked fake.  The impact now kicks the
+       suspension springs directly: the nose dives, the body rolls away from
+       whatever it clipped, and the whole cart bounces on its springs. Kicking
+       the VELOCITIES rather than setting an angle lets the existing spring do
+       the settling, so it rocks and recovers instead of snapping. */
+    const hit = body.hit || 0;
+    const fresh = Math.max(0, hit - (this._lastHit || 0));
+    this._lastHit = hit;
+    if (fresh > 0.02) {
+      this.pitchV -= fresh * 5.2;                       // nose pitches down
+      this.heaveV -= fresh * 0.55;                      // and the body drops
+      // roll away from the side that was clipped; impactYaw carries the sign
+      const side = Math.sign(body.impactYaw || 0) || (Math.random() < 0.5 ? -1 : 1);
+      this.rollV += side * fresh * 4.5;
+    }
 
     // Substep the springs at a fixed 60 Hz.  Integrating a stiff spring with
     // the raw frame dt is what tipped the cart on its side: at the 0.1 s dt

@@ -40,10 +40,10 @@ export const SEATS = {
    is the floor everyone gets, and the shop takes it to 31 rather than being
    the price of admission to a usable speed. */
 export const KMH = 3.6;                        // m/s -> km/h, used all over the HUD
-export const BASE_SPEED_KMH = 24;              // stock, on a flat fairway
+export const BASE_SPEED_KMH = 32;              // stock, on a flat fairway
 export const MAX_BOOST = 1.3;                  // cart tune x Pitstop at Legend
-export const TOP_SPEED_KMH = BASE_SPEED_KMH * MAX_BOOST;   // 31.2 fully upgraded
-export const MAX_FWD = BASE_SPEED_KMH / KMH;   // 6.67 m/s stock
+export const TOP_SPEED_KMH = BASE_SPEED_KMH * MAX_BOOST;   // 41.6 fully upgraded
+export const MAX_FWD = BASE_SPEED_KMH / KMH;   // 8.89 m/s stock
 export const MAX_REV = 1.8;       // reverse is a crawl, as it should be
 export const A_DRIVE = 3.9;       // m/s² at full pull — see the heavy-start ramp below
 export const A_DRIVE_REV = 1.3;
@@ -72,12 +72,18 @@ export const SLOPE_EPS = 1.15;      // ~0.7 × wheelbase: don't fight bumps
 export const MAX_STEER = 0.62;      // rad ≈ 35.5°, 2.29 m turning radius at rest
 export const STEER_RATE = 2.4;      // rad/s toward the input
 export const STEER_RETURN = 3.6;    // rad/s back to centre when released
-export const A_LAT_MAX = 5.0;       // m/s² — this alone decides cart vs go-kart
+export const A_LAT_MAX = 6.2;       // m/s² — this alone decides cart vs go-kart.
+                                    // Raised with the top speed: at 24 km/h a
+                                    // 5.0 limit cornered tidily, but the same
+                                    // grip at 32 turns every bend into a slide
+                                    // and the cart stops answering the wheel.
 
 /* ------------------------------------------------------------- collision */
 export const HIT_RATE = { tree: 9.0, bank: 5.5, fence: 4.0 };
 export const IMPACT = { tree: 0.45, bank: 0.25, fence: 0.15 };
-export const CRASH_SPEED = 7.0;     // above this a tree stops you dead
+export const CRASH_SPEED = 9.5;     // a genuinely head-on hit at speed
+export const RESTITUTION = 0.32;    // how much of the closing speed bounces back
+export const YAW_KICK = 2.6;        // rad/s of spin from a glancing blow
 export const FENCE_INSET = 4;       // m inside the hole bounds
 
 /* ------------------------------------------------------------ integration */
@@ -150,6 +156,7 @@ export class CartBody {
     this.speed = 0;                 // m/s along the heading, signed
     this.steer = 0;                 // rad, + = right
     this.hit = 0;                   // 0..1, decays — drives the crunch effects
+    this.impactYaw = 0;             // rad/s of spin owed from a collision
     this._wasTouching = false;      // edge trigger, so a scrape isn't a crash
     this.odo = 0;                   // m, for spinning the wheels
     this.boost = 1;                 // the shop's cart tune: multiplies top and motor
@@ -258,7 +265,16 @@ export class CartBody {
       // right-handed frame the driver's right hand points along (-cos h, sin h)
       // — which is the direction you reach by DECREASING h.  Turning right is
       // therefore -dh, not +dh; getting this backwards swaps A and D.
-      const dh = -(this.speed * Math.tan(this.steer) / WHEELBASE) * dt;
+      let dh = -(this.speed * Math.tan(this.steer) / WHEELBASE) * dt;
+      /* Spin left over from a glancing impact, bled off over about a third of
+         a second.  This is what makes a clipped tree turn the cart instead of
+         just slowing it — steering is the driver's input, this is the world
+         pushing back, and they add. */
+      if (this.impactYaw) {
+        dh += this.impactYaw * dt;
+        this.impactYaw *= Math.max(0, 1 - dt * 6.0);
+        if (Math.abs(this.impactYaw) < 1e-3) this.impactYaw = 0;
+      }
       const mid = this.heading + dh * 0.5;
       this.heading += dh;
       const s = Math.sin(mid), c = Math.cos(mid);
@@ -277,7 +293,14 @@ export class CartBody {
     const b = hole.bounds;
     const cx = clamp(nx, b.minX + FENCE_INSET, b.maxX - FENCE_INSET);
     const cz = clamp(nz, b.minZ + FENCE_INSET, b.maxZ - FENCE_INSET);
-    if (cx !== nx || cz !== nz) { nx = cx; nz = cz; this._scrub('fence'); touching = true; }
+    if (cx !== nx || cz !== nz) {
+      // the normal points back in off whichever edge we ran into
+      const fnX = cx !== nx ? (nx > cx ? -1 : 1) : 0;
+      const fnZ = cz !== nz ? (nz > cz ? -1 : 1) : 0;
+      nx = cx; nz = cz;
+      this._deflect(fnX, fnZ, 'fence');
+      touching = true;
+    }
 
     /* trees: push out along the normal and scrub speed */
     const trees = hole.trees;
@@ -288,9 +311,10 @@ export class CartBody {
       const d2 = ddx * ddx + ddz * ddz;
       if (d2 < solid * solid && d2 > 1e-9) {
         const d = Math.sqrt(d2);
-        nx = t.x + (ddx / d) * solid;
-        nz = t.z + (ddz / d) * solid;
-        this._scrub('tree');
+        const nX = ddx / d, nZ = ddz / d;          // surface normal, out of the trunk
+        nx = t.x + nX * solid;
+        nz = t.z + nZ * solid;
+        this._deflect(nX, nZ, 'tree');
         touching = true;
       }
     }
@@ -301,12 +325,22 @@ export class CartBody {
     const blockedHere = (x, z) => surfFor(terrain.surfaceAt(x, z).id).block
       && terrain.waterAt(x, z) === null;
     if (blockedHere(nx, nz)) {
+      /* Slide along the edge rather than along the world axes.  Axis-aligned
+         sliding made every green and bunker feel like a square block: you
+         could be scraping a curved bunker lip and the cart would jerk to due
+         north.  Sampling which way is still legal gives the actual edge
+         direction, so the cart follows the shape it is touching. */
       const alongX = !blockedHere(nx, fromZ);
       const alongZ = !blockedHere(fromX, nz);
-      if (alongX) { nz = fromZ; }
-      else if (alongZ) { nx = fromX; }
-      else { nx = fromX; nz = fromZ; }
-      this._scrub('bank');
+      if (alongX) { nz = fromZ; this._deflect(0, nz > fromZ ? -1 : 1, 'bank'); }
+      else if (alongZ) { nx = fromX; this._deflect(nx > fromX ? -1 : 1, 0, 'bank'); }
+      else {
+        // cornered: back out the way we came in
+        const bx = fromX - nx, bz = fromZ - nz;
+        const bl = Math.hypot(bx, bz) || 1;
+        nx = fromX; nz = fromZ;
+        this._deflect(bx / bl, bz / bl, 'bank');
+      }
       touching = true;
     }
     // deep water drags hard at the wheels the moment you are in it
@@ -316,17 +350,68 @@ export class CartBody {
     this._wasTouching = touching;
   }
 
-  /** Lose speed on contact.  Edge-triggered, so a scrape is not a crash. */
-  _scrub(what) {
+  /**
+   * Hit something solid.  (nX, nZ) is the surface normal pointing back out of
+   * whatever we hit.  Edge-triggered, so a long scrape is one accident.
+   *
+   * This used to be `_scrub`, and all it did was multiply the speed down —
+   * with a special case that set speed to EXACTLY ZERO for any tree hit above
+   * CRASH_SPEED.  That is why collisions looked so bad: the cart stopped dead
+   * against an invisible wall, kept pointing the same way it had been, and
+   * then jittered as the push-out fought the throttle.  Nothing ever turned
+   * the cart, so a wheel-brush at 30° and a head-on hit looked identical.
+   *
+   * Now the angle decides.  Head-on kills the speed and bounces back a
+   * little; a glancing blow keeps most of the momentum, scrapes along the
+   * surface, and yaws the cart away from what it clipped — which is what a
+   * real vehicle does and what the eye is expecting to see.
+   */
+  _deflect(nX, nZ, what) {
     const first = !this._wasTouching;
     const sp = Math.abs(this.speed);
-    if (what === 'tree' && first && sp > CRASH_SPEED) {
-      this.speed = 0;
-      this.hit = 1;
-      return;
+    if (sp < 0.05) return;
+
+    // where is the cart pointing relative to the surface it just touched?
+    const dirX = Math.sin(this.heading), dirZ = Math.cos(this.heading);
+    const into = -(dirX * nX + dirZ * nZ) * Math.sign(this.speed);   // 1 head-on, 0 parallel
+    const head = Math.max(0, Math.min(1, into));
+    const glance = 1 - head;
+
+    if (first) {
+      this.hit = Math.max(this.hit, Math.min(1, (sp / MAX_FWD) * (0.35 + 0.65 * head)));
+      // A hit that is genuinely head-on AND fast stops the cart and rebounds
+      // it — but it is no longer the only outcome, and it never zeroes the
+      // speed outright, so the cart is still a moving object afterwards.
+      if (what === 'tree' && head > 0.55 && sp > CRASH_SPEED) {
+        this.speed = -Math.sign(this.speed) * sp * RESTITUTION;
+        this.impactYaw = (this.impactYaw || 0) + (nX * dirZ - nZ * dirX) * YAW_KICK * 0.4;
+        return;
+      }
     }
-    this.speed *= (1 - IMPACT[what] * (first ? 1 : 0.25));
-    if (first) this.hit = Math.max(this.hit, Math.min(1, sp / MAX_FWD));
+
+    /* Slide along the surface rather than simply braking.  The component of
+       the motion INTO the obstacle is lost; the component past it survives —
+       which is what clipping a gatepost with a wing mirror actually does.
+
+       This only applies on the first frame of contact.  _deflect runs once
+       per SUBSTEP, 240 times a second, so any factor below 1 applied while
+       still touching compounds to a dead stop within a frame or two — which
+       was the original bug in a new costume.  Continuing contact gets a
+       feather-light drag that only matters when you are genuinely driving
+       into the thing. */
+    if (first) {
+      const tangential = Math.sqrt(Math.max(0, 1 - head * head));
+      this.speed *= (1 - IMPACT[what]) * (0.30 + 0.70 * tangential);
+    } else {
+      this.speed *= 1 - IMPACT[what] * 0.06 * head;
+    }
+
+    /* Yaw away from the obstacle.  The cross product of the heading and the
+       normal gives which side was clipped, so a tree caught on the left
+       kicks the nose right.  Scaled by how glancing it was — a square hit
+       does not spin you, it stops you. */
+    const side = nX * dirZ - nZ * dirX;
+    this.impactYaw = (this.impactYaw || 0) + side * glance * YAW_KICK * (sp / MAX_FWD);
   }
 
   /** World position of a seat. */

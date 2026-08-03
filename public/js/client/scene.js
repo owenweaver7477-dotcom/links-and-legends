@@ -483,19 +483,26 @@ export class GolfScene {
       mat.userData.sh = sh;
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', `#include <common>
-          uniform float uTime; varying vec2 vRip; varying vec3 vWorld;`)
+          uniform float uTime; varying vec2 vRip; varying vec3 vWorld; varying vec2 vW;`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
           vRip = position.xy;
-          // two octaves of gentle swell: ~3 m wavelength riding an ~8 m one,
-          // peaks a little under a decimetre — water, not geometry
-          transformed.z += sin(position.x*2.1 + uTime*1.4)*0.05
-                         + sin(position.y*1.6 - uTime*0.9)*0.05
-                         + sin((position.x+position.y)*0.75 + uTime*0.6)*0.035;
+          /* Waves in METRES, not in plane units.
+             The swell used to be driven by the raw vertex position, which
+             runs -1..1 across the pond whatever size the pond is.  A 12 m
+             pool and a 60 m lake therefore got the same two-thirds of a
+             wavelength from edge to edge — which is not a wave, it is a
+             gentle tilt, and it is why the water read as a flat sheet of
+             blue.  Sampling world XZ gives every pond the same real
+             wavelength, so a big lake now carries many waves across it. */
+          vW = (modelMatrix * vec4(position, 1.0)).xz;
+          transformed.z += sin(vW.x*0.57 + uTime*0.9)*0.075
+                         + sin(vW.y*1.05 - uTime*1.3)*0.045
+                         + sin((vW.x+vW.y)*0.33 + uTime*0.55)*0.055;
           vWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
           uniform float uTime; uniform vec3 uSky; uniform vec3 uSun;
-          varying vec2 vRip; varying vec3 vWorld;`)
+          varying vec2 vRip; varying vec3 vWorld; varying vec2 vW;`)
         .replace('#include <dithering_fragment>', `#include <dithering_fragment>
           float rad = length(vRip);
           if (rad > 1.0) discard;              // the plane, clipped back to a pond
@@ -503,13 +510,17 @@ export class GolfScene {
           // Analytic wave normal: the derivative of the same swell the vertex
           // shader applied, so the shading agrees with the geometry instead of
           // being a texture pretending to be one.
-          float dhx = cos(vRip.x*2.1 + uTime*1.4)*2.1*0.05
-                    + cos((vRip.x+vRip.y)*0.75 + uTime*0.6)*0.75*0.035;
-          float dhy = cos(vRip.y*1.6 - uTime*0.9)*1.6*0.05
-                    + cos((vRip.x+vRip.y)*0.75 + uTime*0.6)*0.75*0.035;
-          // fine chop on top, so the surface has detail between the swells
-          dhx += cos(vRip.x*23.0 + uTime*2.4)*23.0*0.0022;
-          dhy += cos(vRip.y*19.0 - uTime*1.9)*19.0*0.0022;
+          float dhx = cos(vW.x*0.57 + uTime*0.9)*0.57*0.075
+                    + cos((vW.x+vW.y)*0.33 + uTime*0.55)*0.33*0.055;
+          float dhy = cos(vW.y*1.05 - uTime*1.3)*1.05*0.045
+                    + cos((vW.x+vW.y)*0.33 + uTime*0.55)*0.33*0.055;
+          /* Fine chop, also in metres — roughly a 1.2 m ripple.  This is what
+             breaks up the mirror and gives the surface something for the sun
+             to catch between the swells. */
+          dhx += cos(vW.x*5.2 + uTime*2.6)*5.2*0.010
+               + cos((vW.x*0.8 - vW.y*0.6)*8.7 + uTime*3.4)*8.7*0.004;
+          dhy += cos(vW.y*4.6 - uTime*2.1)*4.6*0.010
+               + cos((vW.x*0.6 + vW.y*0.8)*9.3 - uTime*3.1)*9.3*0.004;
           vec3 N = normalize(vec3(-dhx, 1.0, dhy));
           vec3 V = normalize(cameraPosition - vWorld);
 
