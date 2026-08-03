@@ -9,6 +9,7 @@ import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { EMOTES } from './celebrations.js';
+import { clubSvg, caddieSvg, statSvg, finishName } from './clubart.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 
@@ -408,16 +409,17 @@ HUD.renderCareer = (prof) => {
 let shopTab = 'crew';
 
 /* ─────────────── what your money has actually bought ─────────────── */
-const CLUB_LOOK_ICON = { wood: '🪵', rust: '🔩', steel: '⚙️', carbon: '🖤', tour: '🏅', titanium: '💠', signature: '👑' };
-
+/* The emoji that used to stand in for each set are gone — see clubart.js.
+   A drawn club in the finish it actually has beats a platform emoji that
+   renders differently on every machine and carries none of our look. */
 /* What the equipment is worth in YARDS, measured rather than asserted.
-   The stat bars below are honest but abstract — a player who has just spent
-   1,200 coins wants to see a number move, and "Accuracy 62%" does not tell
-   them whether anything happened.  This flies the real simulation on a flat
-   range with the gear they own and with nothing, and reports the difference,
-   so the shop and the course cannot disagree.
+   The stat bars are honest but abstract — a player who has just spent 1,200
+   coins wants to see a number move, and "Accuracy 62%" does not tell them
+   whether anything happened. This flies the real simulation on a flat range
+   with the gear they own and with nothing, and reports the difference, so
+   the shop and the course cannot disagree.
 
-   Cached: it is a dozen full flight integrations, and the shop re-renders on
+   Cached: it is a dozen full flight integrations and the shop re-renders on
    every purchase. */
 let rangeT = null;
 const carryCache = new Map();
@@ -454,19 +456,19 @@ function buildPayoff(prof) {
   // the four things a player actually feels, each 0..1
   const lvl = k => (crew[k] || 0) / CADDIE_MAX;
   const bars = [
-    ['Power',       Math.min(1, (tier / 6) * 0.6 + lvl('bruiser') * 0.4), '💪'],
-    ['Accuracy',    Math.min(1, lvl('ace') * 0.6 + (tier / 6) * 0.4),     '🎯'],
-    ['Forgiveness', Math.min(1, (set.faceDamp / 0.33) * 0.7 + lvl('steady') * 0.3), '🛡️'],
-    ['Short game',  Math.min(1, lvl('roller') * 0.7 + lvl('lucky') * 0.3), '⛳'],
-    ['Cart',        lvl('pitstop'),                                        '🛺']
+    ['Power',       Math.min(1, (tier / 6) * 0.6 + lvl('bruiser') * 0.4), 'power'],
+    ['Accuracy',    Math.min(1, lvl('ace') * 0.6 + (tier / 6) * 0.4),     'accuracy'],
+    ['Forgiveness', Math.min(1, (set.faceDamp / 0.33) * 0.7 + lvl('steady') * 0.3), 'forgive'],
+    ['Short game',  Math.min(1, lvl('roller') * 0.7 + lvl('lucky') * 0.3), 'short'],
+    ['Cart',        lvl('pitstop'),                                        'cart']
   ];
 
   wrap.innerHTML = `
     <div class="po-set">
-      <span class="po-icon">${CLUB_LOOK_ICON[set.look] || '🏌️'}</span>
+      <span class="po-art">${clubSvg(set.look, 64)}</span>
       <div class="po-settxt">
         <b>${escapeHtml(set.name)}</b>
-        <span>Tier ${tier + 1}/7${refine ? ' · Refinement ' + ['I', 'II', 'III'][refine - 1] : ''}</span>
+        <span>Tier ${tier + 1}/7 · ${escapeHtml(finishName(set.look))}${refine ? ' · Refinement ' + ['I', 'II', 'III'][refine - 1] : ''}</span>
       </div>
       <div class="po-tiers">${CLUB_TIERS.map((t, i) =>
         `<i class="${i < tier ? 'done' : i === tier ? 'now' : ''}" title="${escapeHtml(t.name)}"></i>`).join('')}</div>
@@ -481,7 +483,7 @@ function buildPayoff(prof) {
     }).join('')}</div>
     <div class="po-bars">${bars.map(([name, v, ico]) => `
       <div class="po-bar">
-        <span class="po-name">${ico} ${name}</span>
+        <span class="po-name">${statSvg(ico)} ${name}</span>
         <span class="po-track"><i style="width:${Math.round(v * 100)}%"></i></span>
         <span class="po-pct">${Math.round(v * 100)}%</span>
       </div>`).join('')}</div>`;
@@ -501,7 +503,7 @@ HUD.renderShop = (prof, onBuy) => {
 
   const tabs = document.createElement('div');
   tabs.className = 'shoptabs';
-  for (const [id, label] of [['crew', '⛳ Caddie Crew'], ['pro', '🏌️ Pro Shop']]) {
+  for (const [id, label] of [['crew', 'Caddie Crew'], ['pro', 'Pro Shop']]) {
     const t = document.createElement('button');
     t.className = 'shoptab' + (shopTab === id ? ' on' : '');
     t.textContent = label;
@@ -525,7 +527,7 @@ HUD.renderShop = (prof, onBuy) => {
       const pips = Array.from({ length: CADDIE_MAX }, (_, i) =>
         `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
       card.innerHTML = `
-        <div class="cad-head"><span class="cad-face">${c.emoji}</span>
+        <div class="cad-head"><span class="cad-face">${caddieSvg(key, 34) || c.emoji}</span>
           <div><b>${c.name}</b><span class="cad-stat">${c.stat}${lvl >= CADDIE_MAX ? ' · LEGEND' : lvl ? ' · Lv ' + lvl : ''}</span></div>
         </div>
         <span class="sc-blurb">${c.blurb}</span>
@@ -552,7 +554,8 @@ HUD.renderShop = (prof, onBuy) => {
     const cur = CLUB_TIERS[tier];
     const curCard = document.createElement('div');
     curCard.className = 'shopcard owned';
-    curCard.innerHTML = `<b>${cur.name}</b><span class="sc-blurb">${cur.blurb}</span>
+    curCard.innerHTML = `<span class="sc-art">${clubSvg(cur.look, 46)}</span>
+      <b>${escapeHtml(cur.name)}</b><span class="sc-blurb">${escapeHtml(cur.blurb)}</span>
       <span class="cad-now">Tier ${tier + 1}/7${refine ? ' · Refinement ' + ['I','II','III'][refine - 1] : ''}</span>`;
     if (refine < 3) {
       const rc = REFINE_COSTS(tier)[refine];
@@ -571,7 +574,8 @@ HUD.renderShop = (prof, onBuy) => {
       const nxt = CLUB_TIERS[tier + 1];
       const nc = document.createElement('div');
       nc.className = 'shopcard';
-      nc.innerHTML = `<b>${nxt.name}</b><span class="sc-blurb">${nxt.blurb}</span>
+      nc.innerHTML = `<span class="sc-art">${clubSvg(nxt.look, 46)}</span>
+        <b>${escapeHtml(nxt.name)}</b><span class="sc-blurb">${escapeHtml(nxt.blurb)}</span>
         <span class="cad-now">Refinements reset on upgrade — a new set starts raw</span>`;
       const nb = document.createElement('button');
       nb.className = 'btn' + (coins >= nxt.cost ? ' primary' : '');

@@ -1165,3 +1165,30 @@ body.playing .coinhud { display: block; }
 .chatmute { margin-left: 6px; cursor: pointer; opacity: .5; font-size: 10px; }
 .chatmute:hover { opacity: 1; }
 @media (max-width: 900px) { .chatpanel { width: 46vw; bottom: 118px; } }
+
+/* ------------------------------------------------------- the pro shop ----
+   Rebuilt around the drawn club art and the carry numbers. The old layout
+   led with an emoji and buried the one figure a player can go and verify. */
+.po-art { flex: none; display: grid; place-items: center; width: 64px; height: 64px;
+  border-radius: 14px; background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.09); }
+.clubart { display: block; }
+.sc-art { display: block; margin: -2px 0 4px; }
+.caddieart { display: block; }
+.cad-face { display: grid; place-items: center; width: 40px; height: 40px; flex: none; }
+
+/* the carry row is now the hero of the panel, not a footnote */
+.po-carry { margin: 14px 0 6px; }
+.po-c { background: linear-gradient(180deg, rgba(143,224,122,.10), rgba(143,224,122,.03));
+  border-color: rgba(143,224,122,.20); }
+.po-c b { font-size: 24px; letter-spacing: -.5px; }
+
+/* the tier pips read as a ladder you are climbing */
+.po-tiers { display: flex; gap: 3px; align-items: center; }
+.po-tiers i { width: 14px; height: 5px; border-radius: 3px; display: block;
+  background: rgba(255,255,255,.14); transition: .2s; }
+.po-tiers i.done { background: #4f9c56; }
+.po-tiers i.now { background: #ffd94a; width: 20px;
+  box-shadow: 0 0 10px rgba(255,217,74,.55); }
+.statart { display: inline-block; vertical-align: -3px; margin-right: 4px; }
+.po-name { display: inline-flex; align-items: center; }
