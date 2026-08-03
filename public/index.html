@@ -212,6 +212,12 @@
 
     <button class="btn primary huge" id="btnPlay">Play now<span class="huge-sub">straight onto the first tee</span></button>
 
+    <!-- Who else is on the course right now.  Presence rather than a friends
+         list: see the note in server.js — a CrazyGames guest has no durable
+         identity to hang a friend list on, but "who is playing now" is only
+         ever a claim about right now, so it works for everybody. -->
+    <div class="onlinenow" id="onlineNow" hidden></div>
+
     <details class="friends" id="friendsBox">
       <summary>Play with friends</summary>
       <div class="split">
@@ -263,6 +269,11 @@
     <div class="section">
       <h4 class="lbl">Your career</h4>
       <div class="career" id="careerBox"></div>
+    </div>
+
+    <div class="section">
+      <h4 class="lbl">Course records</h4>
+      <div id="recordBox"></div>
     </div>
 
     <div class="section">

@@ -1821,6 +1821,12 @@ const loadLook = () => {
 function renderClubhouse() {
   const prof = G.profile;
   HUD.renderCareer(prof);
+  /* The record board. Asked for rather than pushed: it is global data that
+     changes rarely, and the clubhouse is the only place that wants all of it
+     at once. Rendered from whatever we last heard, so opening the clubhouse
+     is never a blank panel waiting on a round trip. */
+  HUD.renderRecords(COURSES, G.records || {}, G.myPid);
+  Net.records(r => { G.records = r; HUD.renderRecords(COURSES, r, G.myPid); });
   HUD.renderShop(prof, item => Net.buy(item));
   bagDraft = me()?.bag?.length ? me().bag.slice()
     : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true }));
@@ -2052,6 +2058,32 @@ document.getElementById('btnCreate').addEventListener('click', () => {
     route();
   });
 });
+/* Joining by code, from the box or from the online panel. */
+function joinByCode(code) {
+  HUD.homeError('');
+  Net.join(code, nameValue(), res => {
+    if (!res.ok) return HUD.homeError(res.error);
+    G.joined = true; G.myPid = res.pid; G.room = res.state;
+    stampRoomUrl(res.code);
+    route();
+    if (res.spectator) HUD.toast("Round in progress — you're in at the next hole.", 'warn', 3400);
+  });
+}
+
+/* Who else is on the course, refreshed while the menu is open and never
+   while a round is running — it is a menu decoration, not a game system, and
+   it must not put traffic on the wire during play. */
+let presenceTimer = null;
+function watchPresence() {
+  clearInterval(presenceTimer);
+  const tick = () => {
+    if (G.screen !== 'home' || !Net.socket?.connected) return;
+    Net.presence(list => HUD.renderOnline(list, G.myPid, joinByCode));
+  };
+  tick();
+  presenceTimer = setInterval(tick, 8000);
+}
+
 document.getElementById('btnJoin').addEventListener('click', () => {
   HUD.homeError('');
   const code = (HUD.el.inpCode.value || '').trim().toUpperCase();
@@ -2244,6 +2276,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   });
   Net.on('connect', () => { wakeTries = 0; HUD.homeError(''); });
   await Net.connect();
+  watchPresence();
   requestAnimationFrame(frame);
 
   /* Once this is published, the only bugs that matter happen on hardware I

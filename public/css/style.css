@@ -1092,3 +1092,44 @@ body.playing .coinhud { display: block; }
   78% { opacity: 1; }
   100% { opacity: 0; transform: scale(1.02); }
 }
+
+/* the course record, under the hole card */
+.ho-record { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; margin-top: 10px; padding-top: 9px;
+  border-top: 1px solid rgba(255,255,255,.09); }
+.ho-record b { font-size: 10px; font-weight: 800; letter-spacing: 1.4px;
+  text-transform: uppercase; color: #8fa694; }
+.ho-record span { font-size: 12.5px; font-weight: 700; color: #eaf3ea; }
+
+/* the record board in the clubhouse */
+.recboard { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.recrow { display: flex; align-items: baseline; gap: 10px; padding: 8px 11px;
+  border-radius: 10px; background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.07); }
+.recrow .rc-course { flex: 1; font-size: 12.5px; font-weight: 700; color: #eaf3ea; }
+.recrow .rc-score { font-size: 15px; font-weight: 800; color: #8fe07a;
+  font-variant-numeric: tabular-nums; }
+.recrow .rc-who { font-size: 10.5px; color: #8fa694; min-width: 84px; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recrow.mine { border-color: rgba(143,224,122,.45); background: rgba(143,224,122,.10); }
+.recrow.empty .rc-score, .recrow.empty .rc-who { color: #6f8375; font-weight: 600; }
+
+/* who else is playing right now */
+.onlinenow { display: flex; flex-direction: column; gap: 7px; padding: 11px 13px;
+  border-radius: 13px; background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.09); }
+.on-head { display: flex; align-items: center; gap: 7px; }
+.on-head b { font-size: 11.5px; font-weight: 800; letter-spacing: .3px; color: #cfe4d3; }
+.on-dot { width: 7px; height: 7px; border-radius: 50%; background: #6fe07a;
+  box-shadow: 0 0 8px rgba(111,224,122,.9); animation: onpulse 2.2s ease-in-out infinite; }
+@keyframes onpulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+.on-list { display: flex; flex-direction: column; gap: 4px; }
+.on-row { display: flex; align-items: center; gap: 8px; }
+.on-name { font-size: 12px; font-weight: 700; color: #eaf3ea;
+  max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.on-doing { flex: 1; font-size: 10.5px; color: #8fa694; }
+.on-join { padding: 3px 10px; border-radius: 999px; cursor: pointer; font: inherit;
+  font-size: 10.5px; font-weight: 800; color: #06210f; background: #8fe07a;
+  border: none; transition: .13s; }
+.on-join:hover { background: #a9ec96; transform: translateY(-1px); }
+.on-note { font-size: 10px; color: #7d9484; margin: 1px 0 0; }

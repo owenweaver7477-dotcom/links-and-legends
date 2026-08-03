@@ -138,6 +138,16 @@ Net.setLook = look => Net.socket?.emit('player:look', { look });
 Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, rot, moving, cart });
 Net.hail = () => Net.socket?.emit('cart:hail');
 Net.emote = id => Net.socket?.emit('player:emote', { id });
+/** The global record board. Answers with {} if we are not connected yet. */
+Net.records = cb => {
+  if (!Net.socket) return cb({});
+  Net.socket.emit('records:all', null, res => cb(res?.records || {}));
+};
+/** Who is online right now.  Polled from the menu; never while playing. */
+Net.presence = cb => {
+  if (!Net.socket) return cb([]);
+  Net.socket.emit('presence:who', null, res => cb(res?.online || []));
+};
 Net.buy = item => Net.socket?.emit('shop:buy', { item });
 Net.start = () => Net.socket?.emit('game:start');
 

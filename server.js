@@ -33,6 +33,7 @@ import { EMOTES } from './public/js/client/celebrations.js';
 import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound } from './server/profiles.js';
+import { loadRecords, recordsFor, allRecords, submitRound } from './server/records.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -56,6 +57,7 @@ const io = new Server(httpServer, {
 const COURSES = allCourses();
 calibrateCarries();
 loadProfiles();
+loadRecords();
 
 /* ═══════════════════════════════════════════════════════════════ assets ═══
    Everything under public/ is read, hashed and COMPRESSED once at boot, then
@@ -479,6 +481,17 @@ function nextHole(room) {
       const holeScores = p.scores.map((s, i) => s == null ? null : { strokes: s, par: pars[i] }).filter(Boolean);
       const rc = settleRound(p.pid, room.courseId, holeScores);
       const prof = recordRound(p.pid, total - parTotal, played);
+      /* The record board only ever sees rounds THIS server simulated, and
+         only complete ones — see records.js for why both matter. */
+      const beat = submitRound(room.courseId, p.name, p.pid, holeScores);
+      if (beat.round || beat.holes.length) {
+        io.to(room.code).emit('toast', {
+          msg: beat.round
+            ? `🏆 ${p.name} set the course record — ${total} at ${course(room).name}`
+            : `🏆 ${p.name} set a new best on hole ${beat.holes[0] + 1}`,
+          kind: 'good'
+        });
+      }
       const sock = p.socketId && io.sockets.sockets.get(p.socketId);
       if (sock && prof) {
         sock.emit('profile', prof);
@@ -512,6 +525,7 @@ function snapshot(room) {
     state: room.state,
     turnPid: room.turnPid,
     wind: room.wind,
+    records: recordsFor(room.courseId),
     maxPlayers: MAX_PLAYERS,
     holes: HOLES_PER_COURSE,
     players: room.players.map(p => ({
@@ -820,6 +834,44 @@ io.on('connection', socket => {
     if (now - (p.lastEmoteAt || 0) < 1200) return;      // one at a time
     p.lastEmoteAt = now;
     io.to(room.code).emit('player:emote', { pid: p.pid, id });
+  });
+
+  /* ------------------------------------------------------------ presence --
+     Who is online and what they are doing.  Built from the live room table
+     rather than a second store, so it cannot drift out of step with reality
+     and there is nothing to clean up when someone drops.
+
+     Note the honesty about identity: this is keyed on the same pid as
+     everything else, which for a CrazyGames GUEST is a local id CrazyGames
+     themselves warn against trusting across sessions ("multiple users might
+     share the same device").  Presence is fine on that basis — it only has
+     to be true right now — but a durable FRIENDS list is not, and that is
+     why this ships and the friend list waits for a real account. */
+  socket.on('presence:who', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const out = [];
+    for (const room of rooms.values()) {
+      const h = room.state === 'playing' || room.state === 'holeover'
+        ? course(room)?.holes?.[room.holeIndex] : null;
+      for (const p of room.players) {
+        if (!p.connected) continue;
+        out.push({
+          pid: p.pid, name: p.name, code: room.code,
+          courseId: room.courseId,
+          doing: room.state === 'lobby' ? 'in a lobby'
+            : room.state === 'results' ? 'finishing a round'
+              : h ? `on the ${h.number}${['th','st','nd','rd'][h.number % 10 > 3 ? 0 : h.number % 10] || 'th'}`
+                : 'on the course',
+          joinable: room.state === 'lobby' &&
+            room.players.filter(x => x.connected).length < MAX_PLAYERS
+        });
+      }
+    }
+    ack({ online: out.slice(0, 60), rooms: rooms.size });
+  });
+
+  socket.on('records:all', (d, ack) => {
+    if (typeof ack === 'function') ack({ records: allRecords() });
   });
 
   socket.on('cart:hail', () => {

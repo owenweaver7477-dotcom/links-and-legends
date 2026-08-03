@@ -28,7 +28,7 @@ for (const id of [
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
   'coinHud', 'coinHudN',
-  'emoteWheel', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
+  'emoteWheel', 'recordBox', 'onlineNow', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -746,6 +746,23 @@ HUD.renderHoleOver = (room, myPid, course) => {
       <span class="vp ${rel < 0 ? 'under' : rel > 0 ? 'over' : ''}">${scoreName(rel)}</span>`;
     el.hoTable.appendChild(div);
   });
+  /* The record for THIS hole, under the card.  A number to beat is worth more
+     on the hole you have just played than buried in a menu — and if the player
+     has just taken it, say so here rather than letting a toast carry it. */
+  const rec = room.records?.holes?.[room.holeIndex];
+  const mine = rows.find(r => r.p.pid === myPid);
+  const holder = document.createElement('div');
+  holder.className = 'ho-record';
+  if (rec) {
+    const isMe = rec.pid === myPid && mine && mine.s === rec.strokes;
+    holder.innerHTML = isMe
+      ? `<b>🏆 Course record</b><span>${rec.strokes} — that is yours</span>`
+      : `<b>Course record</b><span>${rec.strokes} by ${escapeHtml(rec.name)}</span>`;
+  } else {
+    holder.innerHTML = '<b>Course record</b><span>nobody has set one yet</span>';
+  }
+  el.hoTable.appendChild(holder);
+
   const isHost = room.hostPid === myPid;
   el.btnNext.disabled = !isHost;
   el.btnNext.textContent = room.holeIndex >= HOLES_PER_COURSE - 1 ? 'See the card' : 'Next hole';
@@ -837,3 +854,68 @@ HUD.renderEmotes = (level, onPick) => {
 };
 HUD.showEmotes = on => { if (el.emoteWheel) el.emoteWheel.hidden = !on; };
 HUD.emotesOpen = () => el.emoteWheel && !el.emoteWheel.hidden;
+
+/* ------------------------------------------------------------ records --- */
+/**
+ * The course record board.  Every course is listed whether or not it has a
+ * record yet, because an empty row reads as an invitation and a missing row
+ * reads as a course that does not exist.
+ */
+HUD.renderRecords = (courses, records, myPid) => {
+  const box = el.recordBox;
+  if (!box) return;
+  box.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'recboard';
+  for (const c of courses) {
+    const r = records?.[c.id] || null;
+    const row = document.createElement('div');
+    row.className = 'recrow' + (r ? (r.pid === myPid ? ' mine' : '') : ' empty');
+    const rel = r ? r.total - r.par : 0;
+    row.innerHTML =
+      `<span class="rc-course">${escapeHtml(c.name)}</span>` +
+      `<span class="rc-score">${r ? r.total + (rel === 0 ? ' (E)' : rel > 0 ? ` (+${rel})` : ` (${rel})`) : '—'}</span>` +
+      `<span class="rc-who">${r ? escapeHtml(r.pid === myPid ? 'you' : r.name) : 'unclaimed'}</span>`;
+    wrap.appendChild(row);
+  }
+  box.appendChild(wrap);
+};
+
+/* ------------------------------------------------------------ presence --- */
+/**
+ * Who is on the course right now.  Hidden entirely when nobody else is on,
+ * because an empty "0 players online" box on a new game is worse than no box.
+ */
+HUD.renderOnline = (list, myPid, onJoin) => {
+  const box = el.onlineNow;
+  if (!box) return;
+  const others = (list || []).filter(o => o.pid !== myPid);
+  if (!others.length) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+
+  const joinable = others.filter(o => o.joinable);
+  box.innerHTML = `<div class="on-head"><span class="on-dot"></span>` +
+    `<b>${others.length} ${others.length === 1 ? 'golfer' : 'golfers'} on the course</b></div>`;
+  const rows = document.createElement('div');
+  rows.className = 'on-list';
+  for (const o of others.slice(0, 6)) {
+    const row = document.createElement('div');
+    row.className = 'on-row';
+    row.innerHTML = `<span class="on-name">${escapeHtml(o.name)}</span>` +
+      `<span class="on-doing">${escapeHtml(o.doing)}</span>`;
+    if (o.joinable) {
+      const b = document.createElement('button');
+      b.className = 'on-join'; b.type = 'button'; b.textContent = 'Join';
+      b.addEventListener('click', () => onJoin(o.code));
+      row.appendChild(b);
+    }
+    rows.appendChild(row);
+  }
+  box.appendChild(rows);
+  if (joinable.length === 0) {
+    const note = document.createElement('p');
+    note.className = 'on-note';
+    note.textContent = 'All mid-round — start your own and invite them.';
+    box.appendChild(note);
+  }
+};
