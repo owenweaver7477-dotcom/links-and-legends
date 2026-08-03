@@ -5,15 +5,18 @@ each ends in a shippable state, and later ones depend on earlier ones. Don't
 paste all six at once — you'll get shallow work on all of them instead of
 finished work on each.
 
-Two things to settle before Prompt 1, because they change what's possible:
+Two things to know before Prompt 1. The first changes what's possible; the
+second is already decided and is here so nobody reopens it:
 
 - **Storage.** Course records, friends and online presence cannot live in
   `data/profiles.json` on Render's free tier — that disk is wiped on every
   deploy. You need a real database (Supabase and Neon both have free Postgres
   tiers). Prompt 4 assumes one exists. Everything before it does not.
-- **Chat moderation.** CrazyGames will not approve open text chat between
-  strangers without filtering. Prompt 5 covers this, but if you'd rather not
-  own that risk, cut free-text chat and keep the quick-phrase wheel.
+- **Chat is going in, and so is melee.** I raised the moderation and griefing
+  risks and I'm accepting both — these are decided, not open questions. Prompt
+  5 builds real free-text chat and real physical shoving. The filtering and
+  rate limiting in that prompt stay, not as a debate, but because CrazyGames
+  will reject a build without them and because they are just good engineering.
 
 ---
 
@@ -45,8 +48,10 @@ Two things to settle before Prompt 1, because they change what's possible:
 > address spot.
 >
 > **Cart collisions.** These look bad and I want them properly fixed. Go and
-> read the current collision response in `public/js/client/cart3d.js` before
-> changing anything, and tell me what's wrong with it. What I want to see:
+> read the current collision response in `public/js/client/carts.js` before
+> changing anything (cart-vs-cart shove is around line 179, and there is
+> already a `hitFlash` / `damage` / `wrecked` model at the top of the class),
+> and tell me what's wrong with it. What I want to see:
 > a cart that hits a tree stops or deflects with real weight rather than
 > sliding or jittering; glancing blows that scrape and turn the cart instead
 > of stopping it dead; some visible reaction — a lurch, a bounce, the body
@@ -177,35 +182,59 @@ Two things to settle before Prompt 1, because they change what's possible:
 
 ---
 
-## Prompt 5 — Talking to each other, and shoving each other
+## Prompt 5 — Chat and melee
 
-> Two social features, both with a risk I want you to take seriously rather
-> than build past.
+> Two social features. Both were flagged to me as risky — open text between
+> strangers, and shoving that can be used to grief. I've heard the argument
+> and I'm taking the risk on both. Build them properly; don't re-litigate the
+> decision or water them down into cosmetic versions.
 >
-> **Text chat.** In-round chat. But CrazyGames will not approve open text
-> between strangers without moderation, so: profanity filtering, rate
-> limiting, a mute-player control, and no links. Server-side filtering, not
-> client-side, since the client can't be trusted. Also add a quick-phrase
-> wheel ("nice shot", "unlucky", "your turn") because most players will use
-> that and it's zero risk.
+> **Free-text chat, in-round and in the lobby.** There is no chat channel
+> today — the closest thing is the one-way `toast(room, msg, kind)` broadcast
+> in `server.js` and `HUD.toast` in `hud.js`. Add a real one: a `chat:say`
+> event in, a `chat:msg` broadcast out to the room, a scrollback panel that
+> doesn't cover the shot controls, and a key to open it that doesn't collide
+> with the existing bindings (W/A/S/D, Q/E, C, F, G, M, P, Space, Shift and
+> the arrows are all taken — check `main.js` before you pick one).
 >
-> If you think free-text chat is more risk than it's worth for a portal
-> launch, say so and make the case — I'd rather hear that now than after a
-> rejection.
+> Ship the safety rails as engineering, not as a debate: server-side
+> profanity filtering (the client can't be trusted, so do it where the
+> message is rebroadcast), a rate limit so one player can't flood the room, a
+> per-player mute that persists for the session, a length cap, and strip
+> anything that looks like a URL. Escape everything on the way into the DOM —
+> `escapeHtml` already exists in `hud.js` and every message must go through
+> it, because a chat box is the most obvious XSS surface in the game.
 >
-> **Melee / pushing.** I want to be able to shove another player's character.
-> Think hard about griefing before you build it: on a public portal you're
-> shoving strangers, and if a shove can knock someone off a green or delay
-> their shot, it will be used to ruin rounds. Propose a design that keeps the
-> fun and removes the weapon — options worth considering are making it purely
-> cosmetic with no positional effect on the shot, or restricting it to
-> private rooms with friends, or an opt-in toggle per room. Recommend one,
-> explain the reasoning, then build it.
+> Also add the quick-phrase wheel — "nice shot", "unlucky", "your turn",
+> "good luck", "sorry" — as well as free text, not instead of it. Most
+> players will use it and it's instant on mobile where typing is painful.
 >
-> Both features need to work over the existing Socket.IO channels and survive
-> the reconnect storms that `test/softlock.mjs` covers.
-
----
+> **Melee — real shoving, with real physical effect.** I want to be able to
+> barge another golfer and actually move them. There is no player-to-player
+> collision in the game at all today, so this starts from scratch — but the
+> cart-to-cart shove in `public/js/client/carts.js` (around line 179, where
+> relative velocity along the collision normal becomes a push) is the model
+> to follow, and it already handles the two-clients-each-owning-their-own-body
+> problem you're about to hit again.
+>
+> Make it feel good: a wind-up, a real impulse on the target proportional to
+> how fast the shover was moving, a stagger animation on the person hit, and
+> a cooldown so it can't be spammed into a permanent stunlock. A sprinting
+> shove should shift someone properly; a standing nudge shouldn't.
+>
+> It moves people for real, including off a green and out of their address
+> position. That is the point and I've accepted it. Two things I do want,
+> because they cost nothing and stop the worst of it: never let a shove
+> interrupt a swing that is already mid-stroke (that turns griefing into
+> stroke theft), and add a per-room toggle the host can switch off. Default
+> it on.
+>
+> Both features run over the existing Socket.IO channels and must survive the
+> reconnect storms `test/softlock.mjs` covers — a player who drops mid-shove
+> or mid-message must not leave the room in a broken state. Write tests for
+> both: the filter and rate limit on the chat side, and on the melee side
+> that a shove replicates, respects the cooldown, and cannot land on someone
+> mid-swing.
 
 ## Prompt 6 — Make it look like a real product
 
@@ -240,12 +269,14 @@ Two things to settle before Prompt 1, because they change what's possible:
 
 ---
 
-## What I'd cut or defer
+## The one constraint that isn't a preference
 
-- **Free-text chat** is the single biggest risk to portal approval for the
-  smallest gain. The quick-phrase wheel gets you 80% of the social feel at
-  none of the moderation cost.
-- **A true friends system** is fighting the platform. CrazyGames guests have
-  no durable identity. Invite links already work and are the supported path.
-- **Melee with real physical effect** will be used to grief. Cosmetic-only,
-  or friends-rooms-only.
+A true friends list is fighting the platform, and no amount of accepting risk
+changes it: CrazyGames guests have no durable identity, so there is nothing
+stable to key a friends list to. That is a fact about the platform, not a
+judgement call like chat or melee. Prompt 4 asks for an honest read of what
+the SDK actually supports for a signed-in CrazyGames user versus a guest
+before anything gets built on top of it — expect friends to be a real feature
+for signed-in users and a degraded one for everybody else.
+
+Everything else on this list is a decision that has been made. Build it.
