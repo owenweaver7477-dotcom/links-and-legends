@@ -21,6 +21,16 @@ const _fwd = new THREE.Vector3();
 const _m4 = new THREE.Matrix4();
 const _scl = new THREE.Vector3();
 
+/* Three real budgets. `scenery` scales the decorative instancing, `water`
+   drops the fine chop, and pixelRatio is the one that decides whether a weak
+   machine is playable at all — a retina display asks for four times the
+   fragments, and capping it is worth more than every other lever combined. */
+export const QUALITY = {
+  low:    { pixelRatio: 1,   shadows: false, shadowMap: 0,    scenery: 0.35, water: 0 },
+  medium: { pixelRatio: 1.5, shadows: true,  shadowMap: 1024, scenery: 0.75, water: 1 },
+  high:   { pixelRatio: 2,   shadows: true,  shadowMap: 2048, scenery: 1.0,  water: 1 }
+};
+
 export class GolfScene {
   constructor(canvas) {
     this.canvas = canvas;
@@ -35,7 +45,8 @@ export class GolfScene {
     // pass over every caster — so they are OFF by default.  Avatars and balls
     // carry blob shadows instead, which cost one transparent quad each.
     // 'quality' turns the real sun shadow on for machines that can take it.
-    this.quality = 'perf';
+    this.quality = 'medium';
+    this.q = QUALITY.medium;
     this.renderer.shadowMap.enabled = false;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
@@ -78,22 +89,53 @@ export class GolfScene {
   }
 
   /**
-   * Switch the graphics budget.  Only touches the shadow pass; geometry and
-   * textures are already sized for the low end.
+   * Switch the graphics budget.
+   *
+   * This used to toggle the shadow pass and nothing else, which is why
+   * neither end of the setting did much: a weak laptop still rendered every
+   * pixel at full device resolution, and a strong one got no more scenery
+   * for saying so.
+   *
+   * The levers, in order of how much they actually cost:
+   *
+   *   pixelRatio   by far the biggest. A retina display asks for four times
+   *                the fragments; capping it at 1 is the single change that
+   *                turns an unplayable machine into a playable one.
+   *   shadows      the whole second pass, plus its map resolution.
+   *   scenery      far trees and the surrounding ground rings, which are
+   *                pure decoration beyond the hole boundary.
+   *   water        the fine chop octaves in the water shader.
+   *
+   * Changing scenery needs the hole rebuilt, so setQuality reports whether
+   * the caller should do that rather than doing it behind their back.
    */
   setQuality(q) {
-    const on = q === 'quality';
+    const Q = QUALITY[q] || QUALITY.medium;
+    const wasScenery = this.q?.scenery;
     this.quality = q;
-    this.renderer.shadowMap.enabled = on;
-    this.renderer.shadowMap.autoUpdate = on;
+    this.q = Q;
+
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, Q.pixelRatio));
+    this.renderer.shadowMap.enabled = Q.shadows;
+    this.renderer.shadowMap.autoUpdate = Q.shadows;
     this.renderer.shadowMap.needsUpdate = true;
-    if (this.sun) this.sun.castShadow = on;
-    if (this.terrainMesh) this.terrainMesh.receiveShadow = on;
-    // materials must be recompiled when the shadow path changes
-    this.scene.traverse(o => { if (o.material) {
-      const m = Array.isArray(o.material) ? o.material : [o.material];
-      for (const mm of m) mm.needsUpdate = true;
-    } });
+    if (this.sun) {
+      this.sun.castShadow = Q.shadows;
+      if (Q.shadows) this.sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
+      // the map is allocated on first use, so it has to be dropped to resize
+      this.sun.shadow.map?.dispose?.();
+      this.sun.shadow.map = null;
+    }
+    if (this.terrainMesh) this.terrainMesh.receiveShadow = Q.shadows;
+    this.scene.traverse(o => {
+      if (o.material) {
+        const m = Array.isArray(o.material) ? o.material : [o.material];
+        for (const mm of m) mm.needsUpdate = true;
+      }
+      if (o.isInstancedMesh && o.userData.decor) o.castShadow = Q.shadows;
+    });
+    this.resize();
+    return wasScenery !== undefined && wasScenery !== Q.scenery;   // rebuild?
   }
 
   resize() {
@@ -132,10 +174,10 @@ export class GolfScene {
 // than as a uniformly lit model
     const sun = new THREE.DirectionalLight(new THREE.Color(P.sun), 1.78);
     sun.position.set(sunDir.x * 600, sunDir.y * 600, sunDir.z * 600);
-    sun.castShadow = this.quality === 'quality';
+    sun.castShadow = !!this.q?.shadows;
     // 2048 over 1536: the shadow frustum covers 70 m, so this is the
     // difference between a golfer's shadow having edges and having a smear.
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(this.q?.shadowMap || 2048, this.q?.shadowMap || 2048);
     const SH = 52;                       // metres of shadow coverage around the camera
     // tighter than the old 70: the same texels over less ground is a sharper
     // shadow everywhere you are actually looking
@@ -321,7 +363,7 @@ export class GolfScene {
 
     const mesh = new THREE.Mesh(geo, mat);
     mesh.name = 'terrain';
-    mesh.receiveShadow = this.quality === 'quality';
+    mesh.receiveShadow = !!this.q?.shadows;
     this.terrainMesh = mesh;
     return mesh;
   }
@@ -344,7 +386,9 @@ export class GolfScene {
     // roughly 0.75 spans + 420 m).  At 7.5 the land ran out in front of the
     // ridge, and wherever the ridge profile dipped you saw a slot of bare sky
     // below the skyline — the "abyss" under the world.
-    const RINGS = 14, SEGS = 128, SPREAD = 26, OVERLAP = 0.97;
+    const RINGS = Math.max(6, Math.round(14 * (this.q?.scenery ?? 1)));
+    const SEGS = (this.q?.scenery ?? 1) < 0.5 ? 64 : 128;
+    const SPREAD = 26, OVERLAP = 0.97;
     const pos = [], idx = [];
 
     // a point on the terrain's boundary rectangle at perimeter fraction t
@@ -422,7 +466,7 @@ export class GolfScene {
   _buildFarTrees(hole, bio, boundary, cx, cz) {
     if ((bio.treeDensity ?? 0) < 0.12) return null;      // links has no trees
     const rng = mulberry32((hole.terrainSeed ^ 0x7ee5) >>> 0);
-    const N = 420;
+    const N = Math.round(420 * (this.q?.scenery ?? 1));
     const geo = cached('fartree', () => {
       // a rounded mass, not a spike: at this distance a tree is a blob of
       // canopy, and a narrow cone reads as a grey obelisk
@@ -768,7 +812,7 @@ export class GolfScene {
       }
       inst.instanceMatrix.needsUpdate = true;
       if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-      inst.castShadow = this.quality === 'quality';
+      inst.castShadow = !!this.q?.shadows;
       meshes.push(inst);
       return inst;
     };
@@ -1360,7 +1404,7 @@ export class GolfScene {
       this.fill.target.position.set(c.x + _fwd.x * 20, c.y + _fwd.y * 20 - 3, c.z + _fwd.z * 20);
       this.fill.target.updateMatrixWorld();
     }
-    if (this.sun && this.sunDir && this.quality === 'quality') {
+    if (this.sun && this.sunDir && this.q?.shadows) {
       const c = this.camera.position;
       this.sun.target.position.set(c.x, this.T ? this.T.heightAt(c.x, c.z) : 0, c.z);
       this.sun.position.set(

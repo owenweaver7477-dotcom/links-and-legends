@@ -45,10 +45,16 @@ try { HUD.metric = localStorage.getItem('lg_metric') === '1'; } catch { /* priva
    that cannot afford a shadow map is the exception rather than the rule.  The
    auto-downgrade in main.js watches real frame times and eases back to blobs
    once, saying so, if this turns out to be wrong on a given machine. */
-HUD.quality = 'quality';
-try { HUD.quality = localStorage.getItem('lg_quality') || 'quality'; } catch { /* private mode */ }
+HUD.quality = 'medium';
+try {
+  const saved = localStorage.getItem('lg_quality');
+  // 'perf' and 'quality' were the old two-way setting; map them onto the new
+  // three so nobody's saved preference turns into an invalid tier.
+  HUD.quality = saved === 'perf' ? 'low' : saved === 'quality' ? 'high'
+    : ['low', 'medium', 'high'].includes(saved) ? saved : 'medium';
+} catch { /* private mode */ }
 HUD.setQuality = q => {
-  HUD.quality = q === 'quality' ? 'quality' : 'perf';
+  HUD.quality = ['low', 'medium', 'high'].includes(q) ? q : 'medium';
   try { localStorage.setItem('lg_quality', HUD.quality); } catch { /* ignore */ }
 };
 

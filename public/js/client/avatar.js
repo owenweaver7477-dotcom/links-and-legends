@@ -562,12 +562,26 @@ export class Avatar {
 
       const b = Math.max(0, -phi);             // how far back
       const f = Math.max(0, phi);              // how far through
+
+      /* The kinematic sequence: hips, then torso, then arms, then club.
+         Everything used to run off one number, so the whole body arrived at
+         once and the swing read as a single rigid rotation — which is the
+         thing that most makes an animated golfer look like a puppet.
+
+         The body now LEADS the arms through the downswing by a fraction of
+         the motion, so the turn opens first and the arms are dragged into
+         impact behind it. The lag closes to nothing by the finish, because a
+         real swing does end square rather than permanently offset. */
+      const lag = 0.16 * Math.max(0, 1 - f * 1.6);
+      const phiArm = phi - (phi > -0.05 ? lag : 0);
+      const bA = Math.max(0, -phiArm), fA = Math.max(0, phiArm);
+
       // hips and shoulders: the turn away is modest, the turn through is full
       P.yaw = -0.15 - 0.78 * b + 1.35 * f;
       // arms: lift going back, sweep low through impact, wrap high to finish
-      const armBack = -0.60 - 1.72 * b;
-      const armThru = -0.60 + f * (f < 0.4 ? 2.2 : 2.2 + (f - 0.4) * 1.4);
-      P.armLx = b > 0 ? armBack : armThru;
+      const armBack = -0.60 - 1.72 * bA;
+      const armThru = -0.60 + fA * (fA < 0.4 ? 2.2 : 2.2 + (fA - 0.4) * 1.4);
+      P.armLx = bA > 0 ? armBack : armThru;
       P.armRx = P.armLx;
       // the trailing elbow folds going back; both arms fold over the finish
       P.armLz = 0.16 + 0.30 * b + 0.42 * Math.max(0, f - 0.55);

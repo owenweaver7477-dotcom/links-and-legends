@@ -2026,8 +2026,16 @@ scene.onContextRestored = () => {
 
 HUD.el.optQuality.addEventListener('change', e => {
   HUD.setQuality(e.target.value);
-  scene.setQuality(HUD.quality);
-  HUD.toast(HUD.quality === 'quality' ? 'Sun shadows on' : 'Performance mode — blob shadows', 'info', 1600);
+  // scenery density is baked into the hole's geometry, so a change to it
+  // needs the hole rebuilt — setQuality says when that is
+  const rebuild = scene.setQuality(HUD.quality);
+  if (rebuild && G.room && G.loadedKey) {
+    const key = G.loadedKey, i = key.lastIndexOf(':');
+    G.loadedKey = null;
+    ensureHole(key.slice(0, i), Number(key.slice(i + 1)));
+    syncAvatars(G.room.players || []);
+  }
+  HUD.toast({ low: 'Low — lightest, no shadows', medium: 'Medium', high: 'High — full shadows and scenery' }[HUD.quality] || HUD.quality, 'info', 1800);
 });
 
 const sndBox = document.getElementById('optSound');
