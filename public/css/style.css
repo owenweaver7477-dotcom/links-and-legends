@@ -1192,3 +1192,90 @@ body.playing .coinhud { display: block; }
   box-shadow: 0 0 10px rgba(255,217,74,.55); }
 .statart { display: inline-block; vertical-align: -3px; margin-right: 4px; }
 .po-name { display: inline-flex; align-items: center; }
+
+/* =========================================================================
+   PHONE — 560px and under
+   -------------------------------------------------------------------------
+   Everything here is a fix for something measured on a 390x844 viewport, not
+   a precaution. In order of how badly it broke the game:
+
+     1. the play bar overflowed the screen, so the club selector and the aim
+        control were literally off both edges — you could not choose a club
+        or aim at anything
+     2. .dist and .quitbtn were BOTH pinned to top:8px right:8px, so Leave
+        sat directly on top of the yards-to-pin readout
+     3. the phrase bar sat on the scorecard
+   ========================================================================= */
+@media (max-width: 560px) {
+
+  /* ---- 1. the play bar has to fit ------------------------------------ */
+  .playbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: 'club power aim' 'club cancel aim';
+    gap: 5px 6px;
+    left: 6px; right: 6px; bottom: 6px;
+    width: auto; max-width: none; transform: none;
+    padding: 7px;
+  }
+  .playbar > .clubsel    { grid-area: club; }
+  .playbar > .meter      { grid-area: power; min-width: 0; }
+  .playbar > .aimsel     { grid-area: aim; }
+  .playbar > .cancelshot { grid-area: cancel; justify-self: center; }
+
+  /* the two steppers shrink but keep a finger-sized tap target */
+  .clubsel, .aimsel { min-width: 0; padding: 3px; gap: 2px; }
+  .clubsel .cinfo b, .aimsel .cinfo b { font-size: 12.5px; }
+  .clubsel .cinfo span, .aimsel .cinfo span { font-size: 8px; }
+  .cbtn { width: 26px; height: 30px; font-size: 13px; }
+  .cancelshot { padding: 3px 9px; font-size: 9.5px; }
+  .cancelshot span { display: none; }        /* the ✕ is enough at this size */
+  /* the label was clipping its last word inside a box sized for one line */
+  .m-label { font-size: 9.5px; line-height: 1.15; white-space: normal;
+    overflow: visible; height: auto; min-height: 0; }
+  .meter { padding: 4px 6px; }
+
+  /* ---- 2. one stack down the right, nothing on top of anything ------- */
+  /* .dist and .quitbtn were BOTH pinned to top:8px right:8px, so Leave sat
+     directly on the yards-to-pin. Moving Leave to the bottom-left only
+     traded that collision for one with the chat. They are a column now:
+     coins, distance, Leave — each below the last, all right-aligned. */
+  #coinHud { top: 8px; right: 8px; bottom: auto; left: auto; }
+  .dist { top: 42px; right: 8px; left: auto; transform: none; }
+  /* below the wind dial, which also lives in this column */
+  .wind { top: 100px; right: 8px; left: auto; }
+  .quitbtn { top: 172px; bottom: auto; right: 8px; left: auto;
+    padding: 5px 10px; font-size: 10px; z-index: 14; }
+
+  /* ---- 3. chat and phrases, out of the way --------------------------- */
+  /* The phrase bar is the useful half on a phone — typing during a round is
+     not realistic — so it stays and the scrollback shrinks to make room. */
+  /* clear of the play bar, which on a phone is two rows tall */
+  .chatpanel { left: 6px; right: 6px; width: auto; bottom: 132px; }
+  .chatlog { max-height: 22vh; }
+  .chatmsg { font-size: 11px; padding: 3px 7px; }
+  .phrasebar { gap: 3px; }
+  .phrasebtn { padding: 4px 8px; font-size: 10px; }
+
+  /* the scorecard collapses to a strip so it cannot fight the chat */
+  .board { top: auto; bottom: 250px; left: 6px; right: auto; max-width: 62vw; }
+
+  /* ---- the emote wheel scrolls rather than overflowing ---------------- */
+  .emotewheel { left: 6px; right: 6px; transform: none; bottom: 132px;
+    overflow-x: auto; justify-content: flex-start; padding: 8px; }
+  .emote { width: 78px; padding: 7px 6px; flex: none; }
+  .em-ico { font-size: 18px; }
+  .em-name { font-size: 10.5px; }
+  .em-sub { font-size: 8.5px; }
+
+  /* ---- touch buttons for the actions that were keyboard-only --------- */
+  html.touch .touchpad { bottom: 132px; }
+}
+
+/* A phone in landscape has almost no vertical room; the play bar and the
+   chat cannot both own the bottom of the screen. */
+@media (max-height: 480px) {
+  .chatpanel { display: none; }
+  .board { display: none; }
+  .playbar { bottom: 4px; padding: 5px; }
+}
