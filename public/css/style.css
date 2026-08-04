@@ -1279,3 +1279,8 @@ body.playing .coinhud { display: block; }
   .board { display: none; }
   .playbar { bottom: 4px; padding: 5px; }
 }
+/* what levelling has given you, and what is next */
+.lvlnext { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  font-size: 10.5px; color: #8fa694; margin: -2px 0 8px; }
+.lvlnext b { color: #eaf3ea; font-weight: 700; }
+.lvlnext em { font-style: normal; color: #7d9484; }

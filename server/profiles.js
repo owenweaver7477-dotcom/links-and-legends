@@ -291,10 +291,18 @@ export function recordRound(pid, relToPar, holesPlayed) {
   // way each round, so one great day is progress and one bad day is not ruin.
   const perHole = relToPar / holesPlayed;
   const target = Math.max(2, Math.min(98, 70 - perHole * 63));
-  // 0.26 rather than 0.20: a round moves you a little over a quarter of the
-  // way to where you played, so improvement is visible sooner without a
-  // single good round rewriting your rating.
-  p.rating += (target - p.rating) * 0.26;
+
+  /* Asymmetric, so a rating is harder to HOLD than to reach.
+     A single pull rate meant a high rating cost nothing to keep: play badly
+     once and you drift down a quarter of the way, play well once and you are
+     straight back. Now a bad round pulls you down faster than a good one
+     lifts you, which makes a high number a claim about consistency rather
+     than about your best day. Gaining is slower the higher you already are —
+     at 90 you are moving a tenth of the way per round. */
+  const up = target > p.rating;
+  const stretch = Math.max(0, (p.rating - 55) / 45);          // 0 at 55, 1 at 100
+  const rate = up ? 0.22 * (1 - stretch * 0.55) : 0.30;
+  p.rating += (target - p.rating) * rate;
   saveSoon();
   return publicProfile(pid);
 }

@@ -429,10 +429,26 @@ head('progression — bad at the start, maxed in 20 to 30 hours');
   const perRound = roundCoins(Array(9).fill({ strokes: 4, par: 4 })).total;
   const firstClears = roundCoins([{ strokes: 4, par: 4 }], true).firstClearBonus * 5;
   const rounds = Math.ceil((toMax - firstClears) / perRound);
-  // a nine-hole round is 10-15 minutes; the bound is deliberately wide because
-  // the pace of play is the one number here that is not ours to measure
+  /* A nine-hole round is 10-15 minutes; the bound is deliberately wide
+     because pace of play is the one number here that is not ours to measure.
+
+     This used to assert 20-30 hours. The top three club sets were then
+     repriced upward on purpose — a Signature Set you could own by the end of
+     your second session is not something anyone looks forward to — so the
+     target moved with it. Owning literally everything is now a long-haul
+     goal; the FIRST four sets are what a normal player actually works
+     through, and those are checked separately below. */
   const lo = rounds * 10 / 60, hi = rounds * 15 / 60;
-  ok('owning everything takes 20-30 hours of golf', hi >= 20 && lo <= 30,
+  const early = CLUB_TIERS.slice(0, 4).reduce((a, t) => a + t.cost, 0);
+  const earlyRounds = Math.ceil(early / perRound);
+  ok('the first four club sets are a normal progression', earlyRounds <= 12,
+     earlyRounds + ' rounds for the first four sets');
+  ok('the last three cost far more than the first four',
+     CLUB_TIERS.slice(4).reduce((a, t) => a + t.cost, 0) > early * 5,
+     'top three ' + CLUB_TIERS.slice(4).reduce((a, t) => a + t.cost, 0) +
+     ' vs first four ' + early);
+
+  ok('owning everything is a long haul, not a second job', hi >= 30 && lo <= 70,
      `${rounds} rounds = ${lo.toFixed(0)}-${hi.toFixed(0)} h`);
   ok('but the first caddie is affordable after one round',
      perRound >= CADDIE_COSTS[0], `${perRound} vs ${CADDIE_COSTS[0]}`);

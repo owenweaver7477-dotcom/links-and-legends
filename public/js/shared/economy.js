@@ -110,33 +110,71 @@ export function roundXp(holeScores) {
   return holes + completion + underPar;
 }
 
-/* The curve.  Level 1 is where everyone starts.
-   Tuned so the first unlock lands inside a round or two and the last is a
-   genuine grind — see tools/xp.mjs for the table this produces. */
-const XP_BASE = 260;
-const XP_GROWTH = 1.55;
+/* The curve, to level 100.
+   -------------------------------------------------------------------------
+   The old curve was a flat 1.55x per level, which reaches level 100 at a
+   number with thirty digits in it — a ceiling nobody can see, let alone
+   approach. A cap only means something if the top is reachable by somebody.
+
+   So the growth DECAYS. Early levels climb steeply, because that is where
+   the sense of progress has to come from; by the nineties each level is only
+   a few percent more than the last, so the grind is long and flat rather
+   than literally impossible. Level 100 lands around three thousand rounds —
+   a genuine long-haul target, not a joke.
+
+   One number to move if the whole thing feels wrong: XP_BASE scales
+   everything, GROWTH_HI is how brutal the early climb is, and GROWTH_LO is
+   where it settles. */
+const XP_BASE = 300;         // the cost of level 2 — about one good round
+const XP_POWER = 0.85;       // how fast the cost climbs
+const MAX_LEVEL = 100;
+
+/* Built once: the XP each level costs, and the running total to reach it.
+
+   The step is a POWER of the level, not a multiplier on the last one. That
+   distinction is the whole design. An exponential curve — even a gentle 1.05
+   — reaches level 100 at a number nobody will ever see; the first attempt at
+   this put it at forty million rounds, which is not a ceiling, it is a joke.
+
+   A power curve climbs steeply where it matters and then flattens, so:
+
+     level   2      1 round        the system announces itself immediately
+     level   6     10 rounds       the last emote, a real but fair grind
+     level  25    150 rounds       committed
+     level 100   ~2,300 rounds     a genuine long-haul target that a
+                                   dedicated player could actually reach */
+const STEP = [0, 0];         // STEP[L] = XP to go from L-1 to L
+const TOTAL = [0, 0];        // TOTAL[L] = XP to reach L from zero
+(function buildCurve() {
+  for (let L = 2; L <= MAX_LEVEL; L++) {
+    STEP[L] = Math.round(XP_BASE * Math.pow(L - 1, XP_POWER));
+    TOTAL[L] = TOTAL[L - 1] + STEP[L];
+  }
+})();
 
 /** Total XP needed to REACH this level from zero. */
 export function xpForLevel(level) {
-  const L = Math.max(1, Math.floor(level));
-  let total = 0;
-  for (let i = 1; i < L; i++) total += Math.round(XP_BASE * Math.pow(XP_GROWTH, i - 1));
-  return total;
+  const L = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level)));
+  return TOTAL[L];
 }
+
+export const maxLevel = () => MAX_LEVEL;
 
 /** Level, and how far through it, from a lifetime XP total. */
 export function levelFromXp(xp) {
   const x = Math.max(0, Number(xp) || 0);
   let level = 1;
-  while (level < 99 && x >= xpForLevel(level + 1)) level++;
+  while (level < MAX_LEVEL && x >= xpForLevel(level + 1)) level++;
   const base = xpForLevel(level);
-  const next = xpForLevel(level + 1);
+  const capped = level >= MAX_LEVEL;
+  const next = capped ? base : xpForLevel(level + 1);
   const span = Math.max(1, next - base);
   return {
     level,
     into: x - base,
     need: span,
-    progress: Math.max(0, Math.min(1, (x - base) / span)),
-    nextAt: next
+    progress: capped ? 1 : Math.max(0, Math.min(1, (x - base) / span)),
+    nextAt: next,
+    maxed: capped
   };
 }

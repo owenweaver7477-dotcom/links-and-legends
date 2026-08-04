@@ -14,6 +14,7 @@ import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
 import { EMOTES } from './celebrations.js';
+import { unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
 import { Net } from './net.js';
@@ -1739,11 +1740,15 @@ Net.on('pos', d => {
 function levelUpMoment(from, to) {
   const el = document.createElement('div');
   el.className = 'levelup';
-  const gained = EMOTES.filter(e => e.at > from && e.at <= to);
+  /* Everything earned between the two levels, not just emotes — a level that
+     hands you a club decal should say so rather than reading as empty. */
+  const gained = unlockedBetween(from, to);
+  const next = nextUnlock(to);
   el.innerHTML = `<div><b>LEVEL ${to}</b><span>` +
     (gained.length
-      ? gained.map(g => g.icon + ' ' + g.name + ' unlocked').join(' · ')
-      : 'Keep going') + `</span></div>`;
+      ? gained.map(g => `${g.name} — ${(UNLOCK_KINDS[g.kind] || {}).name || g.kind}`).join(' · ')
+      : next ? `Next: ${next.name} at ${next.at}` : 'Everything unlocked') +
+    `</span></div>`;
   document.body.appendChild(el);
   try { Sound.celebrate?.('birdie'); } catch { /* audio may be blocked */ }
   setTimeout(() => el.remove(), 2700);

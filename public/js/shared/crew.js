@@ -88,6 +88,12 @@ export const NO_CREW = Object.freeze({
 
    1.000 sits at the Tour Pro Set deliberately: the reference the club table is
    calibrated against, and the point where you stop being an amateur. */
+/* The ladder. The first four are a normal progression; the last three are
+   deliberately a different order of magnitude, because a set you can own by
+   the end of your second session is not something anyone will ever look
+   forward to. At roughly 3,300 coins for a level-par round the Signature Set
+   is around 36 rounds of saving on its own — a thing you decide to go after
+   rather than something you drift into. */
 export const CLUB_TIERS = [
   { name: 'Wooden Starter Set', cost: 0,
     speed: 0.860, faceDamp: 0.00, look: 'wood',
@@ -101,13 +107,13 @@ export const CLUB_TIERS = [
   { name: 'Carbon Comp Set', cost: 7000,
     speed: 0.965, faceDamp: 0.12, look: 'carbon',
     blurb: 'Matte black carbon fibre. Quiet, fast, forgiving.' },
-  { name: 'Tour Pro Set', cost: 13000,
+  { name: 'Tour Pro Set', cost: 26000,
     speed: 1.000, faceDamp: 0.18, look: 'tour',
     blurb: 'Sponsor decals and tour stamping. Full tour length at last.' },
-  { name: 'Titanium Elite Set', cost: 22000,
+  { name: 'Titanium Elite Set', cost: 58000,
     speed: 1.032, faceDamp: 0.24, look: 'titanium',
     blurb: 'Brushed titanium with a glow inlay. Hits like the future.' },
-  { name: 'Signature Set', cost: 35000,
+  { name: 'Signature Set', cost: 120000,
     speed: 1.065, faceDamp: 0.33, look: 'signature',
     blurb: 'Holographic finish, premium everything. The bag of legends.' }
 ];

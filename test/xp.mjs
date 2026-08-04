@@ -9,7 +9,8 @@
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { holeXp, roundXp, xpForLevel, levelFromXp } from '../public/js/shared/economy.js';
+import { holeXp, roundXp, xpForLevel, levelFromXp, maxLevel } from '../public/js/shared/economy.js';
+import { UNLOCKS, unlocksAt, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../public/js/shared/unlocks.js';
 import { EMOTES, EMOTE_CLIPS, emotesAt, POSE_KEYS, blankPose } from '../public/js/client/celebrations.js';
 import { io } from 'socket.io-client';
 
@@ -220,4 +221,113 @@ test('the profile carries level and progress, not just raw XP', async () => {
   }
   assert.ok(profile.progress >= 0 && profile.progress <= 1);
   s.disconnect();
+});
+
+/* ------------------------------------------------------------ level 100 -- */
+
+test('the ceiling is reachable by somebody', () => {
+  /* The first attempt at a 100-level curve used a per-level multiplier. Even
+     a gentle one compounds: it put level 100 at forty MILLION rounds, which
+     is not a ceiling, it is a joke. A power curve climbs steeply where the
+     progress needs to feel real and then flattens. */
+  const good = [3, 3, 4, 4, 4, 4, 4, 5, 4].map(s => ({ strokes: s, par: 4 }));
+  const per = roundXp(good);
+  const rounds = xpForLevel(100) / per;
+  assert.ok(rounds > 800,
+    `level 100 in ${rounds.toFixed(0)} rounds is not a long-haul target`);
+  assert.ok(rounds < 6000,
+    `level 100 takes ${rounds.toFixed(0)} rounds — nobody will ever see it`);
+  assert.equal(maxLevel(), 100);
+});
+
+test('the curve never goes backwards and every level costs more', () => {
+  let prevStep = 0;
+  for (let L = 2; L <= 100; L++) {
+    const step = xpForLevel(L) - xpForLevel(L - 1);
+    assert.ok(step > 0, `level ${L} costs nothing`);
+    assert.ok(step >= prevStep, `level ${L} is cheaper than ${L - 1}`);
+    prevStep = step;
+  }
+});
+
+test('the top of the curve reports itself as maxed, not as broken', () => {
+  const at = levelFromXp(xpForLevel(100));
+  assert.equal(at.level, 100);
+  assert.equal(at.maxed, true);
+  assert.equal(at.progress, 1, 'a maxed bar must read full, not empty');
+  const beyond = levelFromXp(xpForLevel(100) * 3);
+  assert.equal(beyond.level, 100, 'XP past the cap must not overflow the level');
+  assert.ok(Number.isFinite(beyond.progress));
+});
+
+/* ------------------------------------------------------------- unlocks --- */
+
+test('rewards run the whole way to 100, not just the first twenty', () => {
+  /* A reward table that stops early tells everyone past that point the game
+     is finished with them. */
+  const past50 = UNLOCKS.filter(u => u.at > 50).length;
+  assert.ok(past50 >= 5, `only ${past50} unlocks past level 50`);
+  assert.ok(UNLOCKS.some(u => u.at === 100), 'nothing at all at the ceiling');
+  assert.ok(UNLOCKS.some(u => u.at <= 3), 'nothing early enough to hook anyone');
+});
+
+test('no two unlocks land on the same level', () => {
+  const levels = UNLOCKS.map(u => u.at);
+  assert.equal(new Set(levels).size, levels.length,
+    'two rewards on one level wastes one of the moments');
+});
+
+test('every unlock is well formed and of a kind we describe', () => {
+  const ids = new Set();
+  for (const u of UNLOCKS) {
+    assert.ok(u.at >= 2 && u.at <= 100, `${u.id} at level ${u.at}`);
+    assert.ok(u.name, `${u.id} has no name to show`);
+    assert.ok(UNLOCK_KINDS[u.kind], `${u.id} is a "${u.kind}", which has no description`);
+    assert.ok(!ids.has(u.kind + ':' + u.id), `duplicate ${u.kind} ${u.id}`);
+    ids.add(u.kind + ':' + u.id);
+  }
+});
+
+test('unlocks accumulate and never un-earn', () => {
+  assert.equal(unlocksAt(1).length, 0, 'nothing is free');
+  let prev = 0;
+  for (let L = 1; L <= 100; L++) {
+    const n = unlocksAt(L).length;
+    assert.ok(n >= prev, `level ${L} has fewer unlocks than ${L - 1}`);
+    prev = n;
+  }
+  assert.equal(unlocksAt(100).length, UNLOCKS.length);
+});
+
+test('unlockedBetween is what the level-up moment shows', () => {
+  const first = UNLOCKS[0];
+  assert.deepEqual(unlockedBetween(1, first.at).map(u => u.id), [first.id]);
+  assert.equal(unlockedBetween(5, 5).length, 0, 'no level change, no reward');
+  // jumping several levels at once must show everything crossed
+  const span = unlockedBetween(1, 10);
+  assert.ok(span.length >= 5, `a 1->10 jump showed only ${span.length} rewards`);
+});
+
+test('there is always something to look forward to until the very top', () => {
+  for (let L = 1; L < 100; L++) {
+    const n = nextUnlock(L);
+    if (!n) {
+      assert.ok(L >= UNLOCKS[UNLOCKS.length - 1].at,
+        `nothing to look forward to at level ${L}, well before the ceiling`);
+    } else {
+      assert.ok(n.at > L);
+    }
+  }
+  assert.equal(nextUnlock(100), null, 'the ceiling must not dangle a carrot');
+});
+
+test('levels buy identity, never power', () => {
+  /* The whole separation: coins buy distance, levels buy looks. An unlock
+     that changed a stat would make grinding mandatory. */
+  for (const u of UNLOCKS) {
+    for (const banned of ['speed', 'power', 'carry', 'accuracy', 'spin', 'faceDamp']) {
+      assert.equal(u[banned], undefined,
+        `unlock "${u.id}" grants ${banned} — levels must not sell power`);
+    }
+  }
 });

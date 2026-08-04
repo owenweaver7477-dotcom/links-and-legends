@@ -9,6 +9,7 @@ import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { EMOTES } from './celebrations.js';
+import { UNLOCKS, unlocksAt, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { clubSvg, caddieSvg, statSvg, finishName } from './clubart.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
@@ -378,10 +379,18 @@ function levelRow(prof) {
   const lvl = prof?.level ?? 1;
   const into = Math.round(prof?.into ?? 0), need = Math.round(prof?.need ?? 1);
   const pct = Math.round((prof?.progress ?? 0) * 100);
+  const next = nextUnlock(lvl);
+  const owned = unlocksAt(lvl).length;
   return `<div class="lvlrow">
     <span class="lvlbadge">LV ${lvl}</span>
     <span class="lvlbar"><i style="width:${pct}%"></i></span>
-    <span class="lvlnum">${into} / ${need} XP</span>
+    <span class="lvlnum">${prof?.maxed ? 'MAX' : into + ' / ' + need + ' XP'}</span>
+  </div>
+  <div class="lvlnext">
+    <span>${owned} of ${UNLOCKS.length} unlocked</span>
+    ${next ? `<span>Next: <b>${escapeHtml(next.name)}</b> ` +
+      `<em>${escapeHtml((UNLOCK_KINDS[next.kind] || {}).name || next.kind)}</em> at level ${next.at}</span>`
+      : '<span>Everything unlocked</span>'}
   </div>`;
 }
 HUD.levelRow = levelRow;
