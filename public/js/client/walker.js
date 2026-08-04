@@ -108,27 +108,56 @@ export class Walker {
       this._step(vx * this.speed * dt, vz * this.speed * dt, terrain, hole);
     }
 
-    /* Being shoved. Applied as a decaying velocity rather than a teleport, so
-       you skid and recover instead of blinking sideways — and it goes through
-       _step, so a shove cannot push anyone through a tree or out of bounds. */
+    /* Being shoved.
+       -------------------------------------------------------------------
+       A shove is a real impulse, integrated properly rather than nudged.
+       The first version decayed the velocity 4.2/s and stopped below
+       0.12 m/s, which at 60fps is a slide of about 20 cm over a third of a
+       second — technically a push, visually a twitch.
+
+       Now it is a genuine stumble: the impulse survives long enough to
+       carry you, and it fights your own footing rather than your own
+       footing simply ignoring it. */
     if (this.knock) {
       const k = this.knock;
+      k.t = (k.t || 0) + dt;
+
+      // Friction rises as you get your feet back under you — a hard shove
+      // slides for a moment before you can resist it at all.
+      const grip = 1.6 + k.t * 5.5;
+      const decay = Math.max(0, 1 - dt * grip);
+
       this._step(k.x * dt, k.z * dt, terrain, hole);
-      const decay = Math.max(0, 1 - dt * 4.2);
       k.x *= decay; k.z *= decay;
-      if (Math.hypot(k.x, k.z) < 0.12) this.knock = null;
+
+      /* While being carried, your own walking is damped — you cannot simply
+         run out of a barge. This is what makes it read as being shoved
+         rather than as the world briefly sliding underneath you. */
+      const carry = Math.hypot(k.x, k.z);
+      if (carry > 0.5) this.speed *= Math.max(0, 1 - dt * 3.0);
+      if (carry < 0.25) this.knock = null;
     }
   }
 
   /**
    * Take a shove. (nx,nz) is the direction, `power` its strength in m/s.
-   * Cancels an auto-walk: being barged off your route should feel like being
-   * barged off your route, not like a train ignoring you.
+   *
+   * Cancels an auto-walk — being barged off your route should feel like it —
+   * and turns you with the blow, because a person who is knocked sideways
+   * does not keep facing primly forward.
    */
   shove(nx, nz, power) {
-    const p = Math.max(0, Math.min(8, power || 0));
-    this.knock = { x: nx * p, z: nz * p };
+    const p = Math.max(0, Math.min(14, power || 0));
+    const prev = this.knock;
+    // a second shove while still sliding ADDS, so being ganged up on compounds
+    this.knock = {
+      x: (prev?.x || 0) * 0.5 + nx * p,
+      z: (prev?.z || 0) * 0.5 + nz * p,
+      t: 0
+    };
     this.auto = null;
+    this.speed *= 0.35;                       // knocked off your stride
+    if (p > 1.5) this.heading = Math.atan2(nx, nz);
   }
 
   /** Move, then push back out of anything solid. */

@@ -27,57 +27,17 @@ const WINDOW_MS = 10000;
 const MAX_IN_WINDOW = 5;
 const MIN_GAP_MS = 700;
 
-/* Two lists, because one matching rule cannot serve both.
+/* NO PROFANITY FILTERING.
+   -------------------------------------------------------------------------
+   Removed at the owner's explicit instruction, after the moderation risk was
+   raised. What remains is not filtering and must not be removed with it:
 
-   WORD stems must BE the token (allowing ordinary suffixes). Substring
-   matching on these is the Scunthorpe problem, and it is not hypothetical —
-   the first version of this file masked "Scunthorpe", and would equally have
-   masked anyone from there trying to say where they live.
+     - escapeHtml on render (hud.js), which stops markup, not words
+     - URL and email stripping below, which stops a chat box being used as a
+       phishing channel aimed at other players
+     - the rate limit, which stops one person flooding a round
 
-   ANY stems are matched anywhere in the token, because they have no innocent
-   substring use and are exactly the words that get a game pulled. */
-const STEMS_WORD = [
-  'fuck', 'shit', 'cunt', 'bitch', 'bastard', 'wank', 'dick', 'cock',
-  'pussy', 'slut', 'whore', 'rape', 'kys', 'retard'
-];
-const STEMS_ANY = ['nigg', 'fagg'];
-
-/* Ordinary things people put on the end of a word. Without these the list
-   catches "fuck" and misses "fucking", which is not a filter. */
-/* Anchored at BOTH ends. Anchored only at the end, the optional group
-   matches empty anywhere and the test is always true — which is how the
-   first version masked "shiitake", "cocktail", "cockpit" and "Wankel". */
-const SUFFIX = /^(?:s|es|ed|er|ers|ing|in|y|ies|head|heads|face|faces|hole|holes|off|wit|wits)$/;
-
-/* Evasions get normalised away before matching: f.u.c.k, fuuuuck, ƒuck. */
-const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's', '!': 'i' };
-
-function normalise(word, collapse) {
-  let n = word
-    .toLowerCase()
-    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')      // strip accents
-    .replace(/[^a-z0-9@$!]/g, '')                            // drop punctuation
-    .replace(/[0134578@$!]/g, c => LEET[c] || c);            // undo leetspeak
-  // Two collapses, because neither alone is right: 'fuuuuuck' needs runs
-  // taken down to ONE to reach 'fuck', but 'shitt' only needs doubling
-  // removed and 'cool' must not become 'col' in the doubled form.
-  return collapse === 'one' ? n.replace(/(.)\1+/g, '$1') : n.replace(/(.)\1{2,}/g, '$1$1');
-}
-
-function hits(n) {
-  if (n.length < 3) return false;
-  if (STEMS_ANY.some(s => n.includes(s))) return true;
-  return STEMS_WORD.some(s => {
-    if (!n.startsWith(s)) return false;
-    const rest = n.slice(s.length);
-    return rest === '' || SUFFIX.test(rest);
-  });
-}
-
-/** Does this token contain a blocked stem, once the evasions are undone? */
-function blocked(token) {
-  return hits(normalise(token, 'double')) || hits(normalise(token, 'one'));
-}
+   Those are security and abuse controls. The word list is gone. */
 
 /**
  * Strip what must never travel: control characters, anything URL-shaped, and
@@ -96,16 +56,9 @@ export function clean(raw) {
   return s.slice(0, MAX_LEN);
 }
 
-/** Mask blocked words, keeping the sentence readable. */
+/** No-op. Kept so callers and tests have a stable shape if it ever returns. */
 export function filter(text) {
-  let hits = 0;
-  const out = String(text).split(' ').map(tok => {
-    if (!blocked(tok)) return tok;
-    hits++;
-    // keep the shape so the sentence still reads, but not the word
-    return '*'.repeat(Math.max(3, Math.min(tok.length, 8)));
-  }).join(' ');
-  return { text: out, hits };
+  return { text: String(text), hits: 0 };
 }
 
 /* -------------------------------------------------------- rate limiting --- */

@@ -157,6 +157,7 @@ export class CartBody {
     this.steer = 0;                 // rad, + = right
     this.hit = 0;                   // 0..1, decays — drives the crunch effects
     this.impactYaw = 0;             // rad/s of spin owed from a collision
+    this.stunned = 0;               // seconds of no-throttle after a big hit
     this._wasTouching = false;      // edge trigger, so a scrape isn't a crash
     this.odo = 0;                   // m, for spinning the wheels
     this.boost = 1;                 // the shop's cart tune: multiplies top and motor
@@ -187,6 +188,14 @@ export class CartBody {
 
   _sub(dt, input, terrain, hole) {
     const surf = surfFor(terrain.surfaceAt(this.x, this.z).id);
+
+    /* A heavy square impact stalls it briefly — the throttle does nothing
+       while the driver is picking themselves up, which is what stops a
+       crash being something you drive straight out of. */
+    if (this.stunned > 0) {
+      this.stunned -= dt;
+      input = { throttle: 0, steer: input?.steer || 0, handbrake: false };
+    }
 
     /* ---------------------------------------------------------- steering */
     const want = clamp(input.steer || 0, -1, 1) * MAX_STEER;
@@ -272,7 +281,7 @@ export class CartBody {
          pushing back, and they add. */
       if (this.impactYaw) {
         dh += this.impactYaw * dt;
-        this.impactYaw *= Math.max(0, 1 - dt * 6.0);
+        this.impactYaw *= Math.max(0, 1 - dt * 3.2);
         if (Math.abs(this.impactYaw) < 1e-3) this.impactYaw = 0;
       }
       const mid = this.heading + dh * 0.5;
@@ -368,50 +377,69 @@ export class CartBody {
    */
   _deflect(nX, nZ, what) {
     const first = !this._wasTouching;
-    const sp = Math.abs(this.speed);
-    if (sp < 0.05) return;
+    const sp = this.speed;
+    if (Math.abs(sp) < 0.05) return;
 
-    // where is the cart pointing relative to the surface it just touched?
+    /* A proper reflection, not a scaling.
+       -----------------------------------------------------------------
+       The previous version multiplied the speed down and added a yaw kick,
+       which meant the cart never actually CHANGED DIRECTION at a collision —
+       it slowed, twitched, and carried on the way it was pointing. That is
+       why hitting things looked so poor: nothing on screen matched what a
+       vehicle does when it strikes something.
+
+       This reflects the velocity about the contact normal the way a real
+       impact does:
+
+           v' = v - (1 + e)(v·n)n
+
+       so a shallow clip skims off along the obstacle keeping most of its
+       speed, and a square hit reverses out. The heading follows the
+       reflected vector, which is the part you can actually see. */
     const dirX = Math.sin(this.heading), dirZ = Math.cos(this.heading);
-    const into = -(dirX * nX + dirZ * nZ) * Math.sign(this.speed);   // 1 head-on, 0 parallel
-    const head = Math.max(0, Math.min(1, into));
-    const glance = 1 - head;
+    // velocity in world terms, signed so reverse behaves too
+    let vx = dirX * sp, vz = dirZ * sp;
 
-    if (first) {
-      this.hit = Math.max(this.hit, Math.min(1, (sp / MAX_FWD) * (0.35 + 0.65 * head)));
-      // A hit that is genuinely head-on AND fast stops the cart and rebounds
-      // it — but it is no longer the only outcome, and it never zeroes the
-      // speed outright, so the cart is still a moving object afterwards.
-      if (what === 'tree' && head > 0.55 && sp > CRASH_SPEED) {
-        this.speed = -Math.sign(this.speed) * sp * RESTITUTION;
-        this.impactYaw = (this.impactYaw || 0) + (nX * dirZ - nZ * dirX) * YAW_KICK * 0.4;
-        return;
-      }
-    }
+    const into = vx * nX + vz * nZ;             // <0 means moving into it
+    if (into >= 0) return;                      // already leaving; don't grab it
 
-    /* Slide along the surface rather than simply braking.  The component of
-       the motion INTO the obstacle is lost; the component past it survives —
-       which is what clipping a gatepost with a wing mirror actually does.
+    const head = Math.min(1, Math.abs(into) / Math.max(1e-3, Math.abs(sp)));
+    const e = RESTITUTION * (0.35 + 0.65 * head);   // square hits bounce most
+    vx -= (1 + e) * into * nX;
+    vz -= (1 + e) * into * nZ;
 
-       This only applies on the first frame of contact.  _deflect runs once
-       per SUBSTEP, 240 times a second, so any factor below 1 applied while
-       still touching compounds to a dead stop within a frame or two — which
-       was the original bug in a new costume.  Continuing contact gets a
-       feather-light drag that only matters when you are genuinely driving
-       into the thing. */
-    if (first) {
-      const tangential = Math.sqrt(Math.max(0, 1 - head * head));
-      this.speed *= (1 - IMPACT[what]) * (0.30 + 0.70 * tangential);
+    /* Friction along the surface: a cart scraping a trunk sheds speed on the
+       tangent as well, or a glancing blow would cost nothing at all. */
+    const mu = (what === 'tree' ? 0.30 : what === 'bank' ? 0.20 : 0.12) * (first ? 1 : 0.20);
+    const tX = -nZ, tZ = nX;
+    const along = vx * tX + vz * tZ;
+    vx -= along * mu * tX;
+    vz -= along * mu * tZ;
+
+    const newSp = Math.hypot(vx, vz);
+    if (newSp > 0.08) {
+      this.heading = Math.atan2(vx, vz);
+      this.speed = Math.sign(sp) * Math.min(newSp, ABS_MAX);
     } else {
-      this.speed *= 1 - IMPACT[what] * 0.06 * head;
+      this.speed = 0;
     }
 
-    /* Yaw away from the obstacle.  The cross product of the heading and the
-       normal gives which side was clipped, so a tree caught on the left
-       kicks the nose right.  Scaled by how glancing it was — a square hit
-       does not spin you, it stops you. */
-    const side = nX * dirZ - nZ * dirX;
-    this.impactYaw = (this.impactYaw || 0) + side * glance * YAW_KICK * (sp / MAX_FWD);
+    if (first) {
+      this.hit = Math.max(this.hit, Math.min(1, (Math.abs(sp) / MAX_FWD) * (0.4 + 0.6 * head)));
+      /* Spin, and enough of it to see. A clipped wing sends a real cart
+         slewing; the old kick was bled off in a sixth of a second and read
+         as a wobble. Scaled by how GLANCING the hit was — a square impact
+         stops you, it does not spin you. */
+      const side = nX * dirZ - nZ * dirX;
+      const glance = 1 - head;
+      /* Clamped: repeated contact while the throttle is still held into the
+         obstacle would otherwise stack kick on kick and spin the cart like a
+         top. One clip should slew you, not launch you into orbit. */
+      const kick = side * glance * YAW_KICK * (Math.abs(sp) / MAX_FWD);
+      this.impactYaw = clamp((this.impactYaw || 0) + kick, -2.6, 2.6);
+      // and a genuinely heavy square hit stalls the drivetrain for a beat
+      if (what === 'tree' && head > 0.7 && Math.abs(sp) > CRASH_SPEED) this.stunned = 0.45;
+    }
   }
 
   /** World position of a seat. */

@@ -904,9 +904,14 @@ io.on('connection', socket => {
     }
 
     me.shoveAt = now;
-    // a sprinting barge moves someone properly; a standing nudge does not
+    /* Strength. The old curve topped out around 4.7 m/s of impulse, which
+       after friction moved someone about a third of a metre — a shove you
+       had to be told had happened. A standing barge is now worth more than
+       that on its own, and a full sprint into someone genuinely launches
+       them. Still from the speed the SERVER measured off their reported
+       positions, not a number the client sends. */
     const speed = Math.min(9, me.aspeed || 0);
-    const power = 0.9 + speed * 0.42;
+    const power = 3.4 + speed * 1.15;          // 3.4 standing .. 13.7 sprinting
     io.to(room.code).emit('player:shoved', {
       from: me.pid, pid: target.pid,
       nx: dx / dist, nz: dz / dist, power

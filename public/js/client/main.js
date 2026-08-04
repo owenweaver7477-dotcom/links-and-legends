@@ -1357,7 +1357,10 @@ window.addEventListener('keydown', ev => {
   }
   // Enter opens the box; the box itself handles send and close (see above).
   if (k === 'enter' && G.screen === 'game') { HUD.showChat(true); return; }
-  if (k === 'r' && !seated && G.screen === 'game') {
+  /* Push is on B, on its own. It was on R, which already resets the camera
+     and re-aims at the pin — so every shove also yanked the view and threw
+     away whatever aim the player had set. */
+  if (k === 'b' && !seated && G.screen === 'game') {
     /* Shove whoever is nearest and in reach. No target picking: at barging
        distance there is only ever one person you could mean, and a wheel
        would turn a physical act into a menu. */
