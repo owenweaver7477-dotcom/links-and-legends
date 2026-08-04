@@ -1792,6 +1792,23 @@ Net.on('profile', prof => {
 });
 
 Net.on('toast', d => HUD.toast(d.msg, d.kind));
+
+/* A record fell somewhere in the game. Take the whole board with it — it is
+   a handful of rows, and a partial update would leave the clubhouse showing
+   one fresh row among stale ones. Re-render only if the board is on screen;
+   otherwise the next open picks it up from G.records for free. */
+Net.on('records', d => {
+  if (d?.all) G.records = d.all;
+  const box = document.getElementById('recordBox');
+  if (box && box.offsetParent !== null) {      // on screen right now
+    HUD.renderRecords(COURSES, G.records || {}, G.myPid);
+  }
+  /* Somebody else's record, announced to everyone. Yours is already toasted
+     by the room you set it in, so it is not said twice. */
+  if (d?.pid && d.pid !== G.myPid && d.round) {
+    HUD.toast(`🏆 ${d.name} set the course record at ${d.course} — ${d.round.total}`, 'good');
+  }
+});
 Net.on('kicked', d => { G.joined = false; G.room = null; route(); HUD.homeError(d.reason || 'Disconnected.'); });
 Net.on('disconnect', () => HUD.toast('Lost the connection — reconnecting…', 'warn', 2200));
 

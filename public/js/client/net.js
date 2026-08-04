@@ -115,6 +115,10 @@ Net.connect = async () => {
   Net.socket.on('player:shoved', d => fire('shoved', d));
   Net.socket.on('profile', d => fire('profile', d));
   Net.socket.on('kicked', d => fire('kicked', d));
+  /* Sent to EVERY connection, not just the room that set it: the record
+     board is one board for the whole game, so it has to change under
+     everyone the moment it changes at all. */
+  Net.socket.on('records:beat', d => fire('records', d));
 };
 
 Net.create = (name, courseId, cb) => {

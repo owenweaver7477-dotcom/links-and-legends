@@ -17,10 +17,9 @@
    of profiles.js: records are global and small, profiles are per-player and
    large, and when this moves to a database they want different tables.
    ========================================================================= */
-import fs from 'node:fs';
-import path from 'node:path';
+import { loadBlob, saveBlob } from './store.js';
 
-const FILE = path.join(process.cwd(), 'data', 'records.json');
+const KEY = 'records';
 const HOLES = 9;
 
 /* {
@@ -30,26 +29,22 @@ const HOLES = 9;
      }
    } */
 let board = {};
-let saveTimer = null;
 
-export function loadRecords() {
-  try {
-    board = JSON.parse(fs.readFileSync(FILE, 'utf8')) || {};
-    const n = Object.keys(board).length;
-    console.log(`  records: ${n} course${n === 1 ? '' : 's'} loaded`);
-  } catch { board = {}; }
+
+/* Async now: on a database-backed host this is a query.
+
+   Worth being clear about why the board goes through the durable store at
+   all. A player's career can be rebuilt from the snapshot their own device
+   keeps — that is what saved one already. Nobody carries a copy of the
+   GLOBAL record board, so if the host loses its disk every course record in
+   the game is gone with no fallback anywhere. */
+export async function loadRecords() {
+  board = await loadBlob(KEY, {}) || {};
+  const n = Object.keys(board).length;
+  console.log(`  records: ${n} course${n === 1 ? '' : 's'} loaded`);
 }
 
-function saveSoon() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      fs.mkdirSync(path.dirname(FILE), { recursive: true });
-      fs.writeFileSync(FILE, JSON.stringify(board), 'utf8');
-    } catch (e) { console.error('  records: save failed —', e.message); }
-  }, 900);
-  saveTimer.unref?.();
-}
+const saveSoon = () => saveBlob(KEY, board);
 
 const blank = () => ({ round: null, holes: new Array(HOLES).fill(null) });
 

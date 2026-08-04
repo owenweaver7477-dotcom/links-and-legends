@@ -146,3 +146,82 @@ export async function flushNow(rows) {
 }
 
 export const storeName = () => impl?.name || '(not open)';
+
+/* =========================================================================
+   BLOBS — small global documents, not per-player rows
+   -------------------------------------------------------------------------
+   The course record board is one object for the whole game, not one row per
+   player, so it does not fit the profiles table. It also matters more than
+   profiles do in one specific way: a player's career can be rebuilt from the
+   snapshot on their own device, but nobody carries a copy of the global
+   record board. If the host loses its disk, every course record in the game
+   is gone and there is no fallback anywhere.
+
+   So it rides the same DATABASE_URL switch: a file when there is no
+   database, a row in a tiny key-value table when there is.
+   ========================================================================= */
+const BLOB_DIR = path.join(process.cwd(), 'data');
+let blobPool = null;
+
+async function blobPg() {
+  const url = process.env.DATABASE_URL;
+  if (!url) return null;
+  if (blobPool) return blobPool;
+  const { default: pkg } = await import('pg');
+  blobPool = new pkg.Pool({
+    connectionString: url,
+    ssl: /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false },
+    max: 2
+  });
+  await blobPool.query(`
+    CREATE TABLE IF NOT EXISTS blobs (
+      key  TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+  return blobPool;
+}
+
+/** Read a global document. Returns `fallback` if there is nothing stored. */
+export async function loadBlob(key, fallback = {}) {
+  try {
+    const pool = await blobPg();
+    if (pool) {
+      const { rows } = await pool.query('SELECT data FROM blobs WHERE key = $1', [key]);
+      if (rows.length) return rows[0].data;
+      return fallback;
+    }
+  } catch (e) {
+    console.error(`  store: blob "${key}" read failed —`, e.message);
+  }
+  try {
+    return JSON.parse(fs.readFileSync(path.join(BLOB_DIR, key + '.json'), 'utf8'));
+  } catch { return fallback; }
+}
+
+/* Debounced per key, because the record board is rewritten at the end of
+   every round and several rounds can finish at once. */
+const blobTimers = new Map();
+export function saveBlob(key, value, debounce = 900) {
+  clearTimeout(blobTimers.get(key));
+  const t = setTimeout(async () => {
+    try {
+      const pool = await blobPg();
+      if (pool) {
+        await pool.query(
+          `INSERT INTO blobs (key, data, updated_at) VALUES ($1, $2::jsonb, now())
+           ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
+          [key, JSON.stringify(value)]);
+        return;
+      }
+    } catch (e) {
+      console.error(`  store: blob "${key}" write failed —`, e.message);
+    }
+    try {
+      fs.mkdirSync(BLOB_DIR, { recursive: true });
+      fs.writeFileSync(path.join(BLOB_DIR, key + '.json'), JSON.stringify(value), 'utf8');
+    } catch (e) { console.error(`  store: blob "${key}" file write failed —`, e.message); }
+  }, debounce);
+  t.unref?.();
+  blobTimers.set(key, t);
+}

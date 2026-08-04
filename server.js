@@ -61,7 +61,7 @@ calibrateCarries();
    below depends on profiles existing, so this is awaited at the top level
    rather than fired and forgotten. */
 await loadProfiles();
-loadRecords();
+await loadRecords();
 
 /* ═══════════════════════════════════════════════════════════════ assets ═══
    Everything under public/ is read, hashed and COMPRESSED once at boot, then
@@ -494,6 +494,21 @@ function nextHole(room) {
             ? `🏆 ${p.name} set the course record — ${total} at ${course(room).name}`
             : `🏆 ${p.name} set a new best on hole ${beat.holes[0] + 1}`,
           kind: 'good'
+        });
+        /* The board is one board for everybody, so a new record has to reach
+           everybody — not just the four people who watched it happen. Anyone
+           sitting in the clubhouse sees the row change under them, and anyone
+           playing another round on this course sees the target they are
+           chasing move. Without this the board is only as live as the last
+           time you happened to open the screen. */
+        io.emit('records:beat', {
+          courseId: room.courseId,
+          course: course(room).name,
+          name: p.name,
+          pid: p.pid,
+          round: beat.round ? { total, par: parTotal } : null,
+          holes: beat.holes,
+          all: allRecords()
         });
       }
       const sock = p.socketId && io.sockets.sockets.get(p.socketId);
