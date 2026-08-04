@@ -1364,10 +1364,16 @@ window.addEventListener('keydown', ev => {
     /* Shove whoever is nearest and in reach. No target picking: at barging
        distance there is only ever one person you could mean, and a wheel
        would turn a physical act into a menu. */
-    let best = null, bestD = 2.4;
+    let best = null, bestD = 2.9;
     for (const pl of (G.room?.players || [])) {
       if (pl.pid === G.myPid || !pl.connected) continue;
-      const d = Math.hypot((pl.ax ?? pl.x) - walker.x, (pl.az ?? pl.z) - walker.z);
+      /* Reach for whichever is nearer: the golfer, or the cart they are
+         sitting in. A parked cart's seat can be a couple of metres from
+         where the server thinks its driver is standing. */
+      const dFoot = Math.hypot((pl.ax ?? pl.x) - walker.x, (pl.az ?? pl.z) - walker.z);
+      const rc = carts.remote?.get?.(pl.pid);
+      const dCart = rc ? Math.hypot(rc.x - walker.x, rc.z - walker.z) : Infinity;
+      const d = Math.min(dFoot, dCart);
       if (d < bestD) { bestD = d; best = pl; }
     }
     if (best) {
@@ -1753,7 +1759,9 @@ Net.on('shoved', d => {
   G.avatars.get(d.pid)?.play('staggered');
   G.avatars.get(d.from)?.play('shoving');
   if (d.pid === G.myPid) {
-    walker.shove(d.nx, d.nz, d.power);
+    // in a cart, the shove goes into the CART; on foot, into your own legs
+    if (d.cart && carts.body) carts.shoveBody(d.nx, d.nz, d.power);
+    else walker.shove(d.nx, d.nz, d.power);
     rig.kick(0.35);
     Sound.thud?.();
   }

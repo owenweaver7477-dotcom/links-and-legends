@@ -886,10 +886,15 @@ io.on('connection', socket => {
     const me = room.players.find(x => x.pid === ref.pid); if (!me) return;
     const target = room.players.find(x => x.pid === cleanPid(d?.pid));
     if (!target || target.pid === me.pid || !target.connected) return;
-    if (inCart(me) || inCart(target)) return;          // carts have their own rules
+    // You have to be on foot to barge. Ramming FROM a cart is what the cart
+    // collision code is for, and it already does it better than this would.
+    if (inCart(me)) return;
 
     const now = Date.now();
-    if (now - (me.shoveAt || 0) < 1500) return;         // cooldown
+    /* Short enough to shove repeatedly — the second-and-a-half cooldown made
+       it feel like a move you were being rationed. This is only here so one
+       held key cannot become a per-frame flood on the wire. */
+    if (now - (me.shoveAt || 0) < 320) return;
 
     const dx = (target.ax ?? target.x) - (me.ax ?? me.x);
     const dz = (target.az ?? target.z) - (me.az ?? me.z);
@@ -897,23 +902,27 @@ io.on('connection', socket => {
     if (dist > 2.4 || dist < 1e-3) return;              // out of reach
 
     /* Standing over their own ball, on their own turn: hands off. */
-    const atBall = room.turnPid === target.pid &&
+    const atBall = !inCart(target) && room.turnPid === target.pid &&
       Math.hypot((target.ax ?? 0) - target.x, (target.az ?? 0) - target.z) <= SHOT_RADIUS + 0.5;
     if (atBall) {
       return socket.emit('toast', { msg: 'Not while they are over the ball.', kind: 'warn' });
     }
 
     me.shoveAt = now;
-    /* Strength. The old curve topped out around 4.7 m/s of impulse, which
-       after friction moved someone about a third of a metre — a shove you
-       had to be told had happened. A standing barge is now worth more than
-       that on its own, and a full sprint into someone genuinely launches
-       them. Still from the speed the SERVER measured off their reported
-       positions, not a number the client sends. */
+    /* Strength, from the speed the SERVER measured off their reported
+       positions rather than a number the client sends. */
     const speed = Math.min(9, me.aspeed || 0);
-    const power = 3.4 + speed * 1.15;          // 3.4 standing .. 13.7 sprinting
+    let power = 3.4 + speed * 1.15;            // 3.4 standing .. 13.7 sprinting
+
+    /* Shoving a CART. It weighs a great deal more than a golfer, so the same
+       barge moves it far less — but it does move, which is the point: a cart
+       parked across your line is now something you can lean on rather than
+       something you have to walk around. */
+    const cart = inCart(target);
+    if (cart) power *= 0.28;
+
     io.to(room.code).emit('player:shoved', {
-      from: me.pid, pid: target.pid,
+      from: me.pid, pid: target.pid, cart: !!cart,
       nx: dx / dist, nz: dz / dist, power
     });
   });

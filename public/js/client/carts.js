@@ -216,6 +216,26 @@ export class CartManager {
     return true;
   }
 
+  /**
+   * Take a shove from a golfer on foot.  Applied as a velocity change on the
+   * chassis rather than a position nudge, so the cart rolls away and settles
+   * on its own suspension instead of teleporting sideways.
+   */
+  shoveBody(nx, nz, power) {
+    const b = this.body;
+    if (!b) return;
+    const p = Math.max(0, Math.min(6, power || 0));
+    const vx = Math.sin(b.heading) * b.speed + nx * p;
+    const vz = Math.cos(b.heading) * b.speed + nz * p;
+    const sp = Math.hypot(vx, vz);
+    if (sp > 0.25) {
+      b.heading = Math.atan2(vx, vz);
+      b.speed = Math.min(sp, 4);            // a barge nudges it, never drives it
+    }
+    b.hit = Math.max(b.hit || 0, Math.min(0.7, p / 5));
+    this.hitFlash = Math.max(this.hitFlash, 0.5);
+  }
+
   /* -------------------------------------------------------------- remote */
 
   /** A cart pose arrived from the network. */
