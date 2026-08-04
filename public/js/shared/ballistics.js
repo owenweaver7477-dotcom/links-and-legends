@@ -542,13 +542,39 @@ export class ShotSim {
       const dx = nx - t.x, dz = nz - t.z;
       const rr = t.r + RADIUS;
       if (dx * dx + dz * dz > rr * rr) continue;
-      // canopy occupies the upper part of the trunk height
+      /* The canopy is an ELLIPSOID, not a cylinder, and it starts where the
+         leaves actually start.
+
+         This was a cylinder of full radius running from 0.28 of the tree's
+         height to the top. A broadleaf is drawn as five lobes centred around
+         0.68..1.00 of its height, the lowest of which bottoms out near 0.45 —
+         so between 0.28 and 0.45 there was a band of solid, invisible canopy
+         wrapped around a bare trunk. On a 19 m maple that is more than three
+         metres of it, sitting exactly at the height a driver flies. Hitting a
+         tree you were nowhere near is that band.
+
+         The cylinder was also full width at the very top and bottom, where
+         the real canopy has tapered to nothing. Matching the drawn shape
+         fixes both at once. */
       const base = this.T.heightAt(t.x, t.z);
-      const canopyLo = base + t.h * (t.species === 'palm' ? 0.72 : 0.28);
-      const canopyHi = base + t.h * 1.02;
-      const trunkR = t.r * (t.species === 'gorse' ? 0.9 : 0.14);
+      const palm = t.species === 'palm';
+      const gorse = t.species === 'gorse';
+      // where the leaves sit, as a fraction of tree height
+      const cy = base + t.h * (palm ? 0.88 : gorse ? 0.55 : 0.80);
+      const halfH = t.h * (palm ? 0.16 : gorse ? 0.45 : 0.26);
+
+      const trunkR = t.r * (gorse ? 0.9 : 0.14);
+      const canopyHi = cy + halfH;
       const inTrunk = dx * dx + dz * dz <= (trunkR + RADIUS) * (trunkR + RADIUS) && ny <= canopyHi;
-      if (ny >= canopyLo && ny <= canopyHi || inTrunk) {
+
+      // radius tapers with height, so the top and bottom of the mass are thin
+      const u = (ny - cy) / halfH;
+      let inCanopy = false;
+      if (u > -1 && u < 1) {
+        const rAt = (t.r + RADIUS) * Math.sqrt(1 - u * u);
+        inCanopy = dx * dx + dz * dz <= rAt * rAt;
+      }
+      if (inCanopy || inTrunk) {
         const d = Math.hypot(dx, dz) || 1e-6;
         return { x: nx, y: ny, z: nz, nx: dx / d, nz: dz / d, tree: t };
       }
