@@ -126,7 +126,7 @@ export function roundXp(holeScores) {
    everything, GROWTH_HI is how brutal the early climb is, and GROWTH_LO is
    where it settles. */
 const XP_BASE = 300;         // the cost of level 2 — about one good round
-const XP_POWER = 0.85;       // how fast the cost climbs
+const XP_POWER = 0.65;       // how fast the cost climbs
 const MAX_LEVEL = 100;
 
 /* Built once: the XP each level costs, and the running total to reach it.
@@ -140,7 +140,7 @@ const MAX_LEVEL = 100;
 
      level   2      1 round        the system announces itself immediately
      level   6     10 rounds       the last emote, a real but fair grind
-     level  25    150 rounds       committed
+     level  25     ~95 rounds      committed
      level 100   ~2,300 rounds     a genuine long-haul target that a
                                    dedicated player could actually reach */
 const STEP = [0, 0];         // STEP[L] = XP to go from L-1 to L

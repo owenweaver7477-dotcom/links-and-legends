@@ -20,6 +20,9 @@
 
 /* The seven finishes, matched to avatar.js `looks` so the shop and the
    course agree about what you bought. */
+/* Cheapest first, so the art knows which tier it is drawing. */
+const ORDER = ['wood', 'rust', 'steel', 'carbon', 'tour', 'titanium', 'signature'];
+
 const FINISH = {
   wood:      { shaft: '#8a6a42', head: '#6e5432', grip: '#5a4630', glow: null,      name: 'rope-bound hickory' },
   rust:      { shaft: '#7a6a5c', head: '#8a5a42', grip: '#3f3a34', glow: null,      name: 'pitted iron' },
@@ -40,23 +43,34 @@ const FINISH = {
 export function clubSvg(look, size = 56) {
   const f = FINISH[look] || FINISH.wood;
   const id = 'cg' + look;
+  const tier = ORDER.indexOf(look);
+  const premium = tier >= 4;          // Tour Pro and up
+
+  /* The top three sets have to LOOK like what they cost. Same silhouette —
+     it is still a driver — but the finish gets treatment the cheap ones do
+     not have: a milled face, a crown badge, a rim light, and for the last
+     two an actual glow. A player who has saved 120,000 coins should be able
+     to tell at a glance, and previously the only difference between the
+     Wooden Starter Set and the Signature Set was a hex value. */
   const glow = f.glow
-    ? `<ellipse cx="20" cy="50" rx="15" ry="9" fill="${f.glow}" opacity=".55" filter="url(#b${id})"/>`
+    ? `<ellipse cx="20" cy="50" rx="17" ry="10" fill="${f.glow}" opacity=".7" filter="url(#b${id})"/>`
     : '';
   const defs = `
     <defs>
       <linearGradient id="s${id}" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stop-color="${f.shaft}" stop-opacity="1"/>
-        <stop offset=".45" stop-color="#ffffff" stop-opacity=".38"/>
+        <stop offset=".45" stop-color="#ffffff" stop-opacity="${premium ? '.62' : '.38'}"/>
         <stop offset="1" stop-color="${f.shaft}" stop-opacity="1"/>
       </linearGradient>
       <linearGradient id="h${id}" x1="0" y1="0" x2=".6" y2="1">
-        <stop offset="0" stop-color="#ffffff" stop-opacity=".30"/>
+        <stop offset="0" stop-color="#ffffff" stop-opacity="${premium ? '.46' : '.30'}"/>
         <stop offset=".5" stop-color="${f.head}"/>
         <stop offset="1" stop-color="#000000" stop-opacity=".35"/>
       </linearGradient>
-      ${f.glow ? `<filter id="b${id}" x="-60%" y="-60%" width="220%" height="220%">
-        <feGaussianBlur stdDeviation="4"/></filter>` : ''}
+      ${f.glow ? `<filter id="b${id}" x="-70%" y="-70%" width="240%" height="240%">
+        <feGaussianBlur stdDeviation="4.5"/></filter>` : ''}
+      ${premium ? `<pattern id="m${id}" width="2.2" height="2.2" patternUnits="userSpaceOnUse">
+        <rect width="2.2" height="1.1" fill="#fff" opacity=".10"/></pattern>` : ''}
     </defs>`;
 
   return `<svg viewBox="0 0 64 64" width="${size}" height="${size}"
@@ -66,15 +80,24 @@ export function clubSvg(look, size = 56) {
     <!-- grip -->
     <rect x="41" y="6" width="6.4" height="17" rx="3.2" fill="${f.grip}"/>
     <rect x="42.6" y="8" width="1.5" height="13" rx="0.7" fill="#fff" opacity=".13"/>
+    ${premium ? `<rect x="41" y="6" width="6.4" height="3.2" rx="1.6" fill="${f.shaft}" opacity=".85"/>` : ''}
     <!-- shaft -->
-    <path d="M44.2 22 L23.5 47.5" stroke="url(#s${id})" stroke-width="3.1"
+    <path d="M44.2 22 L23.5 47.5" stroke="url(#s${id})" stroke-width="${premium ? 3.4 : 3.1}"
           stroke-linecap="round" fill="none"/>
+    ${premium ? `<path d="M44.2 22 L23.5 47.5" stroke="#fff" stroke-width=".7"
+          stroke-linecap="round" fill="none" opacity=".35"/>` : ''}
     <!-- head: a driver's rounded crown, sole flattened to the ground line -->
     <path d="M25.5 44.2 C18 42.5 10.5 45.4 9.2 50.2 C8.2 54 12 56.6 17.6 56.6
              C24.4 56.6 29.4 53.6 30.2 49.4 Z" fill="url(#h${id})"/>
     <!-- the face, catching the light -->
     <path d="M25.9 44.6 C22.6 45.6 20.6 47.6 20.1 50.4 C19.7 52.8 21.2 54.4 23.6 54.6
-             C26.9 54.9 29.4 52.6 29.9 49.4 Z" fill="#fff" opacity=".16"/>
+             C26.9 54.9 29.4 52.6 29.9 49.4 Z" fill="#fff" opacity="${premium ? '.22' : '.16'}"/>
+    ${premium ? `<path d="M25.9 44.6 C22.6 45.6 20.6 47.6 20.1 50.4 C19.7 52.8 21.2 54.4 23.6 54.6
+             C26.9 54.9 29.4 52.6 29.9 49.4 Z" fill="url(#m${id})"/>` : ''}
+    ${premium ? `<path d="M25.5 44.2 C18 42.5 10.5 45.4 9.2 50.2"
+          stroke="#fff" stroke-width="1.1" fill="none" opacity=".42"/>` : ''}
+    ${tier >= 5 ? `<circle cx="17" cy="48.4" r="2.1" fill="${f.glow || '#fff'}" opacity=".9"/>
+       <circle cx="17" cy="48.4" r="2.1" fill="none" stroke="#fff" stroke-width=".5" opacity=".7"/>` : ''}
     <!-- sole line, so it reads as sitting on the turf rather than floating -->
     <ellipse cx="19.6" cy="57" rx="11" ry="1.7" fill="#000" opacity=".26"/>
   </svg>`;

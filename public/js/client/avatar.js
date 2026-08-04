@@ -269,6 +269,15 @@ export class Avatar {
     }
   }
 
+  /** Re-point the club meshes at the current materials (used after a swap). */
+  _retintClub() {
+    const c = this.mats.chrome, d = this.mats.headDark;
+    if (this.clubShaft) this.clubShaft.material = c;
+    // the face and sole swap between the two depending on club type, so
+    // setClub's own assignment below re-resolves them on the next call
+    this.clubKey = null;
+  }
+
   /* ------------------------------------------------------- head styling ---
      Rebuilds hair, hat and accessory from a look.  Cheap enough to call on
      every change (the customiser previews live), and the only allocation is a
@@ -351,20 +360,44 @@ export class Avatar {
     // Signature finish.  Two materials repainted — no new meshes.
     if (tier !== this.clubTierIdx) {
       this.clubTierIdx = tier;
+      /* The club you are actually holding for a whole round. The top three
+         sets cost 26k, 58k and 120k coins, and until now the only thing that
+         bought was a different hex value — no sheen, no glow, nothing you
+         could see at the distance you play from. `shine` drives specular
+         highlight, so a Tour Pro catches the sun and a Wooden Starter Set
+         does not. */
       const looks = [
-        { shaft: 0x8a6a42, head: 0x6e5432, glow: 0 },          // wooden
-        { shaft: 0x7a6a5c, head: 0x8a5a42, glow: 0 },          // rusty iron
-        { shaft: 0xc9ccd2, head: 0x3a3d42, glow: 0 },          // polished steel
-        { shaft: 0x2e3136, head: 0x1d1f24, glow: 0 },          // carbon
-        { shaft: 0xe8eaee, head: 0x22242a, glow: 0 },          // tour pro
-        { shaft: 0xb8c4cc, head: 0x4a5058, glow: 0x27424e },   // titanium glow
-        { shaft: 0xd8c8f0, head: 0x2a2438, glow: 0x51286e }    // signature holo
+        { shaft: 0x8a6a42, head: 0x6e5432, glow: 0,        shine: 0 },    // wooden
+        { shaft: 0x7a6a5c, head: 0x8a5a42, glow: 0,        shine: 0.08 }, // rusty iron
+        { shaft: 0xc9ccd2, head: 0x3a3d42, glow: 0,        shine: 0.35 }, // polished steel
+        { shaft: 0x2e3136, head: 0x1d1f24, glow: 0,        shine: 0.22 }, // carbon
+        { shaft: 0xf2f5f8, head: 0x22242a, glow: 0x141821, shine: 0.72 }, // tour pro
+        { shaft: 0xcdd9e2, head: 0x4a5058, glow: 0x2f5060, shine: 0.88 }, // titanium
+        { shaft: 0xe6d8ff, head: 0x2a2438, glow: 0x6a34a0, shine: 1.0 }   // signature
       ];
       const L = looks[Math.max(0, Math.min(6, tier))];
       this.mats.chrome.color.setHex(L.shaft);
       this.mats.headDark.color.setHex(L.head);
       this.mats.chrome.emissive.setHex(L.glow);
       this.mats.headDark.emissive.setHex(L.glow);
+      /* Lambert has no specular, so a shiny set needs a material that does.
+         Swapped rather than tweaked, and only once per tier change. */
+      if (L.shine > 0.3 && !this.mats.chrome.isMeshPhongMaterial) {
+        const up = m => {
+          const n = new THREE.MeshPhongMaterial({ color: m.color, emissive: m.emissive });
+          m.dispose(); return n;
+        };
+        this.mats.chrome = up(this.mats.chrome);
+        this.mats.headDark = up(this.mats.headDark);
+        this.clubShaft.material = this.mats.chrome;
+        this._retintClub();
+      }
+      if (this.mats.chrome.isMeshPhongMaterial) {
+        this.mats.chrome.shininess = 30 + L.shine * 170;
+        this.mats.chrome.specular.setRGB(L.shine, L.shine, L.shine);
+        this.mats.headDark.shininess = 20 + L.shine * 120;
+        this.mats.headDark.specular.setRGB(L.shine * 0.8, L.shine * 0.8, L.shine * 0.85);
+      }
     }
 
     // shaft length: drivers are long, wedges short, the putter shortest

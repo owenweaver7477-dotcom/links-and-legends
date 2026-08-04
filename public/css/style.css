@@ -758,7 +758,12 @@ h1 em { font-style: normal; color: #7ed492; }
 
 
 /* ------------------------------------------------------------- career */
-.career { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+/* The career panel used to be a row of identical 96px stat boxes, so this
+   was an auto-fit grid. Its children are now full-width SECTIONS — a rating
+   header, two charts, a row of dials — which that grid crammed into columns
+   and overlapped on top of each other. It is a plain column now; the row
+   layouts live inside each section where they belong. */
+.career { display: block; }
 .cstatc { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09);
   border-radius: 11px; padding: 9px 6px; text-align: center; }
 .cstatc b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; letter-spacing: -.3px; }
@@ -1284,3 +1289,64 @@ body.playing .coinhud { display: block; }
   font-size: 10.5px; color: #8fa694; margin: -2px 0 8px; }
 .lvlnext b { color: #eaf3ea; font-weight: 700; }
 .lvlnext em { font-style: normal; color: #7d9484; }
+
+/* =========================================================================
+   THE CLUBHOUSE — rebuilt
+   -------------------------------------------------------------------------
+   It was a stack of identical dark boxes with identical labels, which is
+   what "looks AI" actually means: no hierarchy, nothing to look at first,
+   every element shouting at the same volume. This gives it one loud thing
+   per section and lets the rest recede.
+   ========================================================================= */
+
+/* the rating is the headline, and it is allowed to be big */
+.cr-top { display: flex; align-items: stretch; gap: 12px; margin: 4px 0 14px; }
+.cr-rating { flex: none; min-width: 104px; padding: 12px 16px; border-radius: 14px;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  background: linear-gradient(160deg, rgba(143,224,122,.18), rgba(143,224,122,.04));
+  border: 1px solid rgba(143,224,122,.28); }
+.cr-num { font-size: 38px; font-weight: 900; line-height: 1; letter-spacing: -1.5px;
+  color: #eaffe4; font-variant-numeric: tabular-nums; }
+.cr-cap { font-size: 9px; font-weight: 800; letter-spacing: 1.6px;
+  text-transform: uppercase; color: #8fb69a; margin-top: 4px; }
+.cr-side { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.cr-side > div { display: flex; flex-direction: column; justify-content: center;
+  padding: 8px 10px; border-radius: 11px; background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.07); }
+.cr-side b { font-size: 19px; color: #eaf3ea; line-height: 1.1;
+  font-variant-numeric: tabular-nums; }
+.cr-side span { font-size: 9px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: #8fa694; margin-top: 2px; }
+
+/* section headings inside the card, quieter than the panel titles */
+.cr-h { font-size: 9.5px; font-weight: 800; letter-spacing: 1.4px;
+  text-transform: uppercase; color: #7d9484; margin: 14px 0 6px; }
+
+/* The viewBox was 300x92, so at full panel width `height:auto` scaled the
+   form line to nearly 300px tall. Stretching it with preserveAspectRatio
+   fixed the height and smeared the text sideways instead. The viewBox is
+   simply WIDE now (1000x150), so it fills the panel at a sane height with
+   the aspect ratio intact and the labels undistorted. */
+.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-empty { font-size: 11px; color: #7d9484; padding: 10px 0; }
+
+.cr-dials { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+.dialbox { display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 4px 10px; border-radius: 12px; background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.06); }
+.dial { width: 100%; max-width: 84px; height: auto; }
+.diallabel { font-size: 9px; font-weight: 700; letter-spacing: .8px;
+  text-transform: uppercase; color: #8fa694; }
+
+.cr-tally { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px;
+  padding-top: 11px; border-top: 1px solid rgba(255,255,255,.08); }
+.cr-tally span { font-size: 10.5px; color: #8fa694; }
+.cr-tally b { color: #eaf3ea; font-weight: 800; font-size: 12.5px; margin-right: 3px; }
+
+@media (max-width: 560px) {
+  .cr-top { flex-direction: column; }
+  .cr-rating { min-width: 0; padding: 10px; flex-direction: row; gap: 10px; }
+  .cr-num { font-size: 30px; }
+  .cr-dials { gap: 5px; }
+  .dialbox { padding: 6px 2px 8px; }
+}

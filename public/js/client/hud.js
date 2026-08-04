@@ -11,6 +11,7 @@ import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../sh
 import { EMOTES } from './celebrations.js';
 import { UNLOCKS, unlocksAt, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { clubSvg, caddieSvg, statSvg, finishName } from './clubart.js';
+import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 
@@ -395,47 +396,18 @@ function levelRow(prof) {
 }
 HUD.levelRow = levelRow;
 
-HUD.renderCareer = (prof) => {
-  const box = el.careerBox;
-  if (!box) return;
-  if (!prof || !prof.rounds) {
-    box.innerHTML = levelRow(prof) +
-      '<p class="career-empty">Your first round starts your career — stats, a skill rating and coins live here.</p>';
-    return;
-  }
-  const rel = v => v == null ? '—' : v > 0 ? '+' + v : v === 0 ? 'E' : String(v);
-  const cell = (v, l) => `<div class="cstatc"><b>${v}</b><span>${l}</span></div>`;
-  box.innerHTML =
-    levelRow(prof) +
-    cell(prof.rating, 'rating') +
-    cell('🪙 ' + prof.coins, 'coins') +
-    cell(prof.rounds, 'rounds') +
-    cell(rel(prof.best), 'best') +
-    cell(prof.birdies + (prof.eagles ? ' / ' + prof.eagles : ''), prof.eagles ? 'birdies / eagles' : 'birdies') +
-    cell(prof.fairwayPct == null ? '—' : prof.fairwayPct + '%', 'fairways') +
-    cell(prof.girPct == null ? '—' : prof.girPct + '%', 'greens in reg') +
-    cell(prof.avgPutts == null ? '—' : prof.avgPutts, 'putts / hole');
-};
-
-/**
- * The shop, two tabs: the Caddie Crew (personified stats, levelled 1-10)
- * and the Pro Shop (the club-tier ladder, refinements, and balls).
- */
+/* Which tab the Pro Shop is showing. Module-level so it survives the
+   re-render that every purchase triggers — a tab that reset itself on each
+   buy would bounce the player back to the Caddie Crew every time. */
 let shopTab = 'crew';
 
-/* ─────────────── what your money has actually bought ─────────────── */
-/* The emoji that used to stand in for each set are gone — see clubart.js.
-   A drawn club in the finish it actually has beats a platform emoji that
-   renders differently on every machine and carries none of our look. */
-/* What the equipment is worth in YARDS, measured rather than asserted.
-   The stat bars are honest but abstract — a player who has just spent 1,200
-   coins wants to see a number move, and "Accuracy 62%" does not tell them
-   whether anything happened. This flies the real simulation on a flat range
-   with the gear they own and with nothing, and reports the difference, so
-   the shop and the course cannot disagree.
-
-   Cached: it is a dozen full flight integrations and the shop re-renders on
-   every purchase. */
+/* What the equipment is worth in YARDS, measured rather than asserted. The
+   stat bars are honest but abstract — "Accuracy 62%" does not tell a player
+   who has just spent 1,200 coins whether anything happened. This flies the
+   real simulation on a flat range with the gear they own and with nothing,
+   and reports the difference, so the shop and the course cannot disagree.
+   Cached per gear signature: it is a dozen flight integrations and the shop
+   re-renders on every purchase. */
 let rangeT = null;
 const carryCache = new Map();
 function carryYds(clubKey, prof) {
@@ -460,6 +432,10 @@ function carryYds(clubKey, prof) {
 /** The same player with nothing bought — the honest baseline to compare to. */
 const BARE = { clubTier: 0, refine: 0, gear: { ball: 0, irons: 0, woods: 0, putter: 0 }, crew: {} };
 
+/**
+ * The Pro Shop's headline: the set you own, drawn, with what it is worth in
+ * yards and the five felt stats underneath.
+ */
 function buildPayoff(prof) {
   const wrap = document.createElement('div');
   wrap.className = 'payoff';
@@ -468,7 +444,6 @@ function buildPayoff(prof) {
   const refine = prof?.refine ?? 0;
   const set = CLUB_TIERS[Math.max(0, Math.min(6, tier))];
 
-  // the four things a player actually feels, each 0..1
   const lvl = k => (crew[k] || 0) / CADDIE_MAX;
   const bars = [
     ['Power',       Math.min(1, (tier / 6) * 0.6 + lvl('bruiser') * 0.4), 'power'],
@@ -504,6 +479,59 @@ function buildPayoff(prof) {
       </div>`).join('')}</div>`;
   return wrap;
 }
+
+HUD.renderCareer = (prof) => {
+  const box = el.careerBox;
+  if (!box) return;
+
+  /* Rebuilt as a card with a shape at the top of it rather than eight
+     numbers in eight boxes. Numbers tell you what happened; the form line
+     tells you whether you are getting better, which is the only thing
+     anybody opens this screen to find out. */
+  if (!prof || !prof.rounds) {
+    box.innerHTML = levelRow(prof) +
+      '<p class="career-empty">Your first round starts your career — form, ' +
+      'scoring and a skill rating all live here.</p>';
+    return;
+  }
+
+  const rel = v => v == null ? '—' : v > 0 ? '+' + v : v === 0 ? 'E' : String(v);
+  const hcp = prof.handicap == null ? '—' : (prof.handicap > 0 ? '+' : '') + prof.handicap;
+
+  box.innerHTML =
+    levelRow(prof) +
+    `<div class="cr-top">
+       <div class="cr-rating">
+         <span class="cr-num">${prof.rating}</span>
+         <span class="cr-cap">rating</span>
+       </div>
+       <div class="cr-side">
+         <div><b>${prof.rounds}</b><span>rounds</span></div>
+         <div><b>${rel(prof.best)}</b><span>best</span></div>
+         <div><b>${hcp}</b><span>handicap</span></div>
+       </div>
+     </div>
+
+     <h5 class="cr-h">Form — last ${Math.min(20, (prof.history || []).length)} rounds</h5>
+     ${formChart(prof.history)}
+
+     <h5 class="cr-h">Where the strokes go</h5>
+     ${scoringChart(prof)}
+
+     <div class="cr-dials">
+       ${dial(prof.fairwayPct ?? 0, 'fairways', prof.fairwayPct == null ? '—' : prof.fairwayPct + '%')}
+       ${dial(prof.girPct ?? 0, 'greens in reg', prof.girPct == null ? '—' : prof.girPct + '%')}
+       ${dial(prof.avgPutts == null ? 0 : Math.max(0, (2.4 - prof.avgPutts) / 1.2 * 100),
+              'putts / hole', prof.avgPutts == null ? '—' : prof.avgPutts)}
+     </div>
+
+     <div class="cr-tally">
+       <span><b>${prof.birdies || 0}</b> birdies</span>
+       <span><b>${prof.eagles || 0}</b> eagles</span>
+       <span><b>${prof.aces || 0}</b> aces</span>
+       <span><b>🪙 ${(prof.coins || 0).toLocaleString()}</b></span>
+     </div>`;
+};
 
 HUD.renderShop = (prof, onBuy) => {
   if (!el.shopList) return;
