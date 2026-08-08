@@ -1516,3 +1516,9 @@ body.playing .coinhud { display: block; }
 /* The section headings inside the tabbed panes are only wanted when the tabs
    are NOT running — with a tab bar the heading repeats what the tab says. */
 body.hktabbed .nojs-only { display: none; }
+
+/* A wardrobe entry you have not earned yet. Visible and obviously out of
+   reach, with the level on it — hiding it would mean the ladder in the
+   clubhouse promises things the wardrobe never shows. */
+.lookpill.locked { opacity: .42; cursor: not-allowed; }
+.lookpill.locked:hover { background: rgba(255,255,255,.05); }

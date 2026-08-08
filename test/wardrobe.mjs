@@ -231,3 +231,39 @@ test('every build has sane, finite proportions', () => {
     assert.ok(b.bust >= 0 && b.bust < 0.2, `${b.id}.bust = ${b.bust}`);
   }
 });
+
+test('every reward the level table names actually exists and is enforced', () => {
+  /* The gap this closes was real and embarrassing: the ladder promised a
+     Flat cap at level 8, which everybody already had for free, and a Wide
+     brim at 23, which was not a hat at all — reaching 23 gave you a line in
+     the clubhouse and nothing on your head. A reward table is a promise, and
+     nothing in it may be a lie in either direction. */
+  const SLOT = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ballFinish' };
+  for (const u of UNLOCKS) {
+    if (u.kind === 'hat') {
+      const hat = HAT_STYLES.find(h => h.id === u.id);
+      assert.ok(hat, `the table unlocks a hat "${u.id}" that does not exist`);
+      assert.equal(hat.at, u.at,
+        `"${u.name}" unlocks at ${u.at} in the table but ${hat.at} in the wardrobe`);
+      assert.equal(looksEarnedAt({ hat: u.id }, 0, u.at).hat, u.id);
+      assert.notEqual(looksEarnedAt({ hat: u.id }, 0, u.at - 1).hat, u.id,
+        `"${u.name}" can be worn a level early`);
+      continue;
+    }
+    if (u.kind === 'emote') continue;                 // gated in celebrations.js
+    const slot = SLOT[u.kind];
+    assert.ok(slot, `no wardrobe slot knows what to do with a "${u.kind}"`);
+    assert.equal(looksEarnedAt({ [slot]: u.id }, 0, u.at)[slot], u.id);
+    assert.equal(looksEarnedAt({ [slot]: u.id }, 0, u.at - 1)[slot], null,
+      `"${u.name}" can be worn a level early`);
+  }
+});
+
+test('nothing is free that the table says must be earned', () => {
+  // the inverse: no wardrobe entry may carry a level the table does not know
+  for (const h of HAT_STYLES) {
+    if (!h.at) continue;
+    assert.ok(UNLOCKS.some(u => u.kind === 'hat' && u.id === h.id),
+      `"${h.name}" is locked to level ${h.at} but appears in no reward table`);
+  }
+});

@@ -340,6 +340,15 @@ export class Avatar {
     } else if (hat === 'flat') {
       this.hat.add(part(capMat, 0.242, H * 0.030, 0.240, 0, H * 0.1270, -0.012));
       this.hat.add(part(capMat, 0.20, H * 0.012, 0.10, 0, H * 0.1160, 0.150));
+    } else if (hat === 'wide') {
+      /* The wide brim. This was in the level table as a reward at 23 and
+         did not exist as a hat, so reaching level 23 gave you a line in the
+         clubhouse and nothing on your head. A low crown and a brim that
+         goes all the way round, which is the one silhouette none of the
+         others have. */
+      this.hat.add(part(capMat, 0.235, H * 0.044, 0.235, 0, H * 0.1315, 0));
+      this.hat.add(part(capMat, 0.44, H * 0.011, 0.44, 0, H * 0.1105, 0));
+      this.hat.add(part(this.mats.accent, 0.245, H * 0.011, 0.245, 0, H * 0.1175, 0));
     }
 
     // accessories.  Glasses sit just proud of the face decal.

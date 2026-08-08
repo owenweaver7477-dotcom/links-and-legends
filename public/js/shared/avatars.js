@@ -78,13 +78,21 @@ export const TROUSERS = [
    inside the build budget.
 
    `id` is what travels on the wire and gets stored; the label is local. */
+/* `at` is the level it unlocks, absent for the ones everybody starts with.
+   The level table in unlocks.js promised a Flat cap at 8 and a Wide brim at
+   23; the flat cap was already free to everyone, so the reward was a lie,
+   and the wide brim did not exist as a hat at all, so it was a line in the
+   clubhouse and nothing on your head. Both are real now, and both are
+   enforced here rather than only in the wardrobe's rendering — see
+   looksEarnedAt, which the server calls with the level it holds. */
 export const HAT_STYLES = [
   { id: 'cap',    name: 'Cap' },
   { id: 'visor',  name: 'Visor' },
   { id: 'bucket', name: 'Bucket' },
   { id: 'beanie', name: 'Beanie' },
-  { id: 'flat',   name: 'Flat cap' },
-  { id: 'none',   name: 'Bare head' }
+  { id: 'none',   name: 'Bare head' },
+  { id: 'flat',   name: 'Flat cap',  at: 8 },
+  { id: 'wide',   name: 'Wide brim', at: 23 }
 ];
 
 export const HAIR_STYLES = [
@@ -238,9 +246,15 @@ const UNLOCK_IDS = new Set(UNLOCKS.map(u => u.kind + ':' + u.id));
  * a level-3 ball, and every cosmetic in the game becomes free. Everything
  * else about the look passes through untouched.
  */
-export const looksEarnedAt = (look, seedIndex, level) => normaliseLook(
-  look, seedIndex,
-  new Set(unlocksAt(level).map(u => u.kind + ':' + u.id)));
+export const looksEarnedAt = (look, seedIndex, level) => {
+  const l = { ...(look && typeof look === 'object' ? look : {}) };
+  // headwear is a normal wardrobe slot with a level on two of its entries,
+  // so it cannot ride the cosmetic path — it falls back rather than blanks
+  const hat = HAT_STYLES.find(h => h.id === l.hat);
+  if (hat?.at && (Number(level) || 1) < hat.at) l.hat = 'cap';
+  return normaliseLook(l, seedIndex,
+    new Set(unlocksAt(level).map(u => u.kind + ':' + u.id)));
+};
 
 /** A complete random outfit, for the dice button. */
 export function randomLook() {

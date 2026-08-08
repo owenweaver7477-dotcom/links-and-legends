@@ -773,10 +773,17 @@ HUD.renderLook = (look, onPick, level = 1) => {
       const b = document.createElement('button');
       b.type = 'button';
       if (grp.kind === 'style') {
-        // a shape has no colour to show, so it says what it is
-        b.className = 'lookpill' + (look[grp.key] === c.id ? ' on' : '');
-        b.textContent = c.name;
-        b.addEventListener('click', () => onPick(grp.key, c.id));
+        /* Two hats carry a level (see HAT_STYLES). Shown locked with the
+           level on them rather than hidden: a reward you cannot see is not
+           a reward, and one that silently reverts to a cap when you pick it
+           reads as a bug. */
+        const locked = c.at && level < c.at;
+        b.className = 'lookpill' + (look[grp.key] === c.id ? ' on' : '')
+          + (locked ? ' locked' : '');
+        b.textContent = locked ? `${c.name} · ${c.at}` : c.name;
+        b.disabled = !!locked;
+        if (locked) b.title = `${c.name} unlocks at level ${c.at}`;
+        else b.addEventListener('click', () => onPick(grp.key, c.id));
       } else {
         b.className = 'lookbtn' + (look[grp.key] === c.hex ? ' on' : '');
         b.style.background = c.hex;
