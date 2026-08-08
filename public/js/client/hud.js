@@ -699,24 +699,25 @@ HUD.renderCharacter = (prof, name) => {
  */
 HUD.renderLook = (look, onPick, level = 1) => {
   el.lookPicker.innerHTML = '';
-  for (const grp of EARNED_GROUPS) {
+
+  /* Rewards you have NOT earned get one line between them, at the bottom —
+     not four empty rows at the top.
+     A new player opening this panel was met by "Club decal — first one at
+     level 7", "Ball trail — first one at level 9", and two more, before a
+     single thing they could actually change. Four rows of no. The ladder
+     belongs in the clubhouse, where it is a whole screen and reads as a
+     promise; here it should be one sentence and out of the way. */
+  const earnedGroups = EARNED_GROUPS.filter(g => unlocksOfKind(level, g.kind).length);
+  const pending = EARNED_GROUPS.filter(g => !unlocksOfKind(level, g.kind).length);
+
+  for (const grp of earnedGroups) {
     const owned = unlocksOfKind(level, grp.kind);
     const g = document.createElement('div');
     g.className = 'lookgrp style earned';
     const h = document.createElement('h5'); h.textContent = grp.title;
     const row = document.createElement('div'); row.className = 'lookrow';
 
-    if (!owned.length) {
-      /* An empty row still gets drawn, and says where the first one comes
-         from. A category that simply is not there tells a new player the
-         game has no decals; a row saying "level 7" tells them to go and
-         play. */
-      const next = UNLOCKS.find(u => u.kind === grp.kind);
-      const p = document.createElement('span');
-      p.className = 'lockhint';
-      p.textContent = next ? `First one at level ${next.at}` : '—';
-      row.appendChild(p);
-    } else {
+    {
       // "None" is always available: an earned cosmetic you cannot take off
       // is a punishment for levelling up
       for (const c of [{ id: null, name: 'None' }, ...owned]) {
@@ -787,6 +788,16 @@ HUD.renderLook = (look, onPick, level = 1) => {
     }
     g.append(h, row);
     el.lookPicker.appendChild(g);
+  }
+
+  if (pending.length) {
+    const next = UNLOCKS.find(u => pending.some(p => p.kind === u.kind));
+    const p = document.createElement('p');
+    p.className = 'tiny lockline';
+    p.textContent = next
+      ? `${pending.map(g => g.title.toLowerCase()).join(', ')} — the first arrives at level ${next.at}.`
+      : '';
+    el.lookPicker.appendChild(p);
   }
 };
 
@@ -1019,6 +1030,11 @@ HUD.bindClubhouse = () => {
     const b = e.target.closest('.hktab');
     if (b) HUD.showClubhouseTab(b.dataset.tab);
   });
+  /* The bar reveals itself, and the panes are hidden only from here. Until
+     this line runs the clubhouse is one scrolling page with everything on
+     it — which is a worse layout and a working one. */
+  bar.hidden = false;
+  document.body.classList.add('hktabbed');
   HUD.showClubhouseTab(HUD.hkTab);
 };
 HUD.showClubhouseTab = (name) => {

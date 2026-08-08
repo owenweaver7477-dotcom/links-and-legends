@@ -1443,7 +1443,8 @@ body.playing .coinhud { display: block; }
 
 /* An earned row that has nothing in it yet still says where the first one
    comes from — a missing category reads as "this game has no decals". */
-.lookgrp.earned .lockhint { font-size: 11px; color: #7e937f; padding: 4px 0; }
+.lockline { margin: 10px 0 0; color: #7e937f; }
+.lockline::first-letter { text-transform: uppercase; }
 .lookpill[style*="--pill"] { border-color: var(--pill); }
 
 /* ---------------------------------------------------- clubhouse rooms --- */
@@ -1511,3 +1512,7 @@ body.playing .coinhud { display: block; }
 .rh.mine { background: rgba(143,224,122,.18); }
 .rh.mine b, .rh.mine em { color: #cdf5c0; }
 .rh.empty { opacity: .4; }
+
+/* The section headings inside the tabbed panes are only wanted when the tabs
+   are NOT running — with a tab bar the heading repeats what the tab says. */
+body.hktabbed .nojs-only { display: none; }

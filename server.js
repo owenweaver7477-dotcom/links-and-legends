@@ -117,14 +117,30 @@ function sendAsset(req, res, rec) {
   res.setHeader('Content-Type', rec.type);
   res.setHeader('ETag', rec.etag);
   res.setHeader('Vary', 'Accept-Encoding');
-  // The HTML is the only file whose URL never changes but whose content must
-  // be picked up the instant a deploy lands, so it always revalidates.  The
-  // rest may sit in cache briefly; the ETag makes the recheck a 304.
-  // In dev nothing may be cached by the browser either, or an edit sits behind
-  // a ten-minute max-age and you debug a file you are no longer running.
+  /* CACHE SKEW IS THE ENEMY HERE, not bandwidth.
+     -----------------------------------------------------------------------
+     The HTML revalidated on every load and the scripts sat in cache for ten
+     minutes. So for ten minutes after every deploy a returning player got
+     BRAND NEW HTML DRIVEN BY OLD JAVASCRIPT — and that is not a slightly
+     stale page, it is a broken one. It shipped exactly that way: the new
+     markup carried a tab bar whose inactive panels are hidden, the cached
+     script had no code to switch tabs, and the Pro Shop became unreachable
+     while three new courses failed to appear. From the outside it looks like
+     the UI was rebuilt badly. Nothing was wrong with the UI.
+
+     There is no build step here and no content-hashed filenames, so the only
+     way to make the HTML and the module graph land together is to revalidate
+     both. That is one conditional request per file, answered with a 304 and
+     no body, and it is worth it.
+
+     /vendor/ is the exception and keeps a long immutable cache: three.js is
+     1.2 MB of the 1.47 MB bundle and its URL changes when the library does.
+     So the big download is still cached hard; only the small files we
+     actually edit are rechecked. */
+  const vendored = req.path.startsWith('/vendor/');
   res.setHeader('Cache-Control', DEV ? 'no-store'
-    : rec.type.startsWith('text/html') ? 'no-cache'
-    : 'public, max-age=600, must-revalidate');
+    : vendored ? 'public, max-age=31536000, immutable'
+    : 'no-cache');
 
   if (req.headers['if-none-match'] === rec.etag) return res.status(304).end();
 

@@ -20,7 +20,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
 
-const URL = 'http://localhost:3000';
+/* Point the socket tests at a server on another port with GOLF_URL, so a
+   run can verify a FRESH server without killing the one you are playing on.
+   Server-side changes need a restart to take effect, and testing against a
+   process that booted before the change is how a fix gets signed off twice
+   and shipped never. */
+const URL = process.env.GOLF_URL || 'http://localhost:3000';
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
 const connect = () => new Promise((resolve, reject) => {

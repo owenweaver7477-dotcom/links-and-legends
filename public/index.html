@@ -5,19 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0b1210">
 <title>Links &amp; Legends — Online Golf</title>
-<meta name="description" content="Five courses, nine holes each. Play a round on your own or with up to eight friends — no sign-up, straight into the game.">
+<meta name="description" content="Eight courses, nine holes each. Play a round on your own or with up to eight friends — no sign-up, straight into the game.">
 <!-- This game travels by shared link: an invite in a chat, a portal listing.
      Without these the preview is a grey box that reads as broken. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Links &amp; Legends">
 <meta property="og:title" content="Links &amp; Legends — Online Golf">
-<meta property="og:description" content="Five courses, nine holes each. Play on your own or with up to eight friends. No sign-up.">
+<meta property="og:description" content="Eight courses, nine holes each. Play on your own or with up to eight friends. No sign-up.">
 <meta property="og:image" content="og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Links &amp; Legends — Online Golf">
-<meta name="twitter:description" content="Five courses, nine holes. Play solo or with friends — no sign-up.">
+<meta name="twitter:description" content="Eight courses, nine holes. Play solo or with friends — no sign-up.">
 <meta name="twitter:image" content="og.png">
 <!-- The CrazyGames SDK.  Deliberately NOT async/defer-blocking the game:
      crazygames.js feature-detects it, so if this 404s off-portal (or a
@@ -202,7 +202,7 @@
     <div class="wordmark">
       <span class="wm-eyebrow">⛳ Online golf</span>
       <h1>Links <em>&amp;</em> Legends</h1>
-      <p class="wm-sub">Five courses · nine holes · up to eight friends</p>
+      <p class="wm-sub" id="wmSub">Nine holes · up to eight friends</p>
     </div>
   </div>
 
@@ -241,9 +241,11 @@
     </button>
 
     <p class="err" id="homeErr"></p>
-    <div class="venues">
-      <span>Claude National</span><i>·</i><span>Cairnmoor Links</span><i>·</i><span>Red Mesa</span><i>·</i><span>Hochkar Alpine</span><i>·</i><span>Palmera Cay</span>
-    </div>
+    <!-- Written by the script from COURSE_ORDER, not typed here. Both of
+         these said "five courses" for a while after the eighth one shipped,
+         which is the kind of thing a player notices and quietly reads as
+         nobody being home. -->
+    <div class="venues" id="venueStrip"></div>
   </div>
 
   <!-- PLAY NOW, in the middle of the screen.
@@ -296,7 +298,7 @@
          shop. Rooms, not a corridor. The tab bar is the only navigation on
          this screen and it remembers where you were, because a panel that
          resets to the first tab on every purchase is worse than no tabs. -->
-    <div class="hktabs" id="hkTabs" role="tablist">
+    <div class="hktabs" id="hkTabs" role="tablist" hidden>
       <button class="hktab on" data-tab="career" role="tab">Career</button>
       <button class="hktab" data-tab="rewards" role="tab">Rewards</button>
       <button class="hktab" data-tab="records" role="tab">Records</button>
@@ -304,24 +306,34 @@
       <button class="hktab" data-tab="bag" role="tab">Your bag</button>
     </div>
 
+    <!-- NOT hidden in the markup. The script hides the inactive ones once it
+         is running (see bindClubhouse), and the tab bar is hidden until it
+         does. If the script is missing, old, or throws, this degrades to the
+         long scrolling page it used to be — everything reachable, nothing
+         behind a control that does not work. It shipped the other way round
+         once, and a cached copy of yesterday's script made the Pro Shop
+         unreachable. Markup must never hide what only script can show. -->
     <div class="section hkpane" data-pane="career">
+      <h4 class="lbl nojs-only">Your career</h4>
       <div class="career" id="careerBox"></div>
     </div>
 
-    <div class="section hkpane" data-pane="rewards" hidden>
+    <div class="section hkpane" data-pane="rewards">
+      <h4 class="lbl nojs-only">Rewards</h4>
       <div id="rewardBox"></div>
     </div>
 
-    <div class="section hkpane" data-pane="records" hidden>
+    <div class="section hkpane" data-pane="records">
+      <h4 class="lbl nojs-only">Course records</h4>
       <div id="recordBox"></div>
     </div>
 
-    <div class="section hkpane" data-pane="shop" hidden>
+    <div class="section hkpane" data-pane="shop">
       <h4 class="lbl">Pro shop <span class="coinbal" id="coinBal"></span></h4>
       <div id="shopList"></div>
     </div>
 
-    <div class="section hkpane" data-pane="bag" hidden>
+    <div class="section hkpane" data-pane="bag">
       <h4 class="lbl">Your bag <span id="bagCount"></span></h4>
       <div class="bag" id="bagList"></div>
       <div class="bagbar">

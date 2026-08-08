@@ -2324,6 +2324,22 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   };
   drawCourses();
 
+  /* The course count and the venue strip are written from the data, not
+     typed into the markup. Both still said "five courses" after the eighth
+     one landed — a small lie on the front page, and the kind a player reads
+     as nobody being home. */
+  const wmSub = document.getElementById('wmSub');
+  if (wmSub) wmSub.textContent =
+    `${COURSES.length} courses · nine holes · up to eight friends`;
+  const venues = document.getElementById('venueStrip');
+  if (venues) {
+    venues.textContent = '';
+    COURSES.forEach((c, i) => {
+      if (i) { const dot = document.createElement('i'); dot.textContent = '·'; venues.appendChild(dot); }
+      const sp = document.createElement('span'); sp.textContent = c.name; venues.appendChild(sp);
+    });
+  }
+
   // the dice: a whole outfit in one press, for people who hate picking
   document.getElementById('btnRandomLook')?.addEventListener('click', () => {
     lookDraft = randomLook();      // the whole wardrobe, not just the colours
@@ -2340,9 +2356,14 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   // the clubhouse: career, pro shop and bag, reachable without hosting a game
   HUD.el.btnClubhouse.addEventListener('click', () => {
     renderClubhouse();
-    HUD.bindClubhouse();
+    /* Showing the screen comes FIRST and the tab wiring is guarded, in that
+       order deliberately. Anything that can throw between the click and
+       HUD.show leaves the player looking at a button that does nothing —
+       and the tabs are a convenience, while getting into the clubhouse at
+       all is not. */
     G.screen = 'shop';
     HUD.show('shop');
+    try { HUD.bindClubhouse?.(); } catch (e) { console.error('clubhouse tabs:', e); }
   });
   HUD.el.btnShopBack.addEventListener('click', () => route());
 

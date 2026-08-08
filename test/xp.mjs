@@ -14,7 +14,12 @@ import { UNLOCKS, unlocksAt, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '.
 import { EMOTES, EMOTE_CLIPS, emotesAt, POSE_KEYS, blankPose } from '../public/js/client/celebrations.js';
 import { io } from 'socket.io-client';
 
-const URL = 'http://localhost:3000';
+/* Point the socket tests at a server on another port with GOLF_URL, so a
+   run can verify a FRESH server without killing the one you are playing on.
+   Server-side changes need a restart to take effect, and testing against a
+   process that booted before the change is how a fix gets signed off twice
+   and shipped never. */
+const URL = process.env.GOLF_URL || 'http://localhost:3000';
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const pid = t => t + '-' + Math.random().toString(36).slice(2, 9);
 const connect = () => new Promise((res, rej) => {

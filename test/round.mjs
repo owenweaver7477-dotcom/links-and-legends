@@ -10,7 +10,12 @@ import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub } from '../public/js/shared/club
 import { crewEffect } from '../public/js/shared/crew.js';
 
 calibrateCarries();
-const URL = 'http://localhost:3000';
+/* Point the socket tests at a server on another port with GOLF_URL, so a
+   run can verify a FRESH server without killing the one you are playing on.
+   Server-side changes need a restart to take effect, and testing against a
+   process that booted before the change is how a fix gets signed off twice
+   and shipped never. */
+const URL = process.env.GOLF_URL || 'http://localhost:3000';
 const COURSE = process.argv[2] || 'parkland';
 const N = Number(process.argv[3] || 8);
 const SKILL = Number(process.argv[4] || 1.0);   // 1 = good, 3 = wild
