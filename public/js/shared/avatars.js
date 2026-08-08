@@ -114,8 +114,15 @@ export const HAIR_COLORS = [
    shoulders, which is a poor showing for a game where you look at your
    golfer from behind for an entire round.
 
-   Named for the SILHOUETTE rather than for a gender: a player picks the shape
-   they want to see, and that is a shorter list of decisions and a kinder one.
+   These were named for the SILHOUETTE alone — Straight, Curved, Broad,
+   Slight — on the reasoning that picking a shape is a shorter and kinder
+   decision than picking a gender. In practice players did not read it that
+   way: they went looking for "female", did not find the word, and concluded
+   the game only had men in it. A label nobody can find is not a kindness.
+
+   So the list is grouped and labelled plainly, and every build still carries
+   its silhouette name. The original four ids are untouched, because a look
+   already saved against a player has to keep meaning the same thing.
 
    The numbers are multipliers on the base rig, and one thing is deliberately
    NOT among them — the shoulders. The club hangs off the right arm, and the
@@ -126,21 +133,39 @@ export const HAIR_COLORS = [
    shoulder position, arm length and club mount; the difference is all in the
    torso, hips and leg proportion, which is plenty to read at distance. */
 export const BODIES = [
-  { id: 'straight', name: 'Straight',
+  /* ---- men -------------------------------------------------------- */
+  { id: 'straight', name: 'Athletic', sex: 'm',
     chest: 1.00, waist: 0.95, hips: 0.98, bust: 0,
     hipSpread: 1.00, legLen: 1.00, limb: 1.00, depth: 1.00 },
-  { id: 'curved', name: 'Curved',
-    // narrower through the shoulders, a real waist, wider hips, and legs
-    // that take up more of the same overall height
-    chest: 0.88, waist: 0.76, hips: 1.04, bust: 0.075,
-    hipSpread: 1.16, legLen: 1.06, limb: 0.92, depth: 0.94 },
-  { id: 'broad', name: 'Broad',
+  { id: 'broad', name: 'Powerful', sex: 'm',
     chest: 1.12, waist: 1.14, hips: 1.10, bust: 0,
     hipSpread: 1.06, legLen: 0.96, limb: 1.14, depth: 1.16 },
-  { id: 'slight', name: 'Slight',
+  { id: 'slight', name: 'Lean', sex: 'm',
     chest: 0.90, waist: 0.84, hips: 0.88, bust: 0,
-    hipSpread: 0.94, legLen: 1.03, limb: 0.88, depth: 0.90 }
+    hipSpread: 0.94, legLen: 1.03, limb: 0.88, depth: 0.90 },
+
+  /* ---- women ------------------------------------------------------
+     The difference has to READ FROM BEHIND AT TWENTY METRES, because that
+     is the view of your own golfer for an entire round. A slightly narrower
+     chest does not survive that distance; the hips, the waist and the leg
+     proportion do, and the bust is what carries it in profile. Every one of
+     these differs from every male build in all four at once — that is what
+     makes it a different body rather than the same body relabelled. */
+  { id: 'curved', name: 'Curved', sex: 'f',
+    chest: 0.86, waist: 0.72, hips: 1.10, bust: 0.105,
+    hipSpread: 1.22, legLen: 1.07, limb: 0.90, depth: 0.94 },
+  { id: 'athletic-f', name: 'Athletic', sex: 'f',
+    chest: 0.90, waist: 0.78, hips: 1.02, bust: 0.082,
+    hipSpread: 1.12, legLen: 1.08, limb: 0.94, depth: 0.92 },
+  { id: 'strong-f', name: 'Strong', sex: 'f',
+    chest: 1.00, waist: 0.90, hips: 1.12, bust: 0.090,
+    hipSpread: 1.20, legLen: 1.02, limb: 1.04, depth: 1.02 }
 ];
+
+/** The builds of one sex, in the order they are offered. */
+export const bodiesOf = sex => BODIES.filter(b => b.sex === sex);
+/** Which sex a saved look is, so the picker opens on the right row. */
+export const sexOfBody = id => (BODIES.find(b => b.id === id) || BODIES[0]).sex;
 
 export const ACCESSORIES = [
   { id: 'none',    name: 'None' },

@@ -144,6 +144,11 @@ function sendAsset(req, res, rec) {
    is right for production but means an edit does not show up until a restart,
    which is a genuinely confusing way to lose ten minutes.  NODE_ENV=production
    (what Render sets) keeps the fast in-memory path. */
+/* Kept in step with BACKEND in public/js/client/net.js by hand — there is no
+   build step to share a constant through, and a mismatch here shows up as a
+   blocked request rather than as anything louder. */
+const BACKEND_ORIGIN = 'https://links-and-legends.onrender.com';
+
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   // Security headers a published game should carry.  Note the DELIBERATE
@@ -161,8 +166,16 @@ app.use((req, res, next) => {
     "default-src 'self'; " +
     "img-src 'self' data: https://images.crazygames.com; " +
     "style-src 'self' 'unsafe-inline'; " +
-    "script-src 'self' https://sdk.crazygames.com; " +
-    "connect-src 'self' ws: wss: https://*.crazygames.com https://sdk.crazygames.com; " +
+    /* The deployment's own origin has to be allowed explicitly. net.js falls
+       back to fetching the socket.io client from BACKEND when the page is a
+       static bundle with no server behind it, and it pings /healthz first to
+       wake a sleeping free-tier host. Served by us that fallback is never
+       needed — but the ping fires regardless, and a CSP that blocks your own
+       backend logs two errors on every single page load, which is exactly
+       the kind of noise that hides a real one. */
+    "script-src 'self' https://sdk.crazygames.com " + BACKEND_ORIGIN + '; ' +
+    "connect-src 'self' ws: wss: https://*.crazygames.com https://sdk.crazygames.com " +
+      BACKEND_ORIGIN + ' ' + BACKEND_ORIGIN.replace(/^https:/, 'wss:') + '; ' +
     "frame-ancestors *");
   const key = req.path === '/' ? '/index.html' : req.path;
   if (DEV) {                       // pick up edits without a restart

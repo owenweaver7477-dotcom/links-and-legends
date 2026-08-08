@@ -560,14 +560,29 @@ button.roomtag:active { transform: translateY(1px); }
     linear-gradient(0deg, rgba(4,9,7,.55) 0%, transparent 26%),
     linear-gradient(180deg, rgba(4,9,7,.35) 0%, transparent 18%); }
 
+/* THREE COLUMNS, as a grid rather than three absolutely-positioned blocks.
+   They were each pinned to their own edge with their own width, which works
+   right up until the middle one exists: at 1280px the left column ended at
+   494px and the centred one started at 440px, so they simply sat on top of
+   each other. A grid cannot overlap — that is the entire reason to use one
+   here. The columns give way in a fixed order as the window narrows: the
+   character panel first, then the menu column, and Play now last, because it
+   is the one thing every visitor came for. */
+.screen.home { display: grid; align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px) minmax(0, 430px);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "brand play char" "hero play char";
+  gap: clamp(10px, 1.8vw, 24px) clamp(12px, 2.4vw, 36px);
+  padding: clamp(18px, 4vh, 54px) clamp(14px, 3.2vw, 56px); }
+.home-brand { grid-area: brand; align-self: end;
+  animation: heroFade .7s ease both; }
+
 /* the menu column */
-.home-hero { position: absolute; left: clamp(18px, 4.5vw, 74px); top: 50%;
-  transform: translateY(-50%);
-  width: min(420px, calc(100vw - 36px));
-  max-height: 94vh; overflow-y: auto; scrollbar-width: none;
+.home-hero { position: relative; grid-area: hero; align-self: start;
+  max-height: 100%; overflow-y: auto; scrollbar-width: none;
   display: flex; flex-direction: column; gap: 13px;
   animation: heroFade .7s ease both; }
-.home-hero::-webkit-scrollbar { display: none; }
+.home-hero::-webkit-scrollbar, .home-golfer::-webkit-scrollbar { display: none; }
 @keyframes heroFade { from { opacity: 0; } }
 
 /* the wordmark: big, tight, two-tone — a logo, not a heading */
@@ -603,9 +618,44 @@ button.roomtag:active { transform: translateY(1px); }
 .ch-txt small { font-size: 10px; color: #93ad99; letter-spacing: .6px; text-transform: uppercase; }
 .ch-coins { font-weight: 800; color: #ffd94a; font-size: 13.5px; }
 
+/* PLAY NOW, dead centre over the first tee.
+   The scrim fades left-to-right, so the middle of the screen is the brightest
+   part of the course and a button sitting on it needs its own backing rather
+   than the column's. A narrow plate, not a panel: it should read as a control
+   laid over the view, not as another card. */
+.home-play { position: relative; grid-area: play; align-self: end;
+  margin-bottom: clamp(40px, 9vh, 100px);
+  display: flex; flex-direction: column; gap: 11px;
+  padding: 14px 16px 15px; border-radius: 20px;
+  background: rgba(5,11,8,.55); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 22px 60px rgba(0,0,0,.5);
+  animation: heroFade .7s .06s ease both; }
+.home-play .coursepick { margin: 0; }
+.home-play .onlinenow { margin: 0; }
+
+/* the character card: name, level and rating, beside the golfer who earned it */
+.charcard { display: flex; align-items: center; gap: 10px; margin: 2px 0 11px;
+  padding: 9px 11px; border-radius: 13px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+.cc-name { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.cc-name b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-name small { font-size: 10px; letter-spacing: .7px; text-transform: uppercase;
+  color: #8ba492; }
+.cc-stat { text-align: center; min-width: 52px; }
+.cc-stat i { display: block; font-style: normal; font-size: 19px; font-weight: 900;
+  line-height: 1; color: #eaf3ea; }
+.cc-stat span { font-size: 9px; letter-spacing: .9px; text-transform: uppercase; color: #8ba492; }
+.cc-stat.rating i { color: #ffd94a; }
+
+/* the build picker says Female and Male out loud — see renderLook */
+.buildgrp .buildrow { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.buildsex { flex: 0 0 46px; font-size: 10px; font-weight: 800; letter-spacing: .8px;
+  text-transform: uppercase; color: #8ba492; }
+
 /* your golfer: a thin glass panel bottom-right, under the live preview */
-.home-golfer { position: absolute; right: clamp(14px, 3vw, 44px); bottom: 20px;
-  width: min(430px, calc(100vw - 28px));
+.home-golfer { position: relative; grid-area: char; align-self: end;
+  margin-bottom: 20px; max-height: 88vh; overflow-y: auto; scrollbar-width: none;
   background: rgba(7,14,10,.74); backdrop-filter: blur(14px);
   border: 1px solid rgba(255,255,255,.13); border-radius: 16px;
   padding: 13px 16px 11px; box-shadow: 0 18px 50px rgba(0,0,0,.5);
@@ -635,14 +685,44 @@ body:not(.playing) .mapwrap { display: none !important; }
 .home-hero .venues { justify-content: flex-start; border-top: none; padding-top: 2px;
   margin-top: 2px; text-shadow: 0 1px 5px rgba(0,0,0,.85); }
 
-/* a phone stacks the two panels and scrolls */
+/* Between a phone and a full desktop there is not room for three columns.
+   The character panel folds under the other two before anything else, since
+   it is the one you visit once and then leave alone. */
+@media (max-width: 1180px) and (min-width: 881px) {
+  .screen.home { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    grid-template-rows: auto auto auto;
+    grid-template-areas: "brand play" "hero play" "char char";
+    align-content: center; overflow-y: auto; }
+  .home-golfer { align-self: start; margin: 0 auto 22px;
+    width: min(560px, 100%); max-height: none; }
+}
+
+/* a phone stacks the panels and scrolls */
 @media (max-width: 880px), (max-height: 560px) {
-  .screen.home { overflow-y: auto; }
-  .home-scrim { position: fixed; background: rgba(4,9,7,.78); }
-  .home-hero { position: relative; left: auto; top: auto; transform: none;
-    max-height: none; overflow: visible; margin: 6vh auto 14px; padding: 0 16px; }
-  .home-golfer { position: relative; right: auto; bottom: auto; margin: 0 auto 26px;
+  /* align-items MUST go back to start here.
+     The desktop grid centres its columns, and a centred grid item that is
+     taller than its row overflows in both directions instead of growing it —
+     which is how the character panel ended up sitting on top of the menu.
+     One column, everything top-aligned, nothing scrolling inside anything
+     else: the page is the scroller on a phone. */
+  .screen.home { overflow-y: auto; grid-template-columns: 1fr;
+    grid-template-rows: none; align-content: start; align-items: start;
+    grid-template-areas: "brand" "play" "hero" "char"; padding: 0; }
+  .home-brand { align-self: auto; margin: 5vh auto 0; padding: 0 16px;
     width: min(430px, calc(100vw - 32px)); }
+  .home-scrim { position: fixed; background: rgba(4,9,7,.78); }
+  /* On a phone there is no "middle of the screen" to speak of — the whole
+     page is one column and it scrolls. Play now goes directly under the
+     wordmark, above everything to do with other people, and the grid areas
+     above put it there. */
+  .home-hero { max-height: none; overflow: visible; align-self: auto;
+    margin: 14px auto; padding: 0 16px; width: min(430px, calc(100vw - 32px)); }
+  .home-play { align-self: auto;
+    margin: 14px auto 0; width: min(430px, calc(100vw - 32px));
+    background: none; border: none; box-shadow: none; backdrop-filter: none;
+    padding: 0 16px; }
+  .home-golfer { align-self: auto; margin: 0 auto 26px;
+    max-height: none; overflow: visible; width: min(430px, calc(100vw - 32px)); }
 }
 
 /* ------------------------------------------------------------- the card */

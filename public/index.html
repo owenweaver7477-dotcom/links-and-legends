@@ -193,13 +193,20 @@
 <div class="screen home" id="screenHome">
   <div class="home-scrim" aria-hidden="true"></div>
 
-  <div class="home-hero">
+  <!-- The wordmark is its own block, not the first child of the menu column.
+       On a phone the whole page becomes one scrolling column and Play now has
+       to come near the top — but not ABOVE the title, or a visitor meets a
+       list of course names before they know what game this is. Separating it
+       is what lets the two be ordered independently. -->
+  <div class="home-brand">
     <div class="wordmark">
       <span class="wm-eyebrow">⛳ Online golf</span>
       <h1>Links <em>&amp;</em> Legends</h1>
       <p class="wm-sub">Five courses · nine holes · up to eight friends</p>
     </div>
+  </div>
 
+  <div class="home-hero">
     <div class="identity" id="identityChip" hidden>
       <div class="id-face">⛳</div>
       <div class="id-txt">
@@ -210,24 +217,6 @@
     </div>
     <label class="field" id="nameField"><span>Your name</span>
       <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
-
-    <!-- Somebody who has just clicked a thumbnail has no friends here and no
-         room code.  One button puts them on the first tee; everything to do
-         with other people is secondary and folded away. -->
-    <!-- Play now goes straight to the tee, so the course has to be choosable
-         HERE — otherwise a solo player can only ever play the first one. -->
-    <div class="coursepick">
-      <span class="cp-label">Course</span>
-      <div class="cp-row" id="homeCourses"></div>
-    </div>
-
-    <button class="btn primary huge" id="btnPlay">Play now<span class="huge-sub">straight onto the first tee</span></button>
-
-    <!-- Who else is on the course right now.  Presence rather than a friends
-         list: see the note in server.js — a CrazyGames guest has no durable
-         identity to hang a friend list on, but "who is playing now" is only
-         ever a claim about right now, so it works for everybody. -->
-    <div class="onlinenow" id="onlineNow" hidden></div>
 
     <details class="friends" id="friendsBox">
       <summary>Play with friends</summary>
@@ -257,13 +246,38 @@
     </div>
   </div>
 
-  <!-- Your golfer — the figure on the tee IS the preview, so this panel is
-       thin: swatches and a dice.  Every change lands on them instantly. -->
+  <!-- PLAY NOW, in the middle of the screen.
+       It was the last item in a left-hand column of eight, which is where a
+       form puts its submit button and not where a game puts the one thing
+       a visitor arrived to press. Dead centre, over the first tee, with the
+       course choice attached to it — because Play now goes straight to the
+       tee, so a solo player who cannot choose here can only ever play the
+       first course. -->
+  <div class="home-play">
+    <div class="coursepick">
+      <span class="cp-label">Course</span>
+      <div class="cp-row" id="homeCourses"></div>
+    </div>
+    <button class="btn primary huge" id="btnPlay">Play now<span class="huge-sub">straight onto the first tee</span></button>
+    <!-- Who else is on the course right now.  Presence rather than a friends
+         list: see the note in server.js — a CrazyGames guest has no durable
+         identity to hang a friend list on, but "who is playing now" is only
+         ever a claim about right now, so it works for everybody. -->
+    <div class="onlinenow" id="onlineNow" hidden></div>
+  </div>
+
+  <!-- YOUR CHARACTER — its own section, not a strip of swatches.
+       The figure on the tee IS the preview, so this panel carries who they
+       are rather than a second picture of them: the name, the level, and the
+       rating. The rating especially belongs here and not buried in the
+       clubhouse — it is the number that says how good you are, it is hard to
+       hold, and it should be sitting next to the golfer who earned it. -->
   <div class="home-golfer">
     <div class="hk-head">
-      <h4 class="lbl">Your golfer</h4>
+      <h4 class="lbl">Your character</h4>
       <button class="btn mini" id="btnRandomLook" title="Surprise me">🎲</button>
     </div>
+    <div class="charcard" id="charCard"></div>
     <div class="looker" id="lookPicker"></div>
     <p class="tiny hk-hint">That's them on the tee — changes show up instantly.</p>
   </div>

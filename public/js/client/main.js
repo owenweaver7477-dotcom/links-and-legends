@@ -1783,6 +1783,8 @@ Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
   renderClubhouse();
+  // the front-page character card carries the level and rating too
+  HUD.renderCharacter(prof, Net.lastName || document.getElementById('inpName')?.value);
   previewKey = '';                     // gear may have changed the flight
   if (G.room?.state === 'lobby') renderLobbyAll(G.room);
   // the post-round payout, announced once the results are up
@@ -1868,6 +1870,7 @@ let lookDraft = null;
  * next room you join already has it.
  */
 function drawLookPicker() {
+  HUD.renderCharacter(G.profile, Net.lastName || document.getElementById('inpName')?.value);
   HUD.renderLook(lookDraft, (key, value) => {
     lookDraft = normaliseLook({ ...lookDraft, [key]: value });
     drawLookPicker();

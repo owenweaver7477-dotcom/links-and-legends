@@ -5,7 +5,7 @@
 import { CARRY, CLUBS, CLUB_BY_KEY, BAG_SIZE, DEFAULT_BAG } from '../shared/clubs.js';
 import { HOLES_PER_COURSE, BALL_COLORS } from '../shared/biomes.js';
 import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
-         HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES } from '../shared/avatars.js';
+         HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES, bodiesOf } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { EMOTES } from './celebrations.js';
@@ -360,7 +360,7 @@ HUD.renderBag = (bag, onToggle) => {
    what they are wearing, then the details.  `swatch` groups are colours;
    `style` groups are shapes and show their name instead. */
 const LOOK_GROUPS = [
-  { key: 'body',      title: 'Build',       list: BODIES,      kind: 'style'  },
+  { key: 'body',      title: 'Build',       list: BODIES,      kind: 'build'  },
   { key: 'skin',      title: 'Skin',        list: SKINS,       kind: 'swatch' },
   { key: 'hair',      title: 'Hair',        list: HAIR_STYLES, kind: 'style'  },
   { key: 'hairColor', title: 'Hair colour', list: HAIR_COLORS, kind: 'swatch' },
@@ -659,12 +659,64 @@ HUD.renderShop = (prof, onBuy) => {
   }
 };
 
+/**
+ * The character card on the front page: who you are, your level and your
+ * rating, sitting beside the golfer on the tee.
+ *
+ * The rating in particular was only visible in the clubhouse, two clicks in.
+ * It is the number that says how good you are and it is deliberately hard to
+ * hold — a bad round pulls it down faster than a good one lifts it — so it
+ * belongs in front of you, next to the player who earned it, not filed away
+ * under statistics.
+ */
+HUD.renderCharacter = (prof, name) => {
+  const box = document.getElementById('charCard');
+  if (!box) return;
+  const lvl = prof?.level ?? 1;
+  const rating = prof?.rating;
+  box.innerHTML =
+    `<span class="cc-name"><b>${escapeHtml(name || 'Your golfer')}</b>` +
+    `<small>${prof?.rounds ? prof.rounds + (prof.rounds === 1 ? ' round' : ' rounds') : 'no rounds yet'}</small></span>` +
+    `<span class="cc-stat"><i>${lvl}</i><span>level</span></span>` +
+    `<span class="cc-stat rating"><i>${rating == null ? '—' : Math.round(rating)}</i><span>rating</span></span>`;
+};
+
 HUD.renderLook = (look, onPick) => {
   el.lookPicker.innerHTML = '';
   for (const grp of LOOK_GROUPS) {
     const g = document.createElement('div');
-    g.className = 'lookgrp' + (grp.kind === 'style' ? ' style' : '');
+    g.className = 'lookgrp' + (grp.kind === 'style' || grp.kind === 'build' ? ' style' : '');
     const h = document.createElement('h5'); h.textContent = grp.title;
+
+    /* Build is the one choice that gets said out loud. It used to be four
+       silhouette names in a row — Straight, Curved, Broad, Slight — and
+       players went looking for the word "female", did not find it, and
+       decided the game had no women in it. The shapes were always there;
+       nobody could find them. Two labelled rows, and they can. */
+    if (grp.kind === 'build') {
+      g.classList.add('buildgrp');
+      g.appendChild(h);
+      for (const [sex, label] of [['f', 'Female'], ['m', 'Male']]) {
+        const sub = document.createElement('div'); sub.className = 'buildrow';
+        const tag = document.createElement('span'); tag.className = 'buildsex';
+        tag.textContent = label;
+        const row = document.createElement('div'); row.className = 'lookrow';
+        for (const c of bodiesOf(sex)) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'lookpill' + (look.body === c.id ? ' on' : '');
+          b.textContent = c.name;
+          b.setAttribute('aria-label', label + ' ' + c.name + ' build');
+          b.addEventListener('click', () => onPick('body', c.id));
+          row.appendChild(b);
+        }
+        sub.append(tag, row);
+        g.appendChild(sub);
+      }
+      el.lookPicker.appendChild(g);
+      continue;
+    }
+
     const row = document.createElement('div'); row.className = 'lookrow';
     for (const c of grp.list) {
       const b = document.createElement('button');
