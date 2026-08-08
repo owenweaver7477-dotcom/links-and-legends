@@ -37,7 +37,11 @@ export const BIOMES = {
       fairway: '#5f9c42', rough: '#3f6b32', deep: '#2f5326',
       green: '#7ec95e', fringe: '#67a84a',
       sand: '#e3cf9c', water: '#2a7f96', dirt: '#6b5a3e',
-      trunk: '#4a3524'
+      /* Trunk colours are a stop lighter than they look on a swatch. Lambert
+         under a hemisphere light, then ACES tonemapping, takes about a third
+         out of a dark value — #4a3524 arrived on screen as very nearly black,
+         so every wood in the game was a row of silhouettes. */
+      trunk: '#6b5038'
     },
     ambient: 0.55, sunElev: 52, sunAzim: 135
   },
@@ -73,7 +77,7 @@ export const BIOMES = {
       fairway: '#8a9455', rough: '#6d7f41', deep: '#55632f',
       green: '#8fbe62', fringe: '#7ba552',
       sand: '#efe4c4', water: '#3d6f86', dirt: '#7d6c4c',
-      trunk: '#5a4a30'
+      trunk: '#7a6644'
     },
     ambient: 0.62, sunElev: 34, sunAzim: 200
   },
@@ -109,7 +113,7 @@ export const BIOMES = {
       fairway: '#6aa348', rough: '#8a7a4a', deep: '#9c7a4c',
       green: '#79c257', fringe: '#69a84a',
       sand: '#d9a273', water: '#2f8fa8', dirt: '#a86a42',
-      trunk: '#5d4a32'
+      trunk: '#7d6746'
     },
     ambient: 0.7, sunElev: 66, sunAzim: 160
   },
@@ -144,7 +148,7 @@ export const BIOMES = {
       fairway: '#4f9440', rough: '#33612e', deep: '#254a24',
       green: '#6fbc55', fringe: '#5c9e46',
       sand: '#ded1ad', water: '#2f7fa5', dirt: '#5b4a35',
-      trunk: '#3d2e1f'
+      trunk: '#5c4832'
     },
     ambient: 0.5, sunElev: 44, sunAzim: 120
   },
@@ -179,7 +183,7 @@ export const BIOMES = {
       fairway: '#5fae4b', rough: '#3d7a38', deep: '#2d5c2c',
       green: '#82d162', fringe: '#6cb350',
       sand: '#f2e3c2', water: '#1fa5bd', dirt: '#7a6444',
-      trunk: '#6b5334'
+      trunk: '#8a6f4a'
     },
     ambient: 0.66, sunElev: 60, sunAzim: 145
   }

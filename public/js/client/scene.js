@@ -53,6 +53,64 @@ function applyBallFinish(mat, id, _color) {
   mat.needsUpdate = true;
 }
 
+/**
+ * Make a mostly-horizontal mesh face upward, whatever order its indices came
+ * out in. Sums the vertex normals and flips every triangle if the answer
+ * points at the ground.
+ *
+ * Worth doing rather than just relying on DoubleSide: a downward normal under
+ * a sun that is above you is a surface lit from behind, so the ground would
+ * still be there and still be wrong — flat, dark, and unlit exactly where the
+ * light should be raking across it.
+ */
+/**
+ * Merge a handful of non-indexed-or-indexed geometries into one. Three ships
+ * BufferGeometryUtils for this, but it is not in the vendored build and one
+ * function is cheaper than another file in the bundle. Position and normal
+ * only — nothing here is textured.
+ */
+function mergeGeos(list) {
+  let nv = 0, ni = 0;
+  for (const g of list) {
+    nv += g.attributes.position.count;
+    ni += g.index ? g.index.count : g.attributes.position.count;
+  }
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3);
+  const idx = new Uint16Array(ni);
+  let vo = 0, io = 0;
+  for (const g of list) {
+    const p = g.attributes.position, n = g.attributes.normal;
+    pos.set(p.array, vo * 3);
+    if (n) nor.set(n.array, vo * 3);
+    const gi = g.index;
+    for (let i = 0; i < (gi ? gi.count : p.count); i++) {
+      idx[io++] = (gi ? gi.array[i] : i) + vo;
+    }
+    vo += p.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeVertexNormals();
+  return out;
+}
+
+function faceUp(geo) {
+  geo.computeVertexNormals();
+  const n = geo.attributes.normal;
+  let sum = 0;
+  for (let i = 0; i < n.count; i++) sum += n.getY(i);
+  if (sum >= 0) return geo;
+  const idx = geo.index.array;
+  for (let i = 0; i < idx.length; i += 3) {
+    const t = idx[i]; idx[i] = idx[i + 2]; idx[i + 2] = t;
+  }
+  geo.index.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
 export class GolfScene {
   constructor(canvas) {
     this.canvas = canvas;
@@ -188,7 +246,15 @@ export class GolfScene {
     this.scene.fog = new THREE.Fog(new THREE.Color(P.fog), 420, 2600);
     this.scene.background = skyBot.clone();
 
-    const hemi = new THREE.HemisphereLight(skyTop.clone(), new THREE.Color(P.rough), bio.ambient);
+    /* The hemisphere light's GROUND colour is the bounce coming back up off
+       the course, and it was set to the deep rough — the darkest green in
+       the palette. Everything vertical takes roughly the average of sky and
+       ground, so every trunk, every golfer's legs and the shaded side of
+       every object was lit by the darkest thing in the scene and arrived on
+       screen as a silhouette. A fairway you can stand on bounces fairway
+       light. */
+    const bounce = new THREE.Color(P.fairway).lerp(new THREE.Color(P.rough), 0.45);
+    const hemi = new THREE.HemisphereLight(skyTop.clone(), bounce, bio.ambient * 1.15);
     g.add(hemi);
 
     const sunDir = dirFromAngles(bio.sunElev, bio.sunAzim);
@@ -433,6 +499,26 @@ export class GolfScene {
     const far = new THREE.Color(bio.palette.fog).lerp(new THREE.Color(bio.palette.sky[0]), 0.35);
     const _c = new THREE.Color();
 
+    /* ONE height function for the surrounding land, shared with the distant
+       treeline below. It used to be written out twice — once here and once
+       in _buildFarTrees — with only the far-field half copied across, so the
+       trees were planted at the OPEN-COUNTRY height while the ground beneath
+       them was still blended toward the course rim. They hovered, visibly, in
+       a band right where the eye goes when you look up from a tee shot.
+       Same lesson as the tree crowns: if two things have to agree about a
+       number, one of them has to ask the other. */
+    const ringT = scale => Math.sqrt(Math.max(0, (scale - OVERLAP) / (SPREAD - OVERLAP)));
+    const surroundY = (x, z, edge, t) => {
+      // Two octaves, the broad one strong: distant land should ROLL rather
+      // than lie flat, or the middle distance has nothing to read at all.
+      const roll = fbm(x * 0.0016, z * 0.0016, hole.terrainSeed ^ 0x99, 3) * bio.relief * 3.2
+        + fbm(x * 0.0052, z * 0.0052, hole.terrainSeed ^ 0x5c, 2) * bio.relief * 1.1;
+      const farY = roll - bio.relief * 0.6;
+      // sink the ring a touch as it leaves the rim so the seam tucks under
+      return { y: lerp(edge - 0.6, farY, smoothstep(0.02, 0.5, t)), roll };
+    };
+    this._surroundY = surroundY;
+
     for (let r = 0; r <= RINGS; r++) {
       const t = r / RINGS;
       // start just INSIDE the terrain and a little below it: overlapping
@@ -442,13 +528,8 @@ export class GolfScene {
         const [ex, ez] = boundary(s / SEGS);
         const x = cx + (ex - cx) * scale, z = cz + (ez - cz) * scale;
         const edge = T.heightAt(ex, ez);                       // exact rim height
-        // Two octaves, the broad one strong: distant land should ROLL rather
-        // than lie flat, or the middle distance has nothing to read at all.
-        const roll = fbm(x * 0.0016, z * 0.0016, hole.terrainSeed ^ 0x99, 3) * bio.relief * 3.2
-          + fbm(x * 0.0052, z * 0.0052, hole.terrainSeed ^ 0x5c, 2) * bio.relief * 1.1;
-        const farY = roll - bio.relief * 0.6;
-        // sink the ring a touch as it leaves the rim so the seam tucks under
-        pos.push(x, lerp(edge - 0.6, farY, smoothstep(0.02, 0.5, t)), z);
+        const { y, roll } = surroundY(x, z, edge, t);
+        pos.push(x, y, z);
 
         // colour by distance, with the local roll lightening the high ground
         _c.copy(near).lerp(mid, smoothstep(0, 0.35, t));
@@ -469,13 +550,32 @@ export class GolfScene {
     geo.setIndex(idx);
     geo.computeVertexNormals();
 
-    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+    /* DOUBLE-SIDED, deliberately, and this is the whole "the background does
+       not render" bug.
+
+       The ring is a rectangle walked in one direction and scaled outwards, so
+       the winding of its triangles depends on which way round that walk goes
+       relative to the axes — and it came out facing DOWNWARD. Back-face
+       culling then threw the ground away and left the underside of the sky
+       dome showing through: a hard-edged wedge of sky below the horizon,
+       right where the land should be. It only showed from a camera above the
+       tee — following a lofted shot, or the title screen's orbit — which is
+       why it survived so long.
+
+       The winding is corrected below so the lighting is right, and the
+       material stays double-sided anyway. This is one mesh of 1,548 vertices
+       drawn once; culling half its faces saves nothing worth a hole in the
+       world. */
+    faceUp(geo);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+      vertexColors: true, side: THREE.DoubleSide
+    }));
     mesh.renderOrder = -0.5;
     grp.add(mesh);
 
     // and something living out there: a band of distant trees so the middle
     // distance is scenery rather than empty ground
-    const band = this._buildFarTrees(hole, bio, boundary, cx, cz);
+    const band = this._buildFarTrees(hole, bio, boundary, cx, cz, surroundY, ringT, T);
     if (band) grp.add(band);
     return grp;
   }
@@ -485,25 +585,42 @@ export class GolfScene {
    * surrounding land between the course edge and the ridge, sized up with
    * distance so they still read after the fog thins them.  One draw call.
    */
-  _buildFarTrees(hole, bio, boundary, cx, cz) {
+  _buildFarTrees(hole, bio, boundary, cx, cz, surroundY, ringT, T) {
     if ((bio.treeDensity ?? 0) < 0.12) return null;      // links has no trees
     const rng = mulberry32((hole.terrainSeed ^ 0x7ee5) >>> 0);
     const N = Math.round(420 * (this.q?.scenery ?? 1));
     const geo = cached('fartree', () => {
-      // a rounded mass, not a spike: at this distance a tree is a blob of
-      // canopy, and a narrow cone reads as a grey obelisk
-      const g = new THREE.IcosahedronGeometry(1, 0);
-      g.scale(1, 1.15, 1);
-      g.translate(0, 1.0, 0);
-      return g;
+      /* A canopy on a stem, merged into ONE geometry so it is still one draw
+         call for the whole treeline. The canopy alone was a floating blob:
+         with nothing joining it to the ground it read as a rock hanging in
+         the air, which is exactly what the middle distance looked like. A
+         stem costs sixteen triangles for the entire band and is the
+         difference between scenery and a bug. */
+      const canopy = new THREE.IcosahedronGeometry(1, 0);
+      canopy.scale(1, 1.15, 1);
+      canopy.translate(0, 1.05, 0);
+      const stem = new THREE.CylinderGeometry(0.13, 0.2, 0.95, 5);
+      stem.translate(0, 0.47, 0);
+      return mergeGeos([canopy, stem]);
     });
+    /* The treeline read as a band of black lumps: it was mixed halfway to the
+       biome's DEEP rough — the darkest green in the palette — and then only a
+       eighth of the way to the fog. Distance does the opposite of that. Air
+       lifts and desaturates everything in it, so the far band has to be
+       LIGHTER than the trees you are standing among, not darker, or the eye
+       reads it as a shadow on the hillside rather than as a wood a mile off.
+
+       The base is the rough, barely darkened, and each instance is then hazed
+       by how far out it actually sits — scene fog alone cannot do this
+       because the band starts at 400 m, where fog has not begun. */
     const canopy = new THREE.Color(bio.palette.rough)
-      .lerp(new THREE.Color(bio.palette.deep), 0.5)
-      .lerp(new THREE.Color(bio.palette.fog), 0.12);
-    const mat = new THREE.MeshLambertMaterial({ color: canopy });
+      .lerp(new THREE.Color(bio.palette.deep), 0.22);
+    const haze = new THREE.Color(bio.palette.fog);
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const inst = new THREE.InstancedMesh(geo, mat, N);
     inst.frustumCulled = false;
     const m = new THREE.Matrix4(), s = new THREE.Vector3();
+    const _tc = new THREE.Color();
     let n = 0;
     for (let i = 0; i < N; i++) {
       const [ex, ez] = boundary(rng());
@@ -514,16 +631,26 @@ export class GolfScene {
       const x = cx + (ex - cx) * scale + (rng() - 0.5) * 90;
       const z = cz + (ez - cz) * scale + (rng() - 0.5) * 90;
       const h = 11 + rng() * 9;                          // real tree height, honestly scaled
-      const y = fbm(x * 0.0016, z * 0.0016, hole.terrainSeed ^ 0x99, 3) * bio.relief * 3.2
-        + fbm(x * 0.0052, z * 0.0052, hole.terrainSeed ^ 0x5c, 2) * bio.relief * 1.1
-        - bio.relief * 0.6 - 1.5;
+      /* Planted with the SAME function that builds the ground under them.
+         This used to be the far-field half of that formula copied across,
+         which is right out in open country and wrong everywhere the ring is
+         still blending toward the course rim — so the nearer half of the
+         band floated. -0.4 buries the stem's foot rather than balancing it
+         on the surface. */
+      const y = surroundY(x, z, T.heightAt(ex, ez), ringT(scale)).y - 0.4;
       m.makeRotationY(rng() * 6.283);
       m.scale(s.set(h * 0.52, h * 0.62, h * 0.52));
       m.setPosition(x, y, z);
+      // haze by distance out, plus a little tone so it is not one flat mass
+      const out = Math.min(1, (scale - 1.35) / 3.1);
+      _tc.copy(canopy).lerp(haze, 0.10 + out * 0.34)
+        .offsetHSL(0, (rng() - 0.5) * 0.05, (rng() - 0.5) * 0.10);
+      inst.setColorAt(n, _tc);
       inst.setMatrixAt(n++, m);
     }
     inst.count = n;
     inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
     return inst;
   }
 
