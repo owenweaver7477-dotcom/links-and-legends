@@ -765,7 +765,14 @@ export class GolfScene {
       desert:   { amp: 210, jag: 0.5, clip: 0.55, col: '#8a5844', snow: false },
       links:    { amp: 95,  jag: 0.55, clip: 1.0, col: '#5d6b52', snow: false },
       parkland: { amp: 165, jag: 0.35, clip: 1.0, col: '#3d5a40', snow: false },
-      tropical: { amp: 130, jag: 0.45, clip: 0.85, col: '#3f6b55', snow: false }
+      tropical: { amp: 130, jag: 0.45, clip: 0.85, col: '#3f6b55', snow: false },
+      // low, lazy, and a long way off: the sandbelt's horizon is scrub, not hills
+      sandbelt: { amp: 78,  jag: 0.30, clip: 1.0, col: '#6b6a3c', snow: false },
+      // a volcanic cone behind a wall of forest — high, steep, and clipped
+      // flat at the top, because that is what a caldera rim looks like
+      volcanic: { amp: 360, jag: 0.75, clip: 0.72, col: '#3a4438', snow: true },
+      // sea cliffs: tall, jagged, almost black, and no snow this far down
+      fjord:    { amp: 300, jag: 0.95, clip: 1.0, col: '#4a5158', snow: false }
     };
     const ch = CHAR[bio.id] || CHAR.parkland;
 
@@ -922,6 +929,27 @@ export class GolfScene {
         tuft: { c: ['#2f9448', '#3aa653'], n: 270, s: [0.4, 0.9] },
         rock: { c: ['#b3a48c', '#c2b49b'], n: 16, s: [0.4, 1.0] },     // coral stone
         reed: { c: ['#3f8a4a'], ring: 30 }
+      },
+      sandbelt: {
+        bush: { c: ['#6f7a42', '#7d8a4c'], n: 58, s: [0.6, 1.4] },     // tea-tree
+        bloom: { c: ['#e8d05a', '#f0e08a'], per: 3 },                  // wattle
+        tuft: { c: ['#a39a56', '#8f8a4a', '#b0a862'], n: 330, s: [0.4, 0.95] },
+        rock: { c: ['#9c8f76'], n: 12, s: [0.4, 0.9] },
+        reed: { c: ['#8a8a4e'], ring: 16 }
+      },
+      volcanic: {
+        bush: { c: ['#1f5230', '#286338'], n: 110, s: [0.6, 1.4] },    // dense understory
+        bloom: { c: ['#e8879f', '#f0b3c4'], per: 5 },                  // azalea
+        tuft: { c: ['#357a3c', '#428c47'], n: 320, s: [0.35, 0.8] },
+        rock: { c: ['#43403c', '#35322e', '#4f4b46'], n: 52, s: [0.5, 1.8] }, // basalt
+        reed: { c: ['#2f6b38'], ring: 24 }
+      },
+      fjord: {
+        bush: { c: ['#4f6338', '#5d7042'], n: 30, s: [0.4, 0.9] },     // crowberry
+        bloom: { c: ['#f0f0e8', '#d8c9e0'], per: 2 },                  // cottongrass
+        tuft: { c: ['#7d8a52', '#6b7847'], n: 300, s: [0.35, 0.8] },
+        rock: { c: ['#4a4d52', '#3d4045', '#585c62'], n: 78, s: [0.6, 2.6] }, // black basalt
+        reed: null                                                     // nothing stands in this wind
       }
     }[bio.id] || null;
     if (!P) return [];
@@ -1659,7 +1687,7 @@ function cached(key, make) {
    far wider than anything that should stop a golf ball and they are supposed
    to; the same goes for a saguaro's arms. Those keep their art, and their
    collider is the small core it always was. */
-const SOLID_CANOPY = new Set(['maple', 'oak', 'mangrove', 'palo', 'pine', 'fir', 'spruce']);
+const SOLID_CANOPY = new Set(['maple', 'oak', 'mangrove', 'palo', 'pine', 'fir', 'spruce', 'cedar', 'eucalypt']);
 
 function normaliseCanopy(species, parts) {
   if (!SOLID_CANOPY.has(species)) return parts;
@@ -1721,6 +1749,57 @@ function treeParts(species, bio) {
       for (let i = 0; i < 5; i++) parts.push(skirt(i, 5));
       return parts;
     }
+    /* A cedar: a tall narrow spire, not a Christmas tree. Six shallow skirts
+       that barely widen as they descend, so the corridor between two of them
+       is a gap you can actually see a fairway through — which matters here
+       more than anywhere, because Kurodake is the tightest course in the
+       game and a wall of cones would make it unplayable rather than tight. */
+    case 'cedar': {
+      const dark = '#2a4a30';
+      const parts = [
+        /* Thin. A cedar's crown is only 0.16 of its height (CROWN in
+           biomes.js) and the trunk has to read as slimmer than that, or a
+           26 m tree ends up with a two-and-a-half-metre bole and looks like
+           a terracotta pipe with a hat on. */
+        { geo: cached('cedtrunk', () => new THREE.CylinderGeometry(0.012, 0.026, 1, 7)), mat: trunkMat(),
+          off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) }
+      ];
+      for (let i = 0; i < 6; i++) {
+        const t = i / 5;
+        const r = 0.30 * (1 - t * 0.62);
+        const hh = 0.26 * (1 - t * 0.30);
+        const y = 0.26 + t * 0.70;
+        const col = lightenHex(dark, t * 0.26);
+        parts.push({
+          geo: cached('cedskirt' + i, () => new THREE.ConeGeometry(r, hh, 8)),
+          mat: leafMat(col), off: [0, y, 0], scale: [1, 1, 1], color: new THREE.Color(col)
+        });
+      }
+      return parts;
+    }
+
+    /* A eucalypt: a long pale trunk with almost nothing on it until the very
+       top, where a thin open crown sits. The whole point of the sandbelt is
+       that you can SEE — the trouble is the bunkering, not the trees — so
+       this species is deliberately built to be looked past. */
+    case 'eucalypt': {
+      const leaf = '#7d9464';                       // blue-green, not forest green
+      return [
+        { geo: cached('euctrunk', () => new THREE.CylinderGeometry(0.026, 0.058, 1, 7)), mat: trunkMat(),
+          off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
+        { geo: cached('eucbranch', () => { const g = new THREE.CylinderGeometry(0.012, 0.028, 0.30, 5); g.translate(0, 0.15, 0); g.rotateZ(0.62); return g; }),
+          mat: trunkMat(), off: [0, 0.70, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
+        { geo: cached('eucbranch2', () => { const g = new THREE.CylinderGeometry(0.012, 0.026, 0.26, 5); g.translate(0, 0.13, 0); g.rotateZ(-0.7); return g; }),
+          mat: trunkMat(), off: [0, 0.76, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
+        { geo: cached('euclobeA', () => new THREE.IcosahedronGeometry(0.26, 1)), mat: leafMat(leaf),
+          off: [0, 0.90, 0], scale: [1.1, 0.62, 1.1], color: new THREE.Color(leaf) },
+        { geo: cached('euclobeB', () => new THREE.IcosahedronGeometry(0.17, 1)), mat: leafMat(lightenHex(leaf, 0.14)),
+          off: [0.19, 0.83, 0.06], scale: [1, 0.66, 1], color: new THREE.Color(lightenHex(leaf, 0.14)) },
+        { geo: cached('euclobeC', () => new THREE.IcosahedronGeometry(0.15, 1)), mat: leafMat(darkenHex(leaf, 0.12)),
+          off: [-0.17, 0.86, -0.08], scale: [1, 0.66, 1], color: new THREE.Color(darkenHex(leaf, 0.12)) }
+      ];
+    }
+
     case 'palm': {
       const frond = '#4f9440';
       const parts = [

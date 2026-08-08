@@ -51,16 +51,42 @@ export class TerrainModel {
     this.seed = hole.terrainSeed;
     this.iScale = 1 / (biome.reliefScale || 160);
 
-    // water surface heights, resolved once (a pond is flat, obviously)
-    this.waterLevels = hole.waters.map(w => {
-      const base = this._natural(w.x, w.z);
-      // Nearly to the brim.  The old level sat most of a metre down, which
-      // left every pond ringed by a wide dry bowl — a dam nobody filled.
-      return base - 0.22;
-    });
-
     // green plane, so putting surfaces are smooth and readable
     this.greenBase = this._natural(hole.green.x, hole.green.z);
+
+    /* Water surface heights, resolved once — a pond is flat, obviously.
+       -------------------------------------------------------------------
+       This used to be the NATURAL height at the pond's centre, which is
+       right only on ground that is level. On steep ground it is badly wrong:
+       Grimsvik has relief 14 and a ridge factor of 0.8, so the land can fall
+       six metres across a pond, and a surface set from the middle hangs in
+       mid-air above the downhill rim with a black pit carved out beneath it.
+       Water floating over a hole in the ground is, fairly, what a player
+       calls "not rendering properly".
+
+       Water finds the LOW point. So the level is the minimum ground height
+       around the pond's shoulder — sampled just outside the basin the carve
+       digs, using the terrain as it would be with no water in it at all. Set
+       a touch under that and the pond meets its bank the whole way round. */
+    this.waterLevels = hole.waters.map(w => {
+      let lo = Infinity;
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        // q = 1.32: outside the carve (which fades out by 1.3), so this is
+        // the dry bank rather than the bowl we are about to dig
+        let dx = Math.cos(a) * w.rx * 1.32, dz = Math.sin(a) * w.rz * 1.32;
+        if (w.rot) {
+          const c = Math.cos(w.rot), sn = Math.sin(w.rot);
+          const rx = dx * c - dz * sn, rz = dx * sn + dz * c;
+          dx = rx; dz = rz;
+        }
+        lo = Math.min(lo, this.heightAt(w.x + dx, w.z + dz, true));
+      }
+      if (!Number.isFinite(lo)) lo = this._natural(w.x, w.z);
+      // Nearly to the brim. A level set well down leaves every pond ringed
+      // by a wide dry bowl — a dam nobody filled.
+      return lo - 0.22;
+    });
   }
 
   /* -------- the underlying landform, before any golf course was built ----- */
@@ -87,7 +113,7 @@ export class TerrainModel {
    * Natural landform, blended toward a graded corridor near the centreline,
    * then flattened to a tilted plane on the green and dished out in bunkers.
    */
-  heightAt(x, z) {
+  heightAt(x, z, dry = false) {
     const hole = this.hole;
     const { d, s, base } = this._corridor(x, z);
     const natural = this._natural(x, z);
@@ -180,7 +206,9 @@ export class TerrainModel {
        ellipse edge, then climbs to the natural bank just outside it. Inside
        the pond the ground is always below the water; outside, it is the
        course again within a quarter of a radius. */
-    for (let i = 0; i < hole.waters.length; i++) {
+    // `dry` skips the basins entirely — used while WORKING OUT where the
+    // water goes, which cannot depend on the water already being there
+    for (let i = 0; !dry && i < hole.waters.length; i++) {
       const w = hole.waters[i];
       const q = ellipseQ(x, z, w);
       if (q < 1.3) {

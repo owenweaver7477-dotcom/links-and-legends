@@ -186,10 +186,140 @@ export const BIOMES = {
       trunk: '#8a6f4a'
     },
     ambient: 0.66, sunElev: 60, sunAzim: 145
+  },
+
+  /* ---------------------------------------------------------- SANDBELT ---
+     Melbourne. The one course here where the BUNKERING is the hazard rather
+     than the water or the trees: huge sculpted traps with steep sand faces
+     cut right into the edge of the green, over baked-out couch grass that
+     runs forever. Wide off the tee and terrifying from a hundred yards, so
+     it plays the exact opposite way round to the desert. */
+  sandbelt: {
+    id: 'sandbelt',
+    name: 'Barwon Sandbelt',
+    blurb: 'Baked couch fairways that run for miles, and the deepest bunkering in the game. Wide off the tee, brutal near the green.',
+    region: 'Victoria, Australia',
+    continent: 'asia-pacific',
+    relief: 5,
+    reliefScale: 240,           // broad, lazy folds — sand dunes gone to grass
+    ridged: 0,
+    fairwayWidth: [32, 44],     // the widest fairways here, and it is a trap
+    roughWidth: 18,
+    treeDensity: 0.34,
+    treeSpecies: ['eucalypt', 'eucalypt', 'gorse'],
+    treeHeight: [10, 18],
+    waterChance: 0.12,          // almost none: this is a dry-land course
+    waterKind: 'pond',
+    bunkerCount: [7, 11],       // by far the most, and the point of the place
+    greenSpeed: 1.18,           // the fastest greens in the game
+    greenSize: [12, 17],
+    windBase: 4.2,
+    windGust: 3.4,
+    firmness: 1.42,             // the hardest ground: everything releases
+    palette: {
+      sky: ['#7fb2dd', '#e6eef2'],
+      sun: '#fff4d8',
+      fog: '#dcd8c0',
+      fairway: '#93a353', rough: '#7b7f3e', deep: '#615f30',
+      green: '#8cc45c', fringe: '#7aac4e',
+      sand: '#f0dfae', water: '#3b7f8c', dirt: '#8d7346',
+      trunk: '#b4a893'          // eucalypts are pale — almost white in sun
+    },
+    ambient: 0.68, sunElev: 58, sunAzim: 20
+  },
+
+  /* ---------------------------------------------------------- VOLCANIC ---
+     Kyushu. Cedar forest on old lava, cut narrow, with soft wet greens that
+     hold anything you can land on them. The counterweight to the sandbelt:
+     there, the ground gives you nothing and the air is free; here, the air
+     is the hazard and the green is a friend. Almost no wind, but the
+     corridors are the tightest in the game and the trees are enormous. */
+  volcanic: {
+    id: 'volcanic',
+    name: 'Kurodake Forest',
+    blurb: 'Cedar corridors on old lava. No wind to speak of, greens that hold anything — but the tightest driving lines you will play.',
+    region: 'Kyushu, Japan',
+    continent: 'asia-pacific',
+    relief: 13,
+    reliefScale: 120,           // steep, close-packed volcanic ground
+    ridged: 0.55,
+    fairwayWidth: [21, 28],     // the narrowest in the game
+    roughWidth: 14,             // and barely any rough before the treeline
+    treeDensity: 0.95,          // the densest forest
+    treeSpecies: ['cedar', 'cedar', 'fir'],
+    treeHeight: [16, 26],
+    waterChance: 0.42,
+    waterKind: 'pond',
+    bunkerCount: [1, 4],
+    greenSpeed: 0.88,           // slow, wet, and they hold
+    greenSize: [13, 18],
+    windBase: 1.2,              // the calmest air anywhere here
+    windGust: 1.4,
+    firmness: 0.74,             // soft: the ball lands and stops
+    slopeBias: 1.15,
+    cloudDensity: 1.6,          // low cloud sitting in the valley
+    palette: {
+      sky: ['#7d9db8', '#dfe7ea'],
+      sun: '#fff2e4',
+      fog: '#c2cfd2',
+      fairway: '#4a8a45', rough: '#2f5f34', deep: '#22452a',
+      green: '#68b855', fringe: '#569b45',
+      sand: '#4a4640', water: '#2c6b78', dirt: '#3b332c',   // black volcanic sand
+      trunk: '#6d5747'          // cedar bark: brown-grey, not terracotta
+    },
+    ambient: 0.58, sunElev: 46, sunAzim: 210
+  },
+
+  /* ------------------------------------------------------------- FJORD ---
+     Iceland. No trees at all, black rock, and the ocean on the doorstep —
+     links golf taken to its conclusion. The wind is the whole course: the
+     strongest in the game by a margin, over ground that gives you nothing
+     back. Short on the card and long in the hand. */
+  fjord: {
+    id: 'fjord',
+    name: 'Grimsvik',
+    blurb: 'Black rock and open ocean at the top of the world. No trees, nowhere to hide, and the hardest wind in the game.',
+    region: 'Vestfirdir, Iceland',
+    continent: 'europe',
+    relief: 14,
+    reliefScale: 105,           // sharp, glacier-cut ground
+    ridged: 0.8,
+    fairwayWidth: [24, 34],
+    roughWidth: 30,
+    treeDensity: 0.02,          // effectively none
+    treeSpecies: ['gorse', 'gorse', 'gorse'],
+    treeHeight: [0.8, 1.8],
+    waterChance: 0.55,
+    waterKind: 'ocean',
+    bunkerCount: [3, 7],
+    bunkerStyle: 'pot',         // revetted, and deeper than you want
+    greenSpeed: 1.05,
+    greenSize: [14, 19],        // big greens, because nothing else is fair here
+    windBase: 8.5,              // the defining hazard, and it is severe
+    windGust: 4.2,
+    firmness: 1.30,
+    slopeBias: 1.2,
+    cloudDensity: 1.4,
+    palette: {
+      sky: ['#7a8ea3', '#c8d3da'],
+      sun: '#f0eee6',
+      fog: '#b4bfc6',
+      fairway: '#6f8a52', rough: '#55693e', deep: '#3d4a30',
+      green: '#7fa855', fringe: '#6c9147',
+      sand: '#d6cdb8', water: '#2f5c78', dirt: '#4a4a46',
+      trunk: '#5c5348'
+    },
+    /* A low northern sun is the character of the place, but 22 degrees put
+       the whole course in half-light and you could not read the ground. 30
+       still rakes long shadows across it; the ambient carries the rest. */
+    ambient: 0.76, sunElev: 30, sunAzim: 240
   }
 };
 
-export const COURSE_ORDER = ['parkland', 'links', 'desert', 'alpine', 'tropical'];
+export const COURSE_ORDER = [
+  'parkland', 'links', 'desert', 'alpine', 'tropical',
+  'sandbelt', 'volcanic', 'fjord'
+];
 
 /* ---------------------------------------------------------------- crowns ---
    How wide a tree's canopy is, as a fraction of its height. ONE number per
@@ -214,6 +344,12 @@ export const COURSE_ORDER = ['parkland', 'links', 'desert', 'alpine', 'tropical'
 export const CROWN = {
   maple: 0.28, oak: 0.28, mangrove: 0.26,
   fir: 0.20, pine: 0.20,
+  /* A eucalypt is nearly all trunk with a thin crown at the very top, and a
+     cedar is a tall narrow spire. Both are deliberately SLIMMER than a
+     broadleaf: the sandbelt is meant to be wide and open and the cedar
+     corridors are already the tightest in the game, so a fat canopy on
+     either would ruin the thing that makes the course what it is. */
+  eucalypt: 0.22, cedar: 0.16,
   palm: 0.17, saguaro: 0.12, gorse: 0.70
 };
 export const crownOf = species => CROWN[species] ?? 0.28;
@@ -229,6 +365,8 @@ export const crownOf = species => CROWN[species] ?? 0.28;
 export const CANOPY = {
   maple: [0.82, 0.33], oak: [0.82, 0.33], mangrove: [0.82, 0.33], palo: [0.88, 0.28],
   pine: [0.70, 0.36], fir: [0.70, 0.36], spruce: [0.70, 0.36],
+  cedar: [0.66, 0.40],                 // a spire: leaves nearly all the way down
+  eucalypt: [0.86, 0.20],              // a crown perched on a long bare trunk
   palm: [0.88, 0.16], gorse: [0.50, 0.45], saguaro: [0.62, 0.42]
 };
 export const canopyOf = species => CANOPY[species] || CANOPY.maple;
@@ -245,11 +383,11 @@ export const REGIONS = [
   { id: 'north-america', name: 'North America', flag: '🌎',
     blurb: 'Parkland and desert — generous off the tee, punishing around the green' },
   { id: 'europe', name: 'Europe', flag: '🌍',
-    blurb: 'Wind off the sea and thin mountain air' },
+    blurb: 'Wind off the sea, thin mountain air, and the north Atlantic' },
   { id: 'latin-america', name: 'Latin America', flag: '🏝️',
     blurb: 'Water, palms and soft greens that hold' },
   { id: 'asia-pacific', name: 'Asia Pacific', flag: '🌏',
-    blurb: 'Coming soon' }
+    blurb: 'Deep sand and cedar corridors — the widest driving and the tightest' }
 ];
 
 /** Courses grouped by region, in REGIONS order, with empty regions dropped. */

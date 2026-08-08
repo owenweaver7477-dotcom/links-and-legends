@@ -673,13 +673,15 @@ function buildElevProfile(rk, bio, total, par) {
       p.rollFreq = rk.f(1.6, 3.0);
   }
 
-  /* A par 3 is one shot. A twenty-metre drop over 150 m is a cliff, and a
-     twenty-metre climb is unplayable, so the set piece is halved — a short
-     hole from an elevated tee is still one of the best things in golf, it
-     just does not need the full number. */
-  if (par === 3) {
-    p.teeDrop *= 0.6; p.greenLift *= 0.55; p.midBump *= 0.5; p.shelf *= 0.5;
-  }
+  /* Set pieces scale with the LENGTH of the hole, not with its par.
+     What makes ground playable is the gradient, and a gradient is a height
+     over a distance — so a twenty-metre crest is a gentle roll on a 520 m
+     par 5 and a cliff on a 150 m par 3. Halving it for par 3s was the rough
+     version of this and it was not enough on the steep courses: Kurodake,
+     with the highest relief and a slope bias on top, still put an 11% climb
+     across the launch window of its short second. */
+  const lenK = clamp(total / 380, 0.42, 1.15);
+  p.teeDrop *= lenK; p.greenLift *= lenK; p.midBump *= lenK; p.shelf *= lenK;
   return p;
 }
 
@@ -705,8 +707,14 @@ const sstep = (a, b, t) => {
 export function elevationAlongRoute(hole, s) {
   const p = hole.elevProfile;
   const t = clamp(s / (p.total || 1), 0, 1);
+  /* A crest uses sin², which is flat at the tee — but "flat at t = 0" is not
+     the same as "flat for the first hundred metres", and on a short hole
+     t = 0.28 is already 65% of the way up the bump. So the crest is ALSO
+     faded in over the launch window in metres, exactly like the roll. A
+     hollow needs none of this: falling ground off the tee is the good kind. */
   const sin2 = Math.sin(Math.PI * t) ** 2;
-  let h = p.drop * t + p.midBump * (p.midBump > 0 ? sin2 : Math.sin(Math.PI * t));
+  const crest = p.midBump > 0 ? sin2 * sstep(0, 135, s) : Math.sin(Math.PI * t);
+  let h = p.drop * t + p.midBump * crest;
   /* The tee's own height decays away over the first stretch, so the drop is
      off the tee where you can see it, not a slab tilting the whole hole. */
   if (p.teeDrop) h += p.teeDrop * Math.exp(-t / (p.teeSpan || 0.14));
