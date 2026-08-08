@@ -14,7 +14,7 @@ import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
 import { EMOTES } from './celebrations.js';
-import { unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
+import { UNLOCKS, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
 import { Net } from './net.js';
@@ -648,17 +648,29 @@ function measureFrame(now) {
     HUD.setPerf(1000 / ms, ms, r.calls, r.triangles, HUD.quality);
   }
 
-  /* Adaptive quality.  Sun shadows are a whole extra pass over every caster,
+  /* Adaptive quality. Sun shadows are a whole extra pass over every caster,
      and with a full course of golfers and carts that is exactly the machine
-     that cannot afford them.  Rather than let it grind, notice a sustained
-     bad frame time and drop to the blob-shadow path once, saying so.  Only
-     ever downward, and only once, so it can never oscillate. */
-  if (_autoDropped || HUD.quality !== 'quality' || G.screen !== 'game') return;
+     that cannot afford them. Rather than let it grind, notice a sustained bad
+     frame time and step down one tier, saying so. Only ever downward, and
+     only once, so it can never oscillate.
+
+     This was still written against the OLD two-value setting — it tested for
+     'quality' and set 'perf', and the setting became low/medium/high a while
+     back. So the guard was never true and this never fired: anyone on a weak
+     machine simply ground away at whatever they had picked. And if it HAD
+     fired it would have been worse than doing nothing, because setQuality
+     falls back to medium on an unknown name while HUD.quality was assigned
+     'perf' directly, leaving the setting and the renderer disagreeing and the
+     clubhouse dropdown showing a blank. */
+  const STEP_DOWN = { high: 'medium', medium: 'low' };
+  const easier = STEP_DOWN[HUD.quality];
+  if (_autoDropped || !easier || G.screen !== 'game') return;
   _slowRuns = ms > 34 ? _slowRuns + 1 : 0;      // worse than ~30 fps
   if (_slowRuns >= 12) {                        // ~6 s of it, not one hitch
     _autoDropped = true;
-    HUD.quality = 'perf';
-    scene.setQuality('perf');
+    HUD.setQuality(easier);                     // validates and persists
+    if (scene.setQuality(easier) && G.hole) scene.loadHole(G.hole, G.T, G.bio);
+    if (HUD.el.optQuality) HUD.el.optQuality.value = HUD.quality;
     HUD.toast('Graphics eased to keep things smooth — change it in the clubhouse.', 'info', 4200);
   }
 }
@@ -714,7 +726,15 @@ function beginShot(msg) {
   // the golfer swings on every screen, timed so the ball leaves at the hit
   const swingAv = G.avatars.get(msg.pid);
   if (swingAv) { swingAv.setClub(msg.shot.clubKey, player(msg.pid)?.clubTier ?? 0); swingAv.strike(msg.shot.aim); }
-  scene.setTraceColor(player(msg.pid)?.color || '#ffffff');
+  /* The trail is a LEVEL reward, so it wins over the ball colour when the
+     player has one equipped. That is the point of it: the line your shot
+     draws in the air is the most-watched three seconds in the game, and it
+     is the only cosmetic everyone in the room is guaranteed to look at. */
+  const shooter = player(msg.pid);
+  const trail = shooter?.look?.trail
+    ? UNLOCKS.find(u => u.kind === 'trail' && u.id === shooter.look.trail)
+    : null;
+  scene.setTraceColor(trail?.color || shooter?.color || '#ffffff');
   Sound.strike(CLUB_BY_KEY[msg.shot.clubKey], msg.shot.power);
   scene.clearTrace();
   scene.setAimLine(null);
@@ -1783,8 +1803,10 @@ Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
   renderClubhouse();
-  // the front-page character card carries the level and rating too
+  // the front page carries the level and the rating, and the wardrobe's
+  // earned rows depend on the level, so both are redrawn when it lands
   HUD.renderCharacter(prof, Net.lastName || document.getElementById('inpName')?.value);
+  if (lookDraft) drawLookPicker();
   previewKey = '';                     // gear may have changed the flight
   if (G.room?.state === 'lobby') renderLobbyAll(G.room);
   // the post-round payout, announced once the results are up
@@ -1877,7 +1899,7 @@ function drawLookPicker() {
     saveLook(lookDraft);
     refreshMenuAvatar();             // the golfer on the tee changes NOW
     if (G.joined) Net.setLook(lookDraft);
-  });
+  }, G.profile?.level ?? 1);
 }
 
 const LOOK_KEY = 'golf.look';

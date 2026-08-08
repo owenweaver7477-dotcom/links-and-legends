@@ -18,10 +18,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normaliseLook, randomLook,
+  normaliseLook, randomLook, looksEarnedAt,
   CAPS, SHIRTS, SKINS, TROUSERS, SHOES,
   HAIR_COLORS, HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES
 } from '../public/js/shared/avatars.js';
+import { UNLOCKS } from '../public/js/shared/unlocks.js';
 
 const COLOUR_SLOTS = [
   ['cap', CAPS], ['shirt', SHIRTS], ['skin', SKINS],
@@ -76,8 +77,51 @@ test('junk and hostile values are replaced, never passed through', () => {
   });
   assertComplete(nasty, 'hostile look');
   for (const v of Object.values(nasty)) {
-    assert.equal(typeof v, 'string');
-    assert.ok(!/[<>(){};]/.test(v), `"${v}" reached the renderer with markup in it`);
+    /* Earned cosmetics — decal, trail, title, ball finish — are legitimately
+       null when nothing is equipped, and "" would be a worse answer: it is a
+       falsy string that every `if (look.decal)` still has to guard against
+       and that reads as an id in a log. Everything else is a string. */
+    assert.ok(v === null || typeof v === 'string', `${JSON.stringify(v)} is neither`);
+    if (v !== null) {
+      assert.ok(!/[<>(){};]/.test(v), `"${v}" reached the renderer with markup in it`);
+    }
+  }
+});
+
+test('an unearned cosmetic cannot be equipped by asking for it', () => {
+  /* The gate that makes a hundred levels mean anything. normaliseLook only
+     checks that an id EXISTS — it is shared code with no profile in reach —
+     so the server calls looksEarnedAt with the level it holds on record.
+     Skip that and every decal, trail and title in the game is one crafted
+     socket message away from free. */
+  const greedy = { decal: 'signature', trail: 'aurora', title: 'centurion', ballFinish: 'prism' };
+
+  const newbie = looksEarnedAt(greedy, 0, 1);
+  for (const k of ['decal', 'trail', 'title', 'ballFinish']) {
+    assert.equal(newbie[k], null, `a level 1 player kept ${k}`);
+  }
+
+  const maxed = looksEarnedAt(greedy, 0, 100);
+  assert.equal(maxed.decal, 'signature');
+  assert.equal(maxed.trail, 'aurora');
+  assert.equal(maxed.title, 'centurion');
+  assert.equal(maxed.ballFinish, 'prism');
+
+  // and the boundary is the level it says, not one either side
+  const stripe = UNLOCKS.find(u => u.kind === 'decal' && u.id === 'stripe');
+  assert.equal(looksEarnedAt({ decal: 'stripe' }, 0, stripe.at - 1).decal, null);
+  assert.equal(looksEarnedAt({ decal: 'stripe' }, 0, stripe.at).decal, 'stripe');
+});
+
+test('everything the level table offers can actually be worn', () => {
+  /* A reward nobody can equip is not a reward. Every unlock of a wearable
+     kind has to survive normalisation into the field the renderer reads. */
+  const FIELD = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ballFinish' };
+  for (const u of UNLOCKS) {
+    const field = FIELD[u.kind];
+    if (!field) continue;                       // emotes and hats live elsewhere
+    assert.equal(looksEarnedAt({ [field]: u.id }, 0, u.at)[field], u.id,
+      `${u.kind} "${u.name}" unlocks at ${u.at} but does not stick`);
   }
 });
 

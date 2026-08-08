@@ -11,6 +11,14 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { HUD } from './hud.js';
+import { UNLOCKS } from '../shared/unlocks.js';
+
+/* A level title, if they have one equipped. Shown as its own small tag
+   rather than glued to the name, so a title can never be mistaken for part
+   of what somebody called themselves. */
+const titleOf = look => (look?.title
+  ? UNLOCKS.find(u => u.kind === 'title' && u.id === look.title)?.name || ''
+  : '');
 
 const _v = new THREE.Vector3();
 
@@ -52,13 +60,23 @@ export class Roster {
         this.labels.set(p.pid, el);
       }
       const r = this.rows.get(p.pid);
+      const title = titleOf(p.look);
       r.dot.style.background = p.color;
-      r.name.textContent = p.name + (p.pid === myPid ? '' : '');
+      r.name.textContent = p.name;
+      r.name.title = title ? p.name + ' — ' + title : p.name;
       r.row.classList.toggle('me', p.pid === myPid);
       r.row.classList.toggle('gone', !p.connected);
 
       const lbl = this.labels.get(p.pid);
-      lbl.textContent = p.name;
+      lbl.textContent = '';
+      const nm = document.createElement('span');
+      nm.className = 'nl-name'; nm.textContent = p.name;
+      lbl.appendChild(nm);
+      if (title) {
+        const tg = document.createElement('span');
+        tg.className = 'nl-title'; tg.textContent = title;
+        lbl.appendChild(tg);
+      }
       lbl.style.setProperty('--c', p.color);
       lbl.classList.toggle('self', p.pid === myPid);
     }

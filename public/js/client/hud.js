@@ -9,7 +9,7 @@ import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { EMOTES } from './celebrations.js';
-import { UNLOCKS, unlocksAt, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
+import { UNLOCKS, unlocksAt, unlocksOfKind, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { clubSvg, caddieSvg, statSvg, finishName } from './clubart.js';
 import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
@@ -359,6 +359,16 @@ HUD.renderBag = (bag, onToggle) => {
 /* The wardrobe, in the order a player thinks about it: who they are, then
    what they are wearing, then the details.  `swatch` groups are colours;
    `style` groups are shapes and show their name instead. */
+/* The level rewards, above the wardrobe proper: they are the thing a player
+   came to this panel to look at once they have earned any. `kind` matches
+   unlocks.js; `key` is the field in the look. */
+const EARNED_GROUPS = [
+  { key: 'decal',      title: 'Club decal',  kind: 'decal' },
+  { key: 'trail',      title: 'Ball trail',  kind: 'trail' },
+  { key: 'title',      title: 'Title',       kind: 'title' },
+  { key: 'ballFinish', title: 'Ball finish', kind: 'ball'  }
+];
+
 const LOOK_GROUPS = [
   { key: 'body',      title: 'Build',       list: BODIES,      kind: 'build'  },
   { key: 'skin',      title: 'Skin',        list: SKINS,       kind: 'swatch' },
@@ -681,8 +691,48 @@ HUD.renderCharacter = (prof, name) => {
     `<span class="cc-stat rating"><i>${rating == null ? '—' : Math.round(rating)}</i><span>rating</span></span>`;
 };
 
-HUD.renderLook = (look, onPick) => {
+/**
+ * The wardrobe. Takes the level so the earned rows can be drawn at all —
+ * decals, trails and titles are the whole point of a hundred levels, and
+ * until now they were data with nowhere to equip them from, which is the
+ * same as not existing.
+ */
+HUD.renderLook = (look, onPick, level = 1) => {
   el.lookPicker.innerHTML = '';
+  for (const grp of EARNED_GROUPS) {
+    const owned = unlocksOfKind(level, grp.kind);
+    const g = document.createElement('div');
+    g.className = 'lookgrp style earned';
+    const h = document.createElement('h5'); h.textContent = grp.title;
+    const row = document.createElement('div'); row.className = 'lookrow';
+
+    if (!owned.length) {
+      /* An empty row still gets drawn, and says where the first one comes
+         from. A category that simply is not there tells a new player the
+         game has no decals; a row saying "level 7" tells them to go and
+         play. */
+      const next = UNLOCKS.find(u => u.kind === grp.kind);
+      const p = document.createElement('span');
+      p.className = 'lockhint';
+      p.textContent = next ? `First one at level ${next.at}` : '—';
+      row.appendChild(p);
+    } else {
+      // "None" is always available: an earned cosmetic you cannot take off
+      // is a punishment for levelling up
+      for (const c of [{ id: null, name: 'None' }, ...owned]) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'lookpill' + ((look[grp.key] || null) === c.id ? ' on' : '');
+        b.textContent = c.name;
+        if (c.color) b.style.setProperty('--pill', c.color);
+        b.addEventListener('click', () => onPick(grp.key, c.id));
+        row.appendChild(b);
+      }
+    }
+    g.append(h, row);
+    el.lookPicker.appendChild(g);
+  }
+
   for (const grp of LOOK_GROUPS) {
     const g = document.createElement('div');
     g.className = 'lookgrp' + (grp.kind === 'style' || grp.kind === 'build' ? ' style' : '');

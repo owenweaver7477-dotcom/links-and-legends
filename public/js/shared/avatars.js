@@ -6,6 +6,8 @@
    sides; no DOM, no Three.js.
    ========================================================================= */
 
+import { UNLOCKS, unlocksAt } from './unlocks.js';
+
 export const CAPS = [
   { name: 'White',    hex: '#f2f4f0' },
   { name: 'Navy',     hex: '#2b3f6b' },
@@ -184,6 +186,19 @@ export const SHOES = [
   { name: 'Green',  hex: '#3a6b45' }
 ];
 
+/* ------------------------------------------------------ earned cosmetics ---
+   Decals, trails, titles and ball finishes are LEVEL rewards, and they ride
+   in the look rather than in a channel of their own. That is not laziness:
+   the look is already normalised on the way in, broadcast to every client in
+   the room, and applied by the avatar and the ball. A parallel path for
+   cosmetics would be four more places to forget.
+
+   What this file CANNOT do is check whether you have earned one — it is
+   shared code with no profile in reach. So it only guarantees the value is a
+   known id or nothing; the server clamps it against your level on the way in
+   (see player:look in server.js), which is the only place that can. */
+const pickUnlock = (id, kind, ids) => (id && ids.has(kind + ':' + id) ? id : null);
+
 const pick = (list, hex, i) => (list.find(c => c.hex === hex) || list[i % list.length]).hex;
 const pickId = (list, id, i) => (list.find(c => c.id === id) || list[i % list.length]).id;
 
@@ -194,9 +209,13 @@ const pickId = (list, id, i) => (list.find(c => c.id === id) || list[i % list.le
  * valid golfer — and a new field appearing here never invalidates a look
  * already saved against a player.
  */
-export function normaliseLook(look, seedIndex = 0) {
+export function normaliseLook(look, seedIndex = 0, known = UNLOCK_IDS) {
   const l = look && typeof look === 'object' ? look : {};
   return {
+    decal: pickUnlock(l.decal, 'decal', known),
+    trail: pickUnlock(l.trail, 'trail', known),
+    title: pickUnlock(l.title, 'title', known),
+    ballFinish: pickUnlock(l.ballFinish, 'ball', known),
     cap: pick(CAPS, l.cap, seedIndex),
     shirt: pick(SHIRTS, l.shirt, seedIndex + 2),
     skin: pick(SKINS, l.skin, seedIndex),
@@ -209,6 +228,19 @@ export function normaliseLook(look, seedIndex = 0) {
     shoes: pick(SHOES, l.shoes, 0)
   };
 }
+
+/** Every cosmetic id that exists, as `kind:id`. */
+const UNLOCK_IDS = new Set(UNLOCKS.map(u => u.kind + ':' + u.id));
+
+/**
+ * The same, but limited to what a level has actually earned — what the SERVER
+ * uses. Without it a hand-written socket message puts the level-100 trail on
+ * a level-3 ball, and every cosmetic in the game becomes free. Everything
+ * else about the look passes through untouched.
+ */
+export const looksEarnedAt = (look, seedIndex, level) => normaliseLook(
+  look, seedIndex,
+  new Set(unlocksAt(level).map(u => u.kind + ':' + u.id)));
 
 /** A complete random outfit, for the dice button. */
 export function randomLook() {

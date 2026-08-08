@@ -25,7 +25,7 @@ import { BIOMES, COURSE_ORDER, BALL_COLORS, MAX_PLAYERS, HOLES_PER_COURSE } from
 import { ShotSim, calibrateCarries } from './public/js/shared/ballistics.js';
 import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs.js';
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
-import { normaliseLook, SHOT_RADIUS } from './public/js/shared/avatars.js';
+import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
@@ -826,7 +826,13 @@ io.on('connection', socket => {
     const ref = sockets.get(socket.id); if (!ref) return;
     const room = rooms.get(ref.code); if (!room) return;
     const p = room.players.find(x => x.pid === ref.pid); if (!p) return;
-    const next = normaliseLook(d?.look, room.players.indexOf(p));
+    /* Cosmetics ride in the look, so this is the gate on them. A client can
+       ask for anything; what comes out is clamped to the level the SERVER
+       has on record. Without this every decal, trail and title in the game
+       is one hand-written socket message away from free, and a hundred
+       levels of rewards mean nothing. */
+    const level = levelFromXp(getProfile(ref.pid)?.xp || 0).level;
+    const next = looksEarnedAt(d?.look, room.players.indexOf(p), level);
     // only broadcast a real change, and coalesce bursts (see castSoon)
     if (JSON.stringify(next) === JSON.stringify(p.look)) return;
     p.look = next;

@@ -1430,3 +1430,18 @@ body.playing .coinhud { display: block; }
   .cr-dials { gap: 5px; }
   .dialbox { padding: 6px 2px 8px; }
 }
+
+/* A level title beside a floating name label. Its own tag rather than more
+   text in the name, because a title glued onto a name reads as part of what
+   the player called themselves — and "Owen Centurion" is not a thing anybody
+   typed. Dimmer and smaller than the name for the same reason. */
+.namelabel .nl-title { display: inline-block; margin-left: 5px; padding: 1px 5px;
+  border-radius: 5px; font-size: 9px; font-weight: 800; letter-spacing: .5px;
+  text-transform: uppercase; vertical-align: 1px;
+  color: #eaf3ea; background: rgba(0,0,0,.38);
+  border: 1px solid var(--c, rgba(255,255,255,.3)); }
+
+/* An earned row that has nothing in it yet still says where the first one
+   comes from — a missing category reads as "this game has no decals". */
+.lookgrp.earned .lockhint { font-size: 11px; color: #7e937f; padding: 4px 0; }
+.lookpill[style*="--pill"] { border-color: var(--pill); }

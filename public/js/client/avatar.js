@@ -10,6 +10,7 @@
 
 import * as THREE from '../../vendor/three.module.js';
 import { AVATAR_HEIGHT, BODIES } from '../shared/avatars.js';
+import { UNLOCKS } from '../shared/unlocks.js';
 import { CLIPS, EMOTE_CLIPS, SHOVE_CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
 import { CLUB_BY_KEY } from '../shared/clubs.js';
 
@@ -199,7 +200,15 @@ export class Avatar {
     this.clubFace = part(this.mats.chrome, 0.05, 0.07, 0.03, 0, 0, 0.02);
     this.clubSole = part(this.mats.headDark, 0.05, 0.03, 0.10, 0, -0.04, 0.05);
     this.clubHead.add(this.clubFace, this.clubSole);
-    this.club.add(this.clubGrip, this.clubShaft, this.clubHead);
+    /* The decal: a band round the shaft, in the colour the level unlocked.
+       Levels buy identity and nothing else in this game, so a reward you
+       cannot see is not a reward — and the shaft is the one part of the kit
+       that is in shot for the whole swing, at every camera angle, on every
+       club in the bag. One box, hidden when nothing is equipped. */
+    this.clubDecal = part(M('#8fe07a'), 0.024, 0.10, 0.024, 0, -0.22, 0);
+    this.clubDecal.visible = false;
+    this.club.add(this.clubGrip, this.clubShaft, this.clubHead, this.clubDecal);
+    this.setDecal(look.decal);
     this.club.visible = false;
     this.armR.add(this.club);
     this.clubKey = null;
@@ -350,6 +359,20 @@ export class Avatar {
    * and re-tilted, so switching from driver to putter costs nothing and can
    * never pop assets in or out.
    */
+  /**
+   * The earned club decal. A colour, not a texture: the whole unlock table is
+   * procedural on purpose (see unlocks.js), so a hundred levels of rewards
+   * add nothing to the download.
+   */
+  setDecal(id) {
+    if (id === this._decalId) return;
+    this._decalId = id;
+    const u = id ? UNLOCKS.find(x => x.kind === 'decal' && x.id === id) : null;
+    if (!this.clubDecal) return;
+    this.clubDecal.visible = !!u;
+    if (u) this.clubDecal.material.color.set(u.color || '#8fe07a');
+  }
+
   setClub(key, tier = 0) {
     if (key === this.clubKey && tier === this.clubTierIdx) return;
     const c = CLUB_BY_KEY[key];

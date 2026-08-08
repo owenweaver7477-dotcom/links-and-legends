@@ -32,6 +32,27 @@ export const QUALITY = {
   high:   { pixelRatio: 2,   shadows: true,  shadowMap: 2048, scenery: 1.0,  water: 1 }
 };
 
+/* The earned ball finishes. A finish is how the ball catches the light, not
+   what colour it is — the colour is the player's own and picking one should
+   never take that away from them. So each of these only moves the specular
+   terms, which is also why they cost nothing: no textures, no new material,
+   four numbers on the one that already exists. */
+const BALL_FINISH = {
+  matte:  { shininess: 4,   specular: 0x0d0d0d, emissive: 0x000000 },
+  pearl:  { shininess: 90,  specular: 0x9fa8c0, emissive: 0x0a0c14 },
+  chrome: { shininess: 220, specular: 0xdddddd, emissive: 0x000000 },
+  prism:  { shininess: 180, specular: 0xc8a8ff, emissive: 0x140a1e }
+};
+const BALL_PLAIN = { shininess: 60, specular: 0x555555, emissive: 0x000000 };
+
+function applyBallFinish(mat, id, _color) {
+  const f = BALL_FINISH[id] || BALL_PLAIN;
+  mat.shininess = f.shininess;
+  mat.specular.setHex(f.specular);
+  mat.emissive.setHex(f.emissive);
+  mat.needsUpdate = true;
+}
+
 export class GolfScene {
   constructor(canvas) {
     this.canvas = canvas;
@@ -1350,6 +1371,7 @@ export class GolfScene {
         this.balls.set(p.pid, b);
       }
       b.mesh.material.color.set(p.color);
+      applyBallFinish(b.mesh.material, p.look?.ballFinish, p.color);
       b.mesh.visible = !p.spectator;
       b.shadow.visible = !p.spectator;
     }
