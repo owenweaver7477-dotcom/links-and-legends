@@ -1445,3 +1445,69 @@ body.playing .coinhud { display: block; }
    comes from — a missing category reads as "this game has no decals". */
 .lookgrp.earned .lockhint { font-size: 11px; color: #7e937f; padding: 4px 0; }
 .lookpill[style*="--pill"] { border-color: var(--pill); }
+
+/* ---------------------------------------------------- clubhouse rooms --- */
+/* The clubhouse was one scroll of four stacked sections, so you arrived at
+   the top of your career and had to travel past all of it to reach the shop.
+   Rooms with a door each. */
+.hktabs { display: flex; gap: 4px; margin: 2px 0 14px; padding: 4px;
+  background: rgba(0,0,0,.28); border-radius: 13px;
+  border: 1px solid rgba(255,255,255,.07);
+  overflow-x: auto; scrollbar-width: none; }
+.hktabs::-webkit-scrollbar { display: none; }
+.hktab { flex: 1 0 auto; padding: 9px 15px; border: 0; border-radius: 10px;
+  background: transparent; color: #9fb6a4; font: inherit; font-size: 13px;
+  font-weight: 700; letter-spacing: .2px; cursor: pointer; white-space: nowrap;
+  transition: background .14s, color .14s; }
+.hktab:hover { color: #e6f2e8; background: rgba(255,255,255,.05); }
+.hktab.on { background: linear-gradient(180deg, #2f8a4a, #237038); color: #fff;
+  box-shadow: 0 3px 12px rgba(35,112,56,.42); }
+.hkpane { margin-top: 0; }
+
+/* --------------------------------------------------------- the ladder --- */
+.rw-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px;
+  padding: 11px 13px; border-radius: 13px;
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.08); }
+.rw-head > div { text-align: center; line-height: 1.1; }
+/* Scoped to the counter, NOT to the whole header: the blurb beside it has a
+   <b> in it too, and an unscoped rule turned "Your character" into a
+   25-pixel gold headline in the middle of a sentence. */
+.rw-head > div b { display: block; font-size: 25px; font-weight: 900; color: #ffd94a; }
+.rw-head > div span { font-size: 10px; letter-spacing: .7px; text-transform: uppercase;
+  color: #8ba492; }
+.rw-head p { margin: 0; flex: 1; }
+.rwlist { list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
+.rw { display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+  border-radius: 11px; background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.06); }
+.rw.got { background: rgba(60,150,80,.14); border-color: rgba(120,220,150,.28); }
+.rw.locked { opacity: .55; }
+.rw-lvl { flex: 0 0 26px; text-align: center; font-size: 12px; font-weight: 900;
+  color: #cfe4d3; }
+.rw-swatch { flex: 0 0 13px; height: 13px; border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.28); }
+.rw-name { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.rw-name b { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-name small { font-size: 9.5px; letter-spacing: .6px; text-transform: uppercase;
+  color: #8ba492; }
+.rw-state { font-size: 9.5px; letter-spacing: .6px; text-transform: uppercase;
+  color: #8ba492; }
+.rw.got .rw-state { color: #8fe07a; }
+
+/* ------------------------------------------------- hole-by-hole records --- */
+.recrow { width: 100%; text-align: left; font: inherit; cursor: pointer; }
+.rc-caret { color: #8ba492; font-size: 11px; margin-left: 6px; }
+.recrow.open .rc-caret { color: #eaf3ea; }
+.recholes { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 11px 11px;
+  margin: -2px 0 6px; border-radius: 0 0 11px 11px;
+  background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.06); border-top: 0; }
+.rh { display: flex; align-items: baseline; gap: 5px; padding: 4px 8px;
+  border-radius: 8px; background: rgba(255,255,255,.05); font-size: 12px; }
+.rh i { font-style: normal; font-size: 9.5px; color: #8ba492; min-width: 10px; }
+.rh b { font-weight: 900; color: #eaf3ea; }
+.rh em { font-style: normal; font-size: 10.5px; color: #9fb6a4;
+  max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rh.mine { background: rgba(143,224,122,.18); }
+.rh.mine b, .rh.mine em { color: #cdf5c0; }
+.rh.empty { opacity: .4; }

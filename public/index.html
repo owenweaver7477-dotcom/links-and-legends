@@ -291,22 +291,37 @@
       <button class="btn" id="btnShopBack">← Back</button>
     </div>
 
-    <div class="section">
-      <h4 class="lbl">Your career</h4>
+    <!-- The clubhouse was one long scroll of four sections: you arrived at
+         the top of your career and had to travel past all of it to reach the
+         shop. Rooms, not a corridor. The tab bar is the only navigation on
+         this screen and it remembers where you were, because a panel that
+         resets to the first tab on every purchase is worse than no tabs. -->
+    <div class="hktabs" id="hkTabs" role="tablist">
+      <button class="hktab on" data-tab="career" role="tab">Career</button>
+      <button class="hktab" data-tab="rewards" role="tab">Rewards</button>
+      <button class="hktab" data-tab="records" role="tab">Records</button>
+      <button class="hktab" data-tab="shop" role="tab">Pro shop</button>
+      <button class="hktab" data-tab="bag" role="tab">Your bag</button>
+    </div>
+
+    <div class="section hkpane" data-pane="career">
       <div class="career" id="careerBox"></div>
     </div>
 
-    <div class="section">
-      <h4 class="lbl">Course records</h4>
+    <div class="section hkpane" data-pane="rewards" hidden>
+      <div id="rewardBox"></div>
+    </div>
+
+    <div class="section hkpane" data-pane="records" hidden>
       <div id="recordBox"></div>
     </div>
 
-    <div class="section">
+    <div class="section hkpane" data-pane="shop" hidden>
       <h4 class="lbl">Pro shop <span class="coinbal" id="coinBal"></span></h4>
       <div id="shopList"></div>
     </div>
 
-    <div class="section">
+    <div class="section hkpane" data-pane="bag" hidden>
       <h4 class="lbl">Your bag <span id="bagCount"></span></h4>
       <div class="bag" id="bagList"></div>
       <div class="bagbar">

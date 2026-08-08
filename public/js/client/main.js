@@ -1919,6 +1919,7 @@ function renderClubhouse() {
      is never a blank panel waiting on a round trip. */
   HUD.renderRecords(COURSES, G.records || {}, G.myPid);
   Net.records(r => { G.records = r; HUD.renderRecords(COURSES, r, G.myPid); });
+  HUD.renderRewards(prof);
   HUD.renderShop(prof, item => Net.buy(item));
   bagDraft = me()?.bag?.length ? me().bag.slice()
     : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true }));
@@ -2339,6 +2340,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   // the clubhouse: career, pro shop and bag, reachable without hosting a game
   HUD.el.btnClubhouse.addEventListener('click', () => {
     renderClubhouse();
+    HUD.bindClubhouse();
     G.screen = 'shop';
     HUD.show('shop');
   });

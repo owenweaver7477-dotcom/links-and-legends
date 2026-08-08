@@ -1004,12 +1004,82 @@ HUD.renderEmotes = (level, onPick) => {
 HUD.showEmotes = on => { if (el.emoteWheel) el.emoteWheel.hidden = !on; };
 HUD.emotesOpen = () => el.emoteWheel && !el.emoteWheel.hidden;
 
+/* ------------------------------------------------------ clubhouse tabs --- */
+/**
+ * Which room of the clubhouse is open. Module-level, exactly like the shop's
+ * own tab: every purchase re-renders the whole panel, and a tab that snaps
+ * back to Career each time you buy something is worse than having no tabs.
+ */
+HUD.hkTab = 'career';
+HUD.bindClubhouse = () => {
+  const bar = document.getElementById('hkTabs');
+  if (!bar || bar.dataset.bound) return;
+  bar.dataset.bound = '1';
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('.hktab');
+    if (b) HUD.showClubhouseTab(b.dataset.tab);
+  });
+  HUD.showClubhouseTab(HUD.hkTab);
+};
+HUD.showClubhouseTab = (name) => {
+  HUD.hkTab = name;
+  for (const b of document.querySelectorAll('.hktab')) {
+    const on = b.dataset.tab === name;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+  for (const p of document.querySelectorAll('.hkpane')) {
+    p.hidden = p.dataset.pane !== name;
+  }
+  // a tab switch should start you at the top of the room you just walked into
+  document.querySelector('#screenShop .card')?.scrollTo?.({ top: 0 });
+};
+
+/* ---------------------------------------------------------- the ladder --- */
+/**
+ * Every reward in the game, earned and unearned, in the order they arrive.
+ *
+ * Showing the LOCKED ones is the whole point. The career panel said "8 of 31
+ * unlocked" and named the next one, which tells a player the ladder exists
+ * without ever showing it to them — and a ladder you cannot see the top of
+ * is not a reason to keep playing.
+ */
+HUD.renderRewards = (prof) => {
+  const box = document.getElementById('rewardBox');
+  if (!box) return;
+  const level = prof?.level ?? 1;
+  const owned = UNLOCKS.filter(u => u.at <= level).length;
+
+  const rows = UNLOCKS.map(u => {
+    const got = u.at <= level;
+    const kind = UNLOCK_KINDS[u.kind] || { name: u.kind, blurb: '' };
+    return `<li class="rw ${got ? 'got' : 'locked'}">
+      <span class="rw-lvl">${u.at}</span>
+      <span class="rw-swatch" style="background:${u.color || 'transparent'};
+        ${u.color ? '' : 'border-style:dashed'}"></span>
+      <span class="rw-name"><b>${escapeHtml(u.name)}</b>
+        <small>${escapeHtml(kind.name)}</small></span>
+      <span class="rw-state">${got ? 'earned' : 'level ' + u.at}</span>
+    </li>`;
+  }).join('');
+
+  box.innerHTML =
+    `<div class="rw-head">
+       <div><b>${owned}</b><span>of ${UNLOCKS.length} earned</span></div>
+       <p class="tiny">Levels buy identity, never distance — nothing on this
+         list makes the ball go further. Equip what you have earned from
+         <b>Your character</b> on the front page.</p>
+     </div>
+     <ul class="rwlist">${rows}</ul>`;
+};
+
 /* ------------------------------------------------------------ records --- */
 /**
  * The course record board.  Every course is listed whether or not it has a
  * record yet, because an empty row reads as an invitation and a missing row
  * reads as a course that does not exist.
  */
+HUD.recOpen = null;              // which course's hole board is expanded
 HUD.renderRecords = (courses, records, myPid) => {
   const box = el.recordBox;
   if (!box) return;
@@ -1017,15 +1087,48 @@ HUD.renderRecords = (courses, records, myPid) => {
   const wrap = document.createElement('div');
   wrap.className = 'recboard';
   for (const c of courses) {
-    const r = records?.[c.id] || null;
-    const row = document.createElement('div');
-    row.className = 'recrow' + (r ? (r.pid === myPid ? ' mine' : '') : ' empty');
+    const entry = records?.[c.id] || null;
+    // the board is either the old {round} shape or the full {round, holes}
+    const r = entry && entry.round !== undefined ? entry.round : entry;
+    const holes = entry && entry.holes ? entry.holes : null;
+    const open = HUD.recOpen === c.id;
+
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'recrow' + (r ? (r.pid === myPid ? ' mine' : '') : ' empty')
+      + (open ? ' open' : '');
     const rel = r ? r.total - r.par : 0;
     row.innerHTML =
       `<span class="rc-course">${escapeHtml(c.name)}</span>` +
       `<span class="rc-score">${r ? r.total + (rel === 0 ? ' (E)' : rel > 0 ? ` (+${rel})` : ` (${rel})`) : '—'}</span>` +
-      `<span class="rc-who">${r ? escapeHtml(r.pid === myPid ? 'you' : r.name) : 'unclaimed'}</span>`;
+      `<span class="rc-who">${r ? escapeHtml(r.pid === myPid ? 'you' : r.name) : 'unclaimed'}</span>` +
+      `<span class="rc-caret">${open ? '▾' : '▸'}</span>`;
+    /* Clicking a course opens its hole-by-hole board. The best score on each
+       individual hole is the part of this board an ordinary player can
+       realistically get their name on — the full-round record belongs to
+       whoever is best at the whole game, but anybody can hole a 2. */
+    row.addEventListener('click', () => {
+      HUD.recOpen = open ? null : c.id;
+      HUD.renderRecords(courses, records, myPid);
+    });
     wrap.appendChild(row);
+
+    if (open) {
+      const panel = document.createElement('div');
+      panel.className = 'recholes';
+      if (!holes || !holes.some(Boolean)) {
+        panel.innerHTML = '<span class="tiny">No hole records here yet — ' +
+          'finish a round and every one of them is yours to take.</span>';
+      } else {
+        panel.innerHTML = holes.map((h, i) => {
+          if (!h) return `<span class="rh empty"><i>${i + 1}</i><b>—</b></span>`;
+          const mine = h.pid === myPid;
+          return `<span class="rh${mine ? ' mine' : ''}"><i>${i + 1}</i>` +
+            `<b>${h.strokes}</b><em>${escapeHtml(mine ? 'you' : h.name)}</em></span>`;
+        }).join('');
+      }
+      wrap.appendChild(panel);
+    }
   }
   box.appendChild(wrap);
 };

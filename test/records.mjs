@@ -88,9 +88,16 @@ test('courses keep separate boards', () => {
   submitRound('links', 'Ben', 'b1', NINE(5), 1000);
   assert.equal(recordsFor('parkland').round.name, 'Ann');
   assert.equal(recordsFor('links').round.name, 'Ben');
+  /* allRecords now hands back the WHOLE board per course — the round record
+     and the nine hole records — because the hole records are the ones an
+     ordinary player can realistically get their name on, and the clubhouse
+     needs them to show anything worth chasing. */
   const all = allRecords();
-  assert.equal(all.parkland.total, 27);
-  assert.equal(all.links.total, 45);
+  assert.equal(all.parkland.round.total, 27);
+  assert.equal(all.links.round.total, 45);
+  assert.equal(all.parkland.holes.length, 9);
+  assert.equal(all.parkland.holes[0].name, 'Ann');
+  assert.equal(all.links.holes[8].strokes, 5);
 });
 
 test('a course nobody has played reads as unclaimed, not as broken', () => {

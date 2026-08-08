@@ -55,10 +55,25 @@ export function recordsFor(courseId) {
   return { round: c.round || null, holes: (c.holes || []).slice(0, HOLES) };
 }
 
-/** Every course's round record, for the clubhouse. */
+/**
+ * The whole board, for the clubhouse: every course's round record AND its
+ * nine hole records.
+ *
+ * This used to hand back the round record alone, which is the one entry an
+ * ordinary player will realistically never own — the full-round record goes
+ * to whoever is best at the entire game. The hole records are the reachable
+ * ones: anybody can hole a 2. Sending them is eight courses times nine small
+ * objects, which is nothing, and it is the difference between a board you
+ * read once and a board you chase.
+ */
 export function allRecords() {
   const out = {};
-  for (const [id, c] of Object.entries(board)) out[id] = c.round || null;
+  for (const [id, c] of Object.entries(board)) {
+    out[id] = {
+      round: c.round || null,
+      holes: (c.holes || []).slice(0, HOLES)
+    };
+  }
   return out;
 }
 
