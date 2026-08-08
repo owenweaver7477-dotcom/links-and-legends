@@ -121,6 +121,21 @@ export class TerrainModel {
       }
     }
 
+    /* Mounds and hollows in the fairway itself.
+       These go on AFTER the corridor has been graded, because the whole
+       point of them is that the greenkeeper did not flatten this bit — and
+       BEFORE the green and the tee pads, which are allowed to overrule any
+       shaping that strays into them. Nothing in the game ever putts across a
+       hump or tees off the side of one. */
+    for (const m of hole.mounds || []) {
+      const q = ellipseQ(x, z, m);
+      if (q < 1) {
+        // cosine cap: zero height and zero slope at the rim, so it blends
+        // into the fairway rather than sitting on it like a dropped bowl
+        h += m.h * 0.5 * (1 + Math.cos(Math.PI * q));
+      }
+    }
+
     // green: a smooth, gently tilted plateau
     const g = hole.green;
     const dg = Math.hypot(x - g.x, z - g.z);

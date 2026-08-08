@@ -11,6 +11,7 @@ import { buildSurfaceTexture } from './surfacemap.js';
 import { mulberry32, clamp, lerp, fbm, smoothstep } from '../shared/rng.js';
 import { BALL_RADIUS } from '../shared/ballistics.js';
 import { sharedBlobTexture } from './avatar.js';
+import { crownOf } from '../shared/biomes.js';
 
 const GRID_STEP = 1.8;          // metres between terrain vertices.  2.6 read
                                 // as polygonal on every mound; 1.8 is the
@@ -934,7 +935,7 @@ export class GolfScene {
     }
     const meshes = [];
     for (const [species, list] of bySpecies) {
-      const parts = treeParts(species, bio);
+      const parts = normaliseCanopy(species, treeParts(species, bio));
       for (const part of parts) {
         // Per-instance colour MULTIPLIES the material colour, so the material
         // has to be white or every tree comes out as its own colour squared —
@@ -1491,11 +1492,64 @@ function cached(key, make) {
  * expressed as fractions of the tree's height so one geometry serves every
  * size, and the whole species draws in one call per part.
  */
+/* =========================================================================
+   Making the picture agree with the collider
+   -------------------------------------------------------------------------
+   A tree's canopy was drawn to whatever radius looked right and collided at
+   a separate number in coursegen. They had drifted: a broadleaf's lobes
+   reached 0.49 of its height and it collided at 0.34. From inside the
+   corridor that is a ball flying clean through leaves, or — far worse, and
+   what the player actually reported — a shot that visibly misses by metres
+   being knocked straight down.
+
+   So the drawn canopy is now MEASURED and scaled to reach exactly crownOf().
+   Measured, not annotated, because a hand-written radius beside each lobe is
+   the same drift with extra steps.
+
+   Only species with a solid canopy are normalised. A palm's fronds spread
+   far wider than anything that should stop a golf ball and they are supposed
+   to; the same goes for a saguaro's arms. Those keep their art, and their
+   collider is the small core it always was. */
+const SOLID_CANOPY = new Set(['maple', 'oak', 'mangrove', 'palo', 'pine', 'fir', 'spruce']);
+
+function normaliseCanopy(species, parts) {
+  if (!SOLID_CANOPY.has(species)) return parts;
+  const v = new THREE.Vector3(), sc = new THREE.Vector3();
+  const q = new THREE.Quaternion(), eul = new THREE.Euler();
+  let reach = 0;
+  for (const p of parts) {
+    if (!p.mat.userData?.leaf) continue;
+    eul.set(p.tilt || 0, p.rotY || 0, p.tiltZ || 0);
+    q.setFromEuler(eul);
+    sc.set(p.scale[0], p.scale[1], p.scale[2]);
+    const pos = p.geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      // the same order _buildTrees composes in: scale, rotate, then offset
+      v.fromBufferAttribute(pos, i).multiply(sc).applyQuaternion(q);
+      reach = Math.max(reach, Math.hypot(v.x + p.off[0], v.z + p.off[2]));
+    }
+  }
+  if (!(reach > 0.01)) return parts;
+  const k = crownOf(species) / reach;
+  for (const p of parts) {
+    if (!p.mat.userData?.leaf) continue;
+    // width only — a tree that is scaled in every axis is a shorter tree,
+    // and the height is what the collider's vertical extent is built from
+    p.off = [p.off[0] * k, p.off[1], p.off[2] * k];
+    p.scale = [p.scale[0] * k, p.scale[1], p.scale[2] * k];
+  }
+  return parts;
+}
+
 function treeParts(species, bio) {
   const P = bio.palette;
   const trunkMat = () => new THREE.MeshLambertMaterial({ color: new THREE.Color(P.trunk) });
-  const leafMat = (hex, opts = {}) => new THREE.MeshLambertMaterial(
-    Object.assign({ color: new THREE.Color(hex), flatShading: true }, opts));
+  const leafMat = (hex, opts = {}) => {
+    const m = new THREE.MeshLambertMaterial(
+      Object.assign({ color: new THREE.Color(hex), flatShading: true }, opts));
+    m.userData.leaf = true;      // so the canopy can be measured and normalised
+    return m;
+  };
 
   switch (species) {
     case 'pine': case 'spruce': case 'fir': {

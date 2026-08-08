@@ -22,7 +22,7 @@ export const BIOMES = {
     roughWidth: 26,
     treeDensity: 0.72,          // 0..1, relative
     treeSpecies: ['oak', 'pine', 'maple'],
-    treeHeight: [9, 17],
+    treeHeight: [8, 15],
     waterChance: 0.45,
     waterKind: 'pond',
     bunkerCount: [2, 5],
@@ -128,7 +128,7 @@ export const BIOMES = {
     roughWidth: 20,
     treeDensity: 0.7,
     treeSpecies: ['spruce', 'spruce', 'fir'],
-    treeHeight: [14, 24],
+    treeHeight: [12, 20],
     waterChance: 0.3,
     waterKind: 'lake',
     bunkerCount: [1, 4],
@@ -186,6 +186,48 @@ export const BIOMES = {
 };
 
 export const COURSE_ORDER = ['parkland', 'links', 'desert', 'alpine', 'tropical'];
+
+/* ---------------------------------------------------------------- crowns ---
+   How wide a tree's canopy is, as a fraction of its height. ONE number per
+   species, and it is the single source of truth for three things that were
+   previously each guessing:
+
+     coursegen  sets the tree's collision radius from it
+     ballistics tests the ball against a canopy of that radius
+     scene      normalises the DRAWN lobes so they reach exactly that far
+
+   They had drifted apart, and drift here is the worst kind of bug in a golf
+   game: a broadleaf was drawn with lobes reaching 0.49 of its height and
+   collided at 0.34, so a ball could vanish into leaves and come out clean —
+   or, from the tee camera, appear to miss by four metres and be knocked
+   down. Either way the player concludes the physics is lying, and they are
+   right. Now the picture IS the collider.
+
+   The numbers themselves are also smaller than they were. A real oak has a
+   crown about half its height wide and that is genuinely what a parkland
+   course looks like, but at that ratio a treeline reads as a solid wall from
+   inside a 30 m corridor, and the game is played from inside the corridor. */
+export const CROWN = {
+  maple: 0.28, oak: 0.28, mangrove: 0.26,
+  fir: 0.20, pine: 0.20,
+  palm: 0.17, saguaro: 0.12, gorse: 0.70
+};
+export const crownOf = species => CROWN[species] ?? 0.28;
+
+/* Where the leaves are, vertically: the centre of the canopy and its half
+   height, both as fractions of the tree's height. Same reasoning as CROWN —
+   the physics tests an ellipsoid and the renderer draws lobes, and they have
+   to describe the same object.
+
+   A conifer is the one to look at. Its skirts start at 0.34 of its height,
+   so a band centred at 0.80 like a broadleaf leaves the bottom third of a
+   fir drawn and not solid. */
+export const CANOPY = {
+  maple: [0.82, 0.33], oak: [0.82, 0.33], mangrove: [0.82, 0.33], palo: [0.88, 0.28],
+  pine: [0.70, 0.36], fir: [0.70, 0.36], spruce: [0.70, 0.36],
+  palm: [0.88, 0.16], gorse: [0.50, 0.45], saguaro: [0.62, 0.42]
+};
+export const canopyOf = species => CANOPY[species] || CANOPY.maple;
 
 /* -------------------------------------------------------------- regions ---
    Courses are chosen by where in the world they are, not from a flat list.

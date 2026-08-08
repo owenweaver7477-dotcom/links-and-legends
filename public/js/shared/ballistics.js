@@ -15,6 +15,7 @@ import { SURFACES } from './terrain.js';
 import { clamp } from './rng.js';
 import { gearEffect } from './gear.js';
 import { crewEffect } from './crew.js';
+import { canopyOf } from './biomes.js';
 
 /* ------------------------------------------------------------- constants */
 const G = 9.80665;
@@ -557,11 +558,15 @@ export class ShotSim {
          the real canopy has tapered to nothing. Matching the drawn shape
          fixes both at once. */
       const base = this.T.heightAt(t.x, t.z);
-      const palm = t.species === 'palm';
       const gorse = t.species === 'gorse';
-      // where the leaves sit, as a fraction of tree height
-      const cy = base + t.h * (palm ? 0.88 : gorse ? 0.55 : 0.80);
-      const halfH = t.h * (palm ? 0.16 : gorse ? 0.45 : 0.26);
+      /* Where the leaves sit, from biomes.js — the same table the renderer
+         normalises the drawn lobes against. A conifer's skirts start at a
+         third of its height and a broadleaf's canopy at half, and having
+         that inlined here as one number for every species is how the band
+         of solid, invisible canopy around a bare trunk got in. */
+      const [cyF, halfF] = canopyOf(t.species);
+      const cy = base + t.h * cyF;
+      const halfH = t.h * halfF;
 
       const trunkR = t.r * (gorse ? 0.9 : 0.14);
       const canopyHi = cy + halfH;

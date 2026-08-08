@@ -11,7 +11,7 @@
    ========================================================================= */
 
 import { rngKit, hashSeed, clamp, lerp, toYards } from './rng.js';
-import { BIOMES, COURSE_ORDER, HOLES_PER_COURSE } from './biomes.js';
+import { BIOMES, COURSE_ORDER, HOLES_PER_COURSE, crownOf } from './biomes.js';
 
 /* Standard 9-hole par mix — two 3s, two 5s, five 4s = par 36. */
 const PAR_SETS = [
@@ -305,12 +305,172 @@ function placeTrees(rk, bio, dense, cum, total, green, tee, bunkers, waters, fai
     trees.push({
       x, z, species,
       h,
-      r: h * (species === 'palm' ? 0.20 : species === 'gorse' ? 0.75 : species === 'saguaro' ? 0.12 : 0.34),
+      r: h * crownOf(species),
       rot: rk.f(0, Math.PI * 2),
       tone: rk.f(0, 1)
     });
   }
   return trees;
+}
+
+/* =========================================================================
+   BLOCKAGES — the fairway does not have to be clean
+   -------------------------------------------------------------------------
+   Every hole was a smooth graded corridor with the trouble pushed out to the
+   sides. That is a driving range with a bend in it: aim down the middle, hit
+   it, walk. The interest in a golf hole is what is IN FRONT of you, not what
+   is beside you.
+
+   Three things go in the corridor now:
+
+     mounds     humps and hollows in the fairway itself. Terrain, not a
+                penalty — a good drive that finishes on the downslope of a
+                hump is still a good drive, it just has an awkward stance and
+                a bad view of the green.
+     cross      a bunker lying ACROSS the line rather than beside it, at a
+                distance that asks a question off the tee: carry it, or lay
+                up short of it and hit a longer second.
+     sentinels  a tree, or two, standing in the corridor. Rare and always at
+                the edges of a landing zone, never dead centre, and never
+                where the default aim would send you into it (see defaultAim,
+                which now steers around anything flagged `blocker`).
+
+   Everything here stays clear of the tee apron, so no hole can be blocked
+   from the tee, and clear of the green complex, so nothing sits between you
+   and a putt. It is meant to be untidy, not unfair.
+   ========================================================================= */
+
+/**
+ * Where along the hole it is safe to put something in the way — as fractions
+ * of the hole's length, or null if there is nowhere.
+ *
+ * The near limit is measured from the FORWARD tee, not the back one. That is
+ * the whole subtlety: the forward tees sit 17% up the hole, so a hump placed
+ * "a comfortable 120 m from the tee" is fifty metres in front of a player
+ * using them — inside the launch window, which is the one thing none of this
+ * is allowed to do. Short par 3s come back with nowhere at all, and that is
+ * the right answer for a 130 m hole rather than a reason to relax the rule.
+ */
+const CLEAR_OF_TEE = 130;      // metres, from the most forward tee
+function blockZone(total, par) {
+  const lo = TEE_SETS.forward + CLEAR_OF_TEE / total;
+  const hi = par === 3 ? 0.6 : 0.82;
+  return hi > lo + 0.03 ? [lo, hi] : null;
+}
+
+function placeMounds(rk, bio, dense, cum, total, green, par, fairwayWidth) {
+  const mounds = [];
+  const zone = blockZone(total, par);
+  if (!zone) return mounds;                       // a short hole has no room
+  const [lo, hi] = zone;
+
+  /* Par 3s get at most one piece of shaping, since the only shot played over
+     it is the tee shot and a blind par 3 is a gimmick rather than a hole. */
+  const n = par === 3 ? rk.i(0, 1) : rk.i(1, 3);
+  const halfW = fairwayWidth * 0.5;
+
+  for (let i = 0; i < n; i++) {
+    const s = total * rk.f(lo, hi);
+    const p = routeAt(dense, cum, s);
+    const t = routeTangent(dense, cum, s);
+    if (Math.hypot(p[0] - green.x, p[1] - green.z) < green.r + 34) continue;
+
+    /* Sideways offset is deliberately small — the point is that it is IN the
+       fairway. A hump beside the fairway is just terrain. */
+    const off = rk.f(-0.55, 0.55) * halfW;
+    const hollow = rk.bool(0.3);
+
+    /* Long axis usually runs across the hole, so it reads as a step in the
+       ground you have to cross rather than a lump you walk round. */
+    const along = rk.f(9, 17);
+    const across = along * rk.f(1.1, 2.2);
+    const rot = Math.atan2(t[0], t[1]) + rk.f(-0.5, 0.5);
+
+    /* Height is tied to the SHORT axis, not chosen freely, because the thing
+       that decides whether this is character or a wall is the gradient, not
+       the height. terrain.js caps the mound with a cosine, whose steepest
+       face is h·pi/(2r) — so a fixed fraction of the short radius is a fixed
+       grade. 0.10 to 0.17 works out at 16-27%: enough that a running ball
+       kicks off it and a stance on it is awkward, gentle enough to walk up
+       and to fly over without noticing. A fixed three metres would have been
+       a 50% face on the small ones. */
+    const grade = hollow ? rk.f(0.08, 0.13) : rk.f(0.10, 0.17);
+    mounds.push({
+      x: p[0] + (-t[1]) * off,
+      z: p[1] + (t[0]) * off,
+      rx: across, rz: along, rot,
+      h: (hollow ? -1 : 1) * grade * Math.min(along, across)
+    });
+  }
+  return mounds;
+}
+
+/**
+ * A cross bunker: sand lying across the line, not beside it. The distance is
+ * the whole point — it has to sit where a tee shot lands, or it is scenery.
+ */
+function placeCrossBunker(rk, bio, dense, cum, total, green, par, fairwayWidth) {
+  if (par === 3) return null;                     // nothing to carry on a one-shotter
+  if (!rk.bool(0.42)) return null;
+  const zone = blockZone(total, par);
+  if (!zone) return null;
+  const [lo, hi] = zone;
+  // 210-250 m is a driver for a good player; on a par 5 the second landing
+  // zone is the interesting one, so aim further out.
+  const want = par === 5 ? rk.f(0.42, 0.62) : rk.f(0.34, 0.52);
+  const s = total * clamp(want, lo, hi);
+  const p = routeAt(dense, cum, s);
+  const t = routeTangent(dense, cum, s);
+  if (Math.hypot(p[0] - green.x, p[1] - green.z) < green.r + 40) return null;
+
+  const halfW = fairwayWidth * 0.5;
+  return {
+    // offset a little so there is always a way round for someone laying up
+    x: p[0] + (-t[1]) * rk.f(-0.4, 0.4) * halfW,
+    z: p[1] + (t[0]) * rk.f(-0.4, 0.4) * halfW,
+    rx: halfW * rk.f(0.75, 1.05),                 // wide across the corridor
+    rz: rk.f(4.5, 8),                             // shallow along it
+    rot: Math.atan2(t[0], t[1]) + Math.PI / 2 + rk.f(-0.25, 0.25),
+    depth: bio.bunkerStyle === 'pot' ? rk.f(1.5, 2.2) : rk.f(0.8, 1.4),
+    cross: true
+  };
+}
+
+/**
+ * Sentinel trees: standing IN the corridor. One or two, at the edge of a
+ * landing zone, so the fairway has a shape you have to respect rather than a
+ * width you can ignore.
+ */
+function placeSentinels(rk, bio, dense, cum, total, green, par, fairwayWidth) {
+  const out = [];
+  if (bio.treeDensity <= 0.001) return out;       // a desert has no sentinels
+  const zone = blockZone(total, par);
+  if (!zone) return out;
+  const [lo, hi] = zone;
+  const n = par === 3 ? 0 : rk.bool(0.5) ? rk.i(1, 2) : 0;
+  const halfW = fairwayWidth * 0.5;
+
+  for (let i = 0; i < n; i++) {
+    const s = total * rk.f(lo, hi);
+    const p = routeAt(dense, cum, s);
+    const t = routeTangent(dense, cum, s);
+    if (Math.hypot(p[0] - green.x, p[1] - green.z) < green.r + 45) continue;
+    /* Never dead centre: 45-80% of the way to the edge. There is always a
+       side of it to play down, which is the difference between a hazard and
+       a roadblock. */
+    const off = rk.sign() * rk.f(0.45, 0.8) * halfW;
+    const species = rk.pick(bio.treeSpecies);
+    const h = rk.f(bio.treeHeight[1] * 0.9, bio.treeHeight[1] * 1.45);
+    out.push({
+      x: p[0] + (-t[1]) * off,
+      z: p[1] + (t[0]) * off,
+      species, h,
+      r: h * crownOf(species),
+      rot: rk.f(0, Math.PI * 2), tone: rk.f(0, 1),
+      blocker: true            // defaultAim steers around these
+    });
+  }
+  return out;
 }
 
 export function inEllipse(x, z, e, pad = 0) {
@@ -357,7 +517,11 @@ function makeHole(courseId, bio, number, seed) {
   const pin = { x: green.x + Math.cos(pinA) * pinD, z: green.z + Math.sin(pinA) * pinD };
 
   const bunkers = placeBunkers(rk, bio, dense, cum, total, green, par);
+  const cross = placeCrossBunker(rk, bio, dense, cum, total, green, par, fairwayWidth);
+  if (cross) bunkers.push(cross);
   const waters = placeWaters(rk, bio, dense, cum, total, green, tee, par);
+  const mounds = placeMounds(rk, bio, dense, cum, total, green, par, fairwayWidth);
+  const sentinels = placeSentinels(rk, bio, dense, cum, total, green, par, fairwayWidth);
 
   // bounds: everything the hole occupies plus a margin of scenery
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -386,18 +550,21 @@ function makeHole(courseId, bio, number, seed) {
     tee, tees, teeYards: teeYardage(tees, total),
     green, pin,
     cup: { x: pin.x, z: pin.z, r: 0.108 },     // a real hole is 108 mm across
-    bunkers, waters,
+    bunkers, waters, mounds,
     bounds, ob,
     trees: [],
     // terrain shaping
     terrainSeed: (seed ^ 0x5f3a7c1) >>> 0,
-    elevProfile: buildElevProfile(rk, bio, total),
+    elevProfile: buildElevProfile(rk, bio, total, par),
     greenTilt: { ax: rk.gauss() * 0.028, az: rk.gauss() * 0.028 },
     maxStrokes: par + 6
   };
 
   const dist2route = makeRouteDistanceFn(hole);
   hole.trees = placeTrees(rk, bio, dense, cum, total, green, tee, bunkers, waters, fairwayWidth, bounds, dist2route);
+  /* Sentinels go in LAST and unfiltered: placeTrees rejects anything inside
+     the corridor, which is exactly where these are supposed to be. */
+  hole.trees.push(...sentinels);
   hole.name = describeHole(hole, rk);
   return hole;
 }
@@ -423,18 +590,140 @@ function teeYardage(tees, total) {
   return out;
 }
 
-/** Gentle along-the-hole elevation change: uphill, downhill or a valley. */
-function buildElevProfile(rk, bio, total) {
-  const bias = (bio.slopeBias || 1);
-  const drop = rk.gauss() * 6 * bias;                  // net rise/fall in metres
-  const midBump = rk.gauss() * 4 * bias;
-  return { drop, midBump, total };
+/* =========================================================================
+   ELEVATION — what the hole does vertically
+   -------------------------------------------------------------------------
+   The old profile was `drop * t + midBump * sin(pi t)`, both drawn from a
+   gaussian around zero. That is a fair description of gently undulating
+   ground and it is why every hole felt the same: the expected value of a
+   gaussian is nothing, so the average hole was flat, and the ones that were
+   not still only rose or fell by a few metres spread over four hundred.
+
+   A real course does not undulate randomly, it has SET PIECES — a tee cut
+   into the hillside so you are hitting out over the tops of the trees, a
+   green perched above you that hides its own surface, a valley you drive
+   into and climb out of. Those are the holes anybody remembers.
+
+   So a hole now picks an archetype and commits to it, and the wander is what
+   is layered on top rather than the whole story.
+   ========================================================================= */
+
+const ELEV_KINDS = [
+  /* The one the player asked for by name: you start high. Ten to twenty
+     metres above the fairway is a genuine drop — the ball hangs, carries
+     further than the number says, and the whole hole is laid out in front
+     of you from the tee, which is most of the pleasure of it. */
+  ['tee_box', 4],
+  ['uphill_green', 3],     // the green sits above you and hides its surface
+  ['valley', 3],           // down off the tee, climb back to the green
+  ['plateau', 2],          // climbs early, then runs flat along a shelf
+  ['punchbowl', 2],        // green sits in a hollow: everything feeds in
+  ['ridge', 2],            // a crest partway, blind over the top
+  ['rolling', 3]           // no set piece, just genuinely uneven ground
+];
+
+function buildElevProfile(rk, bio, total, par) {
+  const bias = bio.slopeBias || 1;
+  /* Flat courses get flat holes. A links course pretending to be a mountain
+     course is worse than either, so relief scales the whole archetype rather
+     than being ignored. */
+  const scale = clamp(((bio.relief || 7) / 9) * bias, 0.45, 1.6);
+
+  const sum = ELEV_KINDS.reduce((a, k) => a + k[1], 0);
+  let roll = rk.f(0, sum), kind = ELEV_KINDS[0][0];
+  for (const [name, w] of ELEV_KINDS) { roll -= w; if (roll <= 0) { kind = name; break; } }
+
+  const p = {
+    kind, total,
+    drop: rk.gauss() * 3.5 * bias,          // the old gentle net tilt, kept
+    midBump: rk.gauss() * 2.5 * bias,
+    teeDrop: 0,                             // height the tee sits above the rest
+    teeSpan: 0.14,                          // how quickly it falls away
+    shelf: 0,                               // an early climb onto a terrace
+    greenLift: 0,                           // green above (+) or in a bowl (-)
+    rollAmp: rk.f(0.6, 2.2) * scale,        // the ground is never actually flat
+    rollFreq: rk.f(2.2, 4.4),
+    rollPhase: rk.f(0, Math.PI * 2)
+  };
+
+  switch (kind) {
+    case 'tee_box':
+      p.teeDrop = rk.f(9, 19) * scale;
+      p.teeSpan = rk.f(0.10, 0.18);
+      p.drop -= rk.f(0, 3) * bias;
+      break;
+    case 'uphill_green':
+      p.greenLift = rk.f(6, 14) * scale;
+      break;
+    case 'valley':
+      p.midBump = -rk.f(7, 15) * scale;     // the floor of it, halfway down
+      p.greenLift = rk.f(1, 5) * scale;
+      break;
+    case 'plateau':
+      p.shelf = rk.f(4, 9) * scale;         // climbs onto a terrace, then runs flat
+      break;
+    case 'punchbowl':
+      p.greenLift = -rk.f(4, 9) * scale;
+      break;
+    case 'ridge':
+      p.midBump = rk.f(6, 13) * scale;      // blind over the top of it
+      break;
+    default:                                 // rolling
+      p.rollAmp *= rk.f(1.6, 2.6);
+      p.rollFreq = rk.f(1.6, 3.0);
+  }
+
+  /* A par 3 is one shot. A twenty-metre drop over 150 m is a cliff, and a
+     twenty-metre climb is unplayable, so the set piece is halved — a short
+     hole from an elevated tee is still one of the best things in golf, it
+     just does not need the full number. */
+  if (par === 3) {
+    p.teeDrop *= 0.6; p.greenLift *= 0.55; p.midBump *= 0.5; p.shelf *= 0.5;
+  }
+  return p;
 }
 
+/* Every term that CLIMBS has to leave the tee flat.
+   -------------------------------------------------------------------------
+   This is the whole difference between a mountain hole and a broken one. A
+   plain `sin(pi t)` bump is steepest at t = 0, so a hole that rises fifteen
+   metres to a crest puts most of that gradient in the first fifty metres —
+   directly in the launch window, where a flushed driver flies into the
+   hillside and the player concludes the swing is broken.
+
+   terrain.js grades an apron in front of each tee for exactly this reason,
+   but a cap is a patch over a bad profile; it stops the disaster and leaves
+   the hole feeling like a ramp. So the shapes themselves are chosen to have
+   ZERO SLOPE at the tee: sin² instead of sin for the crest, a smoothstep for
+   the terrace, t³ for the green. Only the tee_box drop is steep at t = 0,
+   and that one falls away from you, which is the point of it. */
+const sstep = (a, b, t) => {
+  const u = clamp((t - a) / ((b - a) || 1), 0, 1);
+  return u * u * (3 - 2 * u);
+};
+
 export function elevationAlongRoute(hole, s) {
-  const { drop, midBump, total } = hole.elevProfile;
-  const t = clamp(s / (total || 1), 0, 1);
-  return drop * t + midBump * Math.sin(Math.PI * t);
+  const p = hole.elevProfile;
+  const t = clamp(s / (p.total || 1), 0, 1);
+  const sin2 = Math.sin(Math.PI * t) ** 2;
+  let h = p.drop * t + p.midBump * (p.midBump > 0 ? sin2 : Math.sin(Math.PI * t));
+  /* The tee's own height decays away over the first stretch, so the drop is
+     off the tee where you can see it, not a slab tilting the whole hole. */
+  if (p.teeDrop) h += p.teeDrop * Math.exp(-t / (p.teeSpan || 0.14));
+  /* The terrace starts climbing outside the launch window and takes its
+     time about it — in metres, for the same reason the roll does. */
+  if (p.shelf) h += p.shelf * sstep(55, Math.max(190, p.total * 0.45), s);
+  // the green's arrives late, for the same reason in reverse
+  if (p.greenLift) h += p.greenLift * (t * t * t);
+  /* The general unevenness fades in over the first hundred metres, so it
+     cannot put a two-metre wave across the launch window either. Note that
+     the fade is in METRES and not in t: a fixed fraction of the hole is 26 m
+     on a par 3 and 90 m on a par 5, and the launch window is the same length
+     on both. Getting that wrong put a 14% climb ten metres off one tee. */
+  if (p.rollAmp) {
+    h += p.rollAmp * Math.sin(t * Math.PI * p.rollFreq + p.rollPhase) * sstep(0, 100, s);
+  }
+  return h;
 }
 
 function describeHole(hole, rk) {
@@ -451,6 +740,21 @@ function describeHole(hole, rk) {
   if (hole.waters.length >= 2) names.push('Double Cross');
   else if (hole.waters.length === 1) names.push('Watermark');
   if (hole.bunkers.length >= 6) names.push('The Sandbox');
+
+  /* What the hole DOES vertically is usually the thing you remember about
+     it, so it gets a name at least as often as the water does. */
+  const ELEV_NAMES = {
+    tee_box: ['The High Tee', 'Lookout', 'The Drop'],
+    uphill_green: ['The Climb', 'Long Way Up'],
+    valley: ['The Valley', 'Dip and Rise'],
+    plateau: ['The Shelf', 'Tabletop'],
+    punchbowl: ['Punchbowl', 'The Dell'],
+    ridge: ['Blind Man’s', 'Over the Crest'],
+    rolling: []
+  };
+  names.push(...(ELEV_NAMES[hole.elevProfile?.kind] || []));
+  if (hole.bunkers.some(b => b.cross)) names.push('The Carry');
+  if (hole.trees.some(t => t.blocker)) names.push('The Sentinel');
   return rk.pick(names);
 }
 
@@ -599,10 +903,14 @@ function makeSignatureHole(bio) {
     green, pin,
     cup: { x: pin.x, z: pin.z, r: 0.108 },
     bunkers, waters,
+    /* The signature hole is the hand-drawn map and stays that way — no
+       generated shaping goes in it. It keeps the field so nothing downstream
+       has to ask whether a hole has mounds. */
+    mounds: [],
     bounds, ob,
     trees: [],
     terrainSeed: 0x51a7c33d >>> 0,
-    elevProfile: { drop: -2.5, midBump: 3.0, total },
+    elevProfile: { kind: 'rolling', drop: -2.5, midBump: 3.0, total },
     greenTilt: { ax: 0.02, az: -0.016 },
     maxStrokes: 11,
     name: 'Dogleg Right',
@@ -646,7 +954,7 @@ function makeSignatureHole(bio) {
       const species = rk.pick(bio.treeSpecies);
       // 'tall' clusters are old growth: two to three times the normal canopy
       const h = cl.tall ? rk.f(cl.tall[0], cl.tall[1]) : rk.f(bio.treeHeight[0], bio.treeHeight[1]);
-      hole.trees.push({ x, z, species, h, r: h * 0.34, rot: rk.f(0, Math.PI * 2), tone: rk.f(0, 1) });
+      hole.trees.push({ x, z, species, h, r: h * crownOf(species), rot: rk.f(0, Math.PI * 2), tone: rk.f(0, 1) });
       placed++;
     }
   }
@@ -695,6 +1003,12 @@ export function defaultAim(hole, x, z, reach = 200) {
   const maxAhead = Math.max(1, Math.round(reach / STEP));
   let best = Math.min(route.length - 1, near + 1);
 
+  /* The corridor is no longer empty — sentinel trees stand in it on purpose
+     (see placeSentinels). Staying over short grass is therefore no longer
+     enough to call a line clear: the aim has to miss the trunk too, or the
+     game would once again default to pointing the player at a tree. */
+  const blockers = (hole.trees || []).filter(t => t.blocker);
+
   for (let k = 2; k <= maxAhead; k++) {
     const i = near + k;
     if (i > route.length - 1) break;
@@ -708,6 +1022,10 @@ export function defaultAim(hole, x, z, reach = 200) {
       const lx = x + dx * t, lz = z + dz * t;
       const rx = route[near + j][0], rz = route[near + j][1];
       if (Math.hypot(lx - rx, lz - rz) > CORRIDOR) { clear = false; break; }
+      for (const b of blockers) {
+        if (Math.hypot(lx - b.x, lz - b.z) < b.r + 3) { clear = false; break; }
+      }
+      if (!clear) break;
     }
     if (!clear) break;
     best = i;
