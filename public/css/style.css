@@ -335,6 +335,13 @@ input.code { text-transform: uppercase; letter-spacing: 6px; font-weight: 700; t
 }
 html.touch .touchpad { position: absolute; left: 10px; bottom: 108px; z-index: 7;
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* On a phone the play bar is two rows tall and reaches 123 px up, so a pad
+   sitting at 108 has its bottom row underneath the swing controls — you go
+   to press Ball and take a swing instead. */
+@media (max-width: 560px) {
+  .touchpad, html.touch .touchpad { bottom: 132px; }
+}
 html.touch .touchpad[hidden] { display: none !important; }
 .tbtn { width: 62px; height: 54px; border-radius: 13px; cursor: pointer;
   background: rgba(10,18,15,.82); border: 1px solid rgba(255,255,255,.15);
@@ -1341,9 +1348,16 @@ body.playing .coinhud { display: block; }
 
   /* ---- 3. chat and phrases, out of the way --------------------------- */
   /* The phrase bar is the useful half on a phone — typing during a round is
-     not realistic — so it stays and the scrollback shrinks to make room. */
-  /* clear of the play bar, which on a phone is two rows tall */
-  .chatpanel { left: 6px; right: 6px; width: auto; bottom: 132px; }
+     not realistic — so it stays and the scrollback shrinks to make room.
+
+     It has to share the bottom of the screen with two things it must never
+     sit on: the play bar, which is how you hit the ball, and the walk pad,
+     which is how you get to it. Measured on a 375-wide phone it was landing
+     on BOTH — "Nice shot!" printed straight across the Ball and Cart
+     buttons. So the pad is lifted clear of the play bar and the chat column
+     is moved to the right of the pad rather than across it. Three things,
+     three lanes, no guessing. */
+  .chatpanel { left: 152px; right: 6px; width: auto; bottom: 132px; }
   .chatlog { max-height: 22vh; }
   .chatmsg { font-size: 11px; padding: 3px 7px; }
   .phrasebar { gap: 3px; }

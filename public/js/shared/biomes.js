@@ -282,8 +282,13 @@ export const BIOMES = {
     region: 'Vestfirdir, Iceland',
     continent: 'europe',
     relief: 14,
-    reliefScale: 105,           // sharp, glacier-cut ground
-    ridged: 0.8,
+    /* Relief 14 at a 105 m scale is twice Cairnmoor's amplitude at almost the
+       same frequency — not big country, just chop, and a ball landing on it
+       kicks somewhere random every time. The wind was getting the blame for
+       scores the GROUND was causing. Broad landforms at 165 keep the drama
+       and give the ball somewhere to settle. */
+    reliefScale: 165,
+    ridged: 0.6,
     fairwayWidth: [24, 34],
     roughWidth: 30,
     treeDensity: 0.02,          // effectively none
@@ -295,8 +300,13 @@ export const BIOMES = {
     bunkerStyle: 'pot',         // revetted, and deeper than you want
     greenSpeed: 1.05,
     greenSize: [14, 19],        // big greens, because nothing else is fair here
-    windBase: 8.5,              // the defining hazard, and it is severe
-    windGust: 4.2,
+    /* The wind is the course, but 8.5 m/s gusting 4.2 was past hard and into
+       pointless: competent players were coming in at +21 to +27 against +2
+       to +5 everywhere else, and a course nobody can score on is a course
+       nobody plays twice. 7.2 still makes this comfortably the windiest
+       place in the game — Cairnmoor, the other links, sits at 6.5. */
+    windBase: 7.2,
+    windGust: 3.4,
     firmness: 1.30,
     slopeBias: 1.2,
     cloudDensity: 1.4,
