@@ -17,7 +17,7 @@
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { allCourses, elevationAlongRoute } from '../public/js/shared/coursegen.js';
+import { allCourses, elevationAlongRoute, aimPlan } from '../public/js/shared/coursegen.js';
 
 const HOLES = allCourses().flatMap(c => c.holes.map(h => ({ course: c, hole: h })));
 const generated = HOLES.filter(({ hole }) => !hole.signature);
@@ -153,4 +153,50 @@ test('every hole is still generated identically everywhere', () => {
   const a = JSON.stringify(HOLES.map(({ hole }) => [hole.mounds, hole.elevProfile]));
   const b = JSON.stringify(again.flatMap(c => c.holes).map(h => [h.mounds, h.elevProfile]));
   assert.equal(a, b);
+});
+
+test('the game never sets up a shot that cannot advance the ball', () => {
+  /* The worst bug this project has had, and it shipped for one commit.
+     aimPlan walks the fairway looking for the furthest point it can reach
+     over short grass. If the very first step fails — standing behind a
+     sentinel tree, say — it used to hand back the next route sample, about
+     three metres away. Harmless while the plan only set the AIM. Fatal once
+     the club and the caddie's power followed it: the game handed you a lob
+     wedge a hundred and eighty metres out and told you to hit it three
+     metres, and you tapped forward until the stroke cap ended the hole.
+     Barwon Sandbelt's third did it every single time.
+
+     So: from anywhere on any fairway on any course, the shot the game sets
+     up must be worth playing. */
+  const bad = [];
+  for (const { course, hole } of HOLES) {
+    for (let s = 0; s < hole.total - 10; s += 12) {
+      let i = 0;
+      while (i < hole.cum.length - 1 && hole.cum[i] < s) i++;
+      const [x, z] = hole.route[i];
+      const toPin = Math.hypot(hole.pin.x - x, hole.pin.z - z);
+      const plan = aimPlan(hole, x, z, 210);
+      if (toPin > 30 && plan.dist < 30) {
+        bad.push(`${course.name} h${hole.number} at ${Math.round(s)}m: ` +
+          `${plan.dist.toFixed(0)} m plan with ${toPin.toFixed(0)} m to the pin`);
+      }
+    }
+  }
+  assert.deepEqual(bad, [], 'the game sets up an unplayable shot here:\n   ' + bad.join('\n   '));
+});
+
+test('a sentinel is a tree, not a bush the size of a house', () => {
+  /* Sentinels picked freely from the biome's species list, and a links gorse
+     — a knee-high shrub whose crown is 0.70 of its height — planted at the
+     sandbelt's 22 m tree height became a bush with a FIFTEEN METRE radius
+     standing in the middle of the fairway. It blocked every line down the
+     hole. Two rules: woody species only, and never wider than a third of the
+     fairway whatever the species table says. */
+  for (const { course, hole } of generated) {
+    for (const t of hole.trees.filter(t => t.blocker)) {
+      assert.ok(t.r <= hole.fairwayWidth * 0.34 + 0.01,
+        `${course.name} h${hole.number}: a ${t.species} sentinel ${t.r.toFixed(1)} m ` +
+        `across a ${hole.fairwayWidth.toFixed(0)} m fairway`);
+    }
+  }
 });

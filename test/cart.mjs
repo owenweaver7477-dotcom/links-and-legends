@@ -414,9 +414,10 @@ head('the coin economy — the document’s shape, at PAYOUT_SCALE');
 }
 
 /* ============================================== how long the climb actually is */
-head('progression — bad at the start, maxed in 20 to 30 hours');
+head('progression — bad at the start, and a ladder that outlasts the shop');
 {
-  const { roundCoins } = await import('../public/js/shared/economy.js');
+  const { roundCoins, roundXp, xpForLevel, maxLevel } =
+    await import('../public/js/shared/economy.js');
   const { CADDIE_COSTS, CADDIE_KEYS, CLUB_TIERS, REFINE_COSTS, crewEffect } =
     await import('../public/js/shared/crew.js');
   const { SHOP } = await import('../public/js/shared/gear.js');
@@ -448,8 +449,24 @@ head('progression — bad at the start, maxed in 20 to 30 hours');
      'top three ' + CLUB_TIERS.slice(4).reduce((a, t) => a + t.cost, 0) +
      ' vs first four ' + early);
 
-  ok('owning everything is a long haul, not a second job', hi >= 30 && lo <= 70,
+  ok('owning everything is a long haul, not a second job', hi >= 60 && lo <= 130,
      `${rounds} rounds = ${lo.toFixed(0)}-${hi.toFixed(0)} h`);
+
+  /* The invariant that actually matters, and the one that was broken:
+     the COIN ladder and the LEVEL ladder have to finish in the right order
+     and not by a silly margin. Coins used to run out at 194 rounds against
+     1,131 for level 100 — a player emptied the shop six times over and then
+     had eight hundred rounds with nothing to spend on, which is a currency
+     that has stopped being a reward. Your bag is the medium-term goal and
+     your level is the long one; between a third and three-quarters of the
+     way keeps both alive at once. */
+  const perRoundXp = roundXp(Array(9).fill({ strokes: 4, par: 4 }));
+  const roundsToMaxLevel = xpForLevel(maxLevel()) / perRoundXp;
+  const ratio = rounds / roundsToMaxLevel;
+  ok('the shop empties well before the level ladder does, but not early',
+     ratio > 0.3 && ratio < 0.75,
+     `gear at ${rounds} rounds vs level 100 at ${Math.round(roundsToMaxLevel)} ` +
+     `(${Math.round(ratio * 100)}% of the way)`);
   ok('but the first caddie is affordable after one round',
      perRound >= CADDIE_COSTS[0], `${perRound} vs ${CADDIE_COSTS[0]}`);
   ok('and the last Legend level is not', perRound < CADDIE_COSTS[9],

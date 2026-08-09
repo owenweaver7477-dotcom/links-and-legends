@@ -450,6 +450,14 @@ function placeSentinels(rk, bio, dense, cum, total, green, par, fairwayWidth) {
   const n = par === 3 ? 0 : rk.bool(0.5) ? rk.i(1, 2) : 0;
   const halfW = fairwayWidth * 0.5;
 
+  /* A sentinel has to be a TREE. Picking freely from the biome's species
+     let the sandbelt plant a "gorse" — a shrub whose crown is 0.70 of its
+     height, because on a links it is a knee-high bush — at the sandbelt's
+     tree height of 22 m. That is a gorse bush with a FIFTEEN METRE radius
+     standing in the fairway, and it blocked every line down the hole. */
+  const woody = bio.treeSpecies.filter(sp => crownOf(sp) <= 0.35);
+  if (!woody.length) return out;
+
   for (let i = 0; i < n; i++) {
     const s = total * rk.f(lo, hi);
     const p = routeAt(dense, cum, s);
@@ -459,13 +467,14 @@ function placeSentinels(rk, bio, dense, cum, total, green, par, fairwayWidth) {
        side of it to play down, which is the difference between a hazard and
        a roadblock. */
     const off = rk.sign() * rk.f(0.45, 0.8) * halfW;
-    const species = rk.pick(bio.treeSpecies);
+    const species = rk.pick(woody);
     const h = rk.f(bio.treeHeight[1] * 0.9, bio.treeHeight[1] * 1.45);
     out.push({
       x: p[0] + (-t[1]) * off,
       z: p[1] + (t[0]) * off,
       species, h,
-      r: h * crownOf(species),
+      // never wider than a third of the fairway, whatever the species says
+      r: Math.min(h * crownOf(species), halfW * 0.66),
       rot: rk.f(0, Math.PI * 2), tone: rk.f(0, 1),
       blocker: true            // defaultAim steers around these
     });
@@ -988,9 +997,28 @@ function makeSignatureHole(bio) {
  * @returns heading in radians, in this project's (sin h, cos h) convention
  */
 export function defaultAim(hole, x, z, reach = 200) {
+  return aimPlan(hole, x, z, reach).aim;
+}
+
+/**
+ * The same decision, but it also hands back HOW FAR the aim is pointing.
+ *
+ * That second number matters as much as the first and used to be thrown
+ * away. The caddie's power marker asked for the distance to the PIN however
+ * the aim was set, so on a dogleg the game pointed you at the corner and
+ * then told you to hit hard enough to reach the flag — a flushed shot went
+ * straight through the corner into the trees, doing exactly what aiming at
+ * the corner was supposed to avoid. Aim and power have to describe one shot.
+ *
+ * @returns { aim, dist }  heading in radians, and the distance to what it is
+ *                         actually pointing at
+ */
+export function aimPlan(hole, x, z, reach = 200) {
   const straight = Math.atan2(hole.pin.x - x, hole.pin.z - z);
+  const toPin = Math.hypot(hole.pin.x - x, hole.pin.z - z);
+  const at = (a, d) => ({ aim: a, dist: d });
   const route = hole.route;
-  if (!Array.isArray(route) || route.length < 2) return straight;
+  if (!Array.isArray(route) || route.length < 2) return at(straight, toPin);
 
   // nearest point on the fairway route to where the ball actually is
   let near = 0, nd = Infinity;
@@ -998,6 +1026,42 @@ export function defaultAim(hole, x, z, reach = 200) {
     const dx = route[i][0] - x, dz = route[i][1] - z;
     const d = dx * dx + dz * dz;
     if (d < nd) { nd = d; near = i; }
+  }
+  const offLine = Math.sqrt(nd);
+
+  /* THE PUNCH-OUT.
+     -------------------------------------------------------------------------
+     Everything beyond the fairway and its rough is deep rough, and it goes on
+     forever — there is no far edge to it, only out of bounds eventually. So a
+     ball forty metres offline that is aimed DOWN THE HOLE travels ninety
+     metres forward and lands forty metres offline again. Measured over the
+     whole game, fifty-four per cent of shots played from deep rough failed to
+     escape it. That is not a hazard, that is the game taking the controller
+     off you for three shots, and it was the single biggest thing making a
+     round unpleasant.
+
+     A caddie handed that ball says one thing: get it back in play. So when
+     the ball is well outside the corridor, the aim goes to the nearest part
+     of the fairway, nudged forward so you gain a little ground rather than
+     hitting sideways or backwards. From in play it is unchanged — this only
+     ever fires when you are already in trouble, which is exactly when the
+     default aim was making it worse.
+
+     The player can still aim anywhere they like. This is what the game
+     SUGGESTS, and suggesting the shot that leaves you in the rough again was
+     bad advice. */
+  const halfW = hole.fairwayWidth * 0.5;
+  const RECOVER_AT = halfW + hole.roughWidth * 0.9;
+  if (offLine > RECOVER_AT) {
+    // a little forward of square, and never further than the club can carry
+    const gain = Math.min(reach * 0.55, Math.max(24, offLine * 0.7));
+    let ti = near;
+    while (ti < route.length - 1 && hole.cum[ti] < hole.cum[near] + gain) ti++;
+    const t = route[ti];
+    // ...unless the pin is genuinely the nearer thing, in which case go at it
+    const d = Math.hypot(t[0] - x, t[1] - z);
+    if (toPin > d * 0.85) return at(Math.atan2(t[0] - x, t[1] - z), d);
+    return at(straight, toPin);
   }
 
   /* Walk forward and take the FURTHEST route point we can still reach in a
@@ -1007,7 +1071,14 @@ export function defaultAim(hole, x, z, reach = 200) {
      asks the only question that matters — does the ball stay over short grass
      all the way there — and stops at the corner when the answer turns no. */
   const STEP = 3;                             // the route is sampled ~3 m apart
-  const CORRIDOR = 16;                        // metres either side of the route
+  /* How far the straight line may stray from the centreline before the shot
+     counts as leaving the short grass. A flat 16 m was far too strict: the
+     fairways here run 24 to 44 m wide, so on the wide ones the test failed
+     while the ball was still comfortably in the middle third, and the plan
+     came back 111 m on a 547-yard par 5 — which handed the player an 8 iron
+     off the tee. Half the fairway width is the honest number, with a floor
+     so a narrow course does not become unplayable. */
+  const CORRIDOR = Math.max(15, hole.fairwayWidth * 0.5);
   const maxAhead = Math.max(1, Math.round(reach / STEP));
   let best = Math.min(route.length - 1, near + 1);
 
@@ -1042,8 +1113,22 @@ export function defaultAim(hole, x, z, reach = 200) {
   const tx = route[best][0], tz = route[best][1];
   // Once the flag is as close as the point we would aim at — or that point is
   // effectively the green anyway — aim at the flag.
-  const toPin = Math.hypot(hole.pin.x - x, hole.pin.z - z);
   const toRoute = Math.hypot(tx - x, tz - z);
-  if (toPin <= toRoute || Math.hypot(tx - hole.pin.x, tz - hole.pin.z) < 20) return straight;
-  return Math.atan2(tx - x, tz - z);
+  if (toPin <= toRoute || Math.hypot(tx - hole.pin.x, tz - hole.pin.z) < 20) return at(straight, toPin);
+
+  /* NEVER hand back a tap.
+     If the corridor walk fails on its very first step — standing behind a
+     sentinel, say — `best` stays one route sample ahead and the plan comes
+     back as three metres. That was harmless while the plan only set the aim.
+     It is a disaster now the CLUB and the caddie's power follow it too: the
+     game hands you a lob wedge a hundred and eighty metres from the green
+     and tells you to hit it three metres, and you tap forward for the rest
+     of your life. Sandbelt's third hole did exactly that, every time.
+
+     There is no safe line from here, so say so the way a caddie would: go at
+     the flag and deal with what is in the way. A hard shot is a golf hole; a
+     shot that cannot advance the ball is a bug. */
+  const MIN_USEFUL = 30;
+  if (toRoute < MIN_USEFUL && toPin > MIN_USEFUL) return at(straight, toPin);
+  return at(Math.atan2(tx - x, tz - z), toRoute);
 }

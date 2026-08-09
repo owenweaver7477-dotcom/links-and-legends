@@ -88,12 +88,28 @@ export const NO_CREW = Object.freeze({
 
    1.000 sits at the Tour Pro Set deliberately: the reference the club table is
    calibrated against, and the point where you stop being an amateur. */
-/* The ladder. The first four are a normal progression; the last three are
-   deliberately a different order of magnitude, because a set you can own by
-   the end of your second session is not something anyone will ever look
-   forward to. At roughly 3,300 coins for a level-par round the Signature Set
-   is around 36 rounds of saving on its own — a thing you decide to go after
-   rather than something you drift into. */
+/* The ladder, and the shape of the whole game's long term.
+   -------------------------------------------------------------------------
+   The first four sets are a normal progression: a few rounds each, so a new
+   player is visibly getting better equipment while they are still learning
+   which end of the club to hold. Then it changes gear.
+
+   The last three used to be 26k / 58k / 120k, which at ~3,300 coins for a
+   level-par round meant owning EVERYTHING in the game — every set, every
+   caddie, every refinement — took 194 rounds. Level 100 takes 1,131. So a
+   dedicated player finished the entire coin ladder six times over before
+   they were a third of the way up the level ladder, and then had nothing
+   left to spend money on for eight hundred rounds. A currency you cannot
+   spend stops being a reward.
+
+   80k / 200k / 500k puts the top three at roughly 24, 60 and 150 rounds of
+   saving. Owning literally everything now lands near 370 rounds — a third of
+   the way to level 100, which is the right relationship between the two:
+   your bag is the medium-term goal and your level is the long one, and
+   neither runs out while the other is still going.
+
+   The Signature Set at 150 rounds is deliberately something you decide to go
+   after. Nobody drifts into it. */
 export const CLUB_TIERS = [
   { name: 'Wooden Starter Set', cost: 0,
     speed: 0.860, faceDamp: 0.00, look: 'wood',
@@ -107,13 +123,13 @@ export const CLUB_TIERS = [
   { name: 'Carbon Comp Set', cost: 7000,
     speed: 0.965, faceDamp: 0.12, look: 'carbon',
     blurb: 'Matte black carbon fibre. Quiet, fast, forgiving.' },
-  { name: 'Tour Pro Set', cost: 26000,
+  { name: 'Tour Pro Set', cost: 80000,
     speed: 1.000, faceDamp: 0.18, look: 'tour',
     blurb: 'Sponsor decals and tour stamping. Full tour length at last.' },
-  { name: 'Titanium Elite Set', cost: 58000,
+  { name: 'Titanium Elite Set', cost: 200000,
     speed: 1.032, faceDamp: 0.24, look: 'titanium',
     blurb: 'Brushed titanium with a glow inlay. Hits like the future.' },
-  { name: 'Signature Set', cost: 120000,
+  { name: 'Signature Set', cost: 500000,
     speed: 1.065, faceDamp: 0.33, look: 'signature',
     blurb: 'Holographic finish, premium everything. The bag of legends.' }
 ];

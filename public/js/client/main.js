@@ -26,7 +26,7 @@ import { initCG, loadingStart, loadingStop, gameplayStart, gameplayStop,
 loadingStart();
 import { Sound } from './sound.js';
 
-import { allCourses, getCourse, defaultAim } from '../shared/coursegen.js';
+import { allCourses, getCourse, defaultAim, aimPlan } from '../shared/coursegen.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
 import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf } from '../shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
@@ -257,11 +257,33 @@ function menuFrame(dt) {
  * itself lives in coursegen.js beside the routes it reads, so the tests can
  * check every tee on every course; this only supplies the player's reach.
  */
+/**
+ * ONE plan for the shot the game is setting up: where to aim, and how far
+ * that aim is actually pointing.
+ *
+ * These used to be worked out in three different places from two different
+ * numbers, and they disagreed. The aim came from the fairway corridor, so on
+ * a dogleg it pointed at the corner. The club and the caddie's power marker
+ * both came from the distance to the PIN. So the game pointed you at the
+ * corner, handed you a driver, and told you to hit it hard enough to reach
+ * the flag — and a flushed shot went straight through the corner into the
+ * trees, which is the exact thing aiming at the corner exists to avoid.
+ *
+ * Twelve of the seventy-two tees in the game are tight enough that the plan
+ * is genuinely short of a full driver. On those you now get an iron and a
+ * full swing instead of a driver at half power, which is both better golf
+ * and a far clearer instruction.
+ */
+function shotPlan(reach) {
+  const b = ballOf(G.myPid);
+  return aimPlan(G.hole, b.x, b.z, reach);
+}
+
 function aimAtPin() {
   const b = ballOf(G.myPid);
   const club = CLUB_BY_KEY[clubKey];
   const reach = (CARRY[clubKey] || 200) * carryMult(club);
-  swing.setAim(defaultAim(G.hole, b.x, b.z, reach));
+  swing.setAim(shotPlan(reach).aim);
 }
 
 /* ===================================================================== */
@@ -299,8 +321,13 @@ function bagEnds() {
 function autoClub() {
   if (clubManual || !G.T) return;
   const b = ballOf(G.myPid);
-  const d = G.T.toPin(b.x, b.z);
   const lie = G.T.surfaceAt(b.x, b.z);
+  /* Club for the shot the game is actually setting up, not for the straight
+     line to the flag. On a dogleg those are different distances and picking
+     by the flag hands you a driver for a 110 m lay-up. */
+  const far = (CARRY.DR || 220) * reachMult();
+  const d = lie.id === 'green' ? G.T.toPin(b.x, b.z)
+    : Math.min(G.T.toPin(b.x, b.z), shotPlan(far).dist);
   clubKey = suggestClub(d, lie.id, lie.id === 'green', myBag(), reachMult()).key;
   swing.clubKey = clubKey;
   swing.setLie(lie.id);              // the lie sets the strike bar's tempo
@@ -402,8 +429,25 @@ function refreshAimPreview(force) {
   // goes in.
   const toPin = G.T.toPin(b.x, b.z);
   const past = CLUB_BY_KEY[clubKey].putter ? 0.45 : 0;
+  /* How far to hit it, along the line you are ACTUALLY aiming down.
+     Straight at the flag this is the distance to the flag, unchanged. Aimed
+     away from it — at a dogleg corner, or punching out sideways from the
+     trees — the pin is projected onto the aim line, so the number is the
+     depth you need rather than a distance you are not travelling. Aiming
+     forty degrees off and being told to hit full driver is how a recovery
+     shot ends up in the trees on the other side. */
+  const bearing = Math.atan2(G.hole.pin.x - b.x, G.hole.pin.z - b.z);
+  const off = Math.atan2(Math.sin(swing.aim - bearing), Math.cos(swing.aim - bearing));
+  const projected = Math.max(2, toPin * Math.cos(off));
+  // `club` is not bound in this function — only clubKey is. Using it here
+  // threw a ReferenceError on the very first aim refresh.
+  const reach = (CARRY[clubKey] || 200) * carryMult(CLUB_BY_KEY[clubKey]);
+  const plan = shotPlan(reach);
+  const onPlan = Math.abs(Math.atan2(Math.sin(swing.aim - plan.aim),
+                                     Math.cos(swing.aim - plan.aim))) < 0.03;
+  const target = onPlan ? Math.min(plan.dist, projected) : projected;
   // the marker swings the same upgraded ball the server will — see suggestedPower
-  HUD.setTargetPower(suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPin + past, myGear, myKit));
+  HUD.setTargetPower(suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, target + past, myGear, myKit));
 }
 
 /* ===================================================================== */
