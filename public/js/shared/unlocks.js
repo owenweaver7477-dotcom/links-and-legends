@@ -21,6 +21,7 @@ export const UNLOCK_KINDS = {
   trail:  { name: 'Ball trail',   blurb: 'Follows the ball through the air' },
   hat:    { name: 'Headwear',     blurb: 'For the wardrobe' },
   title:  { name: 'Title',        blurb: 'Shown beside your name' },
+  melee:  { name: 'Melee',        blurb: 'A new way to lay hands on somebody' },
   ball:   { name: 'Ball finish',  blurb: 'How your ball catches the light' }
 };
 
@@ -38,29 +39,38 @@ export const UNLOCKS = [
   { at: 10, kind: 'title', id: 'regular',     name: 'Regular' },
 
   /* -- teens and twenties: every two or three levels -- */
+  { at: 11, kind: 'melee', id: 'slap',        name: 'Slap' },
   { at: 12, kind: 'decal', id: 'chevron',     name: 'Chevron',        color: '#ffd94a' },
   { at: 14, kind: 'ball',  id: 'matte',       name: 'Matte finish' },
+  { at: 15, kind: 'emote', id: 'bow',         name: 'Take a bow' },
   { at: 16, kind: 'trail', id: 'ember',       name: 'Ember',          color: '#ff8a3d' },
   { at: 18, kind: 'decal', id: 'houndstooth', name: 'Houndstooth',    color: '#e8eaee' },
   { at: 20, kind: 'title', id: 'clubman',     name: 'Clubman' },
+  { at: 21, kind: 'emote', id: 'facepalm',    name: 'Facepalm' },
   { at: 23, kind: 'hat',   id: 'wide',        name: 'Wide brim' },
   { at: 26, kind: 'trail', id: 'mint',        name: 'Mint vapour',    color: '#4ce0b3' },
+  { at: 28, kind: 'melee', id: 'kick',        name: 'Boot' },
   { at: 29, kind: 'decal', id: 'carbonweave', name: 'Carbon weave',   color: '#2e3136' },
+  { at: 30, kind: 'emote', id: 'point',       name: 'Called it' },
 
   /* -- thirties to fifties: every four or five, and they get louder -- */
   { at: 33, kind: 'ball',  id: 'pearl',       name: 'Pearlescent' },
   { at: 37, kind: 'title', id: 'sharpshooter',name: 'Sharpshooter' },
   { at: 41, kind: 'decal', id: 'lightning',   name: 'Lightning',      color: '#ffe66b' },
+  { at: 44, kind: 'emote', id: 'dance',       name: 'Little dance' },
   { at: 45, kind: 'trail', id: 'azure',       name: 'Azure comet',    color: '#38a9ff' },
   { at: 50, kind: 'title', id: 'halfcentury', name: 'Half Century' },
   { at: 55, kind: 'decal', id: 'tartan',      name: 'Tartan',         color: '#7d2f42' },
+  { at: 58, kind: 'emote', id: 'flex',        name: 'Flex' },
   { at: 60, kind: 'ball',  id: 'chrome',      name: 'Chrome' },
 
   /* -- the long tail: rarer, and each one obviously expensive -- */
   { at: 66, kind: 'trail', id: 'violet',      name: 'Violet plume',   color: '#c77dff' },
+  { at: 70, kind: 'emote', id: 'tip',         name: 'Cap tip' },
   { at: 72, kind: 'decal', id: 'goldleaf',    name: 'Gold leaf',      color: '#ffd94a' },
   { at: 78, kind: 'title', id: 'veteran',     name: 'Veteran' },
   { at: 84, kind: 'trail', id: 'aurora',      name: 'Aurora',         color: '#8fe07a' },
+  { at: 88, kind: 'emote', id: 'sleep',       name: 'Slow play' },
   { at: 90, kind: 'ball',  id: 'prism',       name: 'Prism' },
   { at: 95, kind: 'decal', id: 'signature',   name: 'Signature holo', color: '#d8c8f0' },
   { at: 100,kind: 'title', id: 'centurion',   name: 'Centurion' }

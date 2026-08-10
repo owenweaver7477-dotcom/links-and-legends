@@ -23,6 +23,8 @@ import {
   HAIR_COLORS, HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES
 } from '../public/js/shared/avatars.js';
 import { UNLOCKS } from '../public/js/shared/unlocks.js';
+import { EMOTES, EMOTE_CLIPS, MELEES, SHOVE_CLIPS, POSE_KEYS, blankPose }
+  from '../public/js/client/celebrations.js';
 
 const COLOUR_SLOTS = [
   ['cap', CAPS], ['shirt', SHIRTS], ['skin', SKINS],
@@ -250,7 +252,24 @@ test('every reward the level table names actually exists and is enforced', () =>
         `"${u.name}" can be worn a level early`);
       continue;
     }
-    if (u.kind === 'emote') continue;                 // gated in celebrations.js
+    /* Emotes and melees live in celebrations.js with their own `at`, because
+       they are behaviour rather than wardrobe. Two tables, so the only
+       question worth asking is whether they still agree — a reward that
+       unlocks at 30 in the clubhouse and 44 in the game is a bug the player
+       finds by being lied to. */
+    if (u.kind === 'emote') {
+      const e = EMOTES.find(e => e.id === u.id);
+      assert.ok(e, `the ladder unlocks an emote "${u.id}" that does not exist`);
+      assert.equal(e.at, u.at, `"${u.name}" unlocks at ${u.at} on the ladder but ${e.at} in the game`);
+      assert.ok(EMOTE_CLIPS[u.id], `"${u.name}" has no animation`);
+      continue;
+    }
+    if (u.kind === 'melee') {
+      const m = MELEES.find(m => m.id === u.id);
+      assert.ok(m, `the ladder unlocks a melee "${u.id}" that does not exist`);
+      assert.equal(m.at, u.at, `"${u.name}" unlocks at ${u.at} on the ladder but ${m.at} in the game`);
+      continue;
+    }
     const slot = SLOT[u.kind];
     assert.ok(slot, `no wardrobe slot knows what to do with a "${u.kind}"`);
     assert.equal(looksEarnedAt({ [slot]: u.id }, 0, u.at)[slot], u.id);
@@ -266,4 +285,43 @@ test('nothing is free that the table says must be earned', () => {
     assert.ok(UNLOCKS.some(u => u.kind === 'hat' && u.id === h.id),
       `"${h.name}" is locked to level ${h.at} but appears in no reward table`);
   }
+});
+
+test('every animation returns the golfer to neutral', () => {
+  /* Each clip is authored on k in [0,1] and MUST be back at the neutral pose
+     at k = 1, because the blend-out is what hands control back to the walk
+     cycle. A clip that ends anywhere else leaves the golfer permanently bent
+     over, and it only shows up after the emote, which is a long way from the
+     code that caused it. */
+  const all = { ...EMOTE_CLIPS, ...SHOVE_CLIPS };
+  for (const [id, clip] of Object.entries(all)) {
+    const P = blankPose();
+    clip.pose(P, 1);
+    for (const k of POSE_KEYS) {
+      assert.ok(Math.abs(P[k] || 0) < 0.02,
+        `"${id}" leaves ${k} at ${(P[k] || 0).toFixed(3)} when it finishes`);
+    }
+    // and nothing may write a joint the avatar does not have
+    for (const k of Object.keys(P)) {
+      assert.ok(POSE_KEYS.includes(k), `"${id}" writes "${k}", which is not a joint`);
+    }
+    assert.ok(clip.dur > 0.1 && clip.dur < 4, `"${id}" lasts ${clip.dur}s`);
+  }
+});
+
+test('a melee you have not earned falls back to the barge', () => {
+  /* The server picks the move, not the client — same rule as every other
+     unlock. Reach, cooldown and power all come off this table, so a client
+     that could name its own move could also name its own reach. */
+  for (const m of MELEES) {
+    const have = MELEES.filter(x => x.at <= m.at);
+    assert.ok(have.some(x => x.id === m.id), `${m.name} is not available at its own level`);
+    if (m.at > 1) {
+      const early = MELEES.filter(x => x.at <= m.at - 1);
+      assert.ok(!early.some(x => x.id === m.id), `${m.name} is available a level early`);
+    }
+  }
+  // the barge is always there, or the key does nothing for a new player
+  assert.equal(MELEES.filter(m => m.at <= 1).length, 1);
+  assert.equal(MELEES[0].id, 'barge');
 });

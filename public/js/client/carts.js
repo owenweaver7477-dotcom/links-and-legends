@@ -46,6 +46,7 @@ export class CartManager {
     this.sinking = null;       // seconds under water, once you have driven in
     this._lastDry = null;
     this.hitFlash = 0;
+    this.flipShock = 0;
     this.damage = 0;           // 0 fine, ~0.5 smoking, 1 wrecked
     this.wrecked = null;       // seconds since it gave up, once it has
     this._lastDamageAt = 0;    // so one long scrape is one accident
@@ -211,9 +212,26 @@ export class CartManager {
       this.body.speed *= Math.max(0, 1 - dt * 1.6);
     }
 
+    /* Going over throws you out. Sitting calmly in a cart that is lying on
+       its side, still able to steer it, would make the flip a cosmetic event
+       — and the whole point of it is that a crash costs you the walk. The
+       flag is read once by the game loop, which does the ejecting, because
+       carts.js does not own the walker. */
+    if (this.body.justFlipped > 0) {
+      this.flipShock = this.body.justFlipped;
+      this.hitFlash = 1;
+    }
+
     if (this.body.hit > this.hitFlash) this.hitFlash = this.body.hit;
     this.hitFlash = Math.max(0, this.hitFlash - dt * 2.2);
     return true;
+  }
+
+  /** True once, the frame the cart goes over. Reading it clears it. */
+  takeFlip() {
+    const f = this.flipShock || 0;
+    this.flipShock = 0;
+    return f;
   }
 
   /**
@@ -266,11 +284,13 @@ export class CartManager {
     if (!r) {
       r = {
         x: cart.x, z: cart.z, heading: cart.h, speed: cart.v || 0, steer: 0,
+        tilt: cart.t || 0, ttilt: cart.t || 0,
         tx: cart.x, tz: cart.z, theading: cart.h, rider: cart.r || null, seenAt: now
       };
       this.remote.set(pid, r);
     }
     r.tx = cart.x; r.tz = cart.z; r.theading = cart.h;
+    r.ttilt = cart.t || 0;
     r.speed = cart.v || 0;
     r.rider = cart.r || null;
     r.seenAt = now;
@@ -408,6 +428,7 @@ export class CartManager {
       r.x += (r.tx - r.x) * kp;
       r.z += (r.tz - r.z) * kp;
       r.heading += shortestArc(r.heading, r.theading) * kp;
+      r.tilt += ((r.ttilt || 0) - (r.tilt || 0)) * kp;
       this._mesh(pid, tintOf(pid)).update(dt, r, terrain.heightAt(r.x, r.z),
         terrain.normalAt(r.x, r.z, 1.15));
     }
@@ -441,7 +462,13 @@ export class CartManager {
     if (this.driving && this.body) {
       const b = this.body;
       const r2 = v => Math.round(v * 100) / 100;
-      return { s: 'd', x: r2(b.x), z: r2(b.z), h: r2(b.heading), v: r2(b.speed), r: this.rider || null };
+      /* `t` is the body roll. Without it a cart lies on its roof on the
+         driver's screen and stands neatly upright on everybody else's, which
+         is worse than not having flips at all — the one thing a crash has to
+         be is a thing the whole room saw. Two bytes on a channel that already
+         runs ten times a second. */
+      return { s: 'd', x: r2(b.x), z: r2(b.z), h: r2(b.heading), v: r2(b.speed),
+               t: r2(b.tilt), r: this.rider || null };
     }
     if (this.riding) return { s: 'p', o: this.driver };
     return null;

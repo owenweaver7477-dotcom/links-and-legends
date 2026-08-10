@@ -84,6 +84,27 @@ export const IMPACT = { tree: 0.45, bank: 0.25, fence: 0.15 };
 export const CRASH_SPEED = 9.5;     // a genuinely head-on hit at speed
 export const RESTITUTION = 0.32;    // how much of the closing speed bounces back
 export const YAW_KICK = 2.6;        // rad/s of spin from a glancing blow
+
+/* ---------------------------------------------------------------- tipping ---
+   A golf cart is a tall, narrow, short-wheelbase thing with no suspension
+   travel and a roof, and the one genuinely dramatic thing it does is go over.
+   Until now the chassis could only LEAN — cart3d ran a cosmetic spring — so
+   the worst a crash could do was rock it and let you drive on. Every impact
+   looked the same and nothing was ever at stake.
+
+   `tilt` is now real, physical, and lives on the body: lateral load builds
+   it, an impact kicks it, and past TIP_OVER the cart is on its side and you
+   are walking until it rights itself. Cosmetic spring on top, unchanged. */
+export const TIP_OVER = 0.95;       // rad of body roll the cart cannot recover
+export const ON_SIDE = 1.42;        // where it settles once it has gone over
+export const RIGHT_AFTER = 3.2;     // seconds before someone hauls it back up
+/* Soft enough to actually go somewhere. At 34 and 7.2 the body was so stiff
+   that a full-speed impact into an oak peaked at 0.56 rad — it twitched and
+   sat back down, which is the complaint that started this. 20 and 4.6 is
+   still a cart rather than a boat: the same steady-state lean in a corner,
+   but a hit now swings it far enough to matter. */
+const TILT_SPRING = 20;             // how hard it wants to be upright again
+const TILT_DAMP = 4.6;
 export const FENCE_INSET = 4;       // m inside the hole bounds
 
 /* ------------------------------------------------------------ integration */
@@ -158,6 +179,10 @@ export class CartBody {
     this.hit = 0;                   // 0..1, decays — drives the crunch effects
     this.impactYaw = 0;             // rad/s of spin owed from a collision
     this.stunned = 0;               // seconds of no-throttle after a big hit
+    this.tilt = 0;                  // rad of body roll — REAL, not cosmetic
+    this.tiltV = 0;                 // rad/s
+    this.flipped = 0;               // seconds left lying on its side
+    this.justFlipped = 0;           // one-frame flag, for the camera and sound
     this._wasTouching = false;      // edge trigger, so a scrape isn't a crash
     this.odo = 0;                   // m, for spinning the wheels
     this.boost = 1;                 // the shop's cart tune: multiplies top and motor
@@ -166,7 +191,11 @@ export class CartBody {
   set(x, z, heading, speed = 0) {
     this.x = x; this.z = z; this.heading = heading; this.speed = speed;
     this.steer = 0;
+    this.tilt = 0; this.tiltV = 0; this.flipped = 0;
   }
+
+  /** Upside down and going nowhere. */
+  get onSide() { return this.flipped > 0; }
 
   /**
    * Advance the cart.
@@ -182,12 +211,76 @@ export class CartBody {
     // variable step would let a slow machine drive through a tree trunk.
     const n = Math.min(MAX_SUB, Math.max(1, Math.ceil(dt / SUB_DT)));
     const h = dt / n;
+    this.justFlipped = 0;
     for (let i = 0; i < n; i++) this._sub(h, input, terrain, hole);
     this.hit = Math.max(0, this.hit - dt * 2.2);
+    this._roll(dt);
+  }
+
+  /**
+   * The roll axis, integrated properly.
+   *
+   * Upright it is a damped spring, so cornering leans the body and letting
+   * off brings it back. Past TIP_OVER the spring gives up: the cart is over,
+   * everything stops, and it lies there for a few seconds before being
+   * hauled upright — which is the beat that makes a crash cost something.
+   */
+  _roll(dt) {
+    if (this.flipped > 0) {
+      this.flipped -= dt;
+      this.speed = 0;
+      this.tilt = Math.sign(this.tilt || 1) * ON_SIDE;
+      this.tiltV = 0;
+      if (this.flipped <= 0) {
+        this.flipped = 0;
+        // dropped back onto its wheels with a bounce, not teleported upright
+        this.tilt = Math.sign(this.tilt) * 0.42;
+        this.tiltV = -Math.sign(this.tilt) * 2.2;
+        this.stunned = Math.max(this.stunned, 0.35);
+      }
+      return;
+    }
+
+    /* What the body is leaning toward, from two things.
+
+       Cornering, first — but note that a cart on grass CANNOT corner hard
+       enough to tip itself over. Grip runs out at A_LAT_MAX and it slides
+       instead, which is correct and is why yanking the wheel only ever
+       leans it. Carts go over because of what they hit and what they are
+       driving across, not because of the steering wheel.
+
+       So the second and larger term is the CROSS-SLOPE. Driving along the
+       side of a hill puts the body over, and the steeper the hillside the
+       further; on Hochkar or Grimsvik you can absolutely put it on its roof
+       by taking a shortcut across a bank, which is exactly the kind of thing
+       a player should be able to do to themselves. */
+    const latA = clamp(this.speed * this.speed * Math.tan(this.steer) / WHEELBASE,
+                       -A_LAT_MAX, A_LAT_MAX);
+    const drive = -latA * 0.085 + (this.crossSlope || 0) * 1.30;
+    this.tiltV += (drive * TILT_SPRING - this.tilt * TILT_SPRING - this.tiltV * TILT_DAMP) * dt;
+    this.tilt += this.tiltV * dt;
+
+    if (Math.abs(this.tilt) > TIP_OVER) {
+      this.flipped = RIGHT_AFTER;
+      this.justFlipped = Math.min(1, 0.45 + Math.abs(this.speed) / MAX_FWD);
+      this.hit = 1;
+      this.speed = 0;
+      this.impactYaw = 0;
+    }
   }
 
   _sub(dt, input, terrain, hole) {
+    // on its side nothing responds — that is the whole point of going over
+    if (this.flipped > 0) { this.speed = 0; this.steer = 0; return; }
     const surf = surfFor(terrain.surfaceAt(this.x, this.z).id);
+    /* How much the ground falls away sideways under the cart. Sampled here
+       because this is the only place with the terrain in hand; _roll runs
+       once per frame and reads it. */
+    if (terrain.normalAt) {
+      const nrm = terrain.normalAt(this.x, this.z, 1.1);
+      const rightX = -Math.cos(this.heading), rightZ = Math.sin(this.heading);
+      this.crossSlope = clamp(nrm[0] * rightX + nrm[2] * rightZ, -0.9, 0.9);
+    }
 
     /* A heavy square impact stalls it briefly — the throttle does nothing
        while the driver is picking themselves up, which is what stops a
@@ -437,6 +530,13 @@ export class CartBody {
          top. One clip should slew you, not launch you into orbit. */
       const kick = side * glance * YAW_KICK * (Math.abs(sp) / MAX_FWD);
       this.impactYaw = clamp((this.impactYaw || 0) + kick, -2.6, 2.6);
+      /* And it rocks the body for real. Direction comes from which side was
+         struck; the SIZE comes from the energy, not from how glancing it was
+         — using `side` for both meant a square hit at full speed, the one
+         impact that should absolutely put a cart on its roof, generated
+         almost no roll at all because its cross product is near zero. */
+      const over = Math.sign(side) || (this.tilt >= 0 ? 1 : -1);
+      this.tiltV += -over * (0.5 + 0.5 * head) * (Math.abs(sp) / MAX_FWD) * 13.0;
       // and a genuinely heavy square hit stalls the drivetrain for a beat
       if (what === 'tree' && head > 0.7 && Math.abs(sp) > CRASH_SPEED) this.stunned = 0.45;
     }

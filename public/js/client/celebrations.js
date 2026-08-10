@@ -158,7 +158,26 @@ export const EMOTES = [
   { id: 'shrug', name: 'Shrug', icon: '🤷', at: 5,
     blurb: 'No idea what happened there either' },
   { id: 'clap', name: 'Slow clap', icon: '👏', at: 6,
-    blurb: 'Sincere. Mostly.' }
+    blurb: 'Sincere. Mostly.' },
+
+  /* The back half. Five emotes ran out at level 6, which on a hundred-level
+     ladder meant the wheel was finished before anybody had really started —
+     and the emote wheel is the most-opened thing in the game after the
+     scorecard. These are spread the rest of the way up. */
+  { id: 'bow', name: 'Take a bow', icon: '🙇', at: 15,
+    blurb: 'For an audience that may not exist' },
+  { id: 'facepalm', name: 'Facepalm', icon: '🤦', at: 21,
+    blurb: 'The only honest response to that one' },
+  { id: 'point', name: 'Called it', icon: '👉', at: 30,
+    blurb: 'Point at the hole before it drops' },
+  { id: 'dance', name: 'Little dance', icon: '🕺', at: 44,
+    blurb: 'Undignified and entirely earned' },
+  { id: 'flex', name: 'Flex', icon: '🦾', at: 58,
+    blurb: 'Both arms. No apology.' },
+  { id: 'tip', name: 'Cap tip', icon: '🎩', at: 70,
+    blurb: 'The old-fashioned one' },
+  { id: 'sleep', name: 'Slow play', icon: '😴', at: 88,
+    blurb: 'For whoever is reading their putt again' }
 ];
 
 /** Which emotes a player of this level has. */
@@ -233,6 +252,144 @@ export const EMOTE_CLIPS = {
   }
 };
 
+/* --- the back half of the wheel, levels 15 to 88 --------------------- */
+
+EMOTE_CLIPS.bow = {
+  dur: 1.30, in: 0.16, out: 0.32,
+  pose(P, k) {
+    const down = Math.min(1, Math.sin(Math.PI * k) * 1.6);
+    P.bodyRx = 0.92 * down;                 // fold at the waist
+    P.headRx = 0.30 * down;
+    P.armLx = 0.55 * down; P.armRx = 0.55 * down;
+    P.armLz = 0.30 * down; P.armRz = -0.30 * down;
+    P.bodyY = -0.10 * down;
+    P.hatRx = 0.18 * down;
+  }
+};
+
+EMOTE_CLIPS.facepalm = {
+  dur: 1.55, in: 0.14, out: 0.34,
+  pose(P, k) {
+    // hand up fast, then it just stays there a while
+    const up = Math.min(1, k / 0.22);
+    const hold = Math.max(0, 1 - Math.max(0, k - 0.72) / 0.28);
+    const e = up * hold;
+    P.armRx = UP * 0.62 * e;
+    P.armRz = -0.62 * e;
+    P.headRx = 0.30 * e;
+    P.bodyRx = 0.14 * e;
+    P.bodyY = -0.05 * e;
+  }
+};
+
+EMOTE_CLIPS.point = {
+  dur: 1.05, in: 0.12, out: 0.26,
+  pose(P, k) {
+    const jab = env(k, 2.1) * (0.72 + 0.28 * Math.sin(k * Math.PI * 5));
+    P.armRx = -1.62 * jab;                  // arm straight out ahead
+    P.armRz = -0.12 * jab;
+    P.bodyRx = -0.10 * jab;
+    P.headRx = -0.08 * jab;
+    P.yaw = -0.06 * jab;
+  }
+};
+
+EMOTE_CLIPS.dance = {
+  dur: 2.10, in: 0.18, out: 0.36,
+  pose(P, k) {
+    const e = env(k, 2.0);
+    const beat = k * Math.PI * 8;
+    P.bodyY = Math.abs(Math.sin(beat)) * 0.075 * e;
+    P.bodyRz = Math.sin(beat) * 0.16 * e;
+    P.yaw = Math.sin(beat * 0.5) * 0.30 * e;
+    P.armLx = (UP * 0.42 + Math.sin(beat) * 0.5) * e;
+    P.armRx = (UP * 0.42 - Math.sin(beat) * 0.5) * e;
+    P.armLz = 0.42 * e; P.armRz = -0.42 * e;
+    P.legLx = Math.sin(beat) * 0.34 * e;
+    P.legRx = -Math.sin(beat) * 0.34 * e;
+    P.headRy = Math.sin(beat * 0.5) * 0.22 * e;
+  }
+};
+
+EMOTE_CLIPS.flex = {
+  dur: 1.45, in: 0.16, out: 0.32,
+  pose(P, k) {
+    const e = env(k, 1.9);
+    const pulse = 0.86 + 0.14 * Math.sin(k * Math.PI * 6);
+    // both arms up and in, elbows out — the double biceps
+    P.armLx = UP * 0.60 * e * pulse; P.armRx = UP * 0.60 * e * pulse;
+    P.armLz = 0.95 * e; P.armRz = -0.95 * e;
+    P.bodyRx = -0.14 * e;
+    P.bodyY = 0.035 * e;
+    P.headRx = -0.10 * e;
+  }
+};
+
+EMOTE_CLIPS.tip = {
+  dur: 1.20, in: 0.14, out: 0.30,
+  pose(P, k) {
+    const lift = env(k, 2.2);
+    P.armRx = UP * 0.52 * lift;
+    P.armRz = -0.42 * lift;
+    P.hatY = 0.13 * lift;                   // the cap actually comes off
+    P.hatRx = -0.42 * lift;
+    P.headRx = 0.14 * lift;
+    P.bodyRx = 0.12 * lift;
+  }
+};
+
+EMOTE_CLIPS.sleep = {
+  dur: 2.30, in: 0.20, out: 0.40,
+  pose(P, k) {
+    const e = env(k, 2.0);
+    const snore = Math.sin(k * Math.PI * 3.5);
+    P.headRx = 0.34 * e + snore * 0.06 * e;
+    P.bodyRx = 0.16 * e;
+    P.bodyRz = -0.12 * e;
+    P.bodyY = -0.05 * e + snore * 0.012 * e;
+    P.armLx = 0.22 * e; P.armRx = 0.22 * e;
+    P.legLx = 0.10 * e;
+  }
+};
+
+/* =========================================================================
+   MELEE — the three ways to lay hands on somebody
+   -------------------------------------------------------------------------
+   There was one: a barge. It did one thing, at one strength, and it looked
+   the same every time, so after ten minutes nobody pressed the key.
+
+   Three moves now, and they differ in the ways a player can feel rather than
+   in a number on a stat card:
+
+     barge   what you always had. Shoulder in, medium power, no wind-up, and
+             available from the first minute.
+     slap    fast and cheap. Barely moves them, but it spins them on the spot
+             and the recovery is short enough to do it again immediately —
+             the annoying one.
+     kick    slow, telegraphed, and it launches. Longest cooldown in the game
+             and the longest wind-up, so a good player sees it coming and
+             walks away — which is what makes landing one funny.
+
+   `at` is the level it unlocks. Nothing here is available on day one except
+   the barge, so a melee is something you grow into.
+   ========================================================================= */
+export const MELEES = [
+  { id: 'barge', name: 'Barge', icon: '🫸', at: 1, key: 'B',
+    power: 1.0, cool: 320, spin: 0.0, reach: 2.4,
+    blurb: 'Shoulder first. Always in the bag.' },
+  { id: 'slap', name: 'Slap', icon: '✋', at: 11, key: 'B',
+    power: 0.42, cool: 240, spin: 2.6, reach: 2.1,
+    blurb: 'Barely moves them. Spins them right round.' },
+  { id: 'kick', name: 'Boot', icon: '🦵', at: 28, key: 'B',
+    power: 1.85, cool: 1100, spin: 0.6, reach: 2.6,
+    blurb: 'Slow, obvious, and it sends them.' }
+];
+
+export const meleeById = id => MELEES.find(m => m.id === id) || MELEES[0];
+/** Which melees a player of this level has. */
+export const meleesAt = level =>
+  MELEES.filter(m => m.at <= (Number(level) || 1));
+
 /* A shove, from both ends. Not in EMOTES — these are not chosen from a
    wheel, they are what happens to you. */
 export const SHOVE_CLIPS = {
@@ -249,6 +406,43 @@ export const SHOVE_CLIPS = {
       P.yaw = 0.14 * e;
     }
   },
+  /** The slap: one arm whips across the body and the shoulders follow it. */
+  slapping: {
+    dur: 0.38, in: 0.05, out: 0.16,
+    pose(P, k) {
+      // a fast wind-up and an even faster follow-through
+      const wind = k < 0.3 ? k / 0.3 : 0;
+      const swing = k >= 0.3 ? Math.min(1, (k - 0.3) / 0.22) : 0;
+      const back = Math.max(0, 1 - (k - 0.52) / 0.48);
+      P.armRz = (-0.9 * wind + 1.5 * swing) * back;
+      P.armRx = -1.35 * (wind * 0.5 + swing) * back;
+      P.yaw = (0.22 * wind - 0.34 * swing) * back;
+      P.bodyRz = 0.14 * swing * back;
+      P.headRy = -0.2 * swing * back;
+    }
+  },
+
+  /** The boot: plant, load, and swing a leg through. Deliberately slow. */
+  kicking: {
+    dur: 0.78, in: 0.06, out: 0.24,
+    pose(P, k) {
+      /* Half the clip is the wind-up. That is the design, not padding — the
+         boot is meant to be seen coming, so the reward for landing one is
+         that they did not walk away in time. */
+      const load = k < 0.45 ? k / 0.45 : Math.max(0, 1 - (k - 0.45) / 0.2);
+      const swing = k >= 0.45 ? Math.min(1, (k - 0.45) / 0.18) : 0;
+      const back = Math.max(0, 1 - (k - 0.63) / 0.37);
+      P.legRx = (0.55 * load - 2.05 * swing) * back;   // back, then through
+      P.legLx = 0.18 * load * back;
+      P.bodyRx = (0.26 * load + 0.30 * swing) * back;  // lean back over the plant
+      P.armLx = -0.85 * (load + swing) * back;         // arms up for balance
+      P.armRx = -0.55 * (load + swing) * back;
+      P.armLz = 0.55 * back * (load + swing);
+      P.bodyY = -0.05 * load * back + 0.03 * swing * back;
+      P.headRx = -0.12 * swing * back;
+    }
+  },
+
   /** Taking one: knocked back, arms out for balance, then recovering. */
   staggered: {
     dur: 0.85, in: 0.05, out: 0.34,
@@ -263,5 +457,38 @@ export const SHOVE_CLIPS = {
       P.headRx = 0.22 * hit;
       P.bodyY = -0.06 * hit;
     }
+  }
+};
+
+/* Taking a BOOT is not taking a barge. Off the feet, round on the spot, and
+   a slower climb back up — the reaction has to sell the difference or the
+   move is just a bigger number. */
+SHOVE_CLIPS.launched = {
+  dur: 1.35, in: 0.04, out: 0.42,
+  pose(P, k) {
+    const e = env(k, 2.0);
+    const hit = Math.max(0, 1 - k / 0.28);
+    const air = Math.max(0, Math.sin(Math.PI * Math.min(1, k / 0.55)));
+    P.bodyRx = 0.85 * hit + 0.30 * air;
+    P.bodyRz = -0.34 * e;
+    P.yaw = 1.9 * air;                       // spun round by it
+    P.bodyY = 0.20 * air - 0.10 * hit;
+    P.legLx = -0.95 * air; P.legRx = 0.70 * air;
+    P.armLx = -1.5 * e; P.armRx = -1.3 * e;
+    P.armLz = 0.95 * e; P.armRz = -0.85 * e;
+    P.headRx = 0.34 * hit;
+  }
+};
+
+/* And a slap barely moves you — it just makes you look silly. */
+SHOVE_CLIPS.spun = {
+  dur: 0.62, in: 0.04, out: 0.24,
+  pose(P, k) {
+    const e = env(k, 2.4);
+    P.yaw = 1.15 * e;
+    P.headRy = -0.5 * e;
+    P.bodyRz = 0.18 * e;
+    P.armLz = 0.5 * e; P.armRz = -0.45 * e;
+    P.armLx = -0.5 * e; P.armRx = -0.4 * e;
   }
 };

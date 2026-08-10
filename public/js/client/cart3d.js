@@ -264,9 +264,19 @@ export class Cart3D {
       slopePitch = clampN(Math.atan2(normal[0] * s + normal[2] * c, ny), -0.30, 0.30);
       slopeRoll = -clampN(Math.atan2(normal[0] * c - normal[2] * s, ny), -0.30, 0.30);
     }
+    /* And the roll the BODY is carrying, which is the real one.
+       cart3d's spring is cosmetic: it leans in corners and rocks on impact
+       and always comes back. body.tilt is physical — past TIP_OVER the cart
+       is on its side and stays there — so it is added on top rather than
+       replacing anything, and it is the number that puts the roof on the
+       grass. Without this line the cart could go over in the simulation and
+       carry on looking perfectly upright on screen. */
+    const bodyTilt = body.tilt || 0;
     this.tilt.rotation.x = this.pitch + slopePitch;
-    this.tilt.rotation.z = this.roll + slopeRoll;
-    this.tilt.position.y = this.heave;
+    this.tilt.rotation.z = this.roll + slopeRoll + bodyTilt;
+    // once it is over, the chassis rests on its side rather than hovering at
+    // wheel height — drop it by roughly half the track
+    this.tilt.position.y = this.heave - Math.min(0.34, Math.abs(bodyTilt) * 0.30);
   }
 
   /** Where a rider sits, in world space, including the body tilt. */

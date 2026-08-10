@@ -102,17 +102,37 @@ test('the first unlock is quick and the last is a grind', () => {
     `to tell a new player the system exists`);
   assert.ok(roundsTo(last) >= 8,
     `the last emote takes only ${roundsTo(last).toFixed(1)} rounds — no grind at all`);
-  assert.ok(roundsTo(last) <= 40,
-    `the last emote takes ${roundsTo(last).toFixed(1)} rounds, which is a second job`);
+  /* The last emote sits near the top of the ladder on purpose. Five emotes
+     that all arrived by level 6 meant the wheel was finished before anyone
+     had started, on a hundred-level ladder — so the back half is spread the
+     rest of the way up and the final one is a genuine long-haul reward. The
+     bound is against the whole ladder rather than a fixed number of rounds:
+     the last emote must not outlast the game itself. */
+  const roundsToMax = xpForLevel(maxLevel()) / perRound;
+  assert.ok(roundsTo(last) <= roundsToMax,
+    `the last emote takes ${roundsTo(last).toFixed(1)} rounds but the ladder ` +
+    `ends at ${roundsToMax.toFixed(0)}`);
 });
 
 /* -------------------------------------------------------------- emotes --- */
 
-test('there are five emotes and they unlock one at a time', () => {
-  assert.equal(EMOTES.length, 5, 'the brief asked for five');
+test('the emote wheel keeps filling all the way up the ladder', () => {
+  /* Was "there are five". Five was the brief, and five all arriving by level
+     6 was the mistake: the most-opened panel in the game after the scorecard
+     was complete before a new player had finished their second round. There
+     are twelve now, and what matters is not the count but that they are
+     SPREAD — a reward table that stops early tells everyone past that point
+     the game is finished with them. */
+  assert.ok(EMOTES.length >= 8, `only ${EMOTES.length} emotes`);
   const levels = EMOTES.map(e => e.at);
   assert.equal(new Set(levels).size, levels.length,
     'two emotes unlocking at the same level wastes one of the moments');
+  assert.ok(Math.max(...levels) > maxLevel() * 0.6,
+    `the last emote arrives at level ${Math.max(...levels)} of ${maxLevel()} — ` +
+    'the top of the ladder has nothing on it');
+  // and the first few still come fast, so the system announces itself
+  assert.ok(levels.filter(l => l <= 10).length >= 4,
+    'not enough emotes early on to show a new player the wheel fills up');
   for (const e of EMOTES) {
     assert.ok(e.at >= 2, `${e.id} unlocks at level ${e.at} — nothing should be free`);
     assert.ok(EMOTE_CLIPS[e.id], `${e.id} is offered but has no animation`);

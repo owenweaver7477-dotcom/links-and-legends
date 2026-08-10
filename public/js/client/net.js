@@ -145,7 +145,7 @@ Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, 
 Net.hail = () => Net.socket?.emit('cart:hail');
 Net.emote = id => Net.socket?.emit('player:emote', { id });
 Net.say = text => Net.socket?.emit('chat:say', { text });
-Net.shove = pid => Net.socket?.emit('player:shove', { pid });
+Net.shove = (pid, move) => Net.socket?.emit('player:shove', { pid, move });
 Net.setShove = on => Net.socket?.emit('room:shove', { on });
 Net.phrase = id => Net.socket?.emit('chat:say', { phrase: id });
 /** The global record board. Answers with {} if we are not connected yet. */

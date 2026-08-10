@@ -29,7 +29,7 @@ import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/av
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
-import { EMOTES } from './public/js/client/celebrations.js';
+import { EMOTES, meleeById } from './public/js/client/celebrations.js';
 import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allowChat, PHRASES } from './server/chat.js';
 import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
@@ -822,6 +822,8 @@ io.on('connection', socket => {
             z: clamp(Number(c.z) || 0, b.minZ, b.maxZ),
             h: isFinite(Number(c.h)) ? Number(c.h) : 0,
             v: clamp(Number(c.v) || 0, -6, 37),
+            // body roll, so everyone sees the same cart on its side
+            t: clamp(Number(c.t) || 0, -1.6, 1.6),
             r: cleanPid(c.r) || null
           }
         : { s: 'p', o: cleanPid(c.o) || null };
@@ -940,16 +942,24 @@ io.on('connection', socket => {
     // collision code is for, and it already does it better than this would.
     if (inCart(me)) return;
 
+    /* WHICH move. The client says what it wants; the server decides whether
+       they have it, exactly like every other unlock. A melee is picked from
+       the same table both sides read, so the reach, the cooldown and the
+       power cannot drift apart. */
+    const lvl = levelFromXp(getProfile(ref.pid)?.xp || 0).level;
+    const asked = meleeById(String(d?.move || 'barge'));
+    const move = asked.at <= lvl ? asked : meleeById('barge');
+
     const now = Date.now();
-    /* Short enough to shove repeatedly — the second-and-a-half cooldown made
-       it feel like a move you were being rationed. This is only here so one
-       held key cannot become a per-frame flood on the wire. */
-    if (now - (me.shoveAt || 0) < 320) return;
+    /* Per-move, because the cooldown IS the balance: a slap you can throw
+       four times a second and a boot you get once a second are the same
+       button doing genuinely different things. */
+    if (now - (me.shoveAt || 0) < move.cool) return;
 
     const dx = (target.ax ?? target.x) - (me.ax ?? me.x);
     const dz = (target.az ?? target.z) - (me.az ?? me.z);
     const dist = Math.hypot(dx, dz);
-    if (dist > 2.4 || dist < 1e-3) return;              // out of reach
+    if (dist > move.reach || dist < 1e-3) return;       // out of reach
 
     /* Standing over their own ball, on their own turn: hands off. */
     const atBall = !inCart(target) && room.turnPid === target.pid &&
@@ -962,7 +972,7 @@ io.on('connection', socket => {
     /* Strength, from the speed the SERVER measured off their reported
        positions rather than a number the client sends. */
     const speed = Math.min(9, me.aspeed || 0);
-    let power = 3.4 + speed * 1.15;            // 3.4 standing .. 13.7 sprinting
+    let power = (3.4 + speed * 1.15) * move.power;   // and what the move is worth
 
     /* Shoving a CART. It weighs a great deal more than a golfer, so the same
        barge moves it far less — but it does move, which is the point: a cart
@@ -972,7 +982,7 @@ io.on('connection', socket => {
     if (cart) power *= 0.28;
 
     io.to(room.code).emit('player:shoved', {
-      from: me.pid, pid: target.pid, cart: !!cart,
+      from: me.pid, pid: target.pid, cart: !!cart, move: move.id, spin: move.spin,
       nx: dx / dist, nz: dz / dist, power
     });
   });

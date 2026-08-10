@@ -13,7 +13,7 @@ import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REF
 import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
-import { EMOTES } from './celebrations.js';
+import { EMOTES, MELEES, meleesAt, meleeById } from './celebrations.js';
 import { UNLOCKS, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
@@ -933,6 +933,21 @@ function frame(now) {
     const wasFlash = carts.hitFlash;
     carts.step(dt, G.T, G.hole);
     if (carts.hitFlash > wasFlash + 0.3) Sound.crash();
+
+    /* It went over.
+       You stay in it — strapped in, going nowhere, watching the sky for
+       three seconds while it is hauled back onto its wheels. Throwing the
+       driver out was the first design and it meant unpicking the seat, the
+       cart's ownership and the walker all in one frame for a three-second
+       event; sitting there is both simpler and, watching it, funnier. The
+       cost is real either way: no throttle, no steering, and a stun on the
+       way back up. */
+    const flip = carts.takeFlip();
+    if (flip > 0) {
+      rig.kick(1.15 + flip * 0.6);
+      Sound.crash();
+      HUD.toast('You put it on its side.', 'warn', 2400);
+    }
     Sound.cart(carts.sinking != null ? 0.5 : carts.body?.speed ?? 0);
     if (carts.sinking != null && carts.sinking < dt * 2) Sound.splash();
     // A damaged cart smokes from the engine bay, harder the worse it is —
@@ -1442,8 +1457,24 @@ window.addEventListener('keydown', ev => {
       if (d < bestD) { bestD = d; best = pl; }
     }
     if (best) {
-      Net.shove(best.pid);
-      G.avatars.get(G.myPid)?.play('shoving');     // the barge, locally, at once
+      const mv = currentMelee();
+      Net.shove(best.pid, mv.id);
+      // play it locally at once — waiting for the round trip makes the key
+      // feel dead, and the server's answer only ever downgrades the move
+      G.avatars.get(G.myPid)?.play(MELEE_CLIP[mv.id] || 'shoving');
+    }
+    return;
+  }
+  /* Cycle which melee is on the key. One button, because at barging distance
+     there is only ever one person you could mean and a wheel would turn a
+     physical act into a menu — but you choose WHICH thing the button does. */
+  if (k === 'n' && !seated && G.screen === 'game') {
+    const have = meleesAt(G.profile?.level ?? 1);
+    if (have.length > 1) {
+      const i = have.findIndex(m => m.id === meleePick);
+      meleePick = have[(i + 1) % have.length].id;
+      const m = meleeById(meleePick);
+      HUD.toast(`${m.icon} ${m.name} — ${m.blurb}`, 'info', 1800);
     }
     return;
   }
@@ -1820,18 +1851,32 @@ function levelUpMoment(from, to) {
 
 Net.on('levelup', d => { if (d?.to) levelUpMoment(d.from || 1, d.to); });
 
+/** Which melee the B key throws, and the animation each one plays. */
+const MELEE_CLIP = { barge: 'shoving', slap: 'slapping', kick: 'kicking' };
+const TOOK_IT = { barge: 'staggered', slap: 'spun', kick: 'launched' };
+let meleePick = 'barge';
+function currentMelee() {
+  const have = meleesAt(G.profile?.level ?? 1);
+  return have.find(m => m.id === meleePick) || have[0];
+}
+
 /* Somebody got shoved. The stagger plays on whoever took it, on every
    screen; the PUSH only applies to our own golfer, because each client owns
    its own position and applying it to a remote avatar would fight the
    position updates already arriving for them. */
 Net.on('shoved', d => {
-  G.avatars.get(d.pid)?.play('staggered');
-  G.avatars.get(d.from)?.play('shoving');
+  const move = d.move || 'barge';
+  G.avatars.get(d.pid)?.play(TOOK_IT[move] || 'staggered');
+  G.avatars.get(d.from)?.play(MELEE_CLIP[move] || 'shoving');
   if (d.pid === G.myPid) {
     // in a cart, the shove goes into the CART; on foot, into your own legs
     if (d.cart && carts.body) carts.shoveBody(d.nx, d.nz, d.power);
     else walker.shove(d.nx, d.nz, d.power);
-    rig.kick(0.35);
+    /* A slap spins you where you stand. It moves you barely at all, so
+       without this it would land as nothing — the turn IS the move. */
+    if (d.spin) walker.heading += (Math.random() < 0.5 ? -1 : 1) * d.spin;
+    // and the camera hit scales with what hit you
+    rig.kick(move === 'kick' ? 0.85 : move === 'slap' ? 0.2 : 0.35);
     Sound.thud?.();
   }
 });
