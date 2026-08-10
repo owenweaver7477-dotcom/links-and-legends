@@ -241,9 +241,20 @@ export class GolfScene {
     const skyBot = new THREE.Color(P.sky[1]);
 
     /* ---- atmosphere ---- */
-    // Fog starts well out and reaches far: pulled in tight it flattens the
-    // whole middle distance into one grey band and the world reads as a void.
-    this.scene.fog = new THREE.Fog(new THREE.Color(P.fog), 420, 2600);
+    /* AERIAL PERSPECTIVE, which is the thing that was missing.
+       -------------------------------------------------------------------
+       Fog ran 420 to 2600. The horizon ridge sits around 1,000 m, so it was
+       arriving barely a quarter hazed — as saturated and as contrasty as the
+       grass under your feet. That is exactly why the distance read as flat
+       painted cardboard behind the course rather than as land a mile away:
+       real distance is lighter, bluer and lower in contrast, and none of
+       that was happening.
+
+       260 to 1900 puts the ridge at about two-thirds hazed and the far
+       treeline at a third, which is the gradient the eye reads as depth. The
+       near course is untouched — nothing within 260 m is fogged at all, and
+       the longest shot in the game is 300. */
+    this.scene.fog = new THREE.Fog(new THREE.Color(P.fog), 260, 1900);
     this.scene.background = skyBot.clone();
 
     /* The hemisphere light's GROUND colour is the bounce coming back up off
@@ -796,6 +807,27 @@ export class GolfScene {
     const base = new THREE.Color(ch.col);
     const dark = base.clone().multiplyScalar(0.55);
     const snowC = new THREE.Color('#e8eef2');
+    /* THREE bands, not two.
+       -------------------------------------------------------------------
+       The ridge was one flat colour from the ground to the skyline: the
+       largest single area in a lot of shots, and completely empty. Real
+       distant land is banded — dark wooded lower slopes, lighter open
+       ground above, and the top edge washed out by the air in between.
+
+       A third row of vertices gives all of that for the cost of one more
+       triangle strip: a `treed` colour at the foot, the biome's own colour
+       through the middle, and the skyline lifted toward the haze so the
+       silhouette does not cut into the sky like a sheet of card. A treeline
+       band only appears where the biome actually HAS trees — Grimsvik and
+       the links get bare rock, as they should. */
+    const wooded = (bio.treeDensity ?? 0) > 0.25;
+    const treed = base.clone().lerp(new THREE.Color(bio.palette.deep), wooded ? 0.62 : 0.18)
+      .multiplyScalar(0.82);
+    /* Only a touch toward the haze. Scene fog is already washing the ridge
+       by about two-thirds at this distance, and lerping the vertex colour as
+       well hazed it twice — the skyline came out almost the colour of the
+       sky and the silhouette disappeared entirely. */
+    const skyward = base.clone().lerp(new THREE.Color(bio.palette.fog), 0.15);
     for (let i = 0; i <= N; i++) {
       const t = i / N;
       const a = t * Math.PI * 2;
@@ -805,14 +837,19 @@ export class GolfScene {
       // the skirt runs well below ground so the ridge never floats above a
       // slot of sky, whatever the land in front of it is doing
       pos.push(x, -140, z);  col.push(dark.r, dark.g, dark.b);
-      pos.push(x, h, z);
-      // snowline on the alpine ridge
-      const top = ch.snow && h > ch.amp * 0.62 ? snowC : base;
-      col.push(top.r, top.g, top.b);
+      // the treeline, at a wobbling fraction of this column's height so the
+      // band is not a ruled line round the whole horizon
+      const tl = h * (0.30 + prof((t + 0.61) % 1) * 0.22);
+      pos.push(x, tl, z);   col.push(treed.r, treed.g, treed.b);
+      // snowline on the alpine ridge, otherwise washed toward the haze
+      const top = ch.snow && h > ch.amp * 0.62 ? snowC : skyward;
+      pos.push(x, h, z);    col.push(top.r, top.g, top.b);
     }
     for (let i = 0; i < N; i++) {
-      const a = i * 2, c = a + 1, d = a + 2, e = a + 3;
-      idx.push(a, d, c, c, d, e);
+      const a = i * 3, b1 = a + 1, c1 = a + 2;
+      const d = a + 3, e = a + 4, f = a + 5;
+      idx.push(a, d, b1, b1, d, e);          // skirt -> treeline
+      idx.push(b1, e, c1, c1, e, f);         // treeline -> skyline
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -834,7 +871,9 @@ export class GolfScene {
   _buildClouds(hole, bio) {
     const rng = mulberry32((hole.terrainSeed ^ 0xc10d) >>> 0);
     const density = bio.cloudDensity ?? 1;
-    const count = Math.round(10 * density);
+    // ten clouds across a whole sky is two in frame at any time, which
+    // reads as an empty gradient with a couple of stickers on it
+    const count = Math.round(24 * density);
     if (!count) return null;
 
     const geo = cached('cloud-puff', () => new THREE.IcosahedronGeometry(1, 0));

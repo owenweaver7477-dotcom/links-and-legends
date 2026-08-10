@@ -1069,8 +1069,13 @@ body:not(.playing) .hintbar { display: none; }
   .dist .d-big em { font-size: 8.5px; }
   .dist .d-sub { font-size: 9px; }
 
-  /* the turn banner drops BELOW both of them */
-  .turnbar { top: 84px; font-size: 11px; padding: 5px 12px; }
+  /* The turn banner drops BELOW both of them — but "below the hole card" is
+     not below the DISTANCE panel, which is taller: measured at 375 wide the
+     pill still clipped 16 x 12 px into its bottom-left corner. It also has
+     to stay narrow enough not to run under the panel sideways, so it wraps
+     rather than growing. */
+  .turnbar { top: 104px; font-size: 11px; padding: 5px 12px;
+    max-width: min(64vw, 240px); text-align: center; line-height: 1.25; }
 
   /* wind tucks under the distance panel, still right-aligned */
   .wind { top: 118px; right: 8px; left: auto; transform: none; padding: 5px 7px; }

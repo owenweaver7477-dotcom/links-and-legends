@@ -63,9 +63,31 @@ export function buildSurfaceTexture(hole, bio) {
   g.lineWidth = pr(hole.fairwayWidth);
   g.stroke(path);
 
-  // mow stripes — masked to the fairway stroke so they stop at the first cut
+  /* Mow stripes — masked to the fairway stroke so they stop at the first cut.
+     -----------------------------------------------------------------------
+     These were here at 5.5% opacity, which is to say they were not here: the
+     fairway read as one flat slab of green and the whole course looked
+     unfinished because of it. Stripes are the single most recognisable thing
+     about a mown golf hole — it is how you tell a fairway from a field — and
+     they cost one masked fill.
+
+     They also run ALONG the hole now rather than at a fixed 24 degrees to the
+     world. A stripe pattern that ignores the hole it is on is wallpaper; one
+     that follows the corridor reads as a machine that drove up and down it. */
+  const teeT = hole.tees?.back || hole.tee;
+  const stripeAngle = -(Math.atan2(
+    hole.pin.x - teeT.x, hole.pin.z - teeT.z)) + Math.PI / 2;
   strokeMasked(g, W, H, path, pr(hole.fairwayWidth), layer => {
-    drawStripes(layer, W, H, pr(16), 0.42, ['#ffffff', '#000000'], 0.055);
+    drawStripes(layer, W, H, pr(13), stripeAngle, ['#ffffff', '#000000'], 0.15);
+    // a second, wider pass at a slight angle: real cuts are not perfect
+    drawStripes(layer, W, H, pr(41), stripeAngle + 0.05, ['#ffffff', '#000000'], 0.045);
+  });
+
+  /* The first cut gets its own, finer stripes going the other way, so the
+     boundary between fairway and rough reads as two different mowings rather
+     than one colour change. */
+  strokeMasked(g, W, H, path, pr(hole.fairwayWidth + hole.roughWidth * 1.1), layer => {
+    drawStripes(layer, W, H, pr(26), stripeAngle + Math.PI / 2, ['#ffffff', '#000000'], 0.05);
   });
 
   mottle(g, W, H, rnd, [P.rough, P.fairway], 260, 0.05);
@@ -120,7 +142,7 @@ export function buildSurfaceTexture(hole, bio) {
     // fine green stripes
     g.save();
     ellipse(g, px(gr.x), pz(gr.z), pr(gr.rx), pr(gr.rz), -gr.rot); g.clip();
-    drawStripes(g, W, H, pr(3.2), 1.05, ['#ffffff', '#000000'], 0.045);
+    drawStripes(g, W, H, pr(3.2), 1.05, ['#ffffff', '#000000'], 0.10);
     g.restore();
     g.restore();
   }
