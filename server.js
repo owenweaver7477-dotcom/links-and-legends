@@ -1257,7 +1257,9 @@ setInterval(() => {
 /* ---------------------------------------------------------------------- boot */
 httpServer.listen(PORT, HOST, () => {
   console.log('');
-  console.log('  ⛳  Golf — 5 courses, 9 holes each, up to ' + MAX_PLAYERS + ' players');
+  // counted, not typed: this said "5 courses" while printing eight of them
+  console.log('  ⛳  Golf — ' + COURSE_ORDER.length + ' courses, ' + HOLES_PER_COURSE +
+    ' holes each, up to ' + MAX_PLAYERS + ' players');
   for (const c of COURSES) {
     console.log(`      ${c.name.padEnd(18)} ${String(c.par).padStart(2)} · ${String(c.yards).padStart(4)} yds · ${c.region}`);
   }
