@@ -697,14 +697,30 @@ export class Avatar {
   _apply(P) {
     this.legL.rotation.x = P.legLx;
     this.legR.rotation.x = P.legRx;
+    this.legL.rotation.z = P.legLz;
+    this.legR.rotation.z = P.legRz;
     this.armL.rotation.x = P.armLx;
     this.armR.rotation.x = P.armRx;
     this.armL.rotation.z = P.armLz;
     this.armR.rotation.z = P.armRz;
+    this.armL.rotation.y = P.armLy;
+    this.armR.rotation.y = P.armRy;
     this.body.position.y = P.bodyY;      // the hop lifts the body, not the root,
     this.body.rotation.x = P.bodyRx;     // so the blob stays on the ground
     this.body.rotation.z = P.bodyRz;
-    this.body.rotation.y = this._yaw + P.yaw;
+    /* TWIST vs YAW.
+       The arms and the legs are both children of `body`, so turning body.y
+       turns the whole figure — a pivot on the spot, which is all the rig
+       could ever do. Counter-rotating the legs by the same angle holds the
+       feet where they are and lets the shoulders turn against the hips,
+       which is what every throw, swing and slap is actually made of. */
+    this.body.rotation.y = this._yaw + P.yaw + P.twist;
+    if (P.twist) {
+      this.legL.rotation.y = -P.twist;
+      this.legR.rotation.y = -P.twist;
+    } else if (this.legL.rotation.y) {
+      this.legL.rotation.y = 0; this.legR.rotation.y = 0;
+    }
     this.head.rotation.x = P.headRx;
     this.head.rotation.y = P.headRy;
     this.hat.position.y = P.hatY;

@@ -11,9 +11,25 @@
    ========================================================================= */
 
 /** The joints a clip may write.  Anything it leaves alone stays as walking. */
+/* The joints a clip may write.  Anything it leaves alone stays as walking.
+
+   Five were added after every animation in the game was described as stiff,
+   and they were the five the rig could not do:
+
+     twist        the torso turning while the FEET STAY PUT. `yaw` rotates
+                  the whole figure, legs and all, which is a pivot — nobody
+                  slaps, throws or swings anything without turning their
+                  shoulders against their hips first, and without this every
+                  arm movement was an arm movement and nothing else.
+     armLy/armRy  arms crossing the body. Shoulders could only swing forward
+                  and out, so a backhand, a wave across the chest and a slap
+                  all had to be faked with the one axis that was there.
+     legLz/legRz  legs splaying sideways: a wide stance, a stagger, a dance.
+*/
 export const POSE_KEYS = [
   'legLx', 'legRx', 'armLx', 'armRx', 'armLz', 'armRz',
-  'bodyY', 'bodyRx', 'bodyRz', 'yaw', 'headRx', 'headRy', 'hatY', 'hatRx'
+  'bodyY', 'bodyRx', 'bodyRz', 'yaw', 'headRx', 'headRy', 'hatY', 'hatRx',
+  'twist', 'armLy', 'armRy', 'legLz', 'legRz'
 ];
 
 export function blankPose(P = {}) {
@@ -393,32 +409,45 @@ export const meleesAt = level =>
 /* A shove, from both ends. Not in EMOTES — these are not chosen from a
    wheel, they are what happens to you. */
 export const SHOVE_CLIPS = {
-  /** The barge: shoulder drops, arms come through, body turns into it. */
+  /** The barge: load onto the back foot, then drive the shoulder through. */
   shoving: {
     dur: 0.62, in: 0.08, out: 0.22,
     pose(P, k) {
       const e = env(k, 2.2);
-      const push = k < 0.35 ? k / 0.35 : Math.max(0, 1 - (k - 0.35) / 0.65);
-      P.armLx = -1.5 * push; P.armRx = -1.5 * push;
-      P.armLz = 0.30 * push; P.armRz = -0.30 * push;
-      P.bodyRx = -0.20 * push;
-      P.bodyRz = 0.10 * e;
-      P.yaw = 0.14 * e;
+      // wind the shoulders back, then throw them forward through the target
+      const load = k < 0.28 ? k / 0.28 : 0;
+      const push = k >= 0.28 ? Math.min(1, (k - 0.28) / 0.16) : 0;
+      const back = Math.max(0, 1 - (k - 0.44) / 0.56);
+      const drive = push * back;
+      P.twist = (0.42 * load - 0.55 * drive);
+      P.armLx = (-0.4 * load - 1.75 * drive); P.armRx = (-0.4 * load - 1.6 * drive);
+      P.armLz = 0.34 * drive; P.armRz = -0.34 * drive;
+      P.armLy = -0.35 * drive; P.armRy = 0.28 * drive;   // hands meet in front
+      P.bodyRx = (0.12 * load - 0.30 * drive);
+      P.bodyRz = 0.12 * e;
+      P.legRx = -0.30 * load + 0.34 * drive;             // step into it
+      P.legLx = 0.22 * load - 0.20 * drive;
+      P.bodyY = -0.045 * load;
     }
   },
-  /** The slap: one arm whips across the body and the shoulders follow it. */
+  /** The slap: the whole torso whips, the arm is just the end of it. */
   slapping: {
-    dur: 0.38, in: 0.05, out: 0.16,
+    dur: 0.42, in: 0.05, out: 0.18,
     pose(P, k) {
-      // a fast wind-up and an even faster follow-through
-      const wind = k < 0.3 ? k / 0.3 : 0;
-      const swing = k >= 0.3 ? Math.min(1, (k - 0.3) / 0.22) : 0;
-      const back = Math.max(0, 1 - (k - 0.52) / 0.48);
-      P.armRz = (-0.9 * wind + 1.5 * swing) * back;
-      P.armRx = -1.35 * (wind * 0.5 + swing) * back;
-      P.yaw = (0.22 * wind - 0.34 * swing) * back;
-      P.bodyRz = 0.14 * swing * back;
-      P.headRy = -0.2 * swing * back;
+      const wind = k < 0.30 ? k / 0.30 : 0;
+      const swing = k >= 0.30 ? Math.min(1, (k - 0.30) / 0.14) : 0;
+      const back = Math.max(0, 1 - (k - 0.44) / 0.56);
+      const hit = swing * back;
+      /* The twist does the work and the arm follows. Written the other way
+         round — arm only — it looked like someone shooing a fly. */
+      P.twist = (0.62 * wind - 0.95 * hit);
+      P.armRx = -1.5 * (wind * 0.35 + hit);
+      P.armRz = -0.55 * wind + 1.15 * hit;
+      P.armRy = 0.85 * wind - 1.25 * hit;         // right across the body
+      P.armLx = -0.35 * hit; P.armLz = 0.30 * hit;
+      P.bodyRz = 0.18 * hit;
+      P.headRy = -0.34 * hit;
+      P.legLz = 0.10 * hit; P.legRz = -0.10 * hit;
     }
   },
 
@@ -432,13 +461,16 @@ export const SHOVE_CLIPS = {
       const load = k < 0.45 ? k / 0.45 : Math.max(0, 1 - (k - 0.45) / 0.2);
       const swing = k >= 0.45 ? Math.min(1, (k - 0.45) / 0.18) : 0;
       const back = Math.max(0, 1 - (k - 0.63) / 0.37);
-      P.legRx = (0.55 * load - 2.05 * swing) * back;   // back, then through
+      P.legRx = (0.55 * load - 2.15 * swing) * back;   // back, then through
       P.legLx = 0.18 * load * back;
-      P.bodyRx = (0.26 * load + 0.30 * swing) * back;  // lean back over the plant
-      P.armLx = -0.85 * (load + swing) * back;         // arms up for balance
+      P.legRz = -0.20 * swing * back;                  // the boot turns over
+      P.bodyRx = (0.26 * load + 0.34 * swing) * back;  // lean back over the plant
+      P.twist = (-0.34 * load + 0.30 * swing) * back;  // hips open into it
+      P.armLx = -0.95 * (load + swing) * back;         // arms up for balance
       P.armRx = -0.55 * (load + swing) * back;
-      P.armLz = 0.55 * back * (load + swing);
-      P.bodyY = -0.05 * load * back + 0.03 * swing * back;
+      P.armLz = 0.62 * back * (load + swing);
+      P.armRy = -0.30 * swing * back;
+      P.bodyY = -0.06 * load * back + 0.04 * swing * back;
       P.headRx = -0.12 * swing * back;
     }
   },
@@ -454,6 +486,9 @@ export const SHOVE_CLIPS = {
       P.armLx = -1.1 * e; P.armRx = -0.9 * e;
       P.armLz = 0.72 * e; P.armRz = -0.62 * e;
       P.legLx = 0.42 * hit; P.legRx = -0.30 * hit;
+      P.legLz = 0.24 * e; P.legRz = -0.16 * e;    // feet scrabble wide
+      P.twist = -0.28 * e;
+      P.armLy = 0.30 * e; P.armRy = -0.24 * e;
       P.headRx = 0.22 * hit;
       P.bodyY = -0.06 * hit;
     }
@@ -472,8 +507,10 @@ SHOVE_CLIPS.launched = {
     P.bodyRx = 0.85 * hit + 0.30 * air;
     P.bodyRz = -0.34 * e;
     P.yaw = 1.9 * air;                       // spun round by it
+    P.twist = 0.55 * air;
     P.bodyY = 0.20 * air - 0.10 * hit;
     P.legLx = -0.95 * air; P.legRx = 0.70 * air;
+    P.legLz = 0.40 * air; P.legRz = -0.34 * air;
     P.armLx = -1.5 * e; P.armRx = -1.3 * e;
     P.armLz = 0.95 * e; P.armRz = -0.85 * e;
     P.headRx = 0.34 * hit;
@@ -486,6 +523,7 @@ SHOVE_CLIPS.spun = {
   pose(P, k) {
     const e = env(k, 2.4);
     P.yaw = 1.15 * e;
+    P.twist = 0.45 * e;
     P.headRy = -0.5 * e;
     P.bodyRz = 0.18 * e;
     P.armLz = 0.5 * e; P.armRz = -0.45 * e;

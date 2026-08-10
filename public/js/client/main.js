@@ -105,7 +105,21 @@ function ballOf(pid) {
 /* ===================================================================== */
 function ensureHole(courseId, holeIndex) {
   const key = courseId + ':' + holeIndex;
-  if (G.loadedKey === key) return false;
+  if (G.loadedKey === key) {
+    /* The GEOMETRY is already built — but that is not the same as the HUD
+       being right, and the early return used to skip both.
+       The title screen renders the first tee of whatever course you have
+       picked, and it sets loadedKey when it does. So pressing Play now on
+       that course arrives here with the key already matching, the function
+       returns, and HUD.setHole never runs: the card keeps whatever hole it
+       last showed. Pick Palmera Cay from the menu and you tee off on Palmera
+       Cay while the card says Claude National, 541 yards, on a 420-yard
+       hole. Everything underneath was correct; only the sign was wrong,
+       which is the kind of bug a player reports as "the game is confused".
+       Cheap to do, and it has to happen on both paths. */
+    if (G.course && G.hole) HUD.setHole(G.course, G.hole, G.room?.teeSet || 'back');
+    return false;
+  }
   clearMenuBackdrop();               // a real round owns the scene from here
   HUD.show('load');
   HUD.loading('Shaping ' + (BIOMES[courseId]?.name || 'the course') + '…');
@@ -1573,8 +1587,14 @@ function drawMap() {
     const prev = scene.renderer.getSize(new THREE.Vector2());
     const fog = scene.scene.fog;
     const bg = scene.scene.background;
+    /* Clouds sit between the map camera and the course, so from 600 m up
+       they park white blobs over the hole you are trying to read. On a
+       tactical map that is not atmosphere, it is a smudge on the paper. */
+    const clouds = scene.clouds;
+    const cloudsWere = clouds ? clouds.visible : false;
     try {
       scene.scene.fog = null;
+      if (clouds) clouds.visible = false;
       scene.scene.background = new THREE.Color(0x0d1512);
       scene.renderer.setSize(w, h, false);
       scene.render(scene.mapCamera);
@@ -1584,6 +1604,7 @@ function drawMap() {
       mapBaseKey = baseKey;
     } finally {
       scene.scene.fog = fog;
+      if (clouds) clouds.visible = cloudsWere;
       scene.scene.background = bg;
       scene.renderer.setSize(prev.x, prev.y, false);
       scene.resize();
@@ -1599,7 +1620,14 @@ function drawMap() {
   let hw = (bd.maxX - bd.minX) * 0.51, hh = (bd.maxZ - bd.minZ) * 0.51;
   const casp = w / h;
   if (hw / hh < casp) hw = hh * casp; else hh = hw / casp;
-  const mx = x => (x - (cx2 - hw)) / (hw * 2) * w;
+  /* Same flip as the minimap, and here it was worse: this canvas draws live
+     markers OVER a real 3D render, and the two disagreed. fitMapCamera looks
+     straight down with up = +z, which puts screen-right at world -x — the
+     player's right. The marker projection put screen-right at world +x. So
+     the flag and every ball were drawn mirrored against the picture of the
+     hole underneath them: your ball shown in the trees on the left while the
+     render had it on the fairway to the right. */
+  const mx = x => ((cx2 + hw) - x) / (hw * 2) * w;
   const mz = z => ((cz2 + hh) - z) / (hh * 2) * h;
 
   // the flag: a proper red pennant at the pin
@@ -1659,8 +1687,20 @@ function drawMini(now) {
   // own aspect, and a stale backing-store height squashes every later hole
   if (c.width !== W * dpr || c.height !== H * dpr) { c.width = W * dpr; c.height = H * dpr; }
   c.style.height = H + 'px';
-  const x2 = x => (x - b.minX) / spanX * W * dpr;
-  // flip z so up the canvas is up the hole (tee at the bottom)
+  /* BOTH axes flip, and that is the whole bug.
+     -----------------------------------------------------------------------
+     In this project's convention world +z is forward and world +x is the
+     player's LEFT (see the note on left(h) in avatars.js). The map flipped z
+     so that up-canvas is up-the-hole — correct — but left x alone, so
+     right-on-canvas was world +x, which is the player's left. That is a
+     determinant of -1: a MIRROR. Every dogleg bent the wrong way, and a
+     player checking the map before a blind shot was being shown the reverse
+     of what they were about to hit into.
+
+     Flipping x as well makes it a 180-degree rotation instead of a
+     reflection — determinant +1 — so up-canvas is still up the hole and
+     right-canvas is now genuinely the player's right. */
+  const x2 = x => (b.maxX - x) / spanX * W * dpr;
   const z2 = z => (b.maxZ - z) / spanZ * H * dpr;
   const ctx = c.getContext('2d');
 
