@@ -103,8 +103,14 @@ export const RIGHT_AFTER = 3.2;     // seconds before someone hauls it back up
    sat back down, which is the complaint that started this. 20 and 4.6 is
    still a cart rather than a boat: the same steady-state lean in a corner,
    but a hit now swings it far enough to matter. */
-const TILT_SPRING = 20;             // how hard it wants to be upright again
-const TILT_DAMP = 4.6;
+/* Stiffer and better damped than the first pass, which swayed like a boat.
+   20/4.6 was tuned so a full-speed impact could put the cart over, and it did
+   — but it also meant every corner and every bank set the body rocking for a
+   second and a half afterwards. 30/7.0 keeps the same steady lean in a turn
+   (steady state is drive either way), settles in about a third of the time,
+   and the flip is preserved by hitting the IMPACT harder instead. */
+const TILT_SPRING = 30;             // how hard it wants to be upright again
+const TILT_DAMP = 7.0;
 export const FENCE_INSET = 4;       // m inside the hole bounds
 
 /* ------------------------------------------------------------ integration */
@@ -256,7 +262,10 @@ export class CartBody {
        a player should be able to do to themselves. */
     const latA = clamp(this.speed * this.speed * Math.tan(this.steer) / WHEELBASE,
                        -A_LAT_MAX, A_LAT_MAX);
-    const drive = -latA * 0.085 + (this.crossSlope || 0) * 1.30;
+    /* Less lean per unit of load, too. The cornering term especially: a cart
+       is not a motorbike and it was leaning further into a turn than it ever
+       does, which is most of what read as "too much sway". */
+    const drive = -latA * 0.042 + (this.crossSlope || 0) * 0.82;
     this.tiltV += (drive * TILT_SPRING - this.tilt * TILT_SPRING - this.tiltV * TILT_DAMP) * dt;
     this.tilt += this.tiltV * dt;
 
@@ -536,7 +545,7 @@ export class CartBody {
          impact that should absolutely put a cart on its roof, generated
          almost no roll at all because its cross product is near zero. */
       const over = Math.sign(side) || (this.tilt >= 0 ? 1 : -1);
-      this.tiltV += -over * (0.5 + 0.5 * head) * (Math.abs(sp) / MAX_FWD) * 13.0;
+      this.tiltV += -over * (0.5 + 0.5 * head) * (Math.abs(sp) / MAX_FWD) * 17.0;
       // and a genuinely heavy square hit stalls the drivetrain for a beat
       if (what === 'tree' && head > 0.7 && Math.abs(sp) > CRASH_SPEED) this.stunned = 0.45;
     }

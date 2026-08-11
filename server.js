@@ -35,6 +35,11 @@ import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound } from './server/profiles.js';
 import { loadRecords, recordsFor, allRecords, submitRound } from './server/records.js';
+/* Shared, not server-only: the client needs the same format table to draw
+   the picker and the same team colours to draw the card, and two copies of a
+   list like that drift within a week. */
+import { FORMATS, formatById, isScramble, seatsFor, assignTeams, teamLevel,
+         bestBall, gatherTeam, finishTeam, teamCard } from './public/js/shared/scramble.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -300,11 +305,12 @@ const cleanName = raw => (String(raw ?? '')
   .replace(/\s+/g, ' ').trim().slice(0, 14) || 'Golfer');
 const cleanPid = raw => String(raw ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
 
-function createRoom(code, courseId) {
+function createRoom(code, courseId, format) {
   const room = {
     code,
     hostPid: null,
     courseId: COURSE_ORDER.includes(courseId) ? courseId : COURSE_ORDER[0],
+    format: formatById(format).id,  // stroke | 2v2 | 3v3 | 4v4 — see scramble.js
     // Championship by default: it matches the yardages the lobby advertises
     // and keeps par meaningful. Move forward for a gentler round.
     teeSet: 'back',                 // back | regular | forward
@@ -387,6 +393,8 @@ function startHole(room, { purge = false } = {}) {
     p.holePutts = 0; p.holeFairway = false; p.holeGir = false;
   }
   if (purge) room.players = room.players.filter(p => p.connected);
+  // spectators just became players, so the sides need recounting
+  assignTeams(room);
   if (!room.players.some(p => p.pid === room.hostPid)) {
     room.hostPid = room.players.find(p => p.connected)?.pid ?? null;
   }
@@ -411,8 +419,28 @@ function pickNextToPlay(room, teeOff = false) {
     room.turnPid = eligible[0].pid;
     return;
   }
-  let best = eligible[0], bestD = -1;
-  for (const p of eligible) {
+  /* In a SCRAMBLE nobody plays twice until their side is level.
+     After a gather every member of a team stands on the same ball, so they
+     take their shots one at a time — but the moment the first one plays,
+     their ball has moved and could easily be FARTHER from the hole than a
+     teammate who has not swung yet. Farthest-plays would hand them the turn
+     again and they would play the whole hole on their own. So anyone who is
+     already a stroke ahead of the slowest player on their side waits. */
+  let pool = eligible;
+  if (isScramble(room.format)) {
+    const behind = new Map();
+    for (const p of eligible) {
+      if (!Number.isInteger(p.team)) continue;
+      const cur = behind.get(p.team);
+      if (cur === undefined || p.strokes < cur) behind.set(p.team, p.strokes);
+    }
+    const waiting = eligible.filter(
+      p => !Number.isInteger(p.team) || p.strokes === behind.get(p.team));
+    if (waiting.length) pool = waiting;
+  }
+
+  let best = pool[0], bestD = -1;
+  for (const p of pool) {
     const d = Math.hypot(p.x - h.pin.x, p.z - h.pin.z);
     if (d > bestD) { bestD = d; best = p; }
   }
@@ -574,11 +602,13 @@ function snapshot(room) {
     turnPid: room.turnPid,
     wind: room.wind,
     records: recordsFor(room.courseId),
+    format: room.format,
+    teams: teamCard(room),
     maxPlayers: MAX_PLAYERS,
     noShove: !!room.noShove,
     holes: HOLES_PER_COURSE,
     players: room.players.map(p => ({
-      pid: p.pid, name: p.name, color: p.color, colorName: p.colorName,
+      pid: p.pid, name: p.name, color: p.color, colorName: p.colorName, team: p.team ?? null,
       scores: p.scores, strokes: p.strokes, penalties: p.penalties,
       finished: p.finished, x: p.x, z: p.z, lie: p.lie, bag: p.bag,
       look: p.look, ax: p.ax, az: p.az, arot: p.arot,
@@ -677,9 +707,10 @@ io.on('connection', socket => {
       return reply({ ok: false, error: 'The course is completely full right now — try again in a minute.' });
     }
     unbind();
-    const room = createRoom(makeCode(), data?.courseId);
+    const room = createRoom(makeCode(), data?.courseId, data?.format);
     rollWind(room);
     const p = addPlayer(room, pid, cleanName(data?.name), false);
+    assignTeams(room);
     bind(room, p);
     reply({ ok: true, code: room.code, pid, state: snapshot(room) });
     broadcastState(room);
@@ -698,6 +729,7 @@ io.on('connection', socket => {
     let p = room.players.find(x => x.pid === pid);
     if (p) {
       p.name = cleanName(data?.name);
+      assignTeams(room);  // a returning player may have lost their side
       bind(room, p);      // ensureContinuable inside covers a frozen room
       reply({ ok: true, code, pid, state: snapshot(room), rejoined: true });
       broadcastState(room);
@@ -719,6 +751,10 @@ io.on('connection', socket => {
     }
     const spec = room.state !== 'lobby';
     p = addPlayer(room, pid, cleanName(data?.name), spec);
+    /* A joiner needs a side. Assigning only on create meant the host was on
+       Green and everybody else was on no team at all — the format was on, the
+       card drew one row, and the best-ball gather fired for a team of one. */
+    assignTeams(room);
     bind(room, p);
     reply({ ok: true, code, pid, state: snapshot(room), spectator: spec });
     toast(room, p.name + (spec ? ' is watching until the next hole.' : ' joined.'));
@@ -1184,6 +1220,39 @@ io.on('connection', socket => {
         strokes: p.strokes, splash: result.splash || null
       }
     });
+
+    /* SCRAMBLE: the team plays the best ball.
+       ---------------------------------------------------------------------
+       Everything above this line is ordinary stroke play and stays that way —
+       the shot was real, the physics ruled on it, the penalties and the
+       stroke cap applied. All that happens here is that once every member of
+       a side has played the same number of shots, they all move onto whichever
+       of those balls finished nearest the hole.
+
+       Deliberately after the game:shot broadcast, so every client has already
+       watched the shot land before anybody is teleported. Gathering first
+       would snap the ball away mid-flight. */
+    if (isScramble(room.format) && Number.isInteger(p.team)) {
+      const lvl = teamLevel(room, p.team);
+      if (lvl !== null) {
+        /* Somebody on the side holed out: the hole is over for all of them,
+           at the score of whoever got it in. The rest do not keep playing a
+           ball that is already in the cup. */
+        if (result.holed) {
+          finishTeam(room, p.team, p.strokes, room.holeIndex);
+        } else {
+          const ball = bestBall(room, p.team, h.pin);
+          if (ball) {
+            gatherTeam(room, p.team, ball);
+            io.to(room.code).emit('scramble:gather', {
+              team: p.team, pid: ball.pid,
+              x: ball.x, z: ball.z, lie: ball.lie,
+              yards: Math.round(ball.dist / 0.9144), strokes: lvl
+            });
+          }
+        }
+      }
+    }
 
     if (everyoneDone(room)) finishHole(room);
     else pickNextToPlay(room);

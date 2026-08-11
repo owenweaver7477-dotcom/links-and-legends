@@ -258,7 +258,12 @@ test('the ceiling is reachable by somebody', () => {
   const good = [3, 3, 4, 4, 4, 4, 4, 5, 4].map(s => ({ strokes: s, par: 4 }));
   const per = roundXp(good);
   const rounds = xpForLevel(100) / per;
-  assert.ok(rounds > 800,
+  /* The floor came down from 800 deliberately. At 1,131 level-par rounds the
+     ceiling was a genuine long haul and also slow enough in the MIDDLE that
+     the reward wheel went quiet for hours at a stretch — the curve was pulled
+     in by about 40%. 400 rounds of GOOD golf is still eighty-odd hours and
+     still a thing almost nobody finishes, which is what a ceiling is for. */
+  assert.ok(rounds > 400,
     `level 100 in ${rounds.toFixed(0)} rounds is not a long-haul target`);
   assert.ok(rounds < 6000,
     `level 100 takes ${rounds.toFixed(0)} rounds — nobody will ever see it`);

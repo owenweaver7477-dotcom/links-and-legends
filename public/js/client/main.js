@@ -17,6 +17,7 @@ import { EMOTES, MELEES, meleesAt, meleeById } from './celebrations.js';
 import { UNLOCKS, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
+import { isAct, actionFor, keysFor, resetBinds } from './binds.js';
 import { Net } from './net.js';
 import { initCG, loadingStart, loadingStop, gameplayStart, gameplayStop,
          happytime, inviteLink, invitedRoom, storeGet, storeSet, CG } from './crazygames.js';
@@ -27,6 +28,7 @@ loadingStart();
 import { Sound } from './sound.js';
 
 import { allCourses, getCourse, defaultAim, aimPlan } from '../shared/coursegen.js';
+import { FORMATS, formatById, isScramble, TEAM_NAMES } from '../shared/scramble.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
 import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf } from '../shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
@@ -200,6 +202,11 @@ const menu = { key: null, av: null, t: 0 };
 let pickedCourse = COURSE_ORDER[0];
 try { const c = localStorage.getItem('lg_course');
       if (c && COURSE_ORDER.includes(c)) pickedCourse = c; } catch { /* private mode */ }
+/* Which format a hosted round uses. Remembered like the course, because a
+   group that plays scrambles plays scrambles. */
+let pickedFormat = 'stroke';
+try { const f = localStorage.getItem('lg_format');
+      if (f && FORMATS.some(x => x.id === f)) pickedFormat = f; } catch { /* private mode */ }
 
 function menuBackdrop() {
   if (G.joined || menu.key) return;
@@ -1408,6 +1415,10 @@ canvas.addEventListener('wheel', ev => {
 
 window.addEventListener('keydown', ev => {
   if (ev.target && /^(INPUT|TEXTAREA)$/.test(ev.target.tagName)) return;
+  /* The controls panel eats the next key when it is waiting for one. First,
+     before anything else looks at it — otherwise binding a key to "Emote"
+     also fires the emote wheel on the way past. */
+  if (HUD.bindsListening() && HUD.bindsCapture(ev)) return;
   const k = ev.key.toLowerCase();
   keys.add(k);
   walker.key(k, true);
@@ -1419,42 +1430,48 @@ window.addEventListener('keydown', ev => {
   const m = mode();
   const seated = m === 'drive' || m === 'ride';
 
-  if (k === 'm') { toggleMap(); ev.preventDefault(); }
-  if (k === 'q') stepClub(-1);
-  if (k === 'e') stepClub(1);           // E stays the club: the cart toggles on C
-  if (k === 'escape' && cancelShot()) return;
-  if (k === 'escape') {
+  /* Keys are DATA — see binds.js. Every comparison below asks what ACTION
+     this key is bound to rather than whether it is a particular letter, so
+     the whole scheme is rebindable and the dispatch did not have to change
+     shape to make it so. */
+  const a = actionFor(k);
+
+  if (a === 'map') { toggleMap(); ev.preventDefault(); }
+  if (a === 'clubDown') stepClub(-1);
+  if (a === 'clubUp') stepClub(1);
+  if (a === 'cancel' && cancelShot()) return;
+  if (a === 'cancel') {
     if (seated) toggleCart();           // a safety valve out of the cart
     else { swing.cancel(); HUD.setMeter(swing.meter(), canSwing()); }
   }
-  if (k === 'r') {
+  if (a === 'reAim') {
     rig.reset();
     // never touch the aim from the driving seat — you are not addressing a ball
     if (!seated) { aimAtPin(); refreshAimPreview(true); }
   }
-  if (k === 'v') toggleView();
+  if (a === 'view') toggleView();
   if (canSwing()) {
     // camera presets, PGA-style: 1 behind, 2 elevated, 3 side-on, 4 first person
-    if (k === '1') { rig.orbit = 0; rig.pitch = 0; rig.zoom = 1; G.view = 'third'; }
-    if (k === '2') { rig.orbit = 0; rig.pitch = 0.42; rig.zoom = 1.35; G.view = 'third'; }
-    if (k === '3') { rig.orbit = Math.PI / 2; rig.pitch = 0.05; rig.zoom = 1.1; G.view = 'third'; }
-    if (k === '4') { G.view = 'first'; }
+    if (a === 'cam1') { rig.orbit = 0; rig.pitch = 0; rig.zoom = 1; G.view = 'third'; }
+    if (a === 'cam2') { rig.orbit = 0; rig.pitch = 0.42; rig.zoom = 1.35; G.view = 'third'; }
+    if (a === 'cam3') { rig.orbit = Math.PI / 2; rig.pitch = 0.05; rig.zoom = 1.1; G.view = 'third'; }
+    if (a === 'cam4') { G.view = 'first'; }
     // Space is the strike while the bar is sweeping — the key your hand is
     // already on — and only re-frames the camera when no shot is waiting.
-    if (k === ' ') { if (swing.state === SWING.ACCURACY) strike(); else rig.reset(); }
+    if (a === 'strike') { if (swing.state === SWING.ACCURACY) strike(); else rig.reset(); }
   }
-  if (k === 'c') toggleCart();
-  if (k === 'g') hailRide();
-  if (k === 'f') {
+  if (a === 'cart') toggleCart();
+  if (a === 'hail') hailRide();
+  if (a === 'toBall') {
     if (seated) HUD.toast('Get out of the cart first.', 'warn', 1600);
     else jogToMyBall();
   }
   // Enter opens the box; the box itself handles send and close (see above).
-  if (k === 'enter' && G.screen === 'game') { HUD.showChat(true); return; }
+  if (a === 'chat' && G.screen === 'game') { HUD.showChat(true); return; }
   /* Push is on B, on its own. It was on R, which already resets the camera
      and re-aims at the pin — so every shove also yanked the view and threw
      away whatever aim the player had set. */
-  if (k === 'b' && !seated && G.screen === 'game') {
+  if (a === 'melee' && !seated && G.screen === 'game') {
     /* Shove whoever is nearest and in reach. No target picking: at barging
        distance there is only ever one person you could mean, and a wheel
        would turn a physical act into a menu. */
@@ -1482,7 +1499,7 @@ window.addEventListener('keydown', ev => {
   /* Cycle which melee is on the key. One button, because at barging distance
      there is only ever one person you could mean and a wheel would turn a
      physical act into a menu — but you choose WHICH thing the button does. */
-  if (k === 'n' && !seated && G.screen === 'game') {
+  if (a === 'meleeNext' && !seated && G.screen === 'game') {
     const have = meleesAt(G.profile?.level ?? 1);
     if (have.length > 1) {
       const i = have.findIndex(m => m.id === meleePick);
@@ -1492,18 +1509,18 @@ window.addEventListener('keydown', ev => {
     }
     return;
   }
-  if (k === 't' && !seated) {
+  if (a === 'emote' && !seated) {
     // hold T for the wheel; it closes on keyup or once something is picked
     if (!HUD.emotesOpen()) {
       HUD.renderEmotes(G.profile?.level ?? 1, id => { Net.emote(id); HUD.showEmotes(false); });
       HUD.showEmotes(true);
     }
   }
-  if (k === 'p') HUD.showPerf(!HUD.perfVisible());
+  if (a === 'perf') HUD.showPerf(!HUD.perfVisible());
 });
 window.addEventListener('keyup', ev => {
   const k = ev.key.toLowerCase();
-  if (k === 't') HUD.showEmotes(false);
+  if (isAct(k, 'emote')) HUD.showEmotes(false);
   keys.delete(k);
   walker.key(k, false);
 });
@@ -1921,6 +1938,21 @@ Net.on('shoved', d => {
   }
 });
 
+/* A scramble side has picked its ball. Everyone on it is standing on the
+   same spot now, so say WHOSE shot they are all playing — that line is the
+   whole social point of the format, and without it the teleport is just
+   confusing. */
+Net.on('gather', d => {
+  const who = player(d.pid)?.name || 'someone';
+  const mine = G.room?.players?.find(p => p.pid === G.myPid)?.team === d.team;
+  if (mine) {
+    HUD.toast(`Playing ${who}'s ball — ${d.yards} yds out`, 'good', 2600);
+    // your golfer and your ball are both somewhere else now
+    walker.reset(d.x, d.z, walker.heading);
+    rig.snap();
+  }
+});
+
 Net.on('chat', d => HUD.chatMessage(d, G.myPid));
 
 Net.on('emote', d => {
@@ -2049,6 +2081,7 @@ function renderClubhouse() {
   HUD.renderRecords(COURSES, G.records || {}, G.myPid);
   Net.records(r => { G.records = r; HUD.renderRecords(COURSES, r, G.myPid); });
   HUD.renderRewards(prof);
+  HUD.renderBinds();
   HUD.renderShop(prof, item => Net.buy(item));
   bagDraft = me()?.bag?.length ? me().bag.slice()
     : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true }));
@@ -2286,7 +2319,7 @@ document.getElementById('btnCreate').addEventListener('click', () => {
     G.joined = true; G.myPid = res.pid; G.room = res.state;
     stampRoomUrl(res.code);
     route();
-  });
+  }, pickedFormat);
 });
 /* Joining by code, from the box or from the online panel. */
 function joinByCode(code) {
@@ -2453,6 +2486,32 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   };
   drawCourses();
 
+  /* The format picker. Hosting only — a scramble needs four to eight people
+     and offering it on the solo button would be an invitation to a game that
+     cannot start. */
+  const fmtRow = document.getElementById('formatRow');
+  function drawFormats() {
+    if (!fmtRow) return;
+    fmtRow.textContent = '';
+    for (const f of FORMATS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'fmtbtn' + (f.id === pickedFormat ? ' on' : '');
+      b.setAttribute('aria-pressed', f.id === pickedFormat ? 'true' : 'false');
+      b.textContent = f.name;
+      const sub = document.createElement('small');
+      sub.textContent = f.teams ? `${f.teams * f.per} players · ${f.blurb}` : f.blurb;
+      b.appendChild(sub);
+      b.addEventListener('click', () => {
+        pickedFormat = f.id;
+        try { localStorage.setItem('lg_format', f.id); } catch { /* private mode */ }
+        drawFormats();
+      });
+      fmtRow.appendChild(b);
+    }
+  }
+  drawFormats();
+
   /* The course count and the venue strip are written from the data, not
      typed into the markup. Both still said "five courses" after the eighth
      one landed — a small lie on the front page, and the kind a player reads
@@ -2495,6 +2554,11 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     try { HUD.bindClubhouse?.(); } catch (e) { console.error('clubhouse tabs:', e); }
   });
   HUD.el.btnShopBack.addEventListener('click', () => route());
+  document.getElementById('btnBindsReset')?.addEventListener('click', () => {
+    resetBinds();
+    HUD.renderBinds();
+    HUD.toast('Controls back to defaults.', 'info', 1800);
+  });
 
   HUD.show('home');
   scene.resize();

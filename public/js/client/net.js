@@ -119,11 +119,12 @@ Net.connect = async () => {
      board is one board for the whole game, so it has to change under
      everyone the moment it changes at all. */
   Net.socket.on('records:beat', d => fire('records', d));
+  Net.socket.on('scramble:gather', d => fire('gather', d));
 };
 
-Net.create = (name, courseId, cb) => {
+Net.create = (name, courseId, cb, format) => {
   Net.lastName = name;
-  Net.socket?.emit('room:create', { name, courseId, pid: Net.pid }, res => {
+  Net.socket?.emit('room:create', { name, courseId, format, pid: Net.pid }, res => {
     if (res?.ok) Net.code = res.code;
     cb(res || { ok: false, error: 'No response from the server.' });
   });

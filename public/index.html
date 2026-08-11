@@ -220,6 +220,13 @@
 
     <details class="friends" id="friendsBox">
       <summary>Play with friends</summary>
+      <!-- The format lives with HOSTING, not with Play now: a scramble needs
+           four to eight people, and offering it on the solo button would be
+           an invitation to a game that cannot start. -->
+      <div class="formatpick">
+        <span class="cp-label">Format</span>
+        <div class="fmt-row" id="formatRow"></div>
+      </div>
       <div class="split">
         <div class="split-col">
           <button class="btn primary big" id="btnCreate">Host a round</button>
@@ -304,6 +311,7 @@
       <button class="hktab" data-tab="records" role="tab">Records</button>
       <button class="hktab" data-tab="shop" role="tab">Pro shop</button>
       <button class="hktab" data-tab="bag" role="tab">Your bag</button>
+      <button class="hktab" data-tab="keys" role="tab">Controls</button>
     </div>
 
     <!-- NOT hidden in the markup. The script hides the inactive ones once it
@@ -331,6 +339,16 @@
     <div class="section hkpane" data-pane="shop">
       <h4 class="lbl">Pro shop <span class="coinbal" id="coinBal"></span></h4>
       <div id="shopList"></div>
+    </div>
+
+    <div class="section hkpane" data-pane="keys">
+      <h4 class="lbl nojs-only">Controls</h4>
+      <div class="keyhead">
+        <p class="tiny">Click a key and press the one you want. Taking a key
+          off another action is allowed — it will say so.</p>
+        <button class="btn" id="btnBindsReset">Reset to defaults</button>
+      </div>
+      <div id="bindList"></div>
     </div>
 
     <div class="section hkpane" data-pane="bag">

@@ -1548,3 +1548,52 @@ body.hktabbed .nojs-only { display: none; }
    clubhouse promises things the wardrobe never shows. */
 .lookpill.locked { opacity: .42; cursor: not-allowed; }
 .lookpill.locked:hover { background: rgba(255,255,255,.05); }
+
+/* ------------------------------------------------------ scramble format --- */
+.formatpick { margin: 10px 0 4px; }
+.fmt-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 5px; margin-top: 5px; }
+.fmtbtn { display: flex; flex-direction: column; gap: 2px; text-align: left;
+  padding: 8px 11px; border-radius: 11px; cursor: pointer; font: inherit;
+  font-size: 13px; font-weight: 700; color: #cfe4d3;
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09);
+  transition: .12s; }
+.fmtbtn small { font-size: 10px; font-weight: 600; color: #8ba492; }
+.fmtbtn:hover { background: rgba(255,255,255,.08); color: #eaf3ea; }
+.fmtbtn.on { background: linear-gradient(180deg, rgba(47,138,74,.32), rgba(35,112,56,.32));
+  border-color: rgba(143,224,122,.55); color: #fff; }
+.fmtbtn.on small { color: #b6dcbe; }
+
+/* the team rows at the top of the scorecard */
+.trow { display: flex; align-items: center; gap: 8px; padding: 6px 9px;
+  border-radius: 9px; margin-bottom: 3px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+.trow.mine { background: rgba(143,224,122,.14); border-color: rgba(143,224,122,.34); }
+.trow .pname { flex: 1; min-width: 0; display: flex; flex-direction: column;
+  line-height: 1.2; font-weight: 800; font-size: 12.5px; }
+.trow .pname small { font-size: 9.5px; font-weight: 600; color: #8ba492;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow .ptotal { font-weight: 900; font-size: 14px; color: #eaf3ea; }
+
+/* ------------------------------------------------------------- controls --- */
+.keyhead { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.keyhead p { margin: 0; flex: 1; }
+.bindgroup { margin: 14px 0 6px; font-size: 10px; letter-spacing: 1.4px;
+  text-transform: uppercase; color: #8ba492; font-weight: 800; }
+.bindgroup:first-child { margin-top: 0; }
+.bindrow { display: flex; align-items: center; gap: 6px; padding: 5px 9px;
+  border-radius: 9px; margin-bottom: 3px;
+  background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06); }
+.bind-name { flex: 1; font-size: 12.5px; color: #cfe4d3; }
+.bindkey { min-width: 62px; padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  font: inherit; font-size: 11.5px; font-weight: 800; color: #eaf3ea;
+  background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.18);
+  transition: .12s; }
+.bindkey:hover { background: rgba(143,224,122,.22); border-color: rgba(143,224,122,.5); }
+.bindkey.empty { color: #7e937f; font-weight: 600;
+  background: transparent; border-style: dashed; }
+/* Unmistakable while it waits — a panel that is silently eating your
+   keystrokes is the worst state this screen can be in. */
+.bindkey.listening { min-width: 96px; color: #0f1a12; background: #ffd94a;
+  border-color: #ffd94a; animation: bindpulse 1s ease-in-out infinite; }
+@keyframes bindpulse { 50% { opacity: .62; } }

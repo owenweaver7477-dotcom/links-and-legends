@@ -7,6 +7,11 @@
    ball physics uses — you cannot walk through a trunk or out into a lake.
    ========================================================================= */
 
+import { keysFor } from './binds.js';
+
+/* The four that count as "taking over" from an auto-walk. */
+const WALK_ACTIONS = ['walkFwd', 'walkBack', 'walkLeft', 'walkRight'];
+
 import { WALK_SPEED, SPRINT_SPEED, SHOT_RADIUS } from '../shared/avatars.js';
 import { clamp } from '../shared/rng.js';
 
@@ -36,7 +41,7 @@ export class Walker {
     const c = k.toLowerCase();
     if (down) this.keys.add(c); else this.keys.delete(c);
     // any manual input cancels an auto-walk — you are taking over
-    if (down && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(c)) {
+    if (down && WALK_ACTIONS.some(id => keysFor(id).includes(c))) {
       this.auto = null;
     }
   }
@@ -70,13 +75,19 @@ export class Walker {
       else { vx = dx / d; vz = dz / d; want = Math.min(this.auto.speed, d / Math.max(dt, 1e-3)); }
     } else {
       const k = this.keys;
-      // while addressing the ball the arrows belong to aiming, not walking
+      /* Movement is bound, not hard-coded — see binds.js. The arrows are the
+         interesting case: they are a SECOND binding on the same four actions
+         by default, and while you are addressing the ball they belong to
+         aiming instead, so a key only counts if it is bound to walking AND
+         is not an arrow being borrowed by the aim. */
       const arrows = !this.arrowsAim;
+      const held = id => keysFor(id).some(
+        key => k.has(key) && (arrows || !key.startsWith('arrow')));
       let fwd = 0, side = 0;
-      if (k.has('w') || (arrows && k.has('arrowup'))) fwd += 1;
-      if (k.has('s') || (arrows && k.has('arrowdown'))) fwd -= 1;
-      if (k.has('a') || (arrows && k.has('arrowleft'))) side -= 1;
-      if (k.has('d') || (arrows && k.has('arrowright'))) side += 1;
+      if (held('walkFwd')) fwd += 1;
+      if (held('walkBack')) fwd -= 1;
+      if (held('walkLeft')) side -= 1;
+      if (held('walkRight')) side += 1;
       if (fwd || side) {
         // Camera-relative: forward is where you are looking, and your right
         // hand is (-cos, sin) — NOT (cos, -sin).  Facing +Z with Y up in a
@@ -87,7 +98,7 @@ export class Walker {
         vz = cosY * fwd + sinY * side;
         const l = Math.hypot(vx, vz) || 1;
         vx /= l; vz /= l;
-        want = k.has('shift') ? SPRINT_SPEED : WALK_SPEED;
+        want = held('run') ? SPRINT_SPEED : WALK_SPEED;
       }
     }
 

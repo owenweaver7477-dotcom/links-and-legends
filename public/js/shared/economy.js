@@ -21,7 +21,14 @@
    Legend a long way off.  Change this number to move the whole curve.
    ========================================================================= */
 
-export const PAYOUT_SCALE = 8;
+/* Raised from 8. Owning everything sat at 488 rounds against 1,131 for level
+   100 — coherent on paper, but 488 rounds is eighty hours before the shop is
+   empty, and a player who cannot feel the money moving stops caring about it
+   in the first hour. At 13 a level-par round pays about 5,400 and the whole
+   shop lands near 300 rounds, which is still a long haul and no longer a
+   second job. The club-set prices are unchanged: this moves the whole curve
+   from one place, which is exactly what the constant is for. */
+export const PAYOUT_SCALE = 13;
 
 /* Finishing a hole is worth something no matter how it went.  The appearance
    fee used to be eaten alive by the over-par penalty — at four over it hit
@@ -125,8 +132,14 @@ export function roundXp(holeScores) {
    One number to move if the whole thing feels wrong: XP_BASE scales
    everything, GROWTH_HI is how brutal the early climb is, and GROWTH_LO is
    where it settles. */
-const XP_BASE = 300;         // the cost of level 2 — about one good round
-const XP_POWER = 0.65;       // how fast the cost climbs
+/* Levelling was 1,131 rounds to 100 — a genuine long-haul target, and also
+   slow enough in the MIDDLE that the wheel of rewards went quiet for hours
+   at a stretch. XP_BASE down and the power slightly flatter pulls the whole
+   curve in by about 40%: level 100 lands near 660 rounds, level 25 at 65,
+   and the first ten levels come inside a session, which is where a reward
+   ladder has to prove it exists. */
+const XP_BASE = 210;         // the cost of level 2 — about half a good round
+const XP_POWER = 0.60;       // how fast the cost climbs
 const MAX_LEVEL = 100;
 
 /* Built once: the XP each level costs, and the running total to reach it.

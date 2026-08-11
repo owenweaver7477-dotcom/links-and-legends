@@ -10,6 +10,7 @@ import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { EMOTES } from './celebrations.js';
 import { UNLOCKS, unlocksAt, unlocksOfKind, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
+import { ACTIONS, keysFor, bindKey, resetBinds, keyLabel, RESERVED } from './binds.js';
 import { clubSvg, caddieSvg, statSvg, finishName } from './clubart.js';
 import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
@@ -270,6 +271,35 @@ HUD.renderBoard = (room, myPid, course) => {
   el.boardRoom.textContent = room.code;
   el.boardRows.innerHTML = '';
   const parSoFar = course.holes.slice(0, room.holeIndex + 1).reduce((s, h) => s + h.par, 0);
+
+  /* In a scramble the SIDE is the competitor and the individual scores are
+     meaningless — every member of a team carries the same number. So the
+     card leads with two team rows, and the players underneath are grouped
+     beneath their own side rather than listed in join order, which is the
+     only arrangement that lets you see at a glance who you are playing with
+     and who you are playing against. */
+  if (room.teams && room.teams.length) {
+    for (const t of room.teams) {
+      const mine = t.players.some(x => x.pid === myPid);
+      const row = document.createElement('div');
+      row.className = 'trow' + (mine ? ' mine' : '');
+      const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = t.color;
+      const nm = document.createElement('span'); nm.className = 'pname';
+      nm.textContent = t.name;
+      const who = document.createElement('small');
+      who.textContent = t.players.map(x => x.name).join(', ');
+      nm.appendChild(who);
+      let played = 0, taken = 0;
+      for (let i = 0; i < room.holeIndex; i++) {
+        if (t.scores[i] != null) { taken += t.scores[i]; played += course.holes[i].par; }
+      }
+      const rel = taken - played;
+      const tot = document.createElement('span'); tot.className = 'ptotal';
+      tot.textContent = played ? (rel === 0 ? 'E' : rel > 0 ? '+' + rel : String(rel)) : '—';
+      row.append(sw, nm, tot);
+      el.boardRows.appendChild(row);
+    }
+  }
 
   for (const p of room.players) {
     const row = document.createElement('div');
@@ -1057,6 +1087,78 @@ HUD.showClubhouseTab = (name) => {
   // a tab switch should start you at the top of the room you just walked into
   document.querySelector('#screenShop .card')?.scrollTo?.({ top: 0 });
 };
+
+/* --------------------------------------------------------------- binds --- */
+/**
+ * The controls panel: every action, its keys, and a click-then-press rebind.
+ *
+ * Deliberately not a modal. A player rebinding controls is comparing several
+ * of them against each other — "if run is here, jog-to-ball wants to be
+ * there" — and a dialog that shows one action at a time makes that
+ * impossible. The whole scheme is on screen and you edit it in place.
+ */
+let listening = null;             // { id, slot } while waiting for a key
+HUD.renderBinds = () => {
+  const box = document.getElementById('bindList');
+  if (!box) return;
+  box.textContent = '';
+
+  let group = null;
+  for (const a of ACTIONS) {
+    if (a.group !== group) {
+      group = a.group;
+      const h = document.createElement('h5');
+      h.className = 'bindgroup'; h.textContent = group;
+      box.appendChild(h);
+    }
+    const row = document.createElement('div');
+    row.className = 'bindrow';
+    const nm = document.createElement('span');
+    nm.className = 'bind-name'; nm.textContent = a.name;
+    row.appendChild(nm);
+
+    const keys = keysFor(a.id);
+    // always offer one empty slot, so a second binding can be added
+    const slots = Math.min(3, keys.length + 1);
+    for (let i = 0; i < slots; i++) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const live = listening && listening.id === a.id && listening.slot === i;
+      b.className = 'bindkey' + (live ? ' listening' : '') + (keys[i] ? '' : ' empty');
+      b.textContent = live ? 'press a key…' : (keys[i] ? keyLabel(keys[i]) : '+');
+      b.addEventListener('click', () => {
+        listening = live ? null : { id: a.id, slot: i };
+        HUD.renderBinds();
+      });
+      row.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+};
+
+/**
+ * Take a keypress while the panel is listening.
+ * @returns true if it was consumed, so the caller knows not to act on it
+ */
+HUD.bindsCapture = (ev) => {
+  if (!listening) return false;
+  const k = String(ev.key).toLowerCase();
+  ev.preventDefault();
+  if (k === 'escape') { listening = null; HUD.renderBinds(); return true; }
+  if (RESERVED.has(k)) {
+    HUD.toast(`${keyLabel(k)} belongs to the browser — pick another.`, 'warn', 2200);
+    return true;
+  }
+  const stolen = bindKey(listening.id, k, listening.slot);
+  if (stolen) {
+    const from = ACTIONS.find(a => a.id === stolen);
+    HUD.toast(`${keyLabel(k)} taken off "${from ? from.name : stolen}".`, 'info', 2400);
+  }
+  listening = null;
+  HUD.renderBinds();
+  return true;
+};
+HUD.bindsListening = () => !!listening;
 
 /* ---------------------------------------------------------- the ladder --- */
 /**
