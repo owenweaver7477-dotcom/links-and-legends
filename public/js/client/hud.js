@@ -1278,7 +1278,16 @@ HUD.renderOnline = (list, myPid, onJoin) => {
   for (const o of others.slice(0, 6)) {
     const row = document.createElement('div');
     row.className = 'on-row';
-    row.innerHTML = `<span class="on-name">${escapeHtml(o.name)}</span>` +
+    /* Rating first, because it is the only number on this panel that tells
+       you anything about the golf. A best round is shown when they have one
+       — "-3" beside a name is an invitation and a warning at the same time. */
+    const rel = o.best == null ? null
+      : (o.best === 0 ? 'E' : o.best > 0 ? '+' + o.best : String(o.best));
+    row.innerHTML =
+      (o.rating != null ? `<span class="on-rate" title="skill rating">${o.rating}</span>` : '') +
+      `<span class="on-name">${escapeHtml(o.name)}` +
+      (rel ? `<em title="their best round">best ${escapeHtml(rel)}</em>` : '') +
+      `</span>` +
       `<span class="on-doing">${escapeHtml(o.doing)}</span>`;
     if (o.joinable) {
       const b = document.createElement('button');

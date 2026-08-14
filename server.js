@@ -67,6 +67,16 @@ calibrateCarries();
    rather than fired and forgotten. */
 await loadProfiles();
 await loadRecords();
+/* Say it out loud when the board cannot survive a deploy. Without a database
+   the records live in a file, and a host with no persistent disk (Render's
+   free tier, for one) discards it every time you push. Records set today will
+   be gone tomorrow, and there is nothing in the code that can fix that — so
+   it should at least be impossible to be surprised by it. */
+if (!process.env.DATABASE_URL) {
+  console.log('  records: NO DATABASE_URL — the board is a file on this disk.');
+  console.log('           On a host without persistent storage it resets on');
+  console.log('           every deploy. Set DATABASE_URL to keep it for good.');
+}
 
 /* ═══════════════════════════════════════════════════════════════ assets ═══
    Everything under public/ is read, hashed and COMPRESSED once at boot, then
@@ -1073,9 +1083,19 @@ io.on('connection', socket => {
         ? course(room)?.holes?.[room.holeIndex] : null;
       for (const p of room.players) {
         if (!p.connected) continue;
+        /* Who they ARE, not just where they are. The panel listed names and
+           a hole number, which tells you nothing about whether you want to
+           play with them — a rating and a best round is the whole reason to
+           look at a list of strangers. Read from the profile store, so it is
+           the server's number and not a claim from their client. */
+        const prof = publicProfile(p.pid);
         out.push({
           pid: p.pid, name: p.name, code: room.code,
           courseId: room.courseId,
+          rating: prof ? Math.round(prof.rating) : null,
+          level: prof ? prof.level : null,
+          best: prof ? prof.best : null,
+          rounds: prof ? prof.rounds : 0,
           doing: room.state === 'lobby' ? 'in a lobby'
             : room.state === 'results' ? 'finishing a round'
               : h ? `on the ${h.number}${['th','st','nd','rd'][h.number % 10 > 3 ? 0 : h.number % 10] || 'th'}`

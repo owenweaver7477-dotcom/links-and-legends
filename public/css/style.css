@@ -125,10 +125,23 @@ html, body {
 .m-over { position: absolute; right: 0; top: 0; bottom: 0; width: 10.7%; background: rgba(255,90,70,.28); }
 .m-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; border-radius: 9px 0 0 9px;
   background: linear-gradient(90deg, #5fd07a 0%, #b9e05f 55%, #ffc93f 80%, #ff6b4d 100%); transition: width .03s linear; }
-.m-mark { position: absolute; top: -6px; bottom: -6px; width: 3px; background: #fff; left: 50%;
-  box-shadow: 0 0 8px rgba(255,255,255,.95); border-radius: 2px; z-index: 2; }
+/* The caddie's mark: where a perfectly-paced shot finishes at the flag.
+   -------------------------------------------------------------------------
+   It was 3px wide and positioned with `left`, which puts its LEFT EDGE on the
+   target — so the line a player is aiming at sat up to three pixels PAST the
+   power it represents. On a 230px meter covering 0 to 112% that is about 1.5%
+   of power, or four or five yards on a driver, permanently long. Every shot
+   struck exactly on the mark was slightly through the green and there was no
+   way for the player to know why.
+
+   Centred now, and thin enough to aim at: a 3px bar has no single position,
+   and asking someone to stop a sweeping bar on a fat smear is a different
+   game from asking them to stop it on a line. */
+.m-mark { position: absolute; top: -6px; bottom: -6px; width: 1.5px; background: #fff;
+  left: 50%; transform: translateX(-50%);
+  box-shadow: 0 0 7px rgba(255,255,255,.95); border-radius: 1px; z-index: 2; }
 .m-mark::after { content: ''; position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
-  border: 5px solid transparent; border-top-color: #fff; }
+  border: 4px solid transparent; border-top-color: #fff; }
 /* live percentage riding the end of the fill */
 .m-pct { position: absolute; top: 50%; transform: translate(8px,-50%); left: 0;
   font-size: 11px; font-weight: 700; color: #eaf4ec; text-shadow: 0 1px 3px rgba(0,0,0,.9);
@@ -1597,3 +1610,10 @@ body.hktabbed .nojs-only { display: none; }
 .bindkey.listening { min-width: 96px; color: #0f1a12; background: #ffd94a;
   border-color: #ffd94a; animation: bindpulse 1s ease-in-out infinite; }
 @keyframes bindpulse { 50% { opacity: .62; } }
+
+/* who is online: the rating is the point of the list */
+.on-rate { flex: 0 0 auto; min-width: 26px; text-align: center; padding: 1px 5px;
+  border-radius: 6px; font-size: 11px; font-weight: 900; color: #0f1a12;
+  background: linear-gradient(180deg, #ffe066, #ffd21f); }
+.on-name em { font-style: normal; margin-left: 6px; font-size: 10px;
+  font-weight: 700; color: #8fe07a; }

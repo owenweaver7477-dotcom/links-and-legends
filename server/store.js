@@ -196,6 +196,25 @@ export async function loadBlob(key, fallback = {}) {
   }
   try {
     return JSON.parse(fs.readFileSync(path.join(BLOB_DIR, key + '.json'), 'utf8'));
+  } catch { /* no live file — try the committed seed below */ }
+
+  /* THE SEED.
+     -----------------------------------------------------------------------
+     data/ is gitignored, which is right for a live file and fatal for a
+     deployment: a fresh checkout on a host with no persistent disk has no
+     records file at all, so the board came up blank after every single
+     deploy. "The records are blank and don't save over" was exactly this.
+
+     A seed file IS committed, so the board starts from a known snapshot
+     instead of from nothing. It is not a substitute for a database — records
+     set between deploys are still lost without one — but the difference
+     between "last month's records" and "no records at all" is the difference
+     between a leaderboard and a bug. */
+  try {
+    const seed = JSON.parse(
+      fs.readFileSync(path.join(BLOB_DIR, key + '.seed.json'), 'utf8'));
+    console.log(`  store: "${key}" restored from the committed seed`);
+    return seed;
   } catch { return fallback; }
 }
 

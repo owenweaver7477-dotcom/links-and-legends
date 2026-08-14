@@ -253,19 +253,50 @@ function clearMenuBackdrop() {
 }
 
 /** One frame of title screen: a slow, low orbit around the golfer. */
+/* Close-up on the golfer while the wardrobe is being used.
+   -------------------------------------------------------------------------
+   The figure on the tee has always updated the instant a swatch is clicked,
+   but at eight metres in the corner of a wide shot you cannot see a shirt
+   change, let alone a hat or a club decal — so the wardrobe felt like it was
+   doing nothing. Touching anything in the panel pulls the camera in to a
+   portrait framing and holds it there while you keep changing things; a few
+   seconds after you stop, it drifts back out to the title shot on its own.
+
+   No second renderer and no second avatar: it is the same golfer, standing
+   on the same tee, seen properly. */
+/* A countdown in SECONDS, spent by the frame's own dt — not a wall-clock
+   deadline. Mixing performance.now() with a dt-driven camera means the hold
+   and the ease are measured by different clocks, and the moment the frame
+   loop is throttled (a backgrounded tab, a slow machine) they disagree. */
+let portraitHold = 0;
+export function showGolferCloseUp(seconds = 4.5) {
+  portraitHold = Math.max(portraitHold, seconds);
+}
+let portraitK = 0;                 // 0 = wide title shot, 1 = portrait
+
 function menuFrame(dt) {
   menu.t += dt;
   const tee = G.hole.tee;
   const gy = G.T.heightAt(tee.x, tee.z);
   const a = menu.t * 0.055 + 0.9;
-  const r = 8.2;
+
+  // ease between the two framings rather than cutting
+  portraitHold = Math.max(0, portraitHold - dt);
+  const want = portraitHold > 0 ? 1 : 0;
+  portraitK += (want - portraitK) * Math.min(1, dt * 3.2);
+
+  const r = lerp(8.2, 3.9, portraitK);      // close, but the whole golfer in frame
   const cx = tee.x + Math.sin(a) * r, cz = tee.z + Math.cos(a) * r;
-  scene.camera.position.set(cx, gy + 2.35 + Math.sin(menu.t * 0.13) * 0.25, cz);
+  scene.camera.position.set(cx, gy + lerp(2.35, 1.62, portraitK)
+    + Math.sin(menu.t * 0.13) * 0.25 * (1 - portraitK), cz);
   // Aim past the golfer's LEFT so they sit in the right-hand two thirds of
-  // the frame — the menu column owns the left of the screen.
+  // the frame — the menu column owns the left of the screen. Up close that
+  // offset shrinks, or the golfer walks out of shot.
   const dx = tee.x - cx, dz = tee.z - cz;
   const L = Math.hypot(dx, dz) || 1;
-  scene.camera.lookAt(tee.x + (dz / L) * 2.0, gy + 1.2, tee.z - (dx / L) * 2.0);
+  const off = lerp(2.0, 0.30, portraitK);
+  scene.camera.lookAt(tee.x + (dz / L) * off, gy + lerp(1.2, 0.98, portraitK),
+    tee.z - (dx / L) * off);
   scene.setBall('menu', tee.x, gy + BALL_RADIUS, tee.z);   // keep its draw size right
   menu.av?.update(dt, 0);
   scene.windDir = 0.6;
@@ -2059,6 +2090,7 @@ function drawLookPicker() {
     drawLookPicker();
     saveLook(lookDraft);
     refreshMenuAvatar();             // the golfer on the tee changes NOW
+    showGolferCloseUp();             // ...and you are close enough to see it
     if (G.joined) Net.setLook(lookDraft);
   }, G.profile?.level ?? 1);
 }
@@ -2528,12 +2560,22 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     });
   }
 
+  /* Hovering or focusing the panel is enough to get the close-up. You should
+     be able to LOOK at your golfer without having to change something first. */
+  const golferPanel = document.querySelector('.home-golfer');
+  if (golferPanel) {
+    golferPanel.addEventListener('pointerenter', () => showGolferCloseUp(2.5));
+    golferPanel.addEventListener('pointermove', () => showGolferCloseUp(2.5));
+    golferPanel.addEventListener('focusin', () => showGolferCloseUp(5));
+  }
+
   // the dice: a whole outfit in one press, for people who hate picking
   document.getElementById('btnRandomLook')?.addEventListener('click', () => {
     lookDraft = randomLook();      // the whole wardrobe, not just the colours
     saveLook(lookDraft);
     drawLookPicker();
     refreshMenuAvatar();
+    showGolferCloseUp(6);
     if (G.joined) Net.setLook(lookDraft);
   });
 
