@@ -182,3 +182,115 @@ Sound.cart = (speed) => {
   cartFilter.frequency.value = 220 + s * 40;
   cartGain.gain.value = (muted || platformMuted) ? 0 : Math.min(0.10, 0.03 + s * 0.006);
 };
+
+/* ═══════════════════════════════════════════════════════════ AMBIENCE ═══
+   The course you are looking at while you decide whether to play. Wind in
+   the trees, the odd bird, and a pad chord underneath so a silent menu does
+   not read as a page that failed to load.
+
+   Synthesized like everything else here — no files. The wind is filtered
+   noise on a loop with a slowly wandering cutoff, which is what wind IS;
+   sampling it would cost a download and still loop audibly.
+
+   Idempotent on purpose: the frame loop calls this every frame with whether
+   the player is on a menu, so it must be free to call when nothing changes. */
+let ambOn = false;
+let ambNodes = null;
+let birdTimer = 0;
+
+/** One bird: two or three quick pitched notes, never the same twice. */
+function chirp() {
+  const c = ac(); if (!c || muted || platformMuted || !ambOn) return;
+  const base = 1900 + Math.random() * 1500;
+  const n = 2 + ((Math.random() * 2) | 0);
+  for (let i = 0; i < n; i++) {
+    const o = c.createOscillator();
+    o.type = 'sine';
+    const t = c.currentTime + i * (0.055 + Math.random() * 0.05);
+    const f = base * (1 + (Math.random() - 0.4) * 0.3);
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(f * (1.25 + Math.random() * 0.4), t + 0.045);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.035, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.075);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + 0.12);
+  }
+}
+
+Sound.ambience = on => {
+  on = !!on;
+  if (on === ambOn) return;                    // free to call every frame
+  ambOn = on;
+
+  if (!on) {
+    if (ambNodes) {
+      const c = ctx, n = ambNodes;
+      ambNodes = null;
+      try {
+        n.gain.gain.linearRampToValueAtTime(0, c.currentTime + 0.6);
+        setTimeout(() => { try { n.src.stop(); n.pad.forEach(o => o.stop()); } catch { /* done */ } }, 800);
+      } catch { /* context gone */ }
+    }
+    clearInterval(birdTimer); birdTimer = 0;
+    return;
+  }
+
+  const c = ac(); if (!c) { ambOn = false; return; }
+
+  /* Two seconds of noise on loop. Short enough to build instantly, long
+     enough that the loop point is inaudible under a wandering filter. */
+  const len = c.sampleRate * 2;
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  let lastV = 0;
+  for (let i = 0; i < len; i++) {
+    // brown-ish noise: white, integrated. Wind has no top end.
+    lastV = (lastV + (Math.random() * 2 - 1) * 0.06) * 0.985;
+    d[i] = lastV;
+  }
+  // crossfade the seam so the loop does not click
+  const fade = 2000;
+  for (let i = 0; i < fade; i++) {
+    const k = i / fade;
+    d[i] = d[i] * k + d[len - fade + i] * (1 - k);
+  }
+
+  const src = c.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 480; lp.Q.value = 0.4;
+  // the gust: cutoff wanders, so the wind rises and falls
+  const lfo = c.createOscillator();
+  lfo.type = 'sine'; lfo.frequency.value = 0.055;
+  const lfoAmt = c.createGain(); lfoAmt.gain.value = 240;
+  lfo.connect(lfoAmt); lfoAmt.connect(lp.frequency);
+
+  const gain = c.createGain();
+  gain.gain.setValueAtTime(0, c.currentTime);
+  gain.gain.linearRampToValueAtTime(0.16, c.currentTime + 2.2);
+
+  src.connect(lp); lp.connect(gain); gain.connect(master);
+  src.start(); lfo.start();
+
+  /* A pad: root, fifth, major third, detuned a few cents apart so it beats
+     slowly instead of sitting there. Very quiet — it should be noticed only
+     when it stops. */
+  const pad = [];
+  for (const f of [98, 147, 246.9, 196.5]) {
+    const o = c.createOscillator();
+    o.type = 'triangle';
+    o.frequency.value = f * (1 + (Math.random() - 0.5) * 0.004);
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, c.currentTime);
+    g.gain.linearRampToValueAtTime(0.011, c.currentTime + 3.5);
+    o.connect(g); g.connect(gain);
+    o.start();
+    pad.push(o);
+  }
+
+  ambNodes = { src, gain, pad: [...pad, lfo] };
+  clearInterval(birdTimer);
+  birdTimer = setInterval(() => { if (Math.random() < 0.45) chirp(); }, 2600);
+};

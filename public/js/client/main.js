@@ -17,6 +17,7 @@ import { EMOTES, MELEES, meleesAt, meleeById } from './celebrations.js';
 import { UNLOCKS, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
+import { playIntro } from './intro.js';
 import { isAct, actionFor, keysFor, resetBinds } from './binds.js';
 import { Net } from './net.js';
 import { initCG, loadingStart, loadingStop, gameplayStart, gameplayStop,
@@ -273,6 +274,119 @@ export function showGolferCloseUp(seconds = 4.5) {
   portraitHold = Math.max(portraitHold, seconds);
 }
 let portraitK = 0;                 // 0 = wide title shot, 1 = portrait
+
+/* ══════════════════════════════════════════════ THE LANDING PAGE ═══════
+   The front door renders the SAME live course the menu does, but from the
+   air: high, slow, drifting. Two reasons it is not the tee-level menu shot.
+
+   A tee-level camera is a player's-eye view and it is the right frame for a
+   menu, where the golfer standing on the tee IS the character preview. On a
+   landing page there is no golfer yet and nothing to preview — what a
+   visitor needs to be told in one glance is "this is a golf course, and it
+   is a real one", and the shot that says that is the broadcast aerial.
+
+   And it is cheap: the hole is already built and already being rendered
+   behind the menu, so the landing page costs one camera. */
+let landT = 0;
+function landingFrame(dt) {
+  landT += dt;
+  const h = G.hole;
+  // frame the middle of the hole, which is where its shape reads
+  const mid = h.route[Math.floor(h.route.length * 0.42)];
+  const far = h.route[Math.floor(h.route.length * 0.72)];
+  const gy = G.T.heightAt(mid[0], mid[1]);
+
+  /* A slow orbit rather than a straight drift: a straight drift eventually
+     runs out of hole and has to cut back, and there is no cut on this page. */
+  const a = landT * 0.028 + 2.15;
+  const r = 168 + Math.sin(landT * 0.11) * 14;
+  scene.camera.position.set(
+    mid[0] + Math.sin(a) * r,
+    gy + 96 + Math.sin(landT * 0.07) * 6,
+    mid[1] + Math.cos(a) * r
+  );
+  // look a little past the middle, down the hole, so the green is in shot
+  scene.camera.lookAt((mid[0] + far[0]) * 0.5, gy + 4, (mid[1] + far[1]) * 0.5);
+  scene.windDir = 0.6;
+  scene.update(dt);
+  scene.render(scene.camera);
+}
+
+/* Leaving the landing page.  The intro plays over the top of it and the
+   destination screen is revealed underneath — so the animation is a
+   TRANSITION and not a loading screen with a ball on it.
+
+   It runs once per session (sessionStorage, not localStorage: a player who
+   comes back tomorrow should get the whole thing again; a player who
+   reloads twice in a minute should not). */
+let introBusy = false;
+let ambienceOk = false;   // set at the first click: audio may not start before one
+async function leaveLanding(target = 'play') {
+  if (introBusy) return;
+  introBusy = true;
+  const canvas = HUD.el.introCanvas;
+
+  let seen = false;
+  try { seen = sessionStorage.getItem('lg_seen_intro') === '1'; } catch { /* private mode */ }
+
+  if (!seen && canvas) {
+    try { sessionStorage.setItem('lg_seen_intro', '1'); } catch { /* private mode */ }
+    canvas.hidden = false;
+    canvas.classList.remove('out');
+    document.body.classList.add('introing');
+    /* The one gesture-gated moment in the game: a click got us here, so the
+       audio context may legally start, and the intro is where the ambience
+       belongs — it is the first thing that makes the page feel inhabited. */
+    ambienceOk = true;
+    Sound.ambience(true);
+    await playIntro(canvas, {
+      onStrike: () => Sound.strike({ type: 'wood' }, 1),
+      onImpact: () => Sound.bounce('green', 14)
+    });
+    canvas.classList.add('out');
+    setTimeout(() => { canvas.hidden = true; document.body.classList.remove('introing'); }, 520);
+  }
+
+  ambienceOk = true;
+  G.screen = 'home';
+  HUD.show('home');
+  // replay the stagger so the menu ARRIVES rather than being there already
+  const home = HUD.el.screenHome;
+  home.classList.remove('revealing');
+  void home.offsetWidth;                       // restart the animation
+  home.classList.add('revealing');
+  setTimeout(() => home.classList.remove('revealing'), 900);
+
+  if (target && target !== 'play') openLegend(target);
+  introBusy = false;
+}
+
+/* Where each legend goes. Every one of these is a screen that already
+   exists — the landing page is a front door onto the game, not five new
+   pages that have to be kept in step with it. */
+function openLegend(target) {
+  const tab = { leaderboards: 'records', rankings: 'world', settings: 'keys' }[target];
+  if (tab) {
+    renderClubhouse();
+    G.screen = 'shop';
+    HUD.show('shop');
+    try { HUD.bindClubhouse?.(); HUD.showClubhouseTab(tab); } catch (e) { console.error('clubhouse:', e); }
+    if (tab === 'world') Net.ranking(d => HUD.renderWorld(d, G.myPid));
+    return;
+  }
+  if (target === 'community') {
+    // the online box on the home screen, opened and scrolled to
+    const box = document.getElementById('onlineBox');
+    if (box) {
+      /* Setting `open` fires the toggle event, and the room list already
+         refreshes on that — so this must NOT also call refreshRooms, which
+         lives inside boot() and is not in scope here. It would have been a
+         ReferenceError on the one legend nobody tests by hand. */
+      box.open = true;
+      box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+}
 
 function menuFrame(dt) {
   menu.t += dt;
@@ -961,8 +1075,13 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = last ? clamp((now - last) / 1000, 0, 0.1) : 0;
   last = now;
+  /* Birds and wind on the menus, silence in a round — a round has its own
+     sound and an ambient bed under a putt is a distraction. Idempotent, so
+     calling it every frame costs a comparison. */
+  Sound.ambience(ambienceOk && G.screen !== 'game');
   // the title screen: the course drifting behind the menu (and behind the
   // lobby, for a host who has not started yet)
+  if (G.screen === 'landing' && menu.key && G.hole) { landingFrame(dt); return; }
   if (menu.key && G.hole && (!G.joined || G.room?.state === 'lobby')) { menuFrame(dt); return; }
   if (!G.hole) return;
 
@@ -2040,6 +2159,11 @@ function route() {
      play: not the title screen, not the clubhouse, not the hole summary. */
   if (inPlay) gameplayStart(); else gameplayStop();
   if (!G.joined || !r) {
+    /* The landing page outranks the default route. Connecting to the server
+       fires this, and without the guard the front door was replaced by the
+       menu about a second after it appeared — for everyone with a fast
+       connection, which is to say everyone. */
+    if (G.screen === 'landing') { menuBackdrop(); return; }
     G.screen = 'home'; HUD.show('home');
     menuBackdrop();                  // back out of a room: the tee returns
     return;
@@ -2655,7 +2779,30 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     HUD.toast('Controls back to defaults.', 'info', 1800);
   });
 
-  HUD.show('home');
+  /* THE FRONT DOOR.
+     An invite link is somebody being asked to join a specific game right
+     now — sending them to a landing page first would be answering a knock
+     at the door with a brochure. Everybody else gets the landing page. */
+  if (room) {
+    HUD.show('home');
+  } else {
+    G.screen = 'landing';
+    HUD.show('landing');
+    HUD.el.lpLegend.addEventListener('click', e => {
+      const b = e.target.closest('.lp-item');
+      if (b) leaveLanding(b.dataset.go);
+    });
+    /* Enter on a focused legend is free — they are real buttons. This is for
+       the visitor who presses a key at the title screen expecting something
+       to happen, which is a thing people do. */
+    window.addEventListener('keydown', e => {
+      if (G.screen !== 'landing' || introBusy) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (document.activeElement?.classList?.contains('lp-item')) return;
+        e.preventDefault(); leaveLanding('play');
+      }
+    });
+  }
   scene.resize();
 
   /* Bring the portal up before we connect, so the Data module is ready when

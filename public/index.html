@@ -187,6 +187,65 @@
 
 <!-- ═══════════════════════════════ OVERLAYS ═════════════════════════════ -->
 
+<!-- THE LANDING PAGE — the first thing anybody sees.
+     Deliberately almost empty. Behind it is a live aerial of a real hole,
+     drifting; over it, a wordmark and five legends. Nothing else. The home
+     screen behind this one carries eleven controls and is the right screen
+     for somebody who has decided to play; it is the wrong first impression,
+     because a visitor who arrives to a wall of form fields has to read
+     before they can want anything.
+
+     The legends are LINKS, not a menu bar with dropdowns: each one goes
+     somewhere that already exists (the records board, the world ranking, the
+     online lobby, the controls), so this is a front door onto the game
+     rather than five new pages to keep in step. -->
+<div class="screen landing" id="screenLanding" hidden>
+  <canvas class="intro-canvas" id="introCanvas" hidden></canvas>
+
+  <div class="lp-veil" aria-hidden="true"></div>
+
+  <div class="lp-inner">
+    <div class="lp-brand">
+      <span class="lp-eyebrow">⛳ &nbsp;Online golf · eight courses · no sign-up</span>
+      <h1 class="lp-title">Links <em>&amp;</em> Legends</h1>
+      <p class="lp-tag" id="lpTag">Play a round in ninety seconds.</p>
+    </div>
+
+    <!-- The legend box. Five links, each with its own icon, label and the
+         one line that says what is behind it — a bare icon row is a puzzle,
+         and a visitor should never have to click to find out what a thing is. -->
+    <nav class="lp-legend" id="lpLegend" aria-label="Main">
+      <button class="lp-item lp-primary" data-go="play">
+        <span class="lp-ico">🏌️</span>
+        <span class="lp-txt"><b>Click here to play</b><small>straight onto the first tee</small></span>
+        <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
+      <button class="lp-item" data-go="leaderboards">
+        <span class="lp-ico">📊</span>
+        <span class="lp-txt"><b>Leaderboards</b><small>course and hole records</small></span>
+        <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
+      <button class="lp-item" data-go="rankings">
+        <span class="lp-ico">🏆</span>
+        <span class="lp-txt"><b>Rankings</b><small>the world top hundred</small></span>
+        <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
+      <button class="lp-item" data-go="community">
+        <span class="lp-ico">👥</span>
+        <span class="lp-txt"><b>Community</b><small>find a game, any region</small></span>
+        <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
+      <button class="lp-item" data-go="settings">
+        <span class="lp-ico">⚙️</span>
+        <span class="lp-txt"><b>Settings</b><small>controls, sound and units</small></span>
+        <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
+    </nav>
+
+    <p class="lp-foot"><span id="lpLive">Eight courses · nine holes each · play solo or with up to eight</span></p>
+  </div>
+</div>
+
 <!-- The title screen.  Behind it the REAL first tee is rendered live, with
      your golfer standing on it — the menu is a column on the left, and the
      course sells the game the way no card of form fields can. -->

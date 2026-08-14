@@ -20,6 +20,7 @@ const $ = id => document.getElementById(id);
 const el = {};
 for (const id of [
   'screenHome', 'screenLobby', 'screenResults', 'screenLoad', 'screenHoleOver', 'screenShop',
+  'screenLanding', 'introCanvas', 'lpLegend', 'lpLive',
   'btnClubhouse', 'btnShopBack', 'homeCoins',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
@@ -72,6 +73,7 @@ HUD.dist = dist;
 
 /* ---------------------------------------------------------------- screens */
 HUD.show = which => {
+  el.screenLanding.hidden = which !== 'landing';
   el.screenHome.hidden = which !== 'home';
   el.screenLobby.hidden = which !== 'lobby';
   el.screenResults.hidden = which !== 'results';
@@ -82,6 +84,7 @@ HUD.show = which => {
   // piece of in-round chrome, so the transparent title screen never shows
   // the backdrop hole's own scorecard and minimap through itself.
   document.body.classList.toggle('playing', which == null);
+  document.body.classList.toggle('landed', which === 'landing');
 };
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
 HUD.setHomeCoins = n => { el.homeCoins.textContent = '🪙 ' + (n || 0).toLocaleString(); };
@@ -1344,8 +1347,20 @@ HUD.renderRecords = (courses, records, myPid) => {
  */
 HUD.renderOnline = (list, myPid, onJoin) => {
   const box = el.onlineNow;
-  if (!box) return;
   const others = (list || []).filter(o => o.pid !== myPid);
+
+  /* The landing page's one line of live data. It says something true either
+     way — "eight courses, nine holes each" is not a placeholder, it is the
+     thing a visitor wants to know when nobody happens to be on. What it must
+     never say is "0 golfers online", which is the one fact that makes a
+     multiplayer game look abandoned. */
+  if (el.lpLive) {
+    el.lpLive.textContent = others.length
+      ? `${others.length} ${others.length === 1 ? 'golfer is' : 'golfers are'} on the course right now`
+      : 'Eight courses · nine holes each · play solo or with up to eight';
+  }
+
+  if (!box) return;
   if (!others.length) { box.hidden = true; box.innerHTML = ''; return; }
   box.hidden = false;
 

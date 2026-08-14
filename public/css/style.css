@@ -703,6 +703,10 @@ body:not(.playing) .hintbar,
 body:not(.playing) .labellayer,
 body:not(.playing) .shotinfo,
 body:not(.playing) .touchpad,
+/* Chat was missing from this list from the start. It never showed because
+   the home screen's backdrop is opaque enough to hide it — the landing page
+   is not, and six phrase buttons appeared over the aerial. */
+body:not(.playing) .chatpanel,
 body:not(.playing) .mapwrap { display: none !important; }
 
 /* swatches, sized for the front page: big enough to hit, ring when chosen */
@@ -1666,3 +1670,139 @@ body.hktabbed .nojs-only { display: none; }
 /* the course-record badge, wherever a name appears */
 .namelabel .nl-badge { margin-right: 4px; font-size: 11px; letter-spacing: -1px; }
 .on-badge { font-size: 11px; letter-spacing: -1px; }
+
+/* ═══════════════════════════════════════════════════ THE LANDING PAGE ═══
+   The front door. A live aerial of a real hole behind, a wordmark and five
+   legends over it, and nothing else — the busy screen is one click away and
+   is the right screen for somebody who has already decided to play.
+
+   The whole panel is transparent on purpose: `.screen` ships a near-opaque
+   radial and a blur, and inheriting those would hide the course, which is
+   the only thing on this page doing any selling. */
+.screen.landing { background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  align-items: stretch; justify-content: flex-start; padding: 0; overflow: hidden; }
+
+/* A veil, not a scrim: just enough to hold white text over a bright sky,
+   weighted to the left where the legends sit. */
+.lp-veil { position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(100deg, rgba(4,12,9,.86) 0%, rgba(4,12,9,.62) 34%, rgba(4,12,9,.12) 62%, rgba(4,12,9,.30) 100%),
+    linear-gradient(to top, rgba(4,12,9,.55), rgba(4,12,9,0) 42%); }
+
+.lp-inner { position: relative; z-index: 2; display: flex; flex-direction: column;
+  justify-content: center; gap: 30px; width: min(560px, 100%);
+  padding: 40px clamp(22px, 5vw, 62px); height: 100%; }
+
+.lp-eyebrow { font-size: 11px; letter-spacing: 2.4px; text-transform: uppercase;
+  color: #8fd0a2; font-weight: 700; display: block; margin-bottom: 12px; }
+.lp-title { font-size: clamp(40px, 7.4vw, 74px); line-height: .96; letter-spacing: -2.4px;
+  font-weight: 800; text-shadow: 0 6px 40px rgba(0,0,0,.6); }
+.lp-title em { font-style: normal; color: #6fce8a; font-weight: 400; }
+.lp-tag { margin-top: 14px; font-size: 15.5px; color: #cfe0d4; max-width: 34ch; line-height: 1.5; }
+
+/* ── the legends.  Rows, not a menu bar: a row can carry the line of text
+      that says what is behind it, and an icon on its own cannot. */
+.lp-legend { display: flex; flex-direction: column; gap: 9px; }
+
+.lp-item { position: relative; display: flex; align-items: center; gap: 14px;
+  padding: 13px 16px; border-radius: 14px; cursor: pointer; text-align: left;
+  color: #eaf3ec; font: inherit; overflow: hidden;
+  background: rgba(9,18,14,.52); border: 1px solid rgba(255,255,255,.10);
+  backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px);
+  transition: transform .22s cubic-bezier(.2,.8,.3,1), background .22s, border-color .22s, box-shadow .22s; }
+
+/* The glow is a pseudo-element that sweeps rather than a background change,
+   so hovering reads as light moving across the row instead of a state flip. */
+.lp-item::before { content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity .25s;
+  background: linear-gradient(100deg, rgba(111,206,138,.20), rgba(111,206,138,0) 62%); }
+.lp-item:hover, .lp-item:focus-visible { transform: translateX(7px);
+  background: rgba(16,32,24,.72); border-color: rgba(111,206,138,.46);
+  box-shadow: 0 10px 34px rgba(0,0,0,.42), 0 0 0 1px rgba(111,206,138,.14) inset; outline: none; }
+.lp-item:hover::before, .lp-item:focus-visible::before { opacity: 1; }
+.lp-item:active { transform: translateX(7px) scale(.985); }
+
+.lp-ico { position: relative; flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px;
+  display: grid; place-items: center; font-size: 21px;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.09);
+  transition: transform .22s cubic-bezier(.2,.8,.3,1), background .22s; }
+.lp-item:hover .lp-ico { transform: scale(1.09) rotate(-4deg); background: rgba(111,206,138,.17); }
+
+.lp-txt { position: relative; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.lp-txt b { font-size: 15px; letter-spacing: -.1px; }
+.lp-txt small { font-size: 11.5px; color: #9fbaa6; }
+.lp-item:hover .lp-txt small { color: #b9d3bf; }
+
+.lp-arrow { position: relative; margin-left: auto; font-size: 16px; color: #6fce8a;
+  opacity: 0; transform: translateX(-8px); transition: opacity .22s, transform .22s; }
+.lp-item:hover .lp-arrow, .lp-item:focus-visible .lp-arrow { opacity: 1; transform: none; }
+
+/* Play is the one thing most people came for, so it is bigger and it is lit
+   before you touch it — everything else waits to be found. */
+.lp-item.lp-primary { padding: 17px 18px;
+  background: linear-gradient(100deg, rgba(38,96,58,.80), rgba(14,34,24,.62));
+  border-color: rgba(111,206,138,.40); }
+.lp-item.lp-primary .lp-ico { background: rgba(111,206,138,.22); }
+.lp-item.lp-primary .lp-txt b { font-size: 17px; }
+.lp-item.lp-primary .lp-arrow { opacity: .55; transform: none; }
+.lp-item.lp-primary:hover { background: linear-gradient(100deg, rgba(52,124,74,.88), rgba(18,44,30,.7)); }
+
+.lp-foot { font-size: 11.5px; color: #7f9b87; letter-spacing: .2px; }
+
+/* Each legend fades up in turn — a quarter second of stagger is the
+   difference between a page that appeared and a page that arrived. */
+.screen.landing:not([hidden]) .lp-brand { animation: lpUp .7s cubic-bezier(.2,.8,.3,1) both; }
+.screen.landing:not([hidden]) .lp-item { animation: lpUp .55s cubic-bezier(.2,.8,.3,1) both; }
+.screen.landing:not([hidden]) .lp-item:nth-child(1) { animation-delay: .10s; }
+.screen.landing:not([hidden]) .lp-item:nth-child(2) { animation-delay: .17s; }
+.screen.landing:not([hidden]) .lp-item:nth-child(3) { animation-delay: .24s; }
+.screen.landing:not([hidden]) .lp-item:nth-child(4) { animation-delay: .31s; }
+.screen.landing:not([hidden]) .lp-item:nth-child(5) { animation-delay: .38s; }
+.screen.landing:not([hidden]) .lp-foot { animation: lpUp .6s .5s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes lpUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* ── the intro animation's canvas.
+      Above everything on the landing screen while it runs, then removed. */
+.intro-canvas { position: fixed; inset: 0; width: 100%; height: 100%;
+  z-index: 60; display: block; background: #7fb4e0; cursor: pointer; }
+body.introing .lp-inner, body.introing .lp-veil { opacity: 0; transition: opacity .18s; }
+
+/* The UI comes up over the settled ball rather than replacing it in a cut —
+   the reveal is the last beat of the animation, not a separate event. */
+@keyframes introFade { from { opacity: 1; } to { opacity: 0; } }
+.intro-canvas.out { animation: introFade .5s ease forwards; pointer-events: none; }
+.screen.home.revealing > *:not(.home-scrim) { animation: lpUp .55s cubic-bezier(.2,.8,.3,1) both; }
+.screen.home.revealing .home-brand { animation-delay: .04s; }
+.screen.home.revealing .home-play  { animation-delay: .12s; }
+.screen.home.revealing .home-hero  { animation-delay: .18s; }
+.screen.home.revealing .home-golfer{ animation-delay: .24s; }
+
+/* ── phones.  The legends stay legible and reachable: the hero shrinks, the
+      column becomes the whole width, and the whole thing scrolls if it must. */
+@media (max-width: 700px) {
+  .screen.landing { overflow: auto; }
+  .lp-veil { background: linear-gradient(to top, rgba(4,12,9,.92) 0%, rgba(4,12,9,.72) 46%, rgba(4,12,9,.34) 100%); }
+  .lp-inner { width: 100%; gap: 22px; padding: 30px 18px 26px; justify-content: flex-end; min-height: 100%; }
+  .lp-title { letter-spacing: -1.4px; }
+  .lp-tag { font-size: 14px; }
+  /* 2.4px of tracking on a 375px screen pushed "no sign-up" onto its own
+     line, which left the eyebrow reading as two ragged rows above the
+     wordmark. Tighter, smaller, one line. */
+  .lp-eyebrow { font-size: 9.5px; letter-spacing: 1.3px; margin-bottom: 8px; }
+  .lp-item { padding: 11px 13px; gap: 11px; }
+  .lp-item.lp-primary { padding: 14px 15px; }
+  .lp-ico { width: 37px; height: 37px; font-size: 18px; }
+  /* No hover on a touch screen, so the affordance has to be there already. */
+  .lp-arrow { opacity: .4; transform: none; }
+}
+@media (max-width: 700px) and (max-height: 620px) {
+  .lp-txt small { display: none; }
+  .lp-item { padding: 9px 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.landing:not([hidden]) .lp-brand,
+  .screen.landing:not([hidden]) .lp-item,
+  .screen.landing:not([hidden]) .lp-foot,
+  .screen.home.revealing > * { animation: none; }
+  .lp-item, .lp-ico, .lp-arrow { transition: none; }
+}
