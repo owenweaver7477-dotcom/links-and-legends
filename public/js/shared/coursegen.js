@@ -12,6 +12,7 @@
 
 import { rngKit, hashSeed, clamp, lerp, toYards } from './rng.js';
 import { BIOMES, COURSE_ORDER, HOLES_PER_COURSE, crownOf } from './biomes.js';
+import { placeProps } from './props.js';
 
 /* Standard 9-hole par mix — two 3s, two 5s, five 4s = par 36. */
 const PAR_SETS = [
@@ -276,16 +277,22 @@ function placeWaters(rk, bio, dense, cum, total, green, tee, par) {
   return waters;
 }
 
-function placeTrees(rk, bio, dense, cum, total, green, tee, bunkers, waters, fairwayWidth, bounds, dist2route) {
+function placeTrees(rk, bio, dense, cum, total, green, tee, bunkers, waters, fairwayWidth, bounds, dist2route, props = []) {
   const trees = [];
   if (bio.treeDensity <= 0.001) return trees;
 
   const area = (bounds.maxX - bounds.minX) * (bounds.maxZ - bounds.minZ);
-  const target = Math.round((area / 900) * bio.treeDensity);
+  /* One tree per 900 m² at full density was a wood you could see through in
+     every direction. A parkland hole is supposed to feel ENCLOSED — that is
+     the whole character of the place — and at that spacing the treeline read
+     as a hedge with gaps. 460 m² doubles it, and the thinning band below
+     still keeps the corridor itself clear, so this fills the country BEYOND
+     the rough rather than crowding the golf. */
+  const target = Math.round((area / 460) * bio.treeDensity);
   const corridor = fairwayWidth / 2 + bio.roughWidth * 0.55;
 
   let guard = 0;
-  while (trees.length < target && guard < target * 25) {
+  while (trees.length < target && guard < target * 22) {
     guard++;
     const x = rk.f(bounds.minX, bounds.maxX);
     const z = rk.f(bounds.minZ, bounds.maxZ);
@@ -297,6 +304,9 @@ function placeTrees(rk, bio, dense, cum, total, green, tee, bunkers, waters, fai
     if (Math.hypot(x - tee.x, z - tee.z) < 14) continue;
     let blocked = false;
     for (const b of bunkers) if (inEllipse(x, z, b, 4)) { blocked = true; break; }
+    if (blocked) continue;
+    // nothing grows through a hut
+    for (const pr of props) if (Math.hypot(x - pr.x, z - pr.z) < 6) { blocked = true; break; }
     if (blocked) continue;
     for (const w of waters) if (inEllipse(x, z, w, 4)) { blocked = true; break; }
     if (blocked) continue;
@@ -626,7 +636,11 @@ function makeHole(courseId, bio, number, seed) {
   };
 
   const dist2route = makeRouteDistanceFn(hole);
-  hole.trees = placeTrees(rk, bio, dense, cum, total, green, tee, bunkers, waters, fairwayWidth, bounds, dist2route);
+  /* The furniture, before the trees: props claim their spot against the golf
+     and the trees then avoid THEM, rather than a hut being dropped into a
+     wood that is already there. */
+  hole.props = placeProps(rk, hole, bio, dist2route);
+  hole.trees = placeTrees(rk, bio, dense, cum, total, green, tee, bunkers, waters, fairwayWidth, bounds, dist2route, hole.props);
   /* Sentinels go in LAST and unfiltered: placeTrees rejects anything inside
      the corridor, which is exactly where these are supposed to be. */
   hole.trees.push(...sentinels);
@@ -980,6 +994,7 @@ function makeSignatureHole(bio) {
        generated shaping goes in it. It keeps the field so nothing downstream
        has to ask whether a hole has mounds. */
     mounds: [],
+    props: [],
     bounds, ob,
     trees: [],
     terrainSeed: 0x51a7c33d >>> 0,
@@ -1006,6 +1021,11 @@ function makeSignatureHole(bio) {
     { x: 742, z: 410, rx: 170, rz: 210, n: 26, tall: [14, 21] }
   ];
   const dist2route = makeRouteDistanceFn(hole);
+  /* The hand-drawn hole keeps its hand-drawn shaping, but it is still a golf
+     course and it is the first thing anybody sees — so it gets the same
+     furniture as everywhere else. Placed before the trees, as on generated
+     holes, so the tree loop below can keep clear of it. */
+  hole.props = placeProps(rk, hole, bio, dist2route);
   const corridor = hole.fairwayWidth / 2 + 8;
   for (const cl of clusters) {
     const c = cv(cl.x, cl.z);
@@ -1023,6 +1043,8 @@ function makeSignatureHole(bio) {
       for (const bb of bunkers) if (inEllipse(x, z, bb, 6)) { bad = true; break; }
       if (bad) continue;
       for (const ww of waters) if (inEllipse(x, z, ww, 6)) { bad = true; break; }
+      if (bad) continue;
+      for (const pp of hole.props) if (Math.hypot(x - pp.x, z - pp.z) < 5) { bad = true; break; }
       if (bad) continue;
       const species = rk.pick(bio.treeSpecies);
       // 'tall' clusters are old growth: two to three times the normal canopy

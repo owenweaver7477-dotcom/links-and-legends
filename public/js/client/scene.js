@@ -324,6 +324,10 @@ export class GolfScene {
     /* ---- foliage: bushes, blooms, grass, rocks, reeds ---- */
     for (const mesh of this._buildFoliage(hole, terrain, bio)) g.add(mesh);
 
+    /* ---- the furniture: huts, shelters, benches, signs ---- */
+    const props = this._buildProps(hole, terrain, bio);
+    if (props) g.add(props);
+
     /* ---- flag, cup, tee markers ---- */
     g.add(this._buildPin(hole, terrain, bio));
     g.add(this._buildTeeMarkers(hole, terrain, bio));
@@ -665,6 +669,102 @@ export class GolfScene {
     return inst;
   }
 
+  /**
+   * The course furniture — see props.js for where it goes and why.
+   *
+   * One THREE.Group of plain boxes rather than instanced meshes: there are
+   * about a dozen per hole, they are all different shapes, and a group of
+   * two hundred triangles is not worth an instancing table. Built from the
+   * same PROP_KINDS the physics reads, so a hut you can see is a hut you
+   * bounce off.
+   */
+  _buildProps(hole, T, bio) {
+    const list = hole.props || [];
+    if (!list.length) return null;
+    const g = new THREE.Group();
+    const P = bio.palette;
+
+    const M = hex => new THREE.MeshLambertMaterial({ color: new THREE.Color(hex) });
+    const wood = M(P.trunk);
+    const plank = M(lightenHex(P.trunk, 0.30));
+    const roof = M('#4a5560');
+    const brick = M('#c8bda6');
+    const metal = M('#7f8a92');
+    const dark = M('#2c3238');
+    const accent = M('#3f8f52');
+
+    const box = (mat, w, h, d, x, y, z, ry = 0) => {
+      const m = new THREE.Mesh(cached(`pbox${w}_${h}_${d}`,
+        () => new THREE.BoxGeometry(w, h, d)), mat);
+      m.position.set(x, y, z); m.rotation.y = ry;
+      m.castShadow = true; m.receiveShadow = true;
+      return m;
+    };
+
+    for (const p of list) {
+      const y = T.heightAt(p.x, p.z);
+      const n = new THREE.Group();
+      n.position.set(p.x, y, p.z);
+      n.rotation.y = p.rot || 0;
+
+      switch (p.kind) {
+        case 'hut': {                       // walls, a pitched roof, a counter
+          n.add(box(plank, 4.4, 2.3, 3.2, 0, 1.15, 0));
+          n.add(box(roof, 5.2, 0.26, 4.0, 0, 2.45, 0));
+          n.add(box(roof, 4.2, 0.7, 0.24, 0, 2.75, 0));      // a ridge, so it is not a slab
+          n.add(box(wood, 4.6, 0.16, 0.9, 0, 1.05, 1.85));   // the serving counter
+          n.add(box(dark, 1.0, 1.5, 0.1, -1.3, 0.9, 1.62));  // a door
+          break;
+        }
+        case 'shelter': {                   // three sides and a roof
+          n.add(box(plank, 3.4, 2.0, 0.2, 0, 1.0, -1.3));
+          n.add(box(plank, 0.2, 2.0, 2.6, -1.6, 1.0, 0));
+          n.add(box(plank, 0.2, 2.0, 2.6, 1.6, 1.0, 0));
+          n.add(box(roof, 4.0, 0.22, 3.2, 0, 2.15, 0));
+          n.add(box(wood, 3.0, 0.14, 0.5, 0, 0.5, -0.9));    // the bench inside
+          break;
+        }
+        case 'toilet': {
+          n.add(box(brick, 1.7, 2.2, 1.7, 0, 1.1, 0));
+          n.add(box(roof, 2.0, 0.18, 2.0, 0, 2.28, 0));
+          n.add(box(dark, 0.7, 1.5, 0.08, 0, 0.9, 0.87));
+          n.add(box(accent, 0.24, 0.24, 0.06, 0, 1.7, 0.92)); // the little sign
+          break;
+        }
+        case 'bench': {
+          n.add(box(wood, 1.9, 0.12, 0.44, 0, 0.46, 0));
+          n.add(box(wood, 1.9, 0.44, 0.10, 0, 0.72, -0.20));
+          n.add(box(metal, 0.10, 0.46, 0.40, -0.80, 0.23, 0));
+          n.add(box(metal, 0.10, 0.46, 0.40, 0.80, 0.23, 0));
+          break;
+        }
+        case 'washer': {
+          n.add(box(metal, 0.14, 0.85, 0.14, 0, 0.42, 0));
+          n.add(box(accent, 0.42, 0.36, 0.42, 0, 0.98, 0));
+          break;
+        }
+        case 'sign': {
+          n.add(box(wood, 0.11, 1.5, 0.11, 0, 0.75, 0));
+          n.add(box(accent, 0.62, 0.34, 0.06, 0, 1.42, 0));
+          break;
+        }
+        case 'bin': {
+          n.add(box(dark, 0.46, 0.8, 0.46, 0, 0.4, 0));
+          n.add(box(metal, 0.54, 0.08, 0.54, 0, 0.83, 0));
+          break;
+        }
+        case 'crate': {
+          n.add(box(wood, 1.1, 0.6, 0.8, 0, 0.3, 0));
+          n.add(box(plank, 1.16, 0.1, 0.86, 0, 0.63, 0));
+          break;
+        }
+        default: continue;
+      }
+      g.add(n);
+    }
+    return g;
+  }
+
   /* ------------------------------------------------------------ water --- */
   _buildWater(w, level, bio) {
     /* A GRID, not a fan.  CircleGeometry is a triangle fan with a single
@@ -932,62 +1032,69 @@ export class GolfScene {
     const rf = (a, b) => a + rng() * (b - a);
     const b = hole.bounds;
 
-    // What grows where.  [kind, colours, count, sizes, surfaces]
+    /* What grows where.  [kind, colours, count, sizes, surfaces]
+
+       Counts are roughly double what they were. The whole dressing layer is
+       six to nine instanced draw calls however dense it looks, so the cost of
+       "more" here is memory rather than frames — and the thing that made the
+       courses read as unfinished was empty ground between the fairway and the
+       trees. Grass tufts take the biggest jump because they are the cheapest
+       thing in the scene and the one the eye reads as ground cover. */
     const P = {
       parkland: {
-        bush: { c: ['#2e6b33', '#39793b'], n: 95, s: [0.7, 1.5] },
+        bush: { c: ['#2e6b33', '#39793b'], n: 209, s: [0.7, 1.5] },
         bloom: { c: ['#e86fa4', '#f2f2ee', '#d4548a'], per: 4 },
-        tuft: { c: ['#4d8a3d', '#5f9c48'], n: 250, s: [0.35, 0.7] },
-        rock: { c: ['#8d8a82'], n: 10, s: [0.4, 0.9] },
+        tuft: { c: ['#4d8a3d', '#5f9c48'], n: 650, s: [0.35, 0.7] },
+        rock: { c: ['#8d8a82'], n: 20, s: [0.4, 0.9] },
         reed: { c: ['#5d8f4a'], ring: 26 }
       },
       links: {
-        bush: { c: ['#6d6b3f', '#7c7a48'], n: 46, s: [0.5, 1.1] },     // heather-gorse scrub
+        bush: { c: ['#6d6b3f', '#7c7a48'], n: 101, s: [0.5, 1.1] },     // heather-gorse scrub
         bloom: { c: ['#b088c9', '#caa3de'], per: 3 },                  // heather purple
-        tuft: { c: ['#a89c58', '#8f8f4e', '#b3a763'], n: 360, s: [0.4, 0.9] },  // marram
-        rock: { c: ['#7d7f82', '#6e7073'], n: 26, s: [0.5, 1.4] },
+        tuft: { c: ['#a89c58', '#8f8f4e', '#b3a763'], n: 936, s: [0.4, 0.9] },  // marram
+        rock: { c: ['#7d7f82', '#6e7073'], n: 52, s: [0.5, 1.4] },
         reed: { c: ['#9a915a'], ring: 20 }
       },
       desert: {
-        bush: { c: ['#5d7042', '#6c7f4a'], n: 34, s: [0.5, 1.0] },     // sage scrub
+        bush: { c: ['#5d7042', '#6c7f4a'], n: 74, s: [0.5, 1.0] },     // sage scrub
         bloom: { c: ['#e8c25a'], per: 2 },                             // brittlebush yellow
-        tuft: { c: ['#98915c', '#a89a62'], n: 140, s: [0.35, 0.8] },   // dry bunchgrass
-        rock: { c: ['#a4674a', '#8f5a41', '#b0755a'], n: 44, s: [0.6, 2.0] },  // red rock
+        tuft: { c: ['#98915c', '#a89a62'], n: 364, s: [0.35, 0.8] },   // dry bunchgrass
+        rock: { c: ['#a4674a', '#8f5a41', '#b0755a'], n: 88, s: [0.6, 2.0] },  // red rock
         reed: null                                                     // nothing grows by nothing
       },
       alpine: {
-        bush: { c: ['#2f5e35', '#3a6b3e'], n: 52, s: [0.5, 1.1] },
+        bush: { c: ['#2f5e35', '#3a6b3e'], n: 114, s: [0.5, 1.1] },
         bloom: { c: ['#f2f0e6', '#e8c25a', '#7f9fd4'], per: 3 },       // wildflowers
-        tuft: { c: ['#43803c', '#549147'], n: 280, s: [0.35, 0.75] },
-        rock: { c: ['#8f9296', '#7b7f84'], n: 38, s: [0.6, 2.2] },     // granite
+        tuft: { c: ['#43803c', '#549147'], n: 728, s: [0.35, 0.75] },
+        rock: { c: ['#8f9296', '#7b7f84'], n: 76, s: [0.6, 2.2] },     // granite
         reed: { c: ['#4d7a45'], ring: 18 }
       },
       tropical: {
-        bush: { c: ['#1f7a3d', '#2a8a46'], n: 64, s: [0.7, 1.5] },
+        bush: { c: ['#1f7a3d', '#2a8a46'], n: 140, s: [0.7, 1.5] },
         bloom: { c: ['#e8452f', '#f2803d', '#e8377f'], per: 4 },       // hibiscus
-        tuft: { c: ['#2f9448', '#3aa653'], n: 270, s: [0.4, 0.9] },
-        rock: { c: ['#b3a48c', '#c2b49b'], n: 16, s: [0.4, 1.0] },     // coral stone
+        tuft: { c: ['#2f9448', '#3aa653'], n: 702, s: [0.4, 0.9] },
+        rock: { c: ['#b3a48c', '#c2b49b'], n: 32, s: [0.4, 1.0] },     // coral stone
         reed: { c: ['#3f8a4a'], ring: 30 }
       },
       sandbelt: {
-        bush: { c: ['#6f7a42', '#7d8a4c'], n: 58, s: [0.6, 1.4] },     // tea-tree
+        bush: { c: ['#6f7a42', '#7d8a4c'], n: 127, s: [0.6, 1.4] },     // tea-tree
         bloom: { c: ['#e8d05a', '#f0e08a'], per: 3 },                  // wattle
-        tuft: { c: ['#a39a56', '#8f8a4a', '#b0a862'], n: 330, s: [0.4, 0.95] },
-        rock: { c: ['#9c8f76'], n: 12, s: [0.4, 0.9] },
+        tuft: { c: ['#a39a56', '#8f8a4a', '#b0a862'], n: 858, s: [0.4, 0.95] },
+        rock: { c: ['#9c8f76'], n: 24, s: [0.4, 0.9] },
         reed: { c: ['#8a8a4e'], ring: 16 }
       },
       volcanic: {
-        bush: { c: ['#1f5230', '#286338'], n: 110, s: [0.6, 1.4] },    // dense understory
+        bush: { c: ['#1f5230', '#286338'], n: 242, s: [0.6, 1.4] },    // dense understory
         bloom: { c: ['#e8879f', '#f0b3c4'], per: 5 },                  // azalea
-        tuft: { c: ['#357a3c', '#428c47'], n: 320, s: [0.35, 0.8] },
-        rock: { c: ['#43403c', '#35322e', '#4f4b46'], n: 52, s: [0.5, 1.8] }, // basalt
+        tuft: { c: ['#357a3c', '#428c47'], n: 832, s: [0.35, 0.8] },
+        rock: { c: ['#43403c', '#35322e', '#4f4b46'], n: 104, s: [0.5, 1.8] }, // basalt
         reed: { c: ['#2f6b38'], ring: 24 }
       },
       fjord: {
-        bush: { c: ['#4f6338', '#5d7042'], n: 30, s: [0.4, 0.9] },     // crowberry
+        bush: { c: ['#4f6338', '#5d7042'], n: 66, s: [0.4, 0.9] },     // crowberry
         bloom: { c: ['#f0f0e8', '#d8c9e0'], per: 2 },                  // cottongrass
-        tuft: { c: ['#7d8a52', '#6b7847'], n: 300, s: [0.35, 0.8] },
-        rock: { c: ['#4a4d52', '#3d4045', '#585c62'], n: 78, s: [0.6, 2.6] }, // black basalt
+        tuft: { c: ['#7d8a52', '#6b7847'], n: 780, s: [0.35, 0.8] },
+        rock: { c: ['#4a4d52', '#3d4045', '#585c62'], n: 156, s: [0.6, 2.6] }, // black basalt
         reed: null                                                     // nothing stands in this wind
       }
     }[bio.id] || null;

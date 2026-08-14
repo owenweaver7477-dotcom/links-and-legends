@@ -16,6 +16,7 @@ import { clamp } from './rng.js';
 import { gearEffect } from './gear.js';
 import { crewEffect } from './crew.js';
 import { canopyOf } from './biomes.js';
+import { PROP_KINDS } from './props.js';
 
 /* ------------------------------------------------------------- constants */
 const G = 9.80665;
@@ -248,8 +249,8 @@ export class ShotSim {
       return this._penalty('water');
     }
 
-    // did it hit a tree?
-    const hit = this._treeHit(p, nx, ny, nz);
+    // did it hit a tree — or a building?
+    const hit = this._treeHit(p, nx, ny, nz) || this._propHit(nx, ny, nz);
     if (hit) {
       p.x = hit.x; p.y = hit.y; p.z = hit.z;
       this._pushPath(true);
@@ -583,6 +584,28 @@ export class ShotSim {
         const d = Math.hypot(dx, dz) || 1e-6;
         return { x: nx, y: ny, z: nz, nx: dx / d, nz: dz / d, tree: t };
       }
+    }
+    return null;
+  }
+
+  /* A hut is a building, and a ball does not go through one.
+     Only the SOLID props (see props.js) — a bench and a bin are furniture
+     the ball is welcome to rattle off the ground past, and making every
+     sign a collider would turn the walk into an obstacle course. */
+  _propHit(nx, ny, nz) {
+    const props = this.hole.props;
+    if (!props) return null;
+    for (let i = 0; i < props.length; i++) {
+      const p = props[i];
+      const k = PROP_KINDS[p.kind];
+      if (!k || !k.solid) continue;
+      const base = this.T.heightAt(p.x, p.z);
+      if (ny > base + k.h) continue;                 // over the roof
+      const dx = nx - p.x, dz = nz - p.z;
+      const rr = k.r + RADIUS;
+      if (dx * dx + dz * dz > rr * rr) continue;
+      const d = Math.hypot(dx, dz) || 1e-6;
+      return { x: nx, y: ny, z: nz, nx: dx / d, nz: dz / d };
     }
     return null;
   }

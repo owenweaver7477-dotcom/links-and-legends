@@ -17,8 +17,9 @@
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { allCourses, elevationAlongRoute, aimPlan, edgeScale, inEllipse }
-  from '../public/js/shared/coursegen.js';
+import { allCourses, elevationAlongRoute, aimPlan, edgeScale, inEllipse,
+         makeRouteDistanceFn, routeAt } from '../public/js/shared/coursegen.js';
+import { PROP_KINDS } from '../public/js/shared/props.js';
 
 const HOLES = allCourses().flatMap(c => c.holes.map(h => ({ course: c, hole: h })));
 const generated = HOLES.filter(({ hole }) => !hole.signature);
@@ -259,4 +260,71 @@ test('the sand you can see is the sand the ball reacts to', () => {
   }
   assert.ok(probes > 1000, `only ${probes} probes`);
   assert.deepEqual(bad.slice(0, 5), [], `${bad.length} of ${probes} probes disagree`);
+});
+
+test('the furniture is never in play', () => {
+  /* A course now has huts, shelters, benches, signs and a toilet block on
+     it, and the whole point of them is that they are scenery. A bench you
+     can carom off is a hazard nobody designed; a shelter between you and the
+     flag is a hole with a building in it. Everything except the tee
+     furniture — which stands beside the tee pad by definition — keeps clear
+     of the corridor, the green and the water. */
+  const bad = [];
+  let placed = 0;
+  for (const { course, hole } of HOLES) {
+    const d2r = makeRouteDistanceFn(hole);
+    for (const p of (hole.props || [])) {
+      placed++;
+      const k = PROP_KINDS[p.kind];
+      assert.ok(k, `${course.name} h${hole.number}: unknown prop "${p.kind}"`);
+      const where = `${course.name} h${hole.number} ${p.kind}`;
+      if (p.kind !== 'washer' && p.kind !== 'bin') {
+        const d = d2r(p.x, p.z);
+        if (d < hole.fairwayWidth * 0.5 + hole.roughWidth) {
+          bad.push(`${where} is ${d.toFixed(0)} m from the centreline`);
+        }
+      }
+      if (p.kind === 'washer' || p.kind === 'bin') {
+        /* The tee furniture is exempt from the corridor rule, so the thing
+           that keeps it out of play is that it stands level with or behind
+           the markers — the ball leaves the tee going forward. Assert that,
+           because it is now the only guarantee these two have. */
+        const t = hole.tees?.back || hole.tee;
+        const s0 = makeRouteDistanceFn(hole)(t.x, t.z, true).s || 0;
+        /* The bearing 40 m down the hole, not the spline tangent at the tee.
+           The first version of this check used the tangent — the same vector
+           the placement code used — so it agreed with the bug instead of
+           catching it, and passed with a bin sitting in front of the tee. */
+        const far = routeAt(hole.route, hole.cum, Math.min(s0 + 40, hole.total));
+        const fl = Math.hypot(far[0] - t.x, far[1] - t.z) || 1;
+        const dir = [(far[0] - t.x) / fl, (far[1] - t.z) / fl];
+        const ahead = (p.x - t.x) * dir[0] + (p.z - t.z) * dir[1];
+        if (ahead > 0.5) bad.push(`${where} is ${ahead.toFixed(1)} m in front of the tee`);
+      }
+      if (Math.hypot(p.x - hole.green.x, p.z - hole.green.z) < hole.green.r + 4) {
+        bad.push(`${where} is on the green complex`);
+      }
+      for (const w of hole.waters) {
+        if (Math.hypot(p.x - w.x, p.z - w.z) < Math.max(w.rx, w.rz)) {
+          bad.push(`${where} is standing in the water`);
+        }
+      }
+    }
+  }
+  assert.ok(placed > 100, `only ${placed} props across the whole game`);
+  assert.deepEqual(bad.slice(0, 6), [], `${bad.length} props are in play`);
+});
+
+test('a hole is dressed, not decorated at random', () => {
+  /* Two ways this goes wrong and both are visible from the tee: nothing at
+     all, or a housing estate. Every hole gets its tee furniture and a marker
+     post; buildings are rationed. */
+  for (const { course, hole } of HOLES.filter(x => !x.hole.signature)) {
+    const props = hole.props || [];
+    assert.ok(props.length >= 3,
+      `${course.name} h${hole.number} has only ${props.length} props`);
+    const buildings = props.filter(p => PROP_KINDS[p.kind].solid).length;
+    assert.ok(buildings <= 2,
+      `${course.name} h${hole.number} has ${buildings} buildings on it`);
+  }
 });

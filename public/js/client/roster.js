@@ -20,6 +20,14 @@ const titleOf = look => (look?.title
   ? UNLOCKS.find(u => u.kind === 'title' && u.id === look.title)?.name || ''
   : '');
 
+/* A course-record badge. Holding one is the hardest thing in the game to do
+   and it was invisible to everybody you played with — which is most of the
+   point of holding it. A trophy and a count, beside the name, everywhere the
+   name appears. */
+const badgeText = b => !b ? ''
+  : (b.courses ? '🏆' + (b.courses > 1 ? b.courses : '') : '') +
+    (b.holes ? '⛳' + (b.holes > 1 ? b.holes : '') : '');
+
 const _v = new THREE.Vector3();
 
 export class Roster {
@@ -62,13 +70,25 @@ export class Roster {
       const r = this.rows.get(p.pid);
       const title = titleOf(p.look);
       r.dot.style.background = p.color;
-      r.name.textContent = p.name;
+      const bt2 = badgeText(p.badge);
+      r.name.textContent = (bt2 ? bt2 + ' ' : '') + p.name;
       r.name.title = title ? p.name + ' — ' + title : p.name;
       r.row.classList.toggle('me', p.pid === myPid);
       r.row.classList.toggle('gone', !p.connected);
 
       const lbl = this.labels.get(p.pid);
       lbl.textContent = '';
+      const bt = badgeText(p.badge);
+      if (bt) {
+        const bd = document.createElement('span');
+        bd.className = 'nl-badge'; bd.textContent = bt;
+        bd.title = (p.badge.courses ? p.badge.courses + ' course record' +
+          (p.badge.courses > 1 ? 's' : '') : '') +
+          (p.badge.courses && p.badge.holes ? ', ' : '') +
+          (p.badge.holes ? p.badge.holes + ' hole record' +
+            (p.badge.holes > 1 ? 's' : '') : '');
+        lbl.appendChild(bd);
+      }
       const nm = document.createElement('span');
       nm.className = 'nl-name'; nm.textContent = p.name;
       lbl.appendChild(nm);

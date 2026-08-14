@@ -8,6 +8,7 @@
    ========================================================================= */
 
 import { keysFor } from './binds.js';
+import { PROP_KINDS } from '../shared/props.js';
 
 /* The four that count as "taking over" from an auto-walk. */
 const WALK_ACTIONS = ['walkFwd', 'walkBack', 'walkLeft', 'walkRight'];
@@ -191,6 +192,20 @@ export class Walker {
         const d = Math.sqrt(d2);
         nx = t.x + (ddx / d) * trunk;
         nz = t.z + (ddz / d) * trunk;
+      }
+    }
+
+    // and you do not walk through the halfway hut either
+    for (const pr of (hole.props || [])) {
+      const k = PROP_KINDS[pr.kind];
+      if (!k || !k.solid) continue;
+      const rr = k.r + BODY_RADIUS;
+      const ddx = nx - pr.x, ddz = nz - pr.z;
+      const d2 = ddx * ddx + ddz * ddz;
+      if (d2 < rr * rr && d2 > 1e-9) {
+        const d = Math.sqrt(d2);
+        nx = pr.x + (ddx / d) * rr;
+        nz = pr.z + (ddz / d) * rr;
       }
     }
 

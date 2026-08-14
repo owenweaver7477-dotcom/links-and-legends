@@ -36,7 +36,7 @@ import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound } from './server/profiles.js';
 import { loadRecords, recordsFor, allRecords, submitRound,
-         offerRecords, restoreOpen } from './server/records.js';
+         offerRecords, restoreOpen, badgesFor } from './server/records.js';
 /* Shared, not server-only: the client needs the same format table to draw
    the picker and the same team colours to draw the card, and two copies of a
    list like that drift within a week. */
@@ -621,6 +621,7 @@ function snapshot(room) {
     holes: HOLES_PER_COURSE,
     players: room.players.map(p => ({
       pid: p.pid, name: p.name, color: p.color, colorName: p.colorName, team: p.team ?? null,
+      badge: badgesFor(p.pid),
       scores: p.scores, strokes: p.strokes, penalties: p.penalties,
       finished: p.finished, x: p.x, z: p.z, lie: p.lie, bag: p.bag,
       look: p.look, ax: p.ax, az: p.az, arot: p.arot,
@@ -1181,6 +1182,7 @@ io.on('connection', socket => {
           level: prof ? prof.level : null,
           best: prof ? prof.best : null,
           rounds: prof ? prof.rounds : 0,
+          badge: badgesFor(p.pid),
           doing: room.state === 'lobby' ? 'in a lobby'
             : room.state === 'results' ? 'finishing a round'
               : h ? `on the ${h.number}${['th','st','nd','rd'][h.number % 10 > 3 ? 0 : h.number % 10] || 'th'}`

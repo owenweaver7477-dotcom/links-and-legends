@@ -119,6 +119,24 @@ export function submitRound(courseId, name, pid, holeScores, at = Date.now()) {
   return beat;
 }
 
+/**
+ * What this player holds, so the game can put a badge on them.
+ *
+ * A record board nobody wears is a list. The point of holding one is that
+ * everybody you play with can see it — so the count of course records and
+ * hole records travels with the player, and the room draws it beside their
+ * name.
+ */
+export function badgesFor(pid) {
+  if (!pid) return null;
+  let courses = 0, holes = 0, bestCourse = null;
+  for (const [id, c] of Object.entries(board)) {
+    if (c.round?.pid === pid) { courses++; if (!bestCourse) bestCourse = id; }
+    for (const h of (c.holes || [])) if (h?.pid === pid) holes++;
+  }
+  return (courses || holes) ? { courses, holes, bestCourse } : null;
+}
+
 /** For tests: wipe the board without touching disk. */
 export function _reset() { board = {}; }
 

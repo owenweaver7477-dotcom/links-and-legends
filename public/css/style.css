@@ -1662,3 +1662,7 @@ body.hktabbed .nojs-only { display: none; }
 .wr-lvl { font-size: 9.5px; letter-spacing: .6px; color: #8ba492; }
 .wr-best { min-width: 30px; text-align: right; font-size: 11px; font-weight: 700; color: #8fe07a; }
 .wr-rate { min-width: 34px; text-align: right; font-size: 13.5px; font-weight: 900; color: #ffd94a; }
+
+/* the course-record badge, wherever a name appears */
+.namelabel .nl-badge { margin-right: 4px; font-size: 11px; letter-spacing: -1px; }
+.on-badge { font-size: 11px; letter-spacing: -1px; }

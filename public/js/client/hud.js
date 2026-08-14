@@ -1364,6 +1364,9 @@ HUD.renderOnline = (list, myPid, onJoin) => {
       : (o.best === 0 ? 'E' : o.best > 0 ? '+' + o.best : String(o.best));
     row.innerHTML =
       (o.rating != null ? `<span class="on-rate" title="skill rating">${o.rating}</span>` : '') +
+      (o.badge ? `<span class="on-badge" title="holds course records">` +
+        (o.badge.courses ? '🏆' + (o.badge.courses > 1 ? o.badge.courses : '') : '') +
+        (o.badge.holes ? '⛳' + (o.badge.holes > 1 ? o.badge.holes : '') : '') + `</span>` : '') +
       `<span class="on-name">${escapeHtml(o.name)}` +
       (rel ? `<em title="their best round">best ${escapeHtml(rel)}</em>` : '') +
       `</span>` +
