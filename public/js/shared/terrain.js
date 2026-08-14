@@ -8,7 +8,8 @@
    ========================================================================= */
 
 import { fbm, ridged, lerp, smoothstep } from './rng.js';
-import { inEllipse, elevationAlongRoute, makeRouteDistanceFn } from './coursegen.js';
+import { inEllipse, elevationAlongRoute, makeRouteDistanceFn,
+         edgeScale, localOffset } from './coursegen.js';
 
 /* roll  = rolling resistance coefficient; deceleration is roll × g, so green
            0.065 gives ~0.64 m/s² and a 3 m/s putt runs about 7 m — right.
@@ -274,14 +275,14 @@ export class TerrainModel {
   }
 }
 
+/* Same wobbled edge the ball is tested against — see edgeScale in
+   coursegen.js. If the carve used a clean ellipse while the lie test used a
+   wobbled one, the sand you can see and the sand the ball reacts to would be
+   different shapes. */
 function ellipseQ(x, z, e) {
-  let dx = x - e.x, dz = z - e.z;
-  if (e.rot) {
-    const c = Math.cos(-e.rot), s = Math.sin(-e.rot);
-    const rx = dx * c - dz * s, rz = dx * s + dz * c;
-    dx = rx; dz = rz;
-  }
-  return Math.sqrt((dx * dx) / (e.rx * e.rx) + (dz * dz) / (e.rz * e.rz));
+  const [dx, dz] = localOffset(x, z, e);
+  const k = edgeScale(e, dx, dz);
+  return Math.sqrt((dx * dx) / (e.rx * e.rx * k * k) + (dz * dz) / (e.rz * e.rz * k * k));
 }
 
 /* ------------------------------------------------------------------ cache */

@@ -203,6 +203,10 @@ function placeBunkers(rk, bio, dense, cum, total, green, par) {
       x: green.x + Math.cos(a) * d,
       z: green.z + Math.sin(a) * d,
       rx, rz, rot: rk.f(0, Math.PI),
+      // sand takes a much stronger wobble than grass — a bunker is a torn
+      // edge, and a smooth oval of sand is the other thing that reads as a
+      // sticker rather than a hazard
+      wob: [rk.f(0.10, 0.22), rk.f(0, 6.283), rk.f(0.05, 0.12), rk.f(0, 6.283)],
       depth: pot ? rk.f(1.6, 2.4) : rk.f(0.7, 1.3)
     });
   }
@@ -220,6 +224,7 @@ function placeBunkers(rk, bio, dense, cum, total, green, par) {
       x: p[0] + (-t[1]) * off,
       z: p[1] + (t[0]) * off,
       rx, rz: rx * rk.f(0.5, 0.8), rot: Math.atan2(t[0], t[1]) + rk.f(-0.4, 0.4),
+      wob: [rk.f(0.10, 0.22), rk.f(0, 6.283), rk.f(0.05, 0.12), rk.f(0, 6.283)],
       depth: pot ? rk.f(1.5, 2.2) : rk.f(0.6, 1.1)
     });
   }
@@ -431,6 +436,7 @@ function placeCrossBunker(rk, bio, dense, cum, total, green, par, fairwayWidth) 
     rx: halfW * rk.f(0.75, 1.05),                 // wide across the corridor
     rz: rk.f(4.5, 8),                             // shallow along it
     rot: Math.atan2(t[0], t[1]) + Math.PI / 2 + rk.f(-0.25, 0.25),
+    wob: [rk.f(0.10, 0.22), rk.f(0, 6.283), rk.f(0.05, 0.12), rk.f(0, 6.283)],
     depth: bio.bunkerStyle === 'pot' ? rk.f(1.5, 2.2) : rk.f(0.8, 1.4),
     cross: true
   };
@@ -482,14 +488,58 @@ function placeSentinels(rk, bio, dense, cum, total, green, par, fairwayWidth) {
   return out;
 }
 
-export function inEllipse(x, z, e, pad = 0) {
+/**
+ * How far out the edge sits at this bearing, as a multiplier on the radius.
+ *
+ * A green and a bunker were perfect ellipses, and a perfect ellipse is the
+ * one shape that never occurs on a golf course. Rendered at size it reads as
+ * a disc stamped into the grass — which is exactly what the greens looked
+ * like, and it is the single most-looked-at object in the game.
+ *
+ * `wob` is two harmonics chosen when the hole is generated. Three and five
+ * lobes rather than two and four: an even count makes a symmetrical shape,
+ * which still looks manufactured. Odd counts read as a thing somebody mowed.
+ *
+ * THIS IS THE ONLY DEFINITION. The physics test, the terrain carve and the
+ * painted texture all call it, because a green whose picture and whose edge
+ * disagree is the tree-canopy bug again: the ball would break for the fringe
+ * a metre before the fringe you can see.
+ */
+export function edgeScale(e, dx, dz) {
+  const w = e.wob;
+  if (!w) return 1;
+  const th = Math.atan2(dz, dx);
+  /* Always <= 1: the edge only ever cuts IN, never bulges out.
+     The first version was `1 + a·cos(...)`, which averages one but peaks
+     well above it — a bunker could reach a third further than the radius it
+     declares. Everything that keeps hazards away from tees and greens is
+     computed from rx and rz, so a shape allowed to exceed them silently
+     invalidates every one of those clearances at once: the aim test found a
+     tee shot flying into a bunker that had grown into the launch window, and
+     the green had swollen past the fringe it is measured against.
+
+     Cutting inward can never do that. The declared ellipse stays the outer
+     bound of the shape and every existing keep-out remains true. */
+  const a = (1 + Math.cos(3 * th + w[1])) * 0.5;
+  const b = (1 + Math.cos(5 * th + w[3])) * 0.5;
+  return 1 - w[0] * a - w[2] * b;
+}
+
+/** Local (rotated) offset from an ellipse's centre. Shared by every test. */
+export function localOffset(x, z, e) {
   let dx = x - e.x, dz = z - e.z;
   if (e.rot) {
     const c = Math.cos(-e.rot), s = Math.sin(-e.rot);
     const rx = dx * c - dz * s, rz = dx * s + dz * c;
     dx = rx; dz = rz;
   }
-  const a = e.rx + pad, b = e.rz + pad;
+  return [dx, dz];
+}
+
+export function inEllipse(x, z, e, pad = 0) {
+  const [dx, dz] = localOffset(x, z, e);
+  const k = edgeScale(e, dx, dz);
+  const a = e.rx * k + pad, b = e.rz * k + pad;
   return (dx * dx) / (a * a) + (dz * dz) / (b * b) <= 1;
 }
 
@@ -507,7 +557,11 @@ function makeHole(courseId, bio, number, seed) {
   const { cum, total } = routeMetrics(dense);
 
   const fairwayWidth = rk.f(bio.fairwayWidth[0], bio.fairwayWidth[1]);
-  const greenR = rk.f(bio.greenSize[0], bio.greenSize[1]);
+  /* The edge wobble only ever cuts inward (see edgeScale), so a green built
+     to the biome's radius comes out about 6% smaller in area than the number
+     says. Sized back up, or every green in the game quietly got harder to
+     hit and harder to putt on. */
+  const greenR = rk.f(bio.greenSize[0], bio.greenSize[1]) * 1.06;
 
   const end = dense[dense.length - 1];
   const endT = routeTangent(dense, cum, total);
@@ -515,7 +569,9 @@ function makeHole(courseId, bio, number, seed) {
     x: end[0], z: end[1],
     r: greenR,
     rx: greenR, rz: greenR * rk.f(0.78, 1.0),
-    rot: Math.atan2(endT[0], endT[1]) + rk.f(-0.5, 0.5)
+    rot: Math.atan2(endT[0], endT[1]) + rk.f(-0.5, 0.5),
+    // gentle on a green — you still have to be able to read a putt on it
+    wob: [rk.f(0.05, 0.11), rk.f(0, 6.283), rk.f(0.02, 0.05), rk.f(0, 6.283)]
   };
 
   const tees = buildTees(dense, cum, total);
@@ -1087,6 +1143,14 @@ export function aimPlan(hole, x, z, reach = 200) {
      enough to call a line clear: the aim has to miss the trunk too, or the
      game would once again default to pointing the player at a tree. */
   const blockers = (hole.trees || []).filter(t => t.blocker);
+  /* WATER counts as something you may not be aimed into.
+     Sentinel trees were already handled; lakes never were, on the assumption
+     that a hazard sits beside a fairway rather than across it. Sometimes it
+     sits across it, and then the game was pointing a full driver into the
+     middle of a lake and calling it the recommended shot. A caddie lays up
+     short of the water; so does this now, because the corridor walk simply
+     stops at the near bank and hands back that distance. */
+  const waters = hole.waters || [];
 
   for (let k = 2; k <= maxAhead; k++) {
     const i = near + k;
@@ -1103,6 +1167,11 @@ export function aimPlan(hole, x, z, reach = 200) {
       if (Math.hypot(lx - rx, lz - rz) > CORRIDOR) { clear = false; break; }
       for (const b of blockers) {
         if (Math.hypot(lx - b.x, lz - b.z) < b.r + 3) { clear = false; break; }
+      }
+      if (clear) {
+        for (const w of waters) {
+          if (inEllipse(lx, lz, w, 2)) { clear = false; break; }
+        }
       }
       if (!clear) break;
     }

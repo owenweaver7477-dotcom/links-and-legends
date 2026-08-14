@@ -15,10 +15,10 @@
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { allCourses, defaultAim } from '../public/js/shared/coursegen.js';
+import { allCourses, defaultAim, aimPlan } from '../public/js/shared/coursegen.js';
 import { terrainFor } from '../public/js/shared/terrain.js';
 import { BIOMES } from '../public/js/shared/biomes.js';
-import { ShotSim, calibrateCarries, makeFlatRange } from '../public/js/shared/ballistics.js';
+import { ShotSim, calibrateCarries, makeFlatRange, suggestedPower } from '../public/js/shared/ballistics.js';
 import { CARRY } from '../public/js/shared/clubs.js';
 
 calibrateCarries();
@@ -35,15 +35,30 @@ const terrainOf = (hole, biome) => {
   return terrainCache.get(k);
 };
 
-/** Play the shot the game would set up, with a flush strike and full power. */
+/**
+ * Play the shot the game would set up: its aim AND its power.
+ *
+ * This used to aim with defaultAim and then swing at full power regardless,
+ * which was the same shot right up until the game learned to lay up. On a
+ * hole with a lake across the driver landing zone the game now says "hit it
+ * 195 m" and a full driver flies 274 into the water — and the test called
+ * that a hole aimed into something. It is not: it is a hole the game told
+ * you not to hit driver on, and the test was ignoring half of what it said.
+ *
+ * The caddie's number is what a player is shown, so the caddie's number is
+ * what gets hit. Fully blocked holes still fail, which is the point.
+ */
 function teeShot(hole, biome, clubKey = 'DR') {
   const T = terrainOf(hole, biome);
-  const aim = defaultAim(hole, hole.tee.x, hole.tee.z, CARRY[clubKey] || 200);
+  const reach = CARRY[clubKey] || 200;
+  const plan = aimPlan(hole, hole.tee.x, hole.tee.z, reach);
+  const power = suggestedPower(T, hole.tee.x, hole.tee.z, clubKey, plan.aim,
+    NO_WIND, plan.dist, null, null) ?? 1;
   const r = new ShotSim(T, {
-    x: hole.tee.x, z: hole.tee.z, clubKey, power: 1, aim,
+    x: hole.tee.x, z: hole.tee.z, clubKey, power, aim: plan.aim,
     faceDeg: 0, attackDeg: 0, wind: NO_WIND
   }).runToEnd();
-  return { aim, ...r };
+  return { aim: plan.aim, plan, power, ...r };
 }
 
 test('nothing is standing in the way of the shot the game sets up', () => {
@@ -70,8 +85,10 @@ test('nothing is standing in the way of the shot the game sets up', () => {
     for (const h of course.holes) {
       const club = h.par < 4 ? 'I7' : 'DR';
       const r = teeShot(h, biome, club);
-      // 70% leaves room for elevation and a genuinely uphill tee shot
-      const want = clear[club] * 0.70;
+      /* Against the shot the game PLANNED, not the club's maximum. A hole
+         that asks for a 195 m lay-up is not a blocked hole, and judging it
+         against a 268 m driver says it is. */
+      const want = Math.min(r.plan.dist, clear[club]) * 0.70;
       if (r.carry < want) {
         blocked.push(`${course.name} h${h.number} (par ${h.par}, ${h.yards}yds): ` +
           `${club} carried ${yd(r.carry)} yds of a clear ${yd(clear[club])} ` +

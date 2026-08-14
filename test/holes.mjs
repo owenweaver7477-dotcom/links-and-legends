@@ -17,7 +17,8 @@
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { allCourses, elevationAlongRoute, aimPlan } from '../public/js/shared/coursegen.js';
+import { allCourses, elevationAlongRoute, aimPlan, edgeScale, inEllipse }
+  from '../public/js/shared/coursegen.js';
 
 const HOLES = allCourses().flatMap(c => c.holes.map(h => ({ course: c, hole: h })));
 const generated = HOLES.filter(({ hole }) => !hole.signature);
@@ -199,4 +200,63 @@ test('a sentinel is a tree, not a bush the size of a house', () => {
         `across a ${hole.fairwayWidth.toFixed(0)} m fairway`);
     }
   }
+});
+
+test('a green is not a circle, and a bunker is not an oval', () => {
+  /* A perfect ellipse is the one shape that never occurs on a golf course,
+     and at size it reads as a disc stamped into the grass. The green is the
+     most-looked-at object in the game and it was a stamped disc.
+
+     The wobble only ever cuts INWARD — see edgeScale. That direction is not
+     cosmetic: everything that keeps a hazard clear of a tee or a green is
+     computed from rx and rz, so a shape allowed to bulge past them silently
+     invalidates every one of those clearances at once. The first version
+     bulged and the aim test immediately found a driver flying into a bunker
+     that had grown into the launch window. */
+  let wobbled = 0;
+  for (const { course, hole } of generated) {
+    for (const e of [hole.green, ...hole.bunkers]) {
+      assert.ok(Array.isArray(e.wob) && e.wob.length === 4,
+        `${course.name} h${hole.number}: a shape with no edge wobble`);
+      wobbled++;
+      // sample the edge all the way round: never outside the declared ellipse
+      for (let a = 0; a < 360; a += 10) {
+        const th = a * Math.PI / 180;
+        const k = edgeScale(e, Math.cos(th), Math.sin(th));
+        assert.ok(k <= 1.0000001,
+          `${course.name} h${hole.number}: edge bulges to ${k.toFixed(3)} of its radius`);
+        assert.ok(k > 0.55,
+          `${course.name} h${hole.number}: edge collapses to ${k.toFixed(3)}`);
+      }
+    }
+  }
+  assert.ok(wobbled > 200, `only ${wobbled} shapes carry a wobble`);
+});
+
+test('the sand you can see is the sand the ball reacts to', () => {
+  /* The green-and-bunker version of the tree-canopy bug. surfacemap paints
+     the outline and inEllipse rules on the lie, and if they use different
+     shapes the ball breaks for the fringe a metre before the fringe you can
+     see. They read the SAME edgeScale, and this is the check that they
+     still do: well inside the wobbled edge must be in, well outside must be
+     out, all the way round every shape in the game. */
+  let probes = 0, bad = [];
+  for (const { course, hole } of HOLES) {
+    for (const b of hole.bunkers) {
+      const cs = Math.cos(b.rot || 0), sn = Math.sin(b.rot || 0);
+      for (let a = 0; a < 360; a += 30) {
+        const th = a * Math.PI / 180, ct = Math.cos(th), st = Math.sin(th);
+        const at = f => {
+          const lx = b.rx * f * ct, lz = b.rz * f * st;
+          return [b.x + lx * cs - lz * sn, b.z + lx * sn + lz * cs];
+        };
+        const inn = at(0.55), out = at(1.45);
+        probes += 2;
+        if (!inEllipse(inn[0], inn[1], b)) bad.push(`${course.name} h${hole.number} inside-but-out`);
+        if (inEllipse(out[0], out[1], b)) bad.push(`${course.name} h${hole.number} outside-but-in`);
+      }
+    }
+  }
+  assert.ok(probes > 1000, `only ${probes} probes`);
+  assert.deepEqual(bad.slice(0, 5), [], `${bad.length} of ${probes} probes disagree`);
 });

@@ -10,6 +10,7 @@
    ========================================================================= */
 
 import { mulberry32, clamp } from '../shared/rng.js';
+import { edgeScale } from '../shared/coursegen.js';
 
 const MAX_PX = 2048;
 
@@ -108,7 +109,7 @@ export function buildSurfaceTexture(hole, bio) {
     g.save();
     // damp shadow inside the lip
     g.fillStyle = 'rgba(30,26,14,.22)';
-    ellipse(g, px(bk.x), pz(bk.z), pr(bk.rx) * 1.06, pr(bk.rz) * 1.06, -bk.rot); g.fill();
+    blob(g, bk, px, pz, 0.9); g.fill();
     const grd = g.createRadialGradient(
       px(bk.x) - pr(bk.rx) * .3, pz(bk.z) - pr(bk.rz) * .35, pr(1),
       px(bk.x), pz(bk.z), pr(Math.max(bk.rx, bk.rz)));
@@ -116,11 +117,15 @@ export function buildSurfaceTexture(hole, bio) {
     grd.addColorStop(0.7, P.sand);
     grd.addColorStop(1, darken(P.sand, 0.14));
     g.fillStyle = grd;
-    ellipse(g, px(bk.x), pz(bk.z), pr(bk.rx), pr(bk.rz), -bk.rot); g.fill();
+    blob(g, bk, px, pz); g.fill();
     // rake lines
     g.strokeStyle = 'rgba(150,128,86,.42)'; g.lineWidth = Math.max(1, pr(0.16));
+    /* The rake follows the SHAPE. Concentric ellipses inside a torn outline
+       read as tree rings on a stump — the one place the eye instantly knows
+       the shape is fake. `blob` with a negative pad walks the same edge in a
+       bit, which is what a rake actually leaves. */
     for (let i = 1; i < 6; i++) {
-      ellipse(g, px(bk.x), pz(bk.z), pr(bk.rx) * (i / 6), pr(bk.rz) * (i / 6), -bk.rot);
+      blob(g, bk, px, pz, -Math.min(bk.rx, bk.rz) * (1 - i / 6));
       g.stroke();
     }
     g.restore();
@@ -131,17 +136,17 @@ export function buildSurfaceTexture(hole, bio) {
     const gr = hole.green;
     g.save();
     g.fillStyle = P.fringe;
-    ellipse(g, px(gr.x), pz(gr.z), pr(gr.rx + 2.6), pr(gr.rz + 2.6), -gr.rot); g.fill();
+    blob(g, gr, px, pz, 2.6); g.fill();
     const grd = g.createRadialGradient(
       px(gr.x) - pr(gr.rx) * .3, pz(gr.z) - pr(gr.rz) * .35, pr(1),
       px(gr.x), pz(gr.z), pr(Math.max(gr.rx, gr.rz)));
     grd.addColorStop(0, lighten(P.green, 0.12));
     grd.addColorStop(1, P.green);
     g.fillStyle = grd;
-    ellipse(g, px(gr.x), pz(gr.z), pr(gr.rx), pr(gr.rz), -gr.rot); g.fill();
+    blob(g, gr, px, pz); g.fill();
     // fine green stripes
     g.save();
-    ellipse(g, px(gr.x), pz(gr.z), pr(gr.rx), pr(gr.rz), -gr.rot); g.clip();
+    blob(g, gr, px, pz); g.clip();
     drawStripes(g, W, H, pr(3.2), 1.05, ['#ffffff', '#000000'], 0.10);
     g.restore();
     g.restore();
@@ -263,6 +268,35 @@ function grain(g, W, H, rnd, alpha) {
 function ellipse(g, x, y, rx, rz, rot) {
   g.beginPath();
   g.ellipse(x, y, Math.max(0.5, rx), Math.max(0.5, rz), rot || 0, 0, Math.PI * 2);
+}
+
+/**
+ * Trace a shape's real, wobbled outline — the one the ball is tested against.
+ *
+ * Greens and bunkers are not ellipses (see edgeScale in coursegen.js) and
+ * this is the only way to paint them truthfully. Built in WORLD space and
+ * projected point by point rather than by handing a rotation to the canvas:
+ * the local-to-world rotation is already written down once in coursegen and
+ * reproducing it here in canvas terms is how the two drift apart.
+ *
+ * @param pad  metres to grow by, for the fringe and the sand's outer rim
+ */
+function blob(g, e, px, pz, pad = 0) {
+  const cos = Math.cos(e.rot || 0), sin = Math.sin(e.rot || 0);
+  const N = 96;
+  g.beginPath();
+  for (let i = 0; i <= N; i++) {
+    const th = (i / N) * Math.PI * 2;
+    const ct = Math.cos(th), st = Math.sin(th);
+    // edgeScale reads the LOCAL offset, so evaluate it on the unit direction
+    const k = edgeScale(e, ct, st);
+    const lx = (e.rx * k + pad) * ct;
+    const lz = (e.rz * k + pad) * st;
+    const wx = e.x + lx * cos - lz * sin;
+    const wz = e.z + lx * sin + lz * cos;
+    i === 0 ? g.moveTo(px(wx), pz(wz)) : g.lineTo(px(wx), pz(wz));
+  }
+  g.closePath();
 }
 
 function roundRect(g, x, y, w, h, r) {
