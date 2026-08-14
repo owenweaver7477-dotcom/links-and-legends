@@ -150,10 +150,43 @@ Net.shove = (pid, move) => Net.socket?.emit('player:shove', { pid, move });
 Net.setShove = on => Net.socket?.emit('room:shove', { on });
 Net.phrase = id => Net.socket?.emit('chat:say', { phrase: id });
 /** The global record board. Answers with {} if we are not connected yet. */
+/* The board, and OUR copy of it going the other way.
+   A host with no persistent disk loses the board on every deploy, so the
+   only surviving copy of a fresh record is the one in the players' browsers.
+   Handing it back costs one small object on a call that was already being
+   made; the server ignores it unless it cold-booted and two clients agree. */
+const RECORD_CACHE = 'lg_records';
 Net.records = cb => {
   if (!Net.socket) return cb({});
-  Net.socket.emit('records:all', null, res => cb(res?.records || {}));
+  let mine = null;
+  try { mine = JSON.parse(localStorage.getItem(RECORD_CACHE) || 'null'); } catch { /* private mode */ }
+  Net.socket.emit('records:all', { mine }, res => {
+    const r = res?.records || {};
+    // keep a copy for the next cold boot — only if it is worth keeping
+    try {
+      if (Object.keys(r).length) localStorage.setItem(RECORD_CACHE, JSON.stringify(r));
+    } catch { /* private mode */ }
+    cb(r);
+  });
 };
+/** Every open room in the game, so a player without a code can still play. */
+Net.openRooms = cb => {
+  if (!Net.socket) return cb([]);
+  Net.socket.emit('rooms:open', null, res => cb(res?.rooms || []));
+};
+
+/** Find a game, or be told to open one. */
+Net.quickMatch = (format, region, cb) => {
+  if (!Net.socket) return cb(null);
+  Net.socket.emit('rooms:quick', { format, region }, res => cb(res || null));
+};
+
+/** The world ranking, and where we sit in it. */
+Net.ranking = cb => {
+  if (!Net.socket) return cb({ top: [], me: null });
+  Net.socket.emit('world:ranking', null, res => cb(res || { top: [], me: null }));
+};
+
 /** Who is online right now.  Polled from the menu; never while playing. */
 Net.presence = cb => {
   if (!Net.socket) return cb([]);

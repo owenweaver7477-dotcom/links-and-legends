@@ -30,7 +30,7 @@ import { Sound } from './sound.js';
 import { allCourses, getCourse, defaultAim, aimPlan } from '../shared/coursegen.js';
 import { FORMATS, formatById, isScramble, TEAM_NAMES } from '../shared/scramble.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
-import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf } from '../shared/biomes.js';
+import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf, REGIONS } from '../shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
@@ -2114,6 +2114,7 @@ function renderClubhouse() {
   Net.records(r => { G.records = r; HUD.renderRecords(COURSES, r, G.myPid); });
   HUD.renderRewards(prof);
   HUD.renderBinds();
+  Net.ranking(d => HUD.renderWorld(d, G.myPid));
   HUD.renderShop(prof, item => Net.buy(item));
   bagDraft = me()?.bag?.length ? me().bag.slice()
     : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true }));
@@ -2544,6 +2545,57 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   }
   drawFormats();
 
+  /* ---- PLAY ONLINE: region, mode, the browser and quick match ------------
+     "Play with friends" needed a code somebody handed you, so a player with
+     nobody to play with had exactly one option: play alone. This is the
+     other half of a multiplayer game. */
+  const qmRegion = document.getElementById('qmRegion');
+  const qmFormat = document.getElementById('qmFormat');
+  const refreshRooms = () => Net.openRooms(list => {
+    const reg = qmRegion?.value || 'any';
+    HUD.renderRooms(reg === 'any' ? list : list.filter(r => r.region === reg), joinByCode);
+  });
+  if (qmRegion) {
+    qmRegion.innerHTML = '<option value="any">Anywhere</option>' +
+      REGIONS.map(r => `<option value="${r.id}">${r.flag} ${r.name}</option>`).join('');
+    try { qmRegion.value = localStorage.getItem('lg_region') || 'any'; } catch { /* ignore */ }
+    qmRegion.addEventListener('change', () => {
+      try { localStorage.setItem('lg_region', qmRegion.value); } catch { /* ignore */ }
+      refreshRooms();
+    });
+  }
+  if (qmFormat) {
+    qmFormat.innerHTML = FORMATS.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+    qmFormat.value = pickedFormat;
+    qmFormat.addEventListener('change', () => {
+      pickedFormat = qmFormat.value;
+      try { localStorage.setItem('lg_format', pickedFormat); } catch { /* ignore */ }
+      drawFormats();
+    });
+  }
+  document.getElementById('onlineBox')?.addEventListener('toggle', e => {
+    if (e.target.open) refreshRooms();
+  });
+  /* One button for somebody who just wants to play with people: join the
+     fullest room that fits, or open one if there is none. Being told "no
+     rooms" would be a dead end on the one control that exists to avoid them. */
+  document.getElementById('btnQuick')?.addEventListener('click', () => {
+    HUD.homeError('');
+    const region = qmRegion?.value || 'any';
+    Net.quickMatch(pickedFormat, region, res => {
+      if (!res?.ok) return HUD.homeError('Could not reach the course — try again.');
+      if (res.joined) return joinByCode(res.code);
+      HUD.show('load');
+      HUD.loading('Opening a game…');
+      Net.create(nameValue(), res.courseId, r => {
+        if (!r.ok) { HUD.show('home'); return HUD.homeError(r.error); }
+        G.joined = true; G.myPid = r.pid; G.room = r.state;
+        stampRoomUrl(r.code);
+        route();
+      }, res.format);
+    });
+  });
+
   /* The course count and the venue strip are written from the data, not
      typed into the markup. Both still said "five courses" after the eighth
      one landed — a small lie on the front page, and the kind a player reads
@@ -2599,6 +2651,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   document.getElementById('btnBindsReset')?.addEventListener('click', () => {
     resetBinds();
     HUD.renderBinds();
+  Net.ranking(d => HUD.renderWorld(d, G.myPid));
     HUD.toast('Controls back to defaults.', 'info', 1800);
   });
 

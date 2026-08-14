@@ -1617,3 +1617,48 @@ body.hktabbed .nojs-only { display: none; }
   background: linear-gradient(180deg, #ffe066, #ffd21f); }
 .on-name em { font-style: normal; margin-left: 6px; font-size: 10px;
   font-weight: 700; color: #8fe07a; }
+
+/* --------------------------------------------------------- play online --- */
+.qm-row { display: flex; gap: 8px; margin-bottom: 9px; }
+.qm-sel { flex: 1; display: flex; flex-direction: column; gap: 3px;
+  font-size: 10px; letter-spacing: .8px; text-transform: uppercase; color: #8ba492; }
+.qm-sel select { padding: 7px 9px; border-radius: 9px; font: inherit; font-size: 12.5px;
+  color: #eaf3ea; background: rgba(6,12,10,.86);
+  border: 1px solid rgba(255,255,255,.16); outline: none; }
+.roomlist { margin-top: 9px; display: flex; flex-direction: column; gap: 4px; }
+.roomrow { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 10px;
+  border-radius: 10px; cursor: pointer; font: inherit; text-align: left;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09);
+  color: #cfe4d3; transition: .12s; }
+.roomrow:hover { background: rgba(143,224,122,.16); border-color: rgba(143,224,122,.45); }
+.roomrow.mid { opacity: .72; }
+.rm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.rm-main b { font-size: 12.5px; color: #eaf3ea; }
+.rm-main small { font-size: 10px; color: #8ba492;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-who { font-size: 12px; font-weight: 800; color: #eaf3ea; }
+.rm-who em { font-style: normal; margin-left: 5px; font-size: 10px; color: #ffd94a; }
+.rm-state { font-size: 9.5px; letter-spacing: .7px; text-transform: uppercase; color: #8ba492; }
+
+/* -------------------------------------------------------- world ranking --- */
+.wr-me { display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  padding: 11px 13px; border-radius: 13px;
+  background: linear-gradient(90deg, rgba(255,217,74,.18), rgba(255,217,74,.04));
+  border: 1px solid rgba(255,217,74,.32); }
+.wr-me .wr-rank { font-size: 25px; font-weight: 900; color: #ffd94a; }
+.wr-me .wr-of { flex: 1; font-size: 11.5px; color: #cfe4d3; }
+.wr-me .wr-rate { font-size: 19px; font-weight: 900; color: #eaf3ea; }
+.wr-me.unranked b { color: #ffd94a; }
+.wrlist { list-style: none; margin: 0; padding: 0; counter-reset: none; }
+.wr { display: flex; align-items: center; gap: 9px; padding: 6px 10px;
+  border-radius: 9px; margin-bottom: 3px;
+  background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06); }
+.wr.mine { background: rgba(143,224,122,.16); border-color: rgba(143,224,122,.4); }
+.wr-n { flex: 0 0 30px; text-align: right; font-size: 12px; font-weight: 900; color: #8ba492; }
+.wr-name { flex: 1; min-width: 0; font-size: 12.5px; color: #eaf3ea;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wr-name em { font-style: normal; margin-left: 6px; font-size: 9px; font-weight: 800;
+  letter-spacing: .8px; text-transform: uppercase; color: #8fe07a; }
+.wr-lvl { font-size: 9.5px; letter-spacing: .6px; color: #8ba492; }
+.wr-best { min-width: 30px; text-align: right; font-size: 11px; font-weight: 700; color: #8fe07a; }
+.wr-rate { min-width: 34px; text-align: right; font-size: 13.5px; font-weight: 900; color: #ffd94a; }

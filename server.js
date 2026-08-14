@@ -27,14 +27,16 @@ import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
-import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile } from './server/profiles.js';
+import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile,
+         worldRanking, worldPlace } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
 import { EMOTES, meleeById } from './public/js/client/celebrations.js';
 import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allowChat, PHRASES } from './server/chat.js';
 import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound } from './server/profiles.js';
-import { loadRecords, recordsFor, allRecords, submitRound } from './server/records.js';
+import { loadRecords, recordsFor, allRecords, submitRound,
+         offerRecords, restoreOpen } from './server/records.js';
 /* Shared, not server-only: the client needs the same format table to draw
    the picker and the same team colours to draw the card, and two copies of a
    list like that drift within a week. */
@@ -1075,6 +1077,89 @@ io.on('connection', socket => {
     });
   });
 
+  /* THE ROOM BROWSER.
+     -------------------------------------------------------------------
+     "Play with friends" needed a code somebody gave you, so a player with
+     nobody to play with had exactly one option: play alone. Every open room
+     in the game is listed here with what it is and who is in it, which is
+     the difference between a multiplayer game and a single-player game that
+     happens to have sockets. */
+  socket.on('world:ranking', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const ref = sockets.get(socket.id);
+    const pid = ref?.pid || socket.data?.pid || null;
+    ack({ top: worldRanking(50), me: pid ? worldPlace(pid) : null });
+  });
+
+  socket.on('rooms:open', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const out = [];
+    for (const room of rooms.values()) {
+      const live = room.players.filter(p => p.connected);
+      if (!live.length) continue;
+      const bio = BIOMES[room.courseId];
+      const f = formatById(room.format);
+      // A room mid-round can still be joined — you watch until the next hole
+      // — so it is listed, marked, and sorted below the ones about to start.
+      out.push({
+        code: room.code,
+        courseId: room.courseId,
+        course: bio?.name || room.courseId,
+        region: bio?.continent || 'other',
+        where: bio?.region || '',
+        format: room.format,
+        formatName: f.name,
+        players: live.length,
+        max: f.teams ? f.teams * f.per : MAX_PLAYERS,
+        state: room.state,
+        starting: room.state === 'lobby',
+        hole: room.state === 'playing' ? room.holeIndex + 1 : 0,
+        // the strongest golfer in there, so you can see what you are joining
+        topRating: Math.max(0, ...live.map(p => Math.round(publicProfile(p.pid)?.rating || 0))),
+        names: live.slice(0, 8).map(p => p.name)
+      });
+    }
+    out.sort((a, b) =>
+      (b.starting - a.starting) || (b.players - a.players) || a.code.localeCompare(b.code));
+    ack({ rooms: out.slice(0, 40), total: rooms.size });
+  });
+
+  /**
+   * QUICK MATCH — the button for somebody who just wants to play with people.
+   *
+   * Finds the fullest room that matches what they asked for and still has a
+   * seat, and makes one if there is none. Fullest rather than emptiest on
+   * purpose: joining the room with three people in it starts a game, and
+   * joining the one with nobody in it starts another empty room.
+   */
+  socket.on('rooms:quick', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const wantFormat = formatById(d?.format).id;
+    const wantRegion = typeof d?.region === 'string' ? d.region : 'any';
+    let best = null;
+    for (const room of rooms.values()) {
+      if (room.state !== 'lobby') continue;
+      if (room.format !== wantFormat) continue;
+      const bio = BIOMES[room.courseId];
+      if (wantRegion !== 'any' && bio?.continent !== wantRegion) continue;
+      const f = formatById(room.format);
+      const cap = f.teams ? f.teams * f.per : MAX_PLAYERS;
+      const live = room.players.filter(p => p.connected).length;
+      if (live >= cap) continue;
+      if (!best || live > best.live) best = { room, live };
+    }
+    if (best) return ack({ ok: true, code: best.room.code, joined: true });
+
+    /* Nothing to join, so open one — in the region they asked for, or any
+       course if they did not care. Returning "no rooms" would be a dead end
+       on the one button that exists to avoid dead ends. */
+    const pool = wantRegion === 'any'
+      ? COURSE_ORDER
+      : COURSE_ORDER.filter(id => BIOMES[id]?.continent === wantRegion);
+    const courseId = pool[Math.floor(Math.random() * pool.length)] || COURSE_ORDER[0];
+    ack({ ok: true, courseId, format: wantFormat, create: true });
+  });
+
   socket.on('presence:who', (d, ack) => {
     if (typeof ack !== 'function') return;
     const out = [];
@@ -1109,6 +1194,14 @@ io.on('connection', socket => {
   });
 
   socket.on('records:all', (d, ack) => {
+    /* A client hands back the copy it kept, and on a cold-booted host that
+       is the only surviving copy of anything set since the last deploy.
+       Ignored entirely once the board has entries or the window has closed —
+       see offerRecords for why it needs two agreeing clients. */
+    if (d && d.mine && restoreOpen()) {
+      const pid = socket.data?.pid || socket.id;
+      try { offerRecords(pid, d.mine); } catch (e) { console.error('  records: offer failed —', e.message); }
+    }
     if (typeof ack === 'function') ack({ records: allRecords() });
   });
 

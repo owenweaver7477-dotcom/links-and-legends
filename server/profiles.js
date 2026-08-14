@@ -317,3 +317,56 @@ export function colorAllowed(pid, hex) {
   if (!lock) return true;
   return getProfile(pid).rating >= lock.rating;
 }
+
+/* =========================================================================
+   THE WORLD RANKING
+   -------------------------------------------------------------------------
+   Every career in the store, ordered by rating. The board only means
+   anything if the number on it is hard to hold, and it is — a bad round
+   pulls you down faster than a good one lifts you, and gaining slows the
+   higher you already are.
+
+   Two guards, both about honesty rather than performance:
+
+     A MINIMUM NUMBER OF ROUNDS. A player who shoots one lucky 32 and stops
+     would otherwise sit above people who have played four hundred. A rating
+     is a claim about consistency, so it has to have been tested.
+
+     NO BOTS. The soak tests and the demo golfers live in the same store as
+     real players, and a leaderboard full of them is worse than no
+     leaderboard.
+   ========================================================================= */
+const RANKED_MIN_ROUNDS = 5;
+const isBot = pid => /^bot\d|^scr\d|^demo/.test(String(pid));
+
+export function worldRanking(limit = 50) {
+  const rows = [];
+  for (const [pid, p] of profiles) {
+    if (isBot(pid) || (p.rounds || 0) < RANKED_MIN_ROUNDS) continue;
+    rows.push({
+      pid, name: p.name || 'Golfer',
+      rating: Math.round(p.rating || 0),
+      level: levelFromXp(p.xp || 0).level,
+      rounds: p.rounds || 0,
+      best: p.best ?? null
+    });
+  }
+  rows.sort((a, b) => b.rating - a.rating || b.rounds - a.rounds);
+  return rows.slice(0, limit).map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+/** Where one player sits in that list, even when they are not in the top N. */
+export function worldPlace(pid) {
+  const me = profiles.get(pid);
+  if (!me) return null;
+  if ((me.rounds || 0) < RANKED_MIN_ROUNDS) {
+    return { ranked: false, need: RANKED_MIN_ROUNDS - (me.rounds || 0) };
+  }
+  let ahead = 0, total = 0;
+  for (const [id, p] of profiles) {
+    if (isBot(id) || (p.rounds || 0) < RANKED_MIN_ROUNDS) continue;
+    total++;
+    if ((p.rating || 0) > (me.rating || 0)) ahead++;
+  }
+  return { ranked: true, rank: ahead + 1, of: total, rating: Math.round(me.rating || 0) };
+}

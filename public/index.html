@@ -218,6 +218,23 @@
     <label class="field" id="nameField"><span>Your name</span>
       <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
 
+    <!-- PLAY ONLINE.
+         "Play with friends" needed a code somebody handed you, so a player
+         with nobody to play with had exactly one option: play alone. This is
+         the other half of a multiplayer game — pick what you want and where,
+         and either join a room that exists or open one. -->
+    <details class="friends" id="onlineBox">
+      <summary>Play online</summary>
+      <div class="qm-row">
+        <label class="qm-sel"><span>Region</span>
+          <select id="qmRegion"></select></label>
+        <label class="qm-sel"><span>Mode</span>
+          <select id="qmFormat"></select></label>
+      </div>
+      <button class="btn primary big" id="btnQuick">Find a game</button>
+      <div class="roomlist" id="roomList"></div>
+    </details>
+
     <details class="friends" id="friendsBox">
       <summary>Play with friends</summary>
       <!-- The format lives with HOSTING, not with Play now: a scramble needs
@@ -311,6 +328,7 @@
       <button class="hktab" data-tab="records" role="tab">Records</button>
       <button class="hktab" data-tab="shop" role="tab">Pro shop</button>
       <button class="hktab" data-tab="bag" role="tab">Your bag</button>
+      <button class="hktab" data-tab="world" role="tab">World</button>
       <button class="hktab" data-tab="keys" role="tab">Controls</button>
     </div>
 
@@ -339,6 +357,11 @@
     <div class="section hkpane" data-pane="shop">
       <h4 class="lbl">Pro shop <span class="coinbal" id="coinBal"></span></h4>
       <div id="shopList"></div>
+    </div>
+
+    <div class="section hkpane" data-pane="world">
+      <h4 class="lbl nojs-only">World ranking</h4>
+      <div id="worldBox"></div>
     </div>
 
     <div class="section hkpane" data-pane="keys">

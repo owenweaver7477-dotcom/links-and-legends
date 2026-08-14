@@ -121,3 +121,83 @@ export function submitRound(courseId, name, pid, holeScores, at = Date.now()) {
 
 /** For tests: wipe the board without touching disk. */
 export function _reset() { board = {}; }
+
+/* =========================================================================
+   RESTORE BY QUORUM — surviving a host with no disk
+   -------------------------------------------------------------------------
+   The board is a file, and a free-tier host throws its disk away on every
+   deploy. A committed seed stops it being BLANK, but records set since the
+   last push still vanish, and "the records don't save" has been the single
+   most-reported thing about this game.
+
+   Without a database the only copy of a fresh record that outlives the host
+   is the one sitting in the players' browsers. So on a cold boot the server
+   will accept the board back from them — under conditions strict enough that
+   it is not simply a "set any record you like" endpoint:
+
+     1. ONLY while the board has no entry for that course. A restore can
+        never overwrite or beat a record the server actually holds.
+     2. ONLY in the first few minutes after boot. This is a recovery path,
+        not a permanent inbox.
+     3. TWO INDEPENDENT CLIENTS must offer the same score for the same
+        course before it is taken. One browser is a claim; two browsers that
+        have never met agreeing to the stroke is evidence. Forging it means
+        controlling two clients and racing them into the window.
+
+   It is weaker than a database and stronger than losing everything, and the
+   trade is written down here so nobody has to guess why it exists. Set
+   DATABASE_URL and none of this runs.
+   ========================================================================= */
+const RESTORE_WINDOW_MS = 6 * 60 * 1000;
+const bootAt = Date.now();
+const offers = new Map();          // courseId -> [{ from, json }]
+
+/** True while a cold-booted board may still be rebuilt from clients. */
+export const restoreOpen = () =>
+  !process.env.DATABASE_URL && Date.now() - bootAt < RESTORE_WINDOW_MS;
+
+/**
+ * A client offers its cached copy of the board.
+ * @returns how many courses were actually taken
+ */
+export function offerRecords(from, incoming) {
+  if (!restoreOpen() || !incoming || typeof incoming !== 'object') return 0;
+  let taken = 0;
+
+  for (const [courseId, entry] of Object.entries(incoming)) {
+    if (typeof courseId !== 'string' || courseId.length > 32) continue;
+    if (board[courseId]?.round) continue;              // we already know better
+    const r = entry?.round;
+    if (!r || !(r.total > 0) || !(r.par > 0) || typeof r.name !== 'string') continue;
+    // a shape check, so a malformed offer cannot become a permanent record
+    if (r.total < HOLES || r.total > HOLES * 12) continue;
+
+    const key = `${r.total}|${r.par}|${String(r.name).slice(0, 14)}`;
+    const list = offers.get(courseId) || [];
+    if (list.some(o => o.from === from)) continue;     // one vote per client
+    list.push({ from, key, entry });
+    offers.set(courseId, list);
+
+    // two clients that have never met, agreeing to the stroke
+    const seconder = list.find(o => o.from !== from && o.key === key);
+    if (!seconder) continue;
+
+    const holes = Array.isArray(entry.holes)
+      ? entry.holes.slice(0, HOLES).map(h =>
+          h && h.strokes > 0 && h.par > 0
+            ? { name: String(h.name || '?').slice(0, 14), pid: String(h.pid || ''),
+                strokes: h.strokes | 0, par: h.par | 0, at: Number(h.at) || bootAt }
+            : null)
+      : new Array(HOLES).fill(null);
+    board[courseId] = {
+      round: { name: String(r.name).slice(0, 14), pid: String(r.pid || ''),
+               total: r.total | 0, par: r.par | 0, at: Number(r.at) || bootAt,
+               restored: true },
+      holes
+    };
+    taken++;
+    console.log(`  records: ${courseId} restored from two agreeing clients`);
+  }
+  if (taken) saveSoon();
+  return taken;
+}

@@ -1088,6 +1088,85 @@ HUD.showClubhouseTab = (name) => {
   document.querySelector('#screenShop .card')?.scrollTo?.({ top: 0 });
 };
 
+/* ------------------------------------------------------------- the world --- */
+/**
+ * The ranking: the top of the game, and where you sit in it.
+ *
+ * A rating only means something if it is hard to hold — a bad round pulls
+ * you down faster than a good one lifts you — so this is the one screen that
+ * says what all that difficulty was for. Your own row is pinned even when
+ * you are nowhere near the top, because "412th of 3,700" is a position and a
+ * blank screen is not.
+ */
+HUD.renderWorld = (data, myPid) => {
+  const box = document.getElementById('worldBox');
+  if (!box) return;
+  const top = data?.top || [];
+  const me = data?.me || null;
+
+  let head = '';
+  if (me && me.ranked) {
+    head = `<div class="wr-me"><span class="wr-rank">#${me.rank}</span>` +
+      `<span class="wr-of">of ${me.of.toLocaleString()} ranked golfers</span>` +
+      `<span class="wr-rate">${me.rating}</span></div>`;
+  } else if (me) {
+    head = `<div class="wr-me unranked"><b>${me.need} more ` +
+      `${me.need === 1 ? 'round' : 'rounds'}</b>` +
+      `<span class="wr-of">and you are on the board</span></div>`;
+  }
+
+  if (!top.length) {
+    box.innerHTML = head + '<p class="tiny">Nobody has played enough rounds to ' +
+      'be ranked yet. Five is all it takes.</p>';
+    return;
+  }
+  const rows = top.map(r => {
+    const mine = r.pid === myPid;
+    const rel = r.best == null ? '—'
+      : (r.best === 0 ? 'E' : r.best > 0 ? '+' + r.best : String(r.best));
+    return `<li class="wr${mine ? ' mine' : ''}">` +
+      `<span class="wr-n">${r.rank}</span>` +
+      `<span class="wr-name">${escapeHtml(r.name)}${mine ? '<em>you</em>' : ''}</span>` +
+      `<span class="wr-lvl">LV ${r.level}</span>` +
+      `<span class="wr-best" title="best round">${escapeHtml(rel)}</span>` +
+      `<span class="wr-rate">${r.rating}</span></li>`;
+  }).join('');
+  box.innerHTML = head + `<ol class="wrlist">${rows}</ol>`;
+};
+
+/* --------------------------------------------------------- the room list --- */
+/**
+ * Every open game, with what it is and who is in it.
+ *
+ * Rooms about to start come first and rooms mid-round are marked, because
+ * joining one of those means watching until the next hole — which is fine,
+ * and is not what somebody clicking a list expects unless it says so.
+ */
+HUD.renderRooms = (rooms, onJoin) => {
+  const box = document.getElementById('roomList');
+  if (!box) return;
+  if (!rooms.length) {
+    box.innerHTML = '<p class="tiny">No open games right now — ' +
+      '"Find a game" will start one.</p>';
+    return;
+  }
+  box.textContent = '';
+  for (const r of rooms.slice(0, 12)) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'roomrow' + (r.starting ? '' : ' mid');
+    b.innerHTML =
+      `<span class="rm-main"><b>${escapeHtml(r.course)}</b>` +
+      `<small>${escapeHtml(r.formatName)} · ${escapeHtml(r.where)}</small></span>` +
+      `<span class="rm-who">${r.players}/${r.max}` +
+      (r.topRating ? `<em title="best rating in the room">${r.topRating}</em>` : '') +
+      `</span>` +
+      `<span class="rm-state">${r.starting ? 'starting' : 'hole ' + r.hole}</span>`;
+    b.addEventListener('click', () => onJoin(r.code));
+    box.appendChild(b);
+  }
+};
+
 /* --------------------------------------------------------------- binds --- */
 /**
  * The controls panel: every action, its keys, and a click-then-press rebind.
