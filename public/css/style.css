@@ -1806,3 +1806,168 @@ body.introing .lp-inner, body.introing .lp-veil { opacity: 0; transition: opacit
   .screen.home.revealing > * { animation: none; }
   .lp-item, .lp-ico, .lp-arrow { transition: none; }
 }
+
+/* ═══════════════════════════════════════════════════ THE WARDROBE ═══════
+   Transparent, like the landing page and for the same reason: the thing
+   being sold is behind the UI, not in it. Panels down the sides, the golfer
+   in the middle, the course changing behind them. */
+.screen.wardrobe { background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  align-items: stretch; justify-content: space-between; padding: 0; overflow: hidden; }
+
+/* Darkened at the edges only — the middle third, where the golfer stands,
+   stays clear. A full scrim would hide the thing this screen is for. */
+.wd-veil { position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(4,12,9,.88) 0%, rgba(4,12,9,.30) 26%, rgba(4,12,9,0) 40%,
+                    rgba(4,12,9,0) 60%, rgba(4,12,9,.30) 74%, rgba(4,12,9,.88) 100%),
+    linear-gradient(to top, rgba(4,12,9,.90) 0%, rgba(4,12,9,.34) 22%, rgba(4,12,9,0) 42%); }
+
+.wd-panel { position: relative; z-index: 3; width: min(300px, 27vw); height: 100%;
+  padding: 18px 16px 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.wd-panel h3 { font-size: 12px; letter-spacing: 1.8px; text-transform: uppercase;
+  color: #8fd0a2; font-weight: 700; }
+.wd-panel::-webkit-scrollbar { width: 6px; }
+.wd-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius: 3px; }
+
+/* ── the course carousel ─────────────────────────────────────────────── */
+.wd-carousel { position: absolute; z-index: 4; top: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 14px;
+  background: rgba(9,18,14,.62); border: 1px solid rgba(255,255,255,.10);
+  backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); }
+.wd-arrow, .wd-auto { width: 30px; height: 30px; border-radius: 9px; cursor: pointer;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.09);
+  color: #eaf3ec; font-size: 16px; line-height: 1; transition: background .18s, transform .18s; }
+.wd-arrow:hover, .wd-auto:hover { background: rgba(111,206,138,.22); transform: scale(1.06); }
+.wd-auto { font-size: 12px; }
+.wd-auto.on { background: rgba(111,206,138,.20); border-color: rgba(111,206,138,.42); }
+.wd-course { min-width: 158px; text-align: center; }
+.wd-course b { display: block; font-size: 13.5px; letter-spacing: -.1px; }
+.wd-course small { display: block; font-size: 10.5px; color: #9fbaa6; }
+.wd-dots { display: flex; gap: 4px; justify-content: center; margin-top: 5px; }
+.wd-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,.22); }
+.wd-dot.on { background: #6fce8a; transform: scale(1.25); }
+
+/* ── outfit cards ────────────────────────────────────────────────────── */
+.wd-cats { display: flex; flex-wrap: wrap; gap: 5px; }
+.wd-cat { padding: 5px 9px; border-radius: 8px; font-size: 11px; cursor: pointer;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); color: #cfe0d4; }
+.wd-cat.on { background: rgba(111,206,138,.20); border-color: rgba(111,206,138,.44); color: #eaf3ec; }
+.wd-fits { display: flex; flex-direction: column; gap: 7px; }
+.wd-fit { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 11px;
+  cursor: pointer; text-align: left; color: #eaf3ec; font: inherit;
+  background: rgba(9,18,14,.56); border: 1px solid rgba(255,255,255,.09);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: transform .18s, border-color .18s, background .18s; }
+.wd-fit:hover { transform: translateX(4px); border-color: rgba(111,206,138,.44); background: rgba(16,32,24,.72); }
+.wd-fit.on { border-color: #6fce8a; background: rgba(38,96,58,.62); }
+.wd-fit.locked { opacity: .42; cursor: not-allowed; }
+.wd-fit.locked:hover { transform: none; border-color: rgba(255,255,255,.09); }
+/* Two swatches of the outfit's own colours: it is the fastest way to know
+   what a name like "Hickory era" actually looks like. */
+.wd-sw { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; overflow: hidden;
+  display: grid; grid-template-rows: 1fr 1fr; border: 1px solid rgba(0,0,0,.35); }
+.wd-fit b { display: block; font-size: 12.5px; }
+.wd-fit small { display: block; font-size: 10.5px; color: #9fbaa6; }
+
+/* ── the piece pickers ───────────────────────────────────────────────── */
+.wd-rtabs { display: flex; gap: 4px; }
+.wd-rtab { flex: 1; padding: 6px 4px; border-radius: 8px; font-size: 11px; cursor: pointer;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); color: #cfe0d4; }
+.wd-rtab.on { background: rgba(111,206,138,.20); border-color: rgba(111,206,138,.44); color: #eaf3ec; }
+.wd-rbody { display: flex; flex-direction: column; gap: 13px; }
+.wd-grp h5 { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase;
+  color: #8fbf9c; margin-bottom: 6px; font-weight: 700; }
+.wd-opts { display: flex; flex-wrap: wrap; gap: 5px; }
+.wd-opt { padding: 5px 9px; border-radius: 8px; font-size: 11px; cursor: pointer;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); color: #cfe0d4;
+  transition: background .16s, border-color .16s; }
+.wd-opt:hover { background: rgba(111,206,138,.16); }
+.wd-opt.on { background: rgba(111,206,138,.24); border-color: #6fce8a; color: #fff; }
+.wd-opt.locked { opacity: .38; cursor: not-allowed; }
+.wd-opt.locked:hover { background: rgba(255,255,255,.06); }
+.wd-opt .lv { font-size: 9px; color: #8fbf9c; margin-left: 3px; }
+
+/* colour swatches keep the shape of the ones on the home page */
+.wd-cols { display: flex; flex-wrap: wrap; gap: 6px; }
+.wd-col { width: 24px; height: 24px; border-radius: 7px; cursor: pointer;
+  border: 2px solid transparent; box-shadow: 0 0 0 1px rgba(0,0,0,.4) inset; }
+.wd-col.on { border-color: #6fce8a; }
+
+/* ── decals ──────────────────────────────────────────────────────────── */
+.wd-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.wd-slot { padding: 7px 8px; border-radius: 9px; font-size: 10.5px; cursor: pointer;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08);
+  color: #cfe0d4; text-align: left; }
+.wd-slot.on { border-color: #6fce8a; background: rgba(111,206,138,.18); }
+.wd-slot.locked { opacity: .38; cursor: not-allowed; }
+.wd-slot em { display: block; font-style: normal; font-size: 9.5px; color: #8fbf9c; margin-top: 1px; }
+.wd-decals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.wd-decal { position: relative; aspect-ratio: 1; border-radius: 9px; cursor: pointer; padding: 0;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); overflow: hidden; }
+.wd-decal canvas { width: 100%; height: 100%; display: block; }
+.wd-decal.on { border-color: #6fce8a; box-shadow: 0 0 0 1px #6fce8a inset; }
+.wd-decal.locked { opacity: .34; cursor: not-allowed; }
+.wd-decal .lk { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; }
+.wd-custom { display: flex; flex-direction: column; gap: 7px; }
+.wd-custom input[type=text] { width: 100%; padding: 6px 9px; border-radius: 8px; font: inherit;
+  font-size: 12px; letter-spacing: 3px; text-transform: uppercase; text-align: center;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.11); color: #eaf3ec; }
+
+/* ── the base bar: name, stats, the way out ──────────────────────────── */
+.wd-base { position: absolute; z-index: 4; left: 50%; bottom: 18px; transform: translateX(-50%);
+  width: min(560px, 44vw); display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px; border-radius: 16px;
+  background: rgba(9,18,14,.66); border: 1px solid rgba(255,255,255,.10);
+  backdrop-filter: blur(11px); -webkit-backdrop-filter: blur(11px);
+  box-shadow: 0 16px 46px rgba(0,0,0,.5); }
+/* The name is the biggest text on the screen on purpose: the brief asked
+   for no anonymity, and a golfer you have dressed for ten minutes should be
+   somebody rather than "player". */
+.wd-id b { font-size: 25px; font-weight: 800; letter-spacing: -.7px; display: block; line-height: 1.1; }
+.wd-id span { font-size: 11.5px; color: #9fbaa6; }
+.wd-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.wd-stat { padding: 7px 9px; border-radius: 10px; background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.07); }
+.wd-stat em { display: block; font-style: normal; font-size: 9.5px; letter-spacing: .8px;
+  text-transform: uppercase; color: #8fbf9c; }
+.wd-stat b { font-size: 15px; font-weight: 700; }
+.wd-stat b.up { color: #6fce8a; }
+.wd-stat b.flat { color: #cfe0d4; }
+.wd-stat b.down { color: #e88a7a; }
+/* the style bar, because 8.7/10 means more with something to compare to */
+.wd-styleb { height: 3px; border-radius: 2px; margin-top: 4px; background: rgba(255,255,255,.12); }
+.wd-styleb i { display: block; height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg,#6fce8a,#e8c15a); }
+.wd-acts { display: flex; gap: 8px; }
+.wd-acts .btn { flex: 1; }
+.wd-acts .btn:first-child { flex: 0 0 auto; }
+
+/* ── phones: the panels become sheets you page between ───────────────── */
+@media (max-width: 820px) {
+  .screen.wardrobe { display: block; overflow: hidden; }
+  .wd-veil { background: linear-gradient(to top, rgba(4,12,9,.94) 0%, rgba(4,12,9,.5) 30%, rgba(4,12,9,0) 52%); }
+  .wd-panel { position: absolute; top: 62px; bottom: 214px; width: 46vw; padding: 10px 10px 12px; gap: 9px; }
+  .wd-left { left: 0; }
+  .wd-right { right: 0; }
+  .wd-base { width: calc(100% - 20px); bottom: 10px; padding: 11px 12px; }
+  .wd-id b { font-size: 20px; }
+  .wd-stats { grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .wd-stat { padding: 5px 6px; }
+  .wd-stat b { font-size: 13px; }
+  .wd-stat em { font-size: 8.5px; letter-spacing: .4px; }
+  .wd-carousel { top: 8px; padding: 5px 7px; }
+  .wd-course { min-width: 110px; }
+  .wd-decals { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* the way into the wardrobe, on the home screen's character panel */
+.wardrobe-btn { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 10px 12px; margin: 10px 0 4px;
+  background: linear-gradient(100deg, rgba(38,96,58,.62), rgba(14,34,24,.5));
+  border-color: rgba(111,206,138,.34); }
+.wardrobe-btn:hover { background: linear-gradient(100deg, rgba(52,124,74,.75), rgba(18,44,30,.6)); }
+.wb-ico { font-size: 19px; }
+.wb-txt { display: flex; flex-direction: column; gap: 1px; }
+.wb-txt b { font-size: 13px; }
+.wb-txt small { font-size: 10.5px; color: #9fbaa6; }
+.wb-arr { margin-left: auto; color: #6fce8a; }

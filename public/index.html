@@ -246,6 +246,62 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════ THE WARDROBE ════════
+     Your golfer, full height, on a course that changes behind them.
+
+     It is its own screen rather than a panel because of what it is for: the
+     colour swatches on the home page answer "what colour is my shirt" and
+     this answers "what do I look like". Those need different amounts of
+     room. The 3D behind is the real renderer with the real avatar, so what
+     you approve here is exactly what walks onto the first tee — a preview
+     drawn any other way is a promise the game then has to keep. -->
+<div class="screen wardrobe" id="screenWardrobe" hidden>
+  <div class="wd-veil" aria-hidden="true"></div>
+
+  <!-- the course carousel: which hole is behind the golfer -->
+  <div class="wd-carousel" id="wdCarousel">
+    <button class="wd-arrow" id="wdPrev" aria-label="Previous course">‹</button>
+    <div class="wd-course">
+      <b id="wdCourseName">Claude National</b>
+      <small id="wdCourseWhere">Georgia, USA</small>
+      <div class="wd-dots" id="wdDots"></div>
+    </div>
+    <button class="wd-arrow" id="wdNext" aria-label="Next course">›</button>
+    <button class="wd-auto on" id="wdAuto" title="Cycle through the courses">⏸</button>
+  </div>
+
+  <!-- LEFT: ready-made outfits, by category -->
+  <div class="wd-panel wd-left">
+    <h3>Outfits</h3>
+    <div class="wd-cats" id="wdCats" role="tablist"></div>
+    <div class="wd-fits" id="wdFits"></div>
+  </div>
+
+  <!-- RIGHT: the pieces, for somebody who wants to build their own -->
+  <div class="wd-panel wd-right">
+    <div class="wd-rtabs" id="wdRTabs" role="tablist">
+      <button class="wd-rtab on" data-rt="garment">Garments</button>
+      <button class="wd-rtab" data-rt="extras">Accessories</button>
+      <button class="wd-rtab" data-rt="decals">Decals</button>
+    </div>
+    <div class="wd-rbody" id="wdRBody"></div>
+  </div>
+
+  <!-- BOTTOM: who this is, what it does, and the way out -->
+  <div class="wd-base">
+    <div class="wd-id">
+      <b id="wdName">Your golfer</b>
+      <span id="wdFit">No outfit</span>
+    </div>
+    <div class="wd-stats" id="wdStats"></div>
+    <div class="wd-acts">
+      <button class="btn" id="wdRandom" title="Surprise me">🎲</button>
+      <button class="btn" id="wdSeeIn">See in-game</button>
+      <button class="btn primary" id="wdDone">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- The title screen.  Behind it the REAL first tee is rendered live, with
      your golfer standing on it — the menu is a column on the left, and the
      course sells the game the way no card of form fields can. -->
@@ -363,6 +419,14 @@
       <button class="btn mini" id="btnRandomLook" title="Surprise me">🎲</button>
     </div>
     <div class="charcard" id="charCard"></div>
+    <!-- The way into the full wardrobe. It sits above the swatches rather
+         than below them because it is the more capable of the two: the
+         swatches are the quick change, this is the whole thing. -->
+    <button class="btn wardrobe-btn" id="btnWardrobe">
+      <span class="wb-ico">👔</span>
+      <span class="wb-txt"><b>Open the wardrobe</b><small>outfits, decals and the full preview</small></span>
+      <span class="wb-arr" aria-hidden="true">→</span>
+    </button>
     <div class="looker" id="lookPicker"></div>
     <p class="tiny hk-hint">That's them on the tee — changes show up instantly.</p>
   </div>

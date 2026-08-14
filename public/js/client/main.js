@@ -18,6 +18,8 @@ import { UNLOCKS, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/un
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
 import { playIntro } from './intro.js';
+import { wearOutfit, normaliseCustom, outfitEffect } from '../shared/wardrobe.js';
+import { tickHolo } from './decals.js';
 import { isAct, actionFor, keysFor, resetBinds } from './binds.js';
 import { Net } from './net.js';
 import { initCG, loadingStart, loadingStop, gameplayStart, gameplayStop,
@@ -388,6 +390,132 @@ function openLegend(target) {
   }
 }
 
+/* ══════════════════════════════════════════════════ THE WARDROBE ═══════
+   Your golfer, full height, with the eight courses cycling behind them.
+
+   The backdrop is the REAL course — the same loadHole the game uses to play
+   it — because the whole point of a preview is that it is not a mock-up. A
+   still image per course would have been cheaper and would have been a
+   picture of a golfer who is not you standing somewhere the game does not
+   go; every outfit you approve here is approved on the ground you will
+   actually wear it on. */
+const wd = { t: 0, idx: 0, auto: true, hold: 0 };
+const WD_DWELL = 3.0;              // seconds a course holds before the next
+
+function wardrobeFrame(dt) {
+  wd.t += dt;
+  if (wd.auto && G.screen === 'wardrobe') {
+    wd.hold += dt;
+    if (wd.hold >= WD_DWELL) { wd.hold = 0; wdCourse(wd.idx + 1); }
+  }
+
+  const tee = G.hole.tee;
+  /* Orbit the GOLFER, not the tee. They stand at their address spot, which
+     is about a metre to the side of the ball — so a turntable centred on the
+     tee swung the camera straight through them once a revolution, and the
+     first frame of the wardrobe was the inside of a shirt. */
+  const p = menu.av?.root?.position;
+  const cx = p ? p.x : tee.x, cz = p ? p.z : tee.z;
+  const gy = G.T.heightAt(cx, cz);
+
+  /* A slow turntable rather than a fixed three-quarter view: a decal on the
+     back collar and one on a shoe cannot both be checked from one angle, and
+     asking a player to drag the camera to see what they just bought is the
+     kind of friction that ends with them not bothering.
+
+     It STARTS AT THE FRONT. The golfer faces the pin, so an orbit starting
+     at zero opens on the back of their head — the one angle where none of
+     what you just chose is visible. */
+  const aim = Math.atan2(G.hole.pin.x - tee.x, G.hole.pin.z - tee.z);
+  const a = aim + wd.t * 0.22;
+  const r = 3.4;
+  scene.camera.position.set(cx + Math.sin(a) * r, gy + 1.34, cz + Math.cos(a) * r);
+  /* Aimed BELOW the golfer's middle so they sit high in frame: the stats bar
+     owns the bottom fifth of the screen, and a centred golfer has their
+     shoes behind it — which are a slot you can put a decal on. */
+  scene.camera.lookAt(cx, gy + 0.80, cz);
+  menu.av?.update(dt, 0);
+  scene.windDir = 0.6;
+  scene.update(dt);
+  tickHolo(wd.t);                  // the holographic decals shift hue
+  scene.render(scene.camera);
+}
+
+/** Put a different course behind the golfer. */
+function wdCourse(i) {
+  const n = COURSE_ORDER.length;
+  wd.idx = ((i % n) + n) % n;
+  const id = COURSE_ORDER[wd.idx];
+  pickedCourse = id;
+  menu.key = null;                 // force menuBackdrop to rebuild
+  menuBackdrop();
+  const bio = BIOMES[id];
+  HUD.el.wdCourseName.textContent = bio.name;
+  HUD.el.wdCourseWhere.textContent = bio.region || '';
+  HUD.el.wdDots.innerHTML = COURSE_ORDER
+    .map((_, k) => `<i class="wd-dot${k === wd.idx ? ' on' : ''}"></i>`).join('');
+}
+
+function openWardrobe() {
+  G.screen = 'wardrobe';
+  HUD.show('wardrobe');
+  HUD.bindWardrobe();
+  wd.t = 0; wd.hold = 0;
+  wdCourse(COURSE_ORDER.indexOf(pickedCourse) >= 0 ? COURSE_ORDER.indexOf(pickedCourse) : 0);
+  drawWardrobe();
+}
+
+function drawWardrobe() {
+  HUD.renderWardrobe(lookDraft, G.profile?.level ?? 1,
+    Net.lastName || document.getElementById('inpName')?.value || 'Your golfer');
+}
+
+/**
+ * Everything the wardrobe can change arrives here as a patch. The four
+ * underscore keys are commands rather than fields — an outfit is a dozen
+ * fields at once, a decal is a key in a map, and neither is expressible as
+ * `{key: value}`.
+ */
+function applyWardrobe(patch) {
+  if (!patch || typeof patch !== 'object') { drawWardrobe(); return; }
+
+  if (patch.__outfit) {
+    lookDraft = normaliseLook(wearOutfit(lookDraft, patch.__outfit),
+      0, undefined, G.profile?.level ?? 1);
+  } else if (patch.__decal) {
+    const d = { ...(lookDraft.decals || {}) };
+    if (patch.__decal.id) d[patch.__decal.slot] = patch.__decal.id;
+    else delete d[patch.__decal.slot];
+    lookDraft = normaliseLook({ ...lookDraft, decals: d, outfit: lookDraft.outfit },
+      0, undefined, G.profile?.level ?? 1);
+  } else if (patch.__custom) {
+    lookDraft = normaliseLook({
+      ...lookDraft,
+      custom: normaliseCustom({ ...lookDraft.custom, ...patch.__custom })
+    }, 0, undefined, G.profile?.level ?? 1);
+  } else {
+    const fields = Object.keys(patch).filter(k => !k.startsWith('__'));
+    if (fields.length) {
+      /* Changing one garment breaks the outfit it came from — it is no
+         longer "Sunday red", it is Sunday red with different shoes. Saying
+         so is more honest than leaving the name on it. */
+      const next = { ...lookDraft, outfit: null };
+      for (const k of fields) next[k] = patch[k];
+      lookDraft = normaliseLook(next, 0, undefined, G.profile?.level ?? 1);
+    }
+  }
+
+  saveLook(lookDraft);
+  refreshMenuAvatar();
+  if (G.joined) Net.setLook(lookDraft);
+
+  /* The monogram field must not be re-rendered out from under a player who
+     is still typing in it — the caret would jump to the end of the value on
+     every keystroke, which makes the field unusable. */
+  if (patch.__keepFocus) { HUD.renderWardrobeStats(lookDraft); return; }
+  drawWardrobe();
+}
+
 function menuFrame(dt) {
   menu.t += dt;
   const tee = G.hole.tee;
@@ -470,12 +598,18 @@ function carryMult(club) {
   const fx = gearEffect(G.profile?.gear || null, club);
   const cfx = crewEffect(G.profile?.crew || null, G.profile?.clubTier ?? 0,
     G.profile?.refine ?? 0, { power: 1 });
-  return fx.speed * cfx.speed;
+  /* The outfit is a real, small factor and it goes HERE — through the same
+     function the carry number under the club name is computed from. That is
+     the whole reason it is in this function rather than applied at the
+     strike: the wardrobe advertises "+2.5% drive", so the yardage the game
+     promises has to already contain it. A stat that changes the shot but not
+     the number the player aims with is worse than no stat at all. */
+  return fx.speed * cfx.speed * outfitEffect(lookDraft).speed;
 }
 
 /** The same figure without a club in hand, for choosing one in the first place. */
 const reachMult = () => crewEffect(G.profile?.crew || null, G.profile?.clubTier ?? 0,
-  G.profile?.refine ?? 0, { power: 1 }).speed;
+  G.profile?.refine ?? 0, { power: 1 }).speed * outfitEffect(lookDraft).speed;
 
 /** Where this club sits in the bag, so the arrows can grey out at the ends. */
 function bagEnds() {
@@ -1082,6 +1216,7 @@ function frame(now) {
   // the title screen: the course drifting behind the menu (and behind the
   // lobby, for a host who has not started yet)
   if (G.screen === 'landing' && menu.key && G.hole) { landingFrame(dt); return; }
+  if (G.screen === 'wardrobe' && menu.key && G.hole) { wardrobeFrame(dt); return; }
   if (menu.key && G.hole && (!G.joined || G.room?.state === 'lobby')) { menuFrame(dt); return; }
   if (!G.hole) return;
 
@@ -2772,6 +2907,46 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     try { HUD.bindClubhouse?.(); } catch (e) { console.error('clubhouse tabs:', e); }
   });
   HUD.el.btnShopBack.addEventListener('click', () => route());
+
+  /* ---- the wardrobe ---------------------------------------------------- */
+  HUD.onWardrobe = applyWardrobe;
+  document.getElementById('btnWardrobe')?.addEventListener('click', openWardrobe);
+  HUD.el.wdPrev.addEventListener('click', () => { wd.auto = false; syncAuto(); wd.hold = 0; wdCourse(wd.idx - 1); });
+  HUD.el.wdNext.addEventListener('click', () => { wd.auto = false; syncAuto(); wd.hold = 0; wdCourse(wd.idx + 1); });
+  HUD.el.wdAuto.addEventListener('click', () => { wd.auto = !wd.auto; wd.hold = 0; syncAuto(); });
+  const syncAuto = () => {
+    HUD.el.wdAuto.classList.toggle('on', wd.auto);
+    HUD.el.wdAuto.textContent = wd.auto ? '⏸' : '▶';
+    HUD.el.wdAuto.title = wd.auto ? 'Stop cycling' : 'Cycle through the courses';
+  };
+  syncAuto();
+
+  HUD.el.wdRandom.addEventListener('click', () => {
+    lookDraft = normaliseLook(randomLook(), 0, undefined, G.profile?.level ?? 1);
+    saveLook(lookDraft); refreshMenuAvatar();
+    if (G.joined) Net.setLook(lookDraft);
+    drawWardrobe();
+  });
+
+  /* "See in-game" is the honest version of a preview: it puts you on the
+     first tee of the course currently behind you, in what you are wearing,
+     with the real camera. Everything the wardrobe shows is already the real
+     renderer, so this is not a different picture — it is the same golfer at
+     the distance you will actually play them from, which is the one thing
+     the turntable cannot tell you. */
+  HUD.el.wdSeeIn.addEventListener('click', () => {
+    wd.auto = false; syncAuto();
+    G.screen = 'home';
+    HUD.show('home');
+    showGolferCloseUp(7);
+    HUD.toast('This is your golfer on the first tee. Press Play when you like it.', 'info', 3600);
+  });
+
+  HUD.el.wdDone.addEventListener('click', () => {
+    wd.auto = false; syncAuto();
+    drawLookPicker();
+    route();
+  });
   document.getElementById('btnBindsReset')?.addEventListener('click', () => {
     resetBinds();
     HUD.renderBinds();

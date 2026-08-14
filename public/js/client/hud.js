@@ -21,6 +21,9 @@ const el = {};
 for (const id of [
   'screenHome', 'screenLobby', 'screenResults', 'screenLoad', 'screenHoleOver', 'screenShop',
   'screenLanding', 'introCanvas', 'lpLegend', 'lpLive',
+  'screenWardrobe', 'wdCarousel', 'wdCourseName', 'wdCourseWhere', 'wdDots', 'wdPrev', 'wdNext',
+  'wdAuto', 'wdCats', 'wdFits', 'wdRTabs', 'wdRBody', 'wdName', 'wdFit', 'wdStats',
+  'wdRandom', 'wdSeeIn', 'wdDone',
   'btnClubhouse', 'btnShopBack', 'homeCoins',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
@@ -74,6 +77,7 @@ HUD.dist = dist;
 /* ---------------------------------------------------------------- screens */
 HUD.show = which => {
   el.screenLanding.hidden = which !== 'landing';
+  el.screenWardrobe.hidden = which !== 'wardrobe';
   el.screenHome.hidden = which !== 'home';
   el.screenLobby.hidden = which !== 'lobby';
   el.screenResults.hidden = which !== 'results';
@@ -1461,3 +1465,223 @@ HUD.showChat = on => {
 };
 HUD.chatValue = () => el.chatText?.value || '';
 HUD.showChatPanel = on => { if (el.chatPanel) el.chatPanel.style.display = on ? '' : 'none'; };
+
+/* ═══════════════════════════════════════════════════ THE WARDROBE ═══════
+   Rendering only. Every control reports a PATCH — `{fabric:'tech'}` — and
+   main.js decides what to do with it, which is what keeps this file free of
+   any knowledge of the avatar, the scene or the profile.
+
+   The one rule the whole panel is built around: nothing unearned is hidden.
+   A locked outfit is shown greyed with the level on it, because a wardrobe
+   whose locked half is invisible is a wardrobe that never gives anybody a
+   reason to play another round. */
+import {
+  PATTERNS, FABRICS, CUTS, SHOE_TYPES, GLOVES, WATCHES, SLEEVES, NECKWEAR,
+  OUTFITS, OUTFIT_CATS, DECALS, DECAL_CATS, DECAL_SLOTS, CUSTOM_SHAPES,
+  outfitStats, spinWord, outfitById
+} from '../shared/wardrobe.js';
+import { decalTexture } from './decals.js';
+
+/** Set by main.js. Receives a partial look. */
+HUD.onWardrobe = () => {};
+HUD.wdCat = 'tour';
+HUD.wdTab = 'garment';
+
+const lock = (it, level) => !!(it.at && level < it.at);
+
+/** One row of choices. `list` items need `id` and `name`. */
+function optRow(title, list, current, level, kind) {
+  const opts = list.map(it => {
+    const L = lock(it, level);
+    return `<button class="wd-opt${it.id === current ? ' on' : ''}${L ? ' locked' : ''}"
+      data-kind="${kind}" data-val="${it.id}"${L ? ' disabled' : ''}>${it.name}` +
+      (L ? `<span class="lv">Lv ${it.at}</span>` : '') + `</button>`;
+  }).join('');
+  return `<div class="wd-grp"><h5>${title}</h5><div class="wd-opts">${opts}</div></div>`;
+}
+
+/** One row of colour swatches. */
+function colRow(title, list, current, kind) {
+  const sw = list.map(c =>
+    `<button class="wd-col${c.hex === current ? ' on' : ''}" data-kind="${kind}"
+      data-val="${c.hex}" style="background:${c.hex}" title="${c.name}"></button>`).join('');
+  return `<div class="wd-grp"><h5>${title}</h5><div class="wd-cols">${sw}</div></div>`;
+}
+
+/* The stats bar on its own. It is separate because the monogram field
+   updates the badge on every keystroke, and re-rendering the panel that
+   contains the field a player is typing in sends the caret to the end of the
+   value — which makes the field unusable. */
+HUD.renderWardrobeStats = look => {
+  if (!el.wdStats) return;
+  const st = outfitStats(look);
+  const pct = v => (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  const cls = v => (v > 0.0005 ? 'up' : v < -0.0005 ? 'down' : 'flat');
+  el.wdStats.innerHTML =
+    `<div class="wd-stat"><em>Drive</em><b class="${cls(st.drive)}">${pct(st.drive)}</b></div>` +
+    `<div class="wd-stat"><em>Accuracy</em><b class="${cls(st.accuracy)}">${pct(st.accuracy)}</b></div>` +
+    `<div class="wd-stat"><em>Spin</em><b class="${cls(st.spin)}">${spinWord(st.spin)}</b></div>` +
+    `<div class="wd-stat"><em>Style</em><b class="up">${st.style.toFixed(1)}<small>/10</small></b>` +
+      `<div class="wd-styleb"><i style="width:${st.style * 10}%"></i></div></div>`;
+};
+
+HUD.renderWardrobe = (look, level, name) => {
+  if (!el.screenWardrobe) return;
+  const lv = Number(level) || 1;
+
+  /* ---- who this is, and what the outfit does ------------------------- */
+  el.wdName.textContent = name || 'Your golfer';
+  const fit = outfitById(look.outfit);
+  el.wdFit.textContent = fit
+    ? `${fit.name} · ${(OUTFIT_CATS.find(c => c.id === fit.cat) || {}).name || ''}`
+    : 'Your own combination';
+
+  HUD.renderWardrobeStats(look);
+
+  /* ---- outfits, by category ------------------------------------------ */
+  el.wdCats.innerHTML = OUTFIT_CATS.map(c =>
+    `<button class="wd-cat${c.id === HUD.wdCat ? ' on' : ''}" data-cat="${c.id}">${c.name}</button>`
+  ).join('');
+
+  const cat = OUTFIT_CATS.find(c => c.id === HUD.wdCat) || OUTFIT_CATS[0];
+  el.wdFits.innerHTML = `<p class="tiny">${cat.blurb}</p>` + OUTFITS
+    .filter(o => o.cat === HUD.wdCat)
+    .map(o => {
+      const L = o.at > lv;
+      return `<button class="wd-fit${o.id === look.outfit ? ' on' : ''}${L ? ' locked' : ''}"
+        data-fit="${o.id}"${L ? ' disabled' : ''}>
+        <span class="wd-sw"><i style="background:${o.o.shirt}"></i><i style="background:${o.o.trousers}"></i></span>
+        <span><b>${o.name}</b><small>${L ? `Unlocks at level ${o.at}` : (o.o.fabric || '') + (o.o.cut ? ' · ' + o.o.cut : '')}</small></span>
+      </button>`;
+    }).join('');
+
+  /* ---- the pieces ----------------------------------------------------- */
+  el.wdRTabs.querySelectorAll('.wd-rtab').forEach(b =>
+    b.classList.toggle('on', b.dataset.rt === HUD.wdTab));
+
+  if (HUD.wdTab === 'garment') {
+    el.wdRBody.innerHTML =
+      colRow('Shirt', SHIRTS, look.shirt, 'shirt') +
+      optRow('Pattern', PATTERNS, look.pattern, lv, 'pattern') +
+      colRow('Second colour', SHIRTS, look.shirt2, 'shirt2') +
+      optRow('Fabric', FABRICS, look.fabric, lv, 'fabric') +
+      colRow('Trousers', TROUSERS, look.trousers, 'trousers') +
+      optRow('Cut', CUTS, look.cut, lv, 'cut') +
+      colRow('Shoes', SHOES, look.shoes, 'shoes') +
+      optRow('Shoe type', SHOE_TYPES, look.shoeType, lv, 'shoeType');
+  } else if (HUD.wdTab === 'extras') {
+    el.wdRBody.innerHTML =
+      optRow('Glove', GLOVES, look.glove, lv, 'glove') +
+      optRow('Watch', WATCHES, look.watch, lv, 'watch') +
+      optRow('Arm sleeves', SLEEVES, look.sleeve, lv, 'sleeve') +
+      optRow('Neck', NECKWEAR, look.neck, lv, 'neck') +
+      colRow('Cap colour', CAPS, look.cap, 'cap');
+  } else {
+    HUD.renderDecalTab(look, lv);
+  }
+};
+
+/* The decal tab is its own function because it draws: every badge in the
+   grid is the REAL generated texture on a small canvas, not an icon that
+   approximates it. A picker that shows something other than what you get is
+   the single most annoying thing a customisation screen can do. */
+HUD.wdSlot = 'chest';
+HUD.wdDecalCat = 'brand';
+
+HUD.renderDecalTab = (look, lv) => {
+  const slots = DECAL_SLOTS.map(sl => {
+    const L = lock(sl, lv);
+    const on = look.decals?.[sl.id];
+    const d = on ? DECALS.find(x => x.id === on) : null;
+    return `<button class="wd-slot${sl.id === HUD.wdSlot ? ' on' : ''}${L ? ' locked' : ''}"
+      data-slot="${sl.id}"${L ? ' disabled' : ''}>${sl.name}
+      <em>${L ? `Level ${sl.at}` : (d ? d.name : 'empty')}</em></button>`;
+  }).join('');
+
+  const cats = DECAL_CATS.map(c =>
+    `<button class="wd-opt${c.id === HUD.wdDecalCat ? ' on' : ''}" data-dcat="${c.id}">${c.name}</button>`
+  ).join('');
+
+  const cur = look.decals?.[HUD.wdSlot] || null;
+  const list = DECALS.filter(d => d.cat === HUD.wdDecalCat);
+  const cells = `<button class="wd-decal${cur ? '' : ' on'}" data-decal="">
+      <span class="lk">none</span></button>` +
+    list.map(d => {
+      const L = lock(d, lv);
+      return `<button class="wd-decal${d.id === cur ? ' on' : ''}${L ? ' locked' : ''}"
+        data-decal="${d.id}" title="${d.name}${L ? ` — level ${d.at}` : ''}"${L ? ' disabled' : ''}>
+        ${L ? `<span class="lk">🔒${d.at}</span>` : ''}</button>`;
+    }).join('');
+
+  el.wdRBody.innerHTML =
+    `<div class="wd-grp"><h5>Where</h5><div class="wd-slots">${slots}</div></div>` +
+    `<div class="wd-grp"><h5>Kind</h5><div class="wd-opts">${cats}</div></div>` +
+    `<div class="wd-grp"><h5>Badge</h5><div class="wd-decals">${cells}</div></div>` +
+    (HUD.wdDecalCat === 'custom' ? customEditor(look) : '');
+
+  /* Paint the real texture into each unlocked cell. Done after the innerHTML
+     rather than as data: URLs inside it, because these are already-built
+     canvases and re-encoding thirty of them to base64 on every re-render is
+     work for nothing. */
+  el.wdRBody.querySelectorAll('.wd-decal[data-decal]').forEach(btn => {
+    const id = btn.dataset.decal;
+    if (!id || btn.classList.contains('locked')) return;
+    const tex = decalTexture(id, look.custom);
+    if (!tex?.image) return;
+    const c = document.createElement('canvas');
+    c.width = c.height = 56;
+    const g = c.getContext('2d');
+    g.drawImage(tex.image, 0, 0, 56, 56);
+    btn.appendChild(c);
+  });
+};
+
+function customEditor(look) {
+  const cu = look.custom || {};
+  const shapes = CUSTOM_SHAPES.map(s =>
+    `<button class="wd-opt${s.id === cu.shape ? ' on' : ''}" data-cshape="${s.id}">${s.name}</button>`).join('');
+  const cols = a => SHIRTS.map(c =>
+    `<button class="wd-col${c.hex === cu[a] ? ' on' : ''}" data-c${a}="${c.hex}"
+      style="background:${c.hex}" title="${c.name}"></button>`).join('');
+  return `<div class="wd-grp"><h5>Your design</h5><div class="wd-custom">
+    <div class="wd-opts">${shapes}</div>
+    <div class="wd-cols">${cols('a')}</div>
+    <div class="wd-cols">${cols('b')}</div>
+    <input type="text" id="wdInitials" maxlength="3" placeholder="ABC" value="${cu.txt || ''}"
+      autocomplete="off" spellcheck="false">
+    <p class="tiny">Up to three letters or numbers. Everyone in your round sees it.</p>
+  </div></div>`;
+}
+
+/** One delegated listener for the whole screen. */
+let wardrobeBound = false;
+HUD.bindWardrobe = () => {
+  if (wardrobeBound) return;
+  wardrobeBound = true;
+
+  el.screenWardrobe.addEventListener('click', e => {
+    const t = e.target.closest('button');
+    if (!t || t.disabled) return;
+
+    if (t.dataset.cat) { HUD.wdCat = t.dataset.cat; HUD.onWardrobe({}); return; }
+    if (t.dataset.rt) { HUD.wdTab = t.dataset.rt; HUD.onWardrobe({}); return; }
+    if (t.dataset.fit) { HUD.onWardrobe({ __outfit: t.dataset.fit }); return; }
+    if (t.dataset.kind) { HUD.onWardrobe({ [t.dataset.kind]: t.dataset.val }); return; }
+    if (t.dataset.slot) { HUD.wdSlot = t.dataset.slot; HUD.onWardrobe({}); return; }
+    if (t.dataset.dcat) { HUD.wdDecalCat = t.dataset.dcat; HUD.onWardrobe({}); return; }
+    if (t.dataset.cshape) { HUD.onWardrobe({ __custom: { shape: t.dataset.cshape } }); return; }
+    if (t.dataset.ca) { HUD.onWardrobe({ __custom: { a: t.dataset.ca } }); return; }
+    if (t.dataset.cb) { HUD.onWardrobe({ __custom: { b: t.dataset.cb } }); return; }
+    if (t.hasAttribute('data-decal')) {
+      HUD.onWardrobe({ __decal: { slot: HUD.wdSlot, id: t.dataset.decal || null } });
+    }
+  });
+
+  /* The monogram field. `input` rather than `change` so the badge updates as
+     you type — the whole screen is a live preview and one control that waits
+     for a blur would feel broken next to the rest. */
+  el.screenWardrobe.addEventListener('input', e => {
+    if (e.target.id !== 'wdInitials') return;
+    HUD.onWardrobe({ __custom: { txt: e.target.value }, __keepFocus: true });
+  });
+};

@@ -13,6 +13,8 @@ import { AVATAR_HEIGHT, BODIES } from '../shared/avatars.js';
 import { UNLOCKS } from '../shared/unlocks.js';
 import { CLIPS, EMOTE_CLIPS, SHOVE_CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
 import { CLUB_BY_KEY } from '../shared/clubs.js';
+import { FABRICS, GLOVES, WATCHES, CUTS, SHOE_TYPES, DECAL_SLOTS } from '../shared/wardrobe.js';
+import { shirtMaterial, decalMaterial } from './decals.js';
 
 /* One unit box, reused by every part of every avatar.
    `userData.shared` is what stops GolfScene.dispose() from freeing these on
@@ -52,6 +54,7 @@ export { blobTexture as sharedBlobTexture, blobGeo as sharedBlobGeo };
    and shared.  It rides a tiny plane just in front of the head, so the box
    UV problem (a cube texture repeats on every side) never comes up. */
 let _faceTex = null, _faceGeo = null, _faceMat = null;
+let _decalGeo = null;      // one plane, shared by every decal in the game
 function faceParts() {
   if (!_faceMat) {
     const S = 64;
@@ -93,7 +96,13 @@ export class Avatar {
 
     const M = hex => new THREE.MeshLambertMaterial({ color: new THREE.Color(hex) });
     this.mats = {
-      cap: M(look.cap), shirt: M(look.shirt),
+      cap: M(look.cap),
+      /* The shirt is the one garment worth a real material: it is the
+         biggest surface on the golfer and the only one a player looks at
+         from two metres on the wardrobe screen. Pattern comes from a
+         procedurally drawn tile, sheen decides lambert versus phong. */
+      shirt: shirtMaterial(look.shirt, look.pattern, look.shirt2 || '#232833',
+        (FABRICS.find(f => f.id === look.fabric) || FABRICS[0]).sheen),
       skin: M(look.skin), trousers: M(look.trousers),
       shoe: M(look.shoes || '#2b2b2f'), accent: M(ballColor),
       hair: M(look.hairColor || '#241c18'), lens: M('#20262e')
@@ -214,6 +223,8 @@ export class Avatar {
     this.clubKey = null;
     this.clubTierIdx = -1;
     this.setClub('I7', 0);
+
+    this._dressWardrobe(look, M);
 
     this.root.add(this.body);
 
@@ -373,6 +384,150 @@ export class Avatar {
    * procedural on purpose (see unlocks.js), so a hundred levels of rewards
    * add nothing to the download.
    */
+  /* ═══════════════════════════════════════════════════ THE WARDROBE ═══
+     Gloves, a watch, arm sleeves, neckwear, the shoe shape, the trouser cut
+     and every placed decal — added after the rig exists rather than woven
+     through it, so a golfer wearing none of this is exactly the golfer the
+     game had before and costs exactly what it did.
+
+     Everything is boxes and one plane per decal. That is not a limitation
+     being worked around, it is the art style: the whole game is boxes, and a
+     smooth imported mesh on a blocky golfer would look like a mistake. */
+  _dressWardrobe(look, M) {
+    if (!look) return;
+    this.wardrobeMats = [];
+    const mine = hex => { const m = M(hex); this.wardrobeMats.push(m); return m; };
+
+    /* ---- gloves. One hand, the lead hand, which is how golf works. ------ */
+    const gl = GLOVES.find(g => g.id === look.glove);
+    if (gl && gl.id !== 'none' && gl.hex) {
+      const gm = mine(gl.hex);
+      // over the lead hand: left for a right-handed swing
+      this.armL.add(part(gm, 0.132, H * 0.070, 0.132, 0, -H * 0.300, 0));
+      if (gl.id === 'winter') this.armR.add(part(gm, 0.132, H * 0.070, 0.132, 0, -H * 0.300, 0));
+    }
+
+    /* ---- the watch, on the trail wrist so the glove does not cover it --- */
+    const wa = WATCHES.find(w => w.id === look.watch);
+    if (wa && wa.id !== 'none' && wa.hex) {
+      const wm = mine(wa.hex);
+      this.armR.add(part(wm, 0.108, H * 0.020, 0.108, 0, -H * 0.258, 0));
+      // a face, proud of the band, so it catches light rather than reading
+      // as a stripe painted on the arm
+      this.armR.add(part(mine(wa.id === 'sport' ? '#4a9bd4' : '#f2f4f0'),
+        0.052, H * 0.012, 0.030, 0, -H * 0.258, 0.056));
+    }
+
+    /* ---- arm sleeves ---------------------------------------------------- */
+    if (look.sleeve && look.sleeve !== 'none') {
+      const sm = mine(look.shirt2 || '#232833');
+      const arms = look.sleeve === 'both' ? [this.armL, this.armR]
+                 : look.sleeve === 'left' ? [this.armL] : [this.armR];
+      for (const a of arms) {
+        a.add(part(sm, 0.148, H * 0.150, 0.148, 0, -H * 0.150, 0));
+      }
+    }
+
+    /* ---- neckwear ------------------------------------------------------- */
+    const neckY = H * 0.800;
+    if (look.neck === 'collar') {
+      this.body.add(part(this.mats.shirt, 0.250, H * 0.022, 0.190, 0, neckY, 0));
+    } else if (look.neck === 'scarf') {
+      const nm = mine(look.shirt2 || '#7d2f42');
+      this.body.add(part(nm, 0.238, H * 0.030, 0.200, 0, neckY, 0));
+      this.body.add(part(nm, 0.070, H * 0.090, 0.036, 0.060, neckY - H * 0.055, 0.098));
+    } else if (look.neck === 'buff') {
+      this.body.add(part(mine(look.shirt2 || '#3a4048'), 0.236, H * 0.060, 0.206, 0, neckY + H * 0.010, 0));
+    } else if (look.neck === 'chain') {
+      const cm = mine('#e8c15a');
+      this.body.add(part(cm, 0.150, H * 0.010, 0.014, 0, neckY - H * 0.012, 0.106));
+      this.body.add(part(cm, 0.030, H * 0.028, 0.018, 0, neckY - H * 0.035, 0.108));
+    }
+
+    /* ---- the trouser cut. Shorts and plus fours change where the leg
+       stops being cloth and starts being skin, which is the whole point of
+       choosing them and reads instantly in silhouette. ------------------- */
+    const cut = CUTS.find(c => c.id === look.cut);
+    if (cut && (cut.id === 'short' || cut.id === 'skort' || cut.id === 'knicker')) {
+      const skin = this.mats.skin;
+      const legTop = cut.id === 'knicker' ? H * 0.300 : H * 0.380;
+      const w = cut.id === 'knicker' ? 0.128 : 0.120;
+      for (const leg of [this.legL, this.legR]) {
+        leg.add(part(skin, w, legTop, w, 0, -H * 0.235 + legTop * 0.5 - H * 0.06, 0));
+      }
+      if (cut.id === 'knicker') {
+        // the sock, which is the half of plus fours people actually picture
+        const sock = mine(look.shirt2 || '#e9e6dc');
+        for (const leg of [this.legL, this.legR]) {
+          leg.add(part(sock, 0.134, H * 0.130, 0.134, 0, -H * 0.190, 0));
+        }
+      }
+    }
+
+    /* ---- shoe shape ----------------------------------------------------- */
+    const st = SHOE_TYPES.find(t => t.id === look.shoeType);
+    if (st && st.id === 'boot') {
+      for (const leg of [this.legL, this.legR]) {
+        leg.add(part(this.mats.shoe, 0.150, H * 0.080, 0.150, 0, -H * 0.215, 0));
+      }
+    } else if (st && (st.id === 'spike' || st.id === 'soft')) {
+      // a sole plate that overhangs, so spiked shoes read as chunkier
+      for (const leg of [this.legL, this.legR]) {
+        leg.add(part(mine('#1a1c1f'), 0.156, H * 0.014, 0.190, 0, -H * 0.268, 0.012));
+      }
+    }
+
+    /* ---- decals --------------------------------------------------------- */
+    this._placeDecals(look);
+  }
+
+  /**
+   * One plane per filled slot, parented to whatever body part it sits on so
+   * it swings, walks and celebrates with the golfer rather than floating
+   * where the golfer used to be.
+   */
+  _placeDecals(look) {
+    const map = look.decals;
+    if (!map) return;
+    this.decalMeshes = [];
+    if (!_decalGeo) _decalGeo = shared(new THREE.PlaneGeometry(1, 1));
+
+    /* Position, rotation and parent for each slot. `z`/`x` push the plane
+       just proud of the surface it sits on — polygonOffset in the material
+       handles the depth fight, this handles the geometry one. */
+    const WHERE = {
+      chest: { p: 'body', pos: [0, H * 0.735, 0.126], rot: [0, 0, 0] },
+      back:  { p: 'body', pos: [0, H * 0.760, -0.126], rot: [0, Math.PI, 0] },
+      armL:  { p: 'armL', pos: [0.078, -H * 0.115, 0], rot: [0, Math.PI / 2, 0] },
+      armR:  { p: 'armR', pos: [-0.078, -H * 0.115, 0], rot: [0, -Math.PI / 2, 0] },
+      hatF:  { p: 'hat',  pos: [0, H * 0.118, 0.116], rot: [0, 0, 0] },
+      hatB:  { p: 'hat',  pos: [0, H * 0.118, -0.116], rot: [0, Math.PI, 0] },
+      shoeL: { p: 'legL', pos: [0.080, -H * 0.240, 0.010], rot: [0, Math.PI / 2, 0] },
+      shoeR: { p: 'legR', pos: [-0.080, -H * 0.240, 0.010], rot: [0, -Math.PI / 2, 0] },
+      legL:  { p: 'legL', pos: [0.072, -H * 0.090, 0], rot: [0, Math.PI / 2, 0] },
+      legR:  { p: 'legR', pos: [-0.072, -H * 0.090, 0], rot: [0, -Math.PI / 2, 0] }
+    };
+
+    for (const slot of DECAL_SLOTS) {
+      const id = map[slot.id];
+      if (!id) continue;
+      const w = WHERE[slot.id];
+      const parent = w && this[w.p];
+      /* No hat means no cap-front slot, and silently skipping is right:
+         a player who takes their hat off should not lose the badge, they
+         should get it back when they put one on. */
+      if (!parent) continue;
+      const mat = decalMaterial(id, look.custom);
+      if (!mat) continue;
+      const m = new THREE.Mesh(_decalGeo, mat);
+      m.scale.set(slot.size, slot.size, 1);
+      m.position.set(...w.pos);
+      m.rotation.set(...w.rot);
+      parent.add(m);
+      this.decalMeshes.push(m);
+    }
+  }
+
   setDecal(id) {
     if (id === this._decalId) return;
     this._decalId = id;
@@ -770,8 +925,12 @@ export class Avatar {
 
   dispose() {
     for (const m of Object.values(this.mats)) m.dispose();
+    /* The wardrobe's own materials are this avatar's and must go with it;
+       decal materials are SHARED across every player wearing that badge and
+       must not. Freeing a shared one blanks the badge on everybody else. */
+    for (const m of (this.wardrobeMats || [])) m.dispose();
     this.blob.material.dispose();
-    // geometries are shared singletons — leave them alone
+    // geometries and anything flagged shared are singletons — leave them
   }
 }
 

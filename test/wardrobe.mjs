@@ -22,6 +22,10 @@ import {
   CAPS, SHIRTS, SKINS, TROUSERS, SHOES,
   HAIR_COLORS, HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES
 } from '../public/js/shared/avatars.js';
+import {
+  PATTERNS, FABRICS, CUTS, SHOE_TYPES, GLOVES, WATCHES, SLEEVES, NECKWEAR,
+  DECALS, DECAL_SLOTS, CUSTOM_SHAPES, OUTFITS, outfitStats, wearOutfit
+} from '../public/js/shared/wardrobe.js';
 import { UNLOCKS } from '../public/js/shared/unlocks.js';
 import { EMOTES, EMOTE_CLIPS, MELEES, SHOVE_CLIPS, POSE_KEYS, blankPose }
   from '../public/js/client/celebrations.js';
@@ -32,7 +36,11 @@ const COLOUR_SLOTS = [
 ];
 const STYLE_SLOTS = [
   ['hat', HAT_STYLES], ['hair', HAIR_STYLES], ['accessory', ACCESSORIES],
-  ['body', BODIES]
+  ['body', BODIES],
+  // the wardrobe's own slots, held to exactly the same contract
+  ['pattern', PATTERNS], ['fabric', FABRICS], ['cut', CUTS],
+  ['shoeType', SHOE_TYPES], ['glove', GLOVES], ['watch', WATCHES],
+  ['sleeve', SLEEVES], ['neck', NECKWEAR]
 ];
 
 /** Every slot present, and every value one the renderer actually knows. */
@@ -78,15 +86,145 @@ test('junk and hostile values are replaced, never passed through', () => {
     shoes: 999
   });
   assertComplete(nasty, 'hostile look');
-  for (const v of Object.values(nasty)) {
-    /* Earned cosmetics — decal, trail, title, ball finish — are legitimately
-       null when nothing is equipped, and "" would be a worse answer: it is a
-       falsy string that every `if (look.decal)` still has to guard against
-       and that reads as an id in a log. Everything else is a string. */
-    assert.ok(v === null || typeof v === 'string', `${JSON.stringify(v)} is neither`);
+  assertClean(nasty, 'hostile look');
+});
+
+/* The wardrobe added two slots that are OBJECTS rather than strings — the
+   decal map and the generated design — so this walks into them. That
+   matters more here than anywhere else in the look: `decals` is a map whose
+   KEYS come off the wire too, and the monogram is the only free text in the
+   game that other players can see. */
+function assertClean(look, why) {
+  const safe = v => {
+    assert.ok(v === null || typeof v === 'string',
+      `${why}: ${JSON.stringify(v)} is neither a string nor null`);
     if (v !== null) {
-      assert.ok(!/[<>(){};]/.test(v), `"${v}" reached the renderer with markup in it`);
+      assert.ok(!/[<>(){};]/.test(v), `${why}: "${v}" reached the renderer with markup in it`);
     }
+  };
+  for (const [k, v] of Object.entries(look)) {
+    if (k === 'decals') {
+      for (const [slot, id] of Object.entries(v)) {
+        assert.ok(DECAL_SLOTS.some(s => s.id === slot), `${why}: unknown decal slot "${slot}"`);
+        assert.ok(DECALS.some(d => d.id === id), `${why}: unknown decal "${id}"`);
+      }
+      continue;
+    }
+    if (k === 'custom') {
+      assert.ok(CUSTOM_SHAPES.some(s => s.id === v.shape), `${why}: unknown shape "${v.shape}"`);
+      for (const c of [v.a, v.b]) {
+        assert.ok(/^#[0-9a-f]{6}$/i.test(c), `${why}: "${c}" is not a colour`);
+      }
+      assert.ok(/^[A-Z0-9]{0,3}$/.test(v.txt),
+        `${why}: monogram "${v.txt}" is not three characters of A-Z0-9`);
+      continue;
+    }
+    safe(v);
+  }
+}
+
+test('the decal map cannot be used to smuggle anything through', () => {
+  /* The map's KEYS arrive from the wire as well as its values, which is one
+     more surface than any other slot in the look has. A slot name that is
+     not a slot must not survive, and neither must `__proto__`. */
+  const nasty = normaliseLook({
+    decals: {
+      chest: 'bogey',                       // fine
+      armL: '<img onerror=x>',              // not a decal
+      'not-a-slot': 'bogey',                // not a slot
+      __proto__: 'bogey',
+      constructor: 'ac-ace'
+    },
+    custom: { shape: 'evil', a: 'javascript:x', b: 42, txt: '<script>alert(1)</script>' }
+  });
+  assertClean(nasty, 'hostile decals');
+  assert.deepEqual(Object.keys(nasty.decals), ['chest']);
+  // uppercased, stripped of everything but A-Z0-9, THEN cut to three
+  assert.equal(nasty.custom.txt, 'SCR');
+  assert.equal(nasty.custom.shape, CUSTOM_SHAPES[0].id);
+});
+
+test('the wardrobe is levelled, and the fallback is never itself locked', () => {
+  /* The bug this exists for: the fallback used to be the first entry in each
+     list, and steel spikes (level 16) sat at the head of the shoe list — so
+     a brand-new player who sent any shoe id at all was handed a piece of kit
+     they had not earned. Every fallback must be free. */
+  for (const list of [PATTERNS, FABRICS, CUTS, SHOE_TYPES, GLOVES, WATCHES, SLEEVES, NECKWEAR]) {
+    const free = list.find(x => !x.at);
+    assert.ok(free, `a wardrobe list has a level on every entry: ${JSON.stringify(list[0])}`);
+  }
+  const low = looksEarnedAt({
+    pattern: 'camo', fabric: 'metal', cut: 'knicker', shoeType: 'spike',
+    glove: 'winter', watch: 'gold', sleeve: 'both', neck: 'chain'
+  }, 0, 1);
+  for (const [key, list] of [['pattern', PATTERNS], ['fabric', FABRICS], ['cut', CUTS],
+                             ['shoeType', SHOE_TYPES], ['glove', GLOVES], ['watch', WATCHES],
+                             ['sleeve', SLEEVES], ['neck', NECKWEAR]]) {
+    const it = list.find(x => x.id === low[key]);
+    assert.ok(it && !it.at, `level 1 was handed ${key} = ${low[key]}, which is earned`);
+  }
+});
+
+test('an outfit is worth having and never worth more than that', () => {
+  /* The stat line is real, so it has to stay inside the range that keeps it
+     a preference rather than a requirement. The spec asked for about +2.5%
+     on the drive at the top end; anything much past that and a player in the
+     outfit they LIKE is playing a measurably worse game. */
+  let best = 0;
+  for (const o of OUTFITS) {
+    const st = outfitStats(wearOutfit({}, o.id));
+    assert.ok(st.drive <= 0.030, `${o.name} gives ${(st.drive * 100).toFixed(1)}% on the drive`);
+    assert.ok(st.accuracy <= 0.030, `${o.name} gives ${(st.accuracy * 100).toFixed(1)}% accuracy`);
+    assert.ok(st.style > 0 && st.style <= 10, `${o.name} scores ${st.style} for style`);
+    best = Math.max(best, st.drive);
+  }
+  // and the ceiling has to be reachable, or the numbers are decoration
+  assert.ok(best > 0.012, `the best outfit in the game only gives ${(best * 100).toFixed(1)}%`);
+});
+
+test('an outfit is never offered before the clothes it is made of', () => {
+  /* The bug: sixteen of the twenty-four outfits listed pieces gated above
+     their own level, so the card said "wool, plus fours" and a level-3
+     player who picked it got cotton and straight legs — normaliseWardrobe
+     correctly refusing kit they had not earned, and the wardrobe correctly
+     showing them something else. A screen that promises an outfit and hands
+     over a different one is worse than one that makes you wait for it. */
+  const LISTS = { pattern: PATTERNS, fabric: FABRICS, cut: CUTS, shoeType: SHOE_TYPES,
+                  glove: GLOVES, watch: WATCHES, sleeve: SLEEVES, neck: NECKWEAR };
+  for (const o of OUTFITS) {
+    for (const [key, list] of Object.entries(LISTS)) {
+      const v = o.o[key];
+      if (!v) continue;
+      const it = list.find(x => x.id === v);
+      assert.ok(it, `${o.name}: ${key} = "${v}" is not something we ship`);
+      assert.ok(!it.at || it.at <= o.at,
+        `${o.name} unlocks at ${o.at} but its ${key} (${v}) needs level ${it.at}`);
+    }
+    /* And the outfit you are shown is the outfit you get: worn AT its own
+       level, nothing may be substituted. */
+    const worn = looksEarnedAt(wearOutfit({}, o.id), 0, o.at);
+    for (const key of Object.keys(LISTS)) {
+      if (o.o[key]) assert.equal(worn[key], o.o[key],
+        `${o.name} at level ${o.at}: asked for ${key}=${o.o[key]}, got ${worn[key]}`);
+    }
+  }
+});
+
+test('somebody who has never played has something to wear', () => {
+  const day1 = OUTFITS.filter(o => !o.at);
+  assert.ok(day1.length >= 2, `only ${day1.length} outfit(s) available at level 1`);
+  // and the ladder actually climbs rather than dumping everything at once
+  const at40 = OUTFITS.filter(o => o.at <= 40).length;
+  assert.ok(at40 > day1.length && at40 < OUTFITS.length,
+    `${at40} of ${OUTFITS.length} outfits by level 40 is not a progression`);
+});
+
+test('every outfit dresses a complete, legal golfer', () => {
+  for (const o of OUTFITS) {
+    const look = normaliseLook(wearOutfit({}, o.id), 0, undefined, 999);
+    assertComplete(look, o.name);
+    assertClean(look, o.name);
+    assert.equal(look.outfit, o.id, `${o.name} did not stick`);
   }
 });
 

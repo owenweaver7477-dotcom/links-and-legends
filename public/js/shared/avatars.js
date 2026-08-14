@@ -7,6 +7,7 @@
    ========================================================================= */
 
 import { UNLOCKS, unlocksAt } from './unlocks.js';
+import { normaliseWardrobe } from './wardrobe.js';
 
 export const CAPS = [
   { name: 'White',    hex: '#f2f4f0' },
@@ -217,9 +218,15 @@ const pickId = (list, id, i) => (list.find(c => c.id === id) || list[i % list.le
  * valid golfer — and a new field appearing here never invalidates a look
  * already saved against a player.
  */
-export function normaliseLook(look, seedIndex = 0, known = UNLOCK_IDS) {
+export function normaliseLook(look, seedIndex = 0, known = UNLOCK_IDS, level = 999) {
   const l = look && typeof look === 'object' ? look : {};
   return {
+    /* The wardrobe rides in the same object rather than in a channel of its
+       own, for the reason the earned cosmetics do: this is the one thing
+       that is already normalised on the way in, broadcast to every client on
+       join, and applied by the avatar. A parallel path would be four more
+       places to forget. */
+    ...normaliseWardrobe(l, level),
     decal: pickUnlock(l.decal, 'decal', known),
     trail: pickUnlock(l.trail, 'trail', known),
     title: pickUnlock(l.title, 'title', known),
@@ -253,7 +260,7 @@ export const looksEarnedAt = (look, seedIndex, level) => {
   const hat = HAT_STYLES.find(h => h.id === l.hat);
   if (hat?.at && (Number(level) || 1) < hat.at) l.hat = 'cap';
   return normaliseLook(l, seedIndex,
-    new Set(unlocksAt(level).map(u => u.kind + ':' + u.id)));
+    new Set(unlocksAt(level).map(u => u.kind + ':' + u.id)), Number(level) || 1);
 };
 
 /** A complete random outfit, for the dice button. */
