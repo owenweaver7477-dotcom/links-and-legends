@@ -1851,3 +1851,90 @@ HUD.setWeather = w => {
     (fx.length ? `<div class="wfx">${fx.map(f =>
       `<i class="${f.good ? 'good' : 'bad'}">${f.label} ${f.value}</i>`).join('')}</div>` : '');
 };
+
+/* ═══════════════════════════════════════════════════ THE FRIENDS LIST ═══
+   Requests at the top, then favourites, then whoever is online. Somebody
+   waiting on an answer from you outranks everything else on the panel —
+   they are the only row that needs a decision. */
+import { handicapText as hcpText, rankTier as rTier } from '../shared/handicap.js';
+
+HUD.onFriendAct = () => {};
+
+const ago = ms => {
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`;
+  return `${Math.floor(h / 24)} day${Math.floor(h / 24) === 1 ? '' : 's'} ago`;
+};
+
+HUD.renderFriends = (state, people) => {
+  const list = document.getElementById('frList');
+  const badge = document.getElementById('frBadge');
+  if (!list) return;
+
+  const pending = state?.pending || [];
+  if (badge) { badge.hidden = !pending.length; badge.textContent = pending.length; }
+
+  const rows = [];
+
+  // 1. requests waiting on you
+  for (const q of pending) {
+    rows.push(`<div class="fr-row req">
+      <span class="fr-dot"></span>
+      <span class="fr-nm"><b>${escapeHtml(q.name || 'A golfer')}</b>
+        <small>wants to be friends · ${ago(q.ago)}${q.note ? ' · “' + escapeHtml(q.note) + '”' : ''}</small></span>
+      <span class="fr-acts">
+        <button data-fr="accept" data-pid="${q.pid}" title="Accept">✓</button>
+        <button data-fr="decline" data-pid="${q.pid}" title="Decline">✕</button>
+      </span></div>`);
+  }
+
+  // 2. the friends themselves
+  for (const f of (people || [])) {
+    const t = rTier(f.level || 1);
+    const sub = f.online
+      ? (f.where || 'In the menu')
+      : `Level ${f.level} · ${t.name}${f.index != null ? ' · plays off ' + hcpText(f.index) : ''}`;
+    rows.push(`<div class="fr-row${f.fav ? ' fav' : ''}">
+      <span class="fr-dot${f.online ? ' on' : ''}"></span>
+      <span class="fr-nm"><b>${f.fav ? '★ ' : ''}${escapeHtml(f.name)}</b><small>${escapeHtml(sub)}</small></span>
+      <span class="fr-acts">
+        ${f.room ? `<button class="join" data-fr="join" data-room="${f.room}">Join</button>` : ''}
+        <button data-fr="favourite" data-pid="${f.pid}" title="${f.fav ? 'Unfavourite' : 'Favourite'}">${f.fav ? '★' : '☆'}</button>
+        <button data-fr="remove" data-pid="${f.pid}" title="Remove">✕</button>
+      </span></div>`);
+  }
+
+  list.innerHTML = rows.length ? rows.join('')
+    : `<div class="fr-empty">No friends yet. Press <b>My code</b>, send it to
+       somebody, and they can add you — or paste theirs above.
+       <br>Your friends stay with your golfer; there is nothing to sign up for.</div>`;
+};
+
+let friendsBound = false;
+HUD.bindFriends = () => {
+  if (friendsBound) return;
+  friendsBound = true;
+  document.getElementById('frList')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-fr]');
+    if (!b) return;
+    HUD.onFriendAct(b.dataset.fr, { pid: b.dataset.pid, room: b.dataset.room });
+  });
+  document.getElementById('frAdd')?.addEventListener('click', () => {
+    const inp = document.getElementById('frCode');
+    HUD.onFriendAct('request', { code: inp.value });
+  });
+  document.getElementById('frCode')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('frAdd').click();
+  });
+  document.getElementById('frMyCode')?.addEventListener('click', () => {
+    HUD.onFriendAct('mycode', {});
+  });
+};
+
+HUD.friendError = msg => {
+  const el2 = document.getElementById('frErr');
+  if (el2) el2.textContent = msg || '';
+};

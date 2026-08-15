@@ -156,6 +156,24 @@ export function seedProfile(pid, snap) {
   return true;
 }
 
+/**
+ * Remember what this player calls themselves.
+ *
+ * The name lives on the ROOM player until a round ends, which is fine right
+ * up until a friends list has to show somebody who is offline — at which
+ * point the only copy of their name has gone with the room and every friend
+ * in the list reads "Golfer". Stored on the profile, alongside everything
+ * else that has to outlive a session.
+ */
+export function rememberName(pid, name) {
+  const n = String(name || '').trim().slice(0, 14);
+  if (!pid || !n) return;
+  const p = getProfile(pid);
+  if (p.name === n) return;                   // no write, no save, no churn
+  p.name = n;
+  saveSoon();
+}
+
 /** Every differential we can compute from a history, oldest first. */
 export function differentialsOf(p) {
   return (p.history || [])

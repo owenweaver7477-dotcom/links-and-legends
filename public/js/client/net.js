@@ -187,6 +187,17 @@ Net.ranking = cb => {
   Net.socket.emit('world:ranking', null, res => cb(res || { top: [], me: null }));
 };
 
+/* ---------------------------------------------------------------- friends ---
+   One call for eleven verbs, matching the server's single handler. The
+   client never says who it IS — only who it wants to act on. */
+Net.friends = (act, payload, cb) => {
+  if (!Net.socket) return cb?.({ error: 'Not connected.' });
+  Net.socket.emit('friends:do', { act, ...(payload || {}) },
+    res => cb?.(res || { error: 'No answer from the server.' }));
+};
+/** Pushed when somebody accepts, removes or blocks you. */
+Net.onFriends = fn => Net.socket?.on('friends:state', fn);
+
 /** Every ladder at once. One round trip, because the screen is tabs. */
 Net.boards = (courseId, cb) => {
   const empty = { handicap: [], level: [], weekly: [], season: [],
@@ -214,6 +225,8 @@ Net.fetchProfile = () => {
   try {
     Net.socket?.emit('profile:me', {
       pid: Net.pid,
+      // so a friend who is offline still has a name on somebody else's list
+      name: Net.lastName || null,
       // Offered, never trusted: the server uses this ONLY to seed a profile
       // it has no record of, which is what happens after the host wipes its
       // disk on a deploy.  An existing career is never overwritten by it.

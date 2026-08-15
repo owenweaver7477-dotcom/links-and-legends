@@ -330,7 +330,7 @@ function openSide(pane) {
   HUD.el.lpSideTitle.textContent = SIDE_TITLE[pane] || '';
   for (const p of side.querySelectorAll('.lp-pane')) p.hidden = p.dataset.pane !== pane;
   document.body.classList.add('side-open');
-  if (pane === 'friends') refreshRoomsSafe();
+  if (pane === 'friends') { refreshRoomsSafe(); loadFriendsSafe(); }
 }
 function closeSide() {
   const side = HUD.el.lpSide;
@@ -344,6 +344,7 @@ function closeSide() {
    it is not in. That exact mistake shipped once already — see the note on
    the community legend. */
 let refreshRoomsSafe = () => {};
+let loadFriendsSafe = () => {};
 
 /* Leaving the landing page.  The intro plays over the top of it and the
    destination screen is revealed underneath — so the animation is a
@@ -3010,6 +3011,52 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     drawLookPicker();
     route();
   });
+  /* ---- friends --------------------------------------------------------- */
+  HUD.bindFriends();
+  let myFriendCode = null;
+  const drawFriends = res => {
+    if (res?.state) myFriendCode = res.state.code || myFriendCode;
+    HUD.renderFriends(res?.state, res?.people);
+  };
+  const loadFriends = () => Net.friends('state', {}, drawFriends);
+  loadFriendsSafe = loadFriends;
+  /* Pushed, not polled. Somebody accepting your request while you are
+     looking at the panel should appear in it — and a poll fast enough to
+     feel live is a poll nobody should be paying for. */
+  Net.onFriends(drawFriends);
+
+  HUD.onFriendAct = (act, d) => {
+    HUD.friendError('');
+    if (act === 'mycode') {
+      if (!myFriendCode) return HUD.friendError('Not connected yet.');
+      /* Copied AND shown. A code you can only read off the screen is one
+         people retype wrong; a code that is only copied is one they cannot
+         check. */
+      navigator.clipboard?.writeText(myFriendCode).catch(() => {});
+      HUD.toast(`Your friend code is ${myFriendCode} — copied.`, 'good', 6000);
+      return;
+    }
+    if (act === 'join') {
+      if (d.room) { HUD.el.inpCode.value = d.room; document.getElementById('btnJoin').click(); }
+      return;
+    }
+    if (act === 'request') {
+      const code = String(d.code || '').trim();
+      if (!code) return HUD.friendError('Paste a friend code first.');
+      return Net.friends('request', { code }, res => {
+        if (res.error) return HUD.friendError(res.error);
+        document.getElementById('frCode').value = '';
+        HUD.toast(res.pid ? 'You are now friends.' : 'Request sent.', 'good', 3000);
+        drawFriends(res);
+      });
+    }
+    if (act === 'remove' && !confirm('Remove this friend?')) return;
+    Net.friends(act, { pid: d.pid }, res => {
+      if (res.error) return HUD.friendError(res.error);
+      drawFriends(res);
+    });
+  };
+
   /* ---- the ranking boards --------------------------------------------- */
   HUD.bindBoards();
   const courseNames = COURSE_ORDER.map(id => ({ id, name: BIOMES[id].name }));

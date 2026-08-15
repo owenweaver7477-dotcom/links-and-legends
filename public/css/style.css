@@ -2143,3 +2143,32 @@ body.side-open .lp-play-fixed { opacity: .5; }
   .lp-who, .lp-foot { display: none; }
   .lp-title { font-size: 34px; }
 }
+
+/* ── the friends list ────────────────────────────────────────────────── */
+.fr-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fr-badge { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 5px;
+  border-radius: 9px; background: #6fce8a; color: #07120c; font-size: 10px; font-weight: 800; }
+.fr-add { display: flex; gap: 7px; }
+.fr-add input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; font: inherit;
+  font-size: 12.5px; letter-spacing: 2px; text-transform: uppercase; text-align: center;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.11); color: #eaf3ec; }
+.fr-list { display: flex; flex-direction: column; gap: 5px; max-height: 260px; overflow-y: auto; }
+.fr-row { display: grid; grid-template-columns: auto 1fr auto; gap: 9px; align-items: center;
+  padding: 8px 10px; border-radius: 10px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
+.fr-row.fav { border-color: rgba(232,193,90,.34); background: rgba(232,193,90,.07); }
+.fr-row.req { border-color: rgba(111,206,138,.38); background: rgba(111,206,138,.09); }
+.fr-dot { width: 8px; height: 8px; border-radius: 50%; background: #5b6b60; }
+.fr-dot.on { background: #6fce8a; box-shadow: 0 0 0 3px rgba(111,206,138,.18); }
+.fr-nm { min-width: 0; }
+.fr-nm b { display: block; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-nm small { display: block; font-size: 10px; color: #8fa596; }
+.fr-acts { display: flex; gap: 4px; }
+.fr-acts button { width: 26px; height: 26px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08); color: #cfe0d4; }
+.fr-acts button:hover { background: rgba(111,206,138,.20); }
+.fr-acts button.join { width: auto; padding: 0 9px; font-size: 11px; font-weight: 700;
+  background: rgba(111,206,138,.24); border-color: rgba(111,206,138,.44); color: #eaf3ec; }
+.fr-empty { padding: 12px 4px; font-size: 11.5px; color: #8fa596; line-height: 1.5; }
+.fr-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px;
+  letter-spacing: 3px; color: #6fce8a; }

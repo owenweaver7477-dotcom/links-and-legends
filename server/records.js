@@ -40,8 +40,56 @@ let board = {};
    the game is gone with no fallback anywhere. */
 export async function loadRecords() {
   board = await loadBlob(KEY, {}) || {};
+
+  /* MERGE THE SEED IN, never just fall back to it.
+
+     loadBlob returns the seed only when there is no live file at all. That
+     covers a fresh deploy and misses the case that actually happened: a live
+     file that EXISTS but has lost records the seed still has. Two server
+     processes pointed at the same data directory is all it takes — the
+     second one loads, the first one flushes its older in-memory board over
+     the top, and the file goes backwards. It went from six courses to two.
+
+     Merging on every load makes that self-healing rather than permanent. A
+     record only ever moves in one direction, so taking the better of the two
+     copies can never lose a genuine score, and the seed can only ever add
+     back something a live file dropped. */
+  const seed = await loadSeedOnly();
+  let healed = 0;
+  for (const [courseId, sc] of Object.entries(seed || {})) {
+    const live = board[courseId] || (board[courseId] = blank());
+    if (better(sc.round, live.round)) { live.round = sc.round; healed++; }
+    const sh = sc.holes || [];
+    live.holes = live.holes || new Array(HOLES).fill(null);
+    for (let i = 0; i < HOLES; i++) {
+      if (better(sh[i], live.holes[i])) { live.holes[i] = sh[i]; healed++; }
+    }
+  }
   const n = Object.keys(board).length;
-  console.log(`  records: ${n} course${n === 1 ? '' : 's'} loaded`);
+  console.log(`  records: ${n} course${n === 1 ? '' : 's'} loaded` +
+    (healed ? ` (${healed} restored from the seed)` : ''));
+  if (healed) saveSoon();
+}
+
+/** Lower is better, and a missing record loses to any record at all. */
+function better(a, b) {
+  if (!a || typeof a.strokes !== 'number') return false;
+  if (!b || typeof b.strokes !== 'number') return true;
+  return a.strokes < b.strokes;
+}
+
+/* The committed seed on its own, whatever the live file says. loadBlob
+   cannot be reused here — it deliberately prefers the live copy, which is
+   the copy this is checking. */
+async function loadSeedOnly() {
+  try {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const url = await import('node:url');
+    const here = path.dirname(url.fileURLToPath(import.meta.url));
+    return JSON.parse(fs.readFileSync(
+      path.join(here, '..', 'data', KEY + '.seed.json'), 'utf8'));
+  } catch { return null; }
 }
 
 const saveSoon = () => saveBlob(KEY, board);

@@ -22,12 +22,102 @@ import { Server } from 'socket.io';
 import { allCourses, getCourse } from './public/js/shared/coursegen.js';
 import { ratingsFor } from './public/js/shared/handicap.js';
 import { weatherFor } from './public/js/shared/weather.js';
+import { loadFriends, friendState, friendCode, requestFriend, acceptFriend,
+         declineFriend, removeFriend, blockPlayer, unblockPlayer,
+         toggleFavourite, friendsOf, areFriends } from './server/friends.js';
 
 /* Course rating and slope, computed once per course and kept. The geometry
    is a pure function of the seed, so these cannot change while the process
    is up — and recomputing them for every player at the end of every round
    would walk nine holes of hazards eight times for an answer that never
    moves. */
+/* Who a player's friends ARE, as cards: name, level, handicap, and where
+   they are right now. Presence comes from the live socket map rather than
+   from anything stored — "online" is only ever a claim about this instant. */
+function friendPeople(pid) {
+  const out = [];
+  for (const fid of friendsOf(pid)) {
+    const p = publicProfile(fid);
+    const live = liveOf(fid);
+    out.push({
+      pid: fid,
+      name: nameOf(fid),
+      level: p.level, index: p.index ?? null, rating: p.rating,
+      rounds: p.rounds, best: p.best ?? null,
+      online: !!live,
+      where: live?.where || null,
+      room: live?.joinable ? live.room : null
+    });
+  }
+  // favourites first, then online, then by level
+  const fav = new Set(friendState(pid).favourites);
+  out.sort((a, b) =>
+    (fav.has(b.pid) - fav.has(a.pid)) || (b.online - a.online) || (b.level - a.level));
+  for (const f of out) f.fav = fav.has(f.pid);
+  return out;
+}
+
+/** Where a player is, if they are connected at all. */
+function liveOf(pid) {
+  /* Two places a connection can be known, and both have to be checked.
+
+     `sockets` only holds players BOUND TO A ROOM. Somebody sitting in the
+     clubhouse or on the front page has never been bound — they identified
+     with profile:me, which puts the id on socket.data and nowhere else. The
+     first version scanned only the room map, so every friend who was not
+     mid-round showed as offline, which is most of them most of the time. */
+  for (const sk of io.sockets.sockets.values()) {
+    if (sk.data?.pid === pid && !sockets.get(sk.id)) {
+      return { where: 'In the menu', room: null, joinable: false };
+    }
+  }
+  for (const ref of sockets.values()) {
+    if (ref.pid !== pid) continue;
+    const room = ref.code ? rooms.get(ref.code) : null;
+    if (!room) return { where: 'In the menu', room: null, joinable: false };
+    const c = BIOMES[room.courseId];
+    return {
+      where: room.state === 'lobby'
+        ? `Waiting in a lobby${c ? ' at ' + c.name : ''}`
+        : `${c ? c.name : 'Playing'} · hole ${room.holeIndex + 1}`,
+      room: room.code,
+      /* Joinable only if there is a seat AND the round has not started —
+         dropping somebody into hole six of a round they did not play is
+         not joining a friend, it is ruining a scorecard. */
+      joinable: room.state === 'lobby' && room.players.length < MAX_PLAYERS
+    };
+  }
+  return null;
+}
+
+const nameOf = pid => {
+  for (const ref of sockets.values()) if (ref.pid === pid && ref.name) return ref.name;
+  return getProfile(pid).name || 'Golfer';
+};
+
+/* `name` on a room player is the live one and wins; the profile copy is the
+   fallback that makes an offline friend readable. */
+
+/* friends.js stores edges and nothing else — no names, because a name is
+   not a property of a friendship and storing a copy of one is storing a
+   stale copy of one. The panel needs them, so they are attached here, from
+   the profile, at the moment of sending. */
+function decorate(pid) {
+  const st = friendState(pid);
+  st.pending = st.pending.map(q => ({ ...q, name: nameOf(q.pid) }));
+  return st;
+}
+
+/** Push a fresh friends payload to one player, if they are connected. */
+function pushFriends(pid) {
+  if (!pid) return;
+  for (const [sid, ref] of sockets) {
+    if (ref.pid !== pid) continue;
+    io.to(sid).emit('friends:state',
+      { state: decorate(pid), people: friendPeople(pid) });
+  }
+}
+
 const _ratings = new Map();
 const courseRatings = id => {
   if (!_ratings.has(id)) _ratings.set(id, ratingsFor(getCourse(id)));
@@ -41,7 +131,7 @@ import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile,
-         worldRanking, worldPlace, handicapRanking, handicapPlace, levelRanking,
+         worldRanking, worldPlace, handicapRanking, handicapPlace, levelRanking, rememberName,
          weeklyGainers, seasonBoard, courseBoard } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
 import { EMOTES, meleeById } from './public/js/client/celebrations.js';
@@ -83,6 +173,7 @@ calibrateCarries();
    rather than fired and forgotten. */
 await loadProfiles();
 await loadRecords();
+await loadFriends();
 /* Say it out loud when the board cannot survive a deploy. Without a database
    the records live in a file, and a host with no persistent disk (Render's
    free tier, for one) discards it every time you push. Records set today will
@@ -378,6 +469,9 @@ function rollWind(room) {
 }
 
 function addPlayer(room, pid, name, spectator) {
+  // every route into a room passes through here, so this is the one place
+  // that has to remember the name for the friends list to read later
+  rememberName(pid, name);
   const used = new Set(room.players.map(p => p.color));
   const col = BALL_COLORS.find(c => !c.lockRating && !used.has(c.hex))
     || BALL_COLORS.find(c => !c.lockRating) || BALL_COLORS[0];
@@ -775,6 +869,7 @@ io.on('connection', socket => {
     let p = room.players.find(x => x.pid === pid);
     if (p) {
       p.name = cleanName(data?.name);
+      rememberName(pid, p.name);
       assignTeams(room);  // a returning player may have lost their side
       bind(room, p);      // ensureContinuable inside covers a frozen room
       reply({ ok: true, code, pid, state: snapshot(room), rejoined: true });
@@ -956,6 +1051,10 @@ io.on('connection', socket => {
     // the bag — is deliberately OUTSIDE any room, so room membership cannot be
     // the only way we know a player's identity.
     socket.data.pid = pid;
+    // The clubhouse is outside any room, so this is where an offline-capable
+    // name has to be captured too — a friends list that only learns names
+    // from rooms shows "Golfer" for everybody who has not played today.
+    if (d?.name) rememberName(pid, cleanName(d.name));
     // A player we have never seen may be a genuinely new player, or the same
     // player after this host wiped its disk on a deploy.  seedProfile tells
     // those apart safely: it only ever fills a blank, and only within clamps.
@@ -1144,6 +1243,47 @@ io.on('connection', socket => {
       ratings: Object.fromEntries(COURSE_ORDER.map(id => [id, courseRatings(id)])),
       me: pid ? { world: worldPlace(pid), handicap: handicapPlace(pid) } : null
     });
+  });
+
+  /* ═══════════════════════════════════════════════════ FRIENDS ═══════
+     One handler, an action name and a payload, because eleven separate
+     socket events for eleven verbs on the same graph is eleven places to
+     forget the pid check. Every branch below re-reads the pid from the
+     socket rather than trusting anything the client sent — the client
+     supplies WHO IT WANTS TO ACT ON, never who it is. */
+  socket.on('friends:do', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || socket.data?.pid || null;
+    if (!pid) return ack({ error: 'Not connected.' });
+    const act = String(d?.act || '');
+    const other = typeof d?.pid === 'string' ? d.pid.slice(0, 64) : null;
+
+    /* Redeeming a code is the one action an attacker would want to run in a
+       loop, so it is the one that is limited. Eight characters of a
+       31-letter alphabet is 850 billion; at six tries a minute that is not a
+       search anybody finishes, and a real player redeeming one code has
+       never needed a seventh attempt. */
+    if (act === 'request') {
+      const now = Date.now();
+      const gate = socket.data._fr || (socket.data._fr = []);
+      while (gate.length && now - gate[0] > 60000) gate.shift();
+      if (gate.length >= 6) return ack({ error: 'Too many tries. Wait a minute.' });
+      gate.push(now);
+      const r = requestFriend(pid, d?.code, d?.note);
+      if (r.ok && r.to) pushFriends(r.to);
+      return ack({ ...r, state: decorate(pid), people: friendPeople(pid) });
+    }
+
+    let r = { ok: true };
+    if (act === 'accept') { r = acceptFriend(pid, other); if (r.ok) pushFriends(other); }
+    else if (act === 'decline') r = declineFriend(pid, other, !!d?.block);
+    else if (act === 'remove') { r = removeFriend(pid, other); pushFriends(other); }
+    else if (act === 'block') { r = blockPlayer(pid, other); pushFriends(other); }
+    else if (act === 'unblock') r = unblockPlayer(pid, other);
+    else if (act === 'favourite') r = toggleFavourite(pid, other);
+    else if (act !== 'state') return ack({ error: 'Unknown action.' });
+
+    ack({ ...r, state: decorate(pid), people: friendPeople(pid) });
   });
 
   socket.on('rooms:open', (d, ack) => {

@@ -275,9 +275,23 @@
 
     <!-- friends / online -->
     <div class="lp-pane" data-pane="friends">
+      <!-- YOUR FRIENDS. Real, durable, and keyed on the same id your level
+           and coins already live on — no sign-up. -->
+      <div class="lp-block">
+        <div class="fr-head">
+          <h5>Your friends <span class="fr-badge" id="frBadge" hidden>0</span></h5>
+          <button class="btn mini" id="frMyCode" title="Your friend code — give it to somebody">My code</button>
+        </div>
+        <div class="fr-add">
+          <input id="frCode" type="text" maxlength="9" placeholder="FRIEND CODE" autocomplete="off" spellcheck="false">
+          <button class="btn" id="frAdd">Add</button>
+        </div>
+        <p class="err tiny" id="frErr"></p>
+        <div class="fr-list" id="frList"></div>
+      </div>
       <div class="onlinenow" id="onlineNow" hidden></div>
       <div class="lp-block">
-        <h5>Join with a code</h5>
+        <h5>Join with a room code</h5>
         <div class="lp-join">
           <input id="inpCode" type="text" maxlength="5" placeholder="ABCD" autocomplete="off" spellcheck="false" class="code">
           <button class="btn" id="btnJoin">Join</button>
