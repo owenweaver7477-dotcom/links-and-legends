@@ -621,6 +621,21 @@ HUD.renderShop = (prof, onBuy) => {
   el.shopList.appendChild(grid);
   const coins = prof?.coins || 0;
 
+  /* One delegated listener rather than one per card. The preview follows
+     the pointer, so browsing the list IS browsing the models — there is no
+     separate "preview" action to discover. */
+  if (!grid.dataset.wired) {
+    grid.dataset.wired = '1';
+    const show = e => {
+      const card = e.target.closest('[data-view]');
+      if (!card) return;
+      try { HUD.previewShopItem(JSON.parse(card.dataset.view)); } catch { /* ignore */ }
+    };
+    grid.addEventListener('pointerover', show);
+    grid.addEventListener('focusin', show);
+    grid.addEventListener('click', show);
+  }
+
   if (shopTab === 'crew') {
     const crew = prof?.crew || {};
     for (const [key, c] of Object.entries(CADDIES)) {
@@ -628,6 +643,8 @@ HUD.renderShop = (prof, onBuy) => {
       const cost = caddieCost(lvl);
       const card = document.createElement('div');
       card.className = 'shopcard caddie' + (lvl >= CADDIE_MAX ? ' owned' : '');
+      card.dataset.view = JSON.stringify({ kind: 'item', hex: '#e8c15a',
+        name: c.name, sub: c.stat });
       const pips = Array.from({ length: CADDIE_MAX }, (_, i) =>
         `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
       card.innerHTML = `
@@ -678,6 +695,8 @@ HUD.renderShop = (prof, onBuy) => {
       const nxt = CLUB_TIERS[tier + 1];
       const nc = document.createElement('div');
       nc.className = 'shopcard';
+      nc.dataset.view = JSON.stringify({ kind: 'club', key: 'DR', tier: tier + 1,
+        name: nxt.name, sub: 'The next set up' });
       nc.innerHTML = `<span class="sc-art">${clubSvg(nxt.look, 46)}</span>
         <b>${escapeHtml(nxt.name)}</b><span class="sc-blurb">${escapeHtml(nxt.blurb)}</span>
         <span class="cad-now">Refinements reset on upgrade — a new set starts raw</span>`;
@@ -702,6 +721,19 @@ HUD.renderShop = (prof, onBuy) => {
       const blocked = prof ? purchaseBlocked(key, { coins, gear }) : 'Join first.';
       const card = document.createElement('div');
       card.className = 'shopcard' + (owned ? ' owned' : '');
+      /* Which model to turn: a ball for the ball upgrades, the matching club
+         for irons, woods and the putter, and a crate for anything else.
+         Driven off the SLOT rather than the item name, so a new item in an
+         existing slot gets a preview without anybody remembering to add one. */
+      const viewFor = {
+        ball: { kind: 'ball', hex: '#f6f9f4' },
+        irons: { kind: 'club', key: 'I7' },
+        woods: { kind: 'club', key: 'DR' },
+        putter: { kind: 'club', key: 'PT' },
+        cart: { kind: 'item', hex: '#7fb6dd' }
+      }[it.slot] || { kind: 'item', hex: '#6fce8a' };
+      card.dataset.view = JSON.stringify({ ...viewFor, tier: it.tier,
+        name: it.name, sub: it.blurb });
       card.innerHTML = `<b>${escapeHtml(it.name)}</b><span class="sc-blurb">${escapeHtml(it.blurb)}</span>`;
       const btn = document.createElement('button');
       btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
@@ -1113,6 +1145,13 @@ HUD.showClubhouseTab = (name) => {
      something to pull down for somebody who came to buy a putter. */
   if (name === 'ranks') HUD.onBoards?.(null);
   if (name === 'world') HUD.onWorldTab?.();
+  if (name === 'rewards') HUD.bindLevelTrack?.();
+  /* The turntable starts on the first thing in the list rather than empty —
+     an empty stage next to a full list reads as broken, not as waiting. */
+  if (name === 'shop') {
+    const first = document.querySelector('#shopList [data-view]');
+    if (first) { try { HUD.previewShopItem(JSON.parse(first.dataset.view)); } catch {} }
+  }
 };
 
 /* ------------------------------------------------------------- the world --- */
@@ -1598,6 +1637,7 @@ import {
   outfitStats, spinWord, outfitById
 } from '../shared/wardrobe.js';
 import { decalTexture } from './decals.js';
+import { showItem as showShopItem } from './shopview.js';
 import { weatherEffects, clockText } from '../shared/weather.js';
 
 /** Set by main.js. Receives a partial look. */
@@ -2115,4 +2155,18 @@ HUD.bindBoardsScreen = () => {
     const b = e.target.closest('.hktab');
     if (b) HUD.showBoardTab(b.dataset.bd);
   });
+};
+
+/* The turntable beside the shop list. `kind` decides which model is built —
+   see shopview.js. The caption is here rather than in the canvas because
+   text in a WebGL canvas is a texture nobody can select or translate. */
+HUD.previewShopItem = what => {
+  const cv = document.getElementById('shopCanvas');
+  if (!cv || !what) return;
+  showShopItem(cv, what);
+  const cap = document.getElementById('shopCap');
+  if (cap) {
+    cap.innerHTML = `<b>${escapeHtml(what.name || '')}</b>` +
+      (what.sub ? `<small>${escapeHtml(what.sub)}</small>` : '');
+  }
 };

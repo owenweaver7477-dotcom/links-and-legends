@@ -2288,3 +2288,18 @@ body.side-open .lp-play-fixed { opacity: .5; }
   .lv-node { width: 74px; }
   .lv-what { display: none; }
 }
+
+/* ── the pro shop, with the thing on sale actually shown ─────────────── */
+.shopwrap { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }
+.shopview { position: relative; border-radius: 15px; overflow: hidden;
+  background: linear-gradient(165deg, rgba(30,52,40,.85), rgba(10,18,14,.9));
+  border: 1px solid rgba(255,255,255,.09); aspect-ratio: 3 / 4; }
+.shopview canvas { width: 100%; height: 100%; display: block; }
+.shopview-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px;
+  background: linear-gradient(to top, rgba(4,10,8,.92), rgba(4,10,8,0)); }
+.shopview-cap b { display: block; font-size: 13.5px; }
+.shopview-cap small { display: block; font-size: 11px; color: #9fbaa6; }
+@media (max-width: 700px) {
+  .shopwrap { grid-template-columns: 1fr; }
+  .shopview { aspect-ratio: 16 / 9; max-height: 200px; }
+}
