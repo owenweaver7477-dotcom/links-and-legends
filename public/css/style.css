@@ -2189,3 +2189,23 @@ body.side-open .lp-play-fixed { opacity: .5; }
 .nm-suggest button { padding: 3px 8px; border-radius: 7px; font-size: 11px; cursor: pointer;
   background: rgba(111,206,138,.16); border: 1px solid rgba(111,206,138,.32); color: #cfe0d4; }
 .nm-suggest button:hover { background: rgba(111,206,138,.28); }
+
+/* ── invitations ─────────────────────────────────────────────────────── */
+.invites { position: fixed; z-index: 40; right: 14px; bottom: 14px;
+  display: flex; flex-direction: column; gap: 8px; width: min(310px, 84vw);
+  pointer-events: none; }
+.invite { pointer-events: auto; padding: 12px 13px; border-radius: 14px;
+  background: rgba(9,18,14,.94); border: 1px solid rgba(111,206,138,.40);
+  box-shadow: 0 14px 40px rgba(0,0,0,.55);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  animation: invIn .28s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes invIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+.invite b { display: block; font-size: 13px; }
+.invite small { display: block; font-size: 11px; color: #9fbaa6; margin-top: 2px; }
+.invite .inv-note { font-size: 11.5px; color: #cfe0d4; font-style: italic; margin-top: 5px; }
+.invite .inv-acts { display: flex; gap: 6px; margin-top: 9px; }
+.invite .inv-acts button { flex: 1; padding: 6px 8px; border-radius: 9px; font-size: 12px;
+  cursor: pointer; font-weight: 600;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); color: #cfe0d4; }
+.invite .inv-acts button.yes { background: #2f9e4f; border-color: #3fbb63; color: #fff; }
+.invite .inv-acts button:hover { filter: brightness(1.15); }

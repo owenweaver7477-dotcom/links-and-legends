@@ -1917,6 +1917,7 @@ HUD.renderFriends = (state, people) => {
       <span class="fr-nm"><b>${f.fav ? '★ ' : ''}${escapeHtml(f.name)}</b><small>${escapeHtml(sub)}</small></span>
       <span class="fr-acts">
         ${f.room ? `<button class="join" data-fr="join" data-room="${f.room}">Join</button>` : ''}
+        ${f.online && !f.room ? `<button data-fr="invite" data-pid="${f.pid}" title="Invite to your round">🏌️</button>` : ''}
         <button data-fr="favourite" data-pid="${f.pid}" title="${f.fav ? 'Unfavourite' : 'Favourite'}">${f.fav ? '★' : '☆'}</button>
         <button data-fr="remove" data-pid="${f.pid}" title="Remove">✕</button>
       </span></div>`);
@@ -1952,4 +1953,39 @@ HUD.bindFriends = () => {
 HUD.friendError = msg => {
   const el2 = document.getElementById('frErr');
   if (el2) el2.textContent = msg || '';
+};
+
+/* ═══════════════════════════════════════════════════ INVITATIONS ════════
+   A corner card, not a modal. An invitation that stops the game to demand
+   an answer is one people learn to dread; this sits out of the way, says who
+   and where, and goes when it is answered or when the round it points at
+   starts without you. */
+HUD.onInvite = () => {};
+
+HUD.renderInvites = list => {
+  const tray = document.getElementById('inviteTray');
+  if (!tray) return;
+  tray.innerHTML = (list || []).map(v => {
+    const mins = Math.max(0, Math.round((v.expires - Date.now()) / 60000));
+    return `<div class="invite">
+      <b>${escapeHtml(v.fromName)} invited you</b>
+      <small>${escapeHtml(v.courseName)} · ${escapeHtml(v.format)} · ${v.seats} players
+        · expires in ${mins} min</small>
+      ${v.note ? `<div class="inv-note">“${escapeHtml(v.note)}”</div>` : ''}
+      <div class="inv-acts">
+        <button class="yes" data-inv="${v.id}" data-yes="1">Join</button>
+        <button data-inv="${v.id}">Not now</button>
+      </div>
+    </div>`;
+  }).join('');
+};
+
+let invBound = false;
+HUD.bindInvites = () => {
+  if (invBound) return;
+  invBound = true;
+  document.getElementById('inviteTray')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-inv]');
+    if (b) HUD.onInvite(b.dataset.inv, !!b.dataset.yes);
+  });
 };

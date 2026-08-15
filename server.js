@@ -147,6 +147,36 @@ function friendBoardRows(pid) {
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
+/* pid -> [invite]. In memory on purpose: an invitation to a round that has
+   already teed off is not an invitation, so they die with the process the
+   same way the rooms they point at do. */
+const invites = new Map();
+const INVITE_TTL_MS = 10 * 60 * 1000;
+
+/** This player's invitations, minus the dead ones. */
+function liveInvites(pid) {
+  const now = Date.now();
+  const list = (invites.get(pid) || []).filter(x => {
+    if (x.expires < now) return false;
+    const room = rooms.get(x.room);
+    // an invite whose room is gone or already playing is not answerable
+    return !!room && room.state === 'lobby';
+  });
+  invites.set(pid, list);
+  return list;
+}
+
+function pushInvites(pid) {
+  for (const [sid, r] of sockets) {
+    if (r.pid === pid) io.to(sid).emit('invite:state', { invites: liveInvites(pid) });
+  }
+  for (const sk of io.sockets.sockets.values()) {
+    if (sk.data?.pid === pid && !sockets.get(sk.id)) {
+      sk.emit('invite:state', { invites: liveInvites(pid) });
+    }
+  }
+}
+
 /** Push a fresh friends payload to one player, if they are connected. */
 function pushFriends(pid) {
   if (!pid) return;
@@ -1379,6 +1409,76 @@ io.on('connection', socket => {
       socket.emit('profile', publicProfile(pid));
     }
     ack({ ...res, quote: renameQuote(pid), history: nameHistory(pid) });
+  });
+
+  /* ═══════════════════════════════════════════════ INVITATIONS ═══════
+     An invite is a room code plus a note, held for the invitee until they
+     answer or it expires. Not a persistent object in a store: an invitation
+     to a round that has already teed off is not an invitation, so they live
+     in memory and die with the room they point at. */
+  socket.on('invite:send', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || socket.data?.pid || null;
+    if (!pid) return ack({ error: 'Not connected.' });
+    const ref = sockets.get(socket.id);
+    const room = ref?.code ? rooms.get(ref.code) : null;
+    if (!room) return ack({ error: 'Host or join a round first, then invite.' });
+    if (room.state !== 'lobby') return ack({ error: 'That round has already started.' });
+
+    const to = Array.isArray(d?.pids) ? d.pids.slice(0, 3) : [];
+    const note = String(d?.note || '').slice(0, 50);
+    const sent = [];
+    for (const other of to) {
+      /* Only friends, and only friends who have not blocked you. An invite
+         system open to strangers is a spam system with a golf theme. */
+      if (!areFriends(pid, other) || hasBlocked(other, pid)) continue;
+      const inv = {
+        id: `${room.code}:${pid}:${Date.now()}`,
+        from: pid, fromName: nameOf(pid),
+        room: room.code, courseId: room.courseId,
+        courseName: BIOMES[room.courseId]?.name || room.courseId,
+        format: room.format || 'stroke',
+        seats: `${room.players.length}/${MAX_PLAYERS}`,
+        note, at: Date.now(), expires: Date.now() + INVITE_TTL_MS
+      };
+      const list = invites.get(other) || [];
+      // one live invite per inviter: three from the same person is spam
+      const kept = list.filter(x => x.from !== pid);
+      kept.push(inv);
+      invites.set(other, kept.slice(-8));
+      sent.push(nameOf(other));
+      pushInvites(other);
+    }
+    ack({ ok: true, sent });
+  });
+
+  socket.on('invite:list', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || socket.data?.pid || null;
+    ack({ invites: pid ? liveInvites(pid) : [] });
+  });
+
+  socket.on('invite:answer', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || socket.data?.pid || null;
+    if (!pid) return ack({ error: 'Not connected.' });
+    const list = invites.get(pid) || [];
+    const inv = list.find(x => x.id === d?.id);
+    invites.set(pid, list.filter(x => x.id !== d?.id));
+    pushInvites(pid);
+    if (!inv) return ack({ error: 'That invitation has gone.' });
+    if (!d?.accept) {
+      // the inviter is told, without being told why
+      for (const [sid, r] of sockets) {
+        if (r.pid === inv.from) io.to(sid).emit('toast',
+          { msg: `${nameOf(pid)} declined your invitation.`, kind: 'info' });
+      }
+      return ack({ ok: true, declined: true });
+    }
+    const room = rooms.get(inv.room);
+    if (!room) return ack({ error: 'That round is no longer there.' });
+    if (room.state !== 'lobby') return ack({ error: 'That round has already started.' });
+    ack({ ok: true, room: inv.room });
   });
 
   socket.on('rooms:open', (d, ack) => {

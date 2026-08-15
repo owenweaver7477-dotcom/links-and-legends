@@ -21,6 +21,7 @@
    rather than discovered later.
    ========================================================================= */
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 /* WHERE THE DATA LIVES.
@@ -40,6 +41,34 @@ let impl = null;          // the chosen backend
 let dirty = new Set();    // pids changed since the last flush
 let timer = null;
 
+/* ------------------------------------------------------- serialisation ---
+   Each profile is stringified ONCE and the result kept until that profile
+   changes. The flush then joins cached strings instead of walking the whole
+   store again.
+
+   This matters because JSON.stringify is synchronous and there is no way to
+   make it otherwise: at six thousand profiles it alone blocked the event
+   loop for 25 ms, on a debounce, after every hole. Eight players finishing a
+   hole changes eight profiles; re-serialising the other five thousand nine
+   hundred and ninety-two of them was the entire cost.
+
+   `touch(pid)` already told us exactly which ones changed — the file
+   backend simply never used it. */
+const jsonCache = new Map();      // pid -> its serialised form
+
+function serialise(rows) {
+  const parts = [];
+  for (const [pid, p] of rows) {
+    let j = jsonCache.get(pid);
+    if (j === undefined) {
+      j = JSON.stringify(p);
+      jsonCache.set(pid, j);
+    }
+    parts.push(JSON.stringify(pid) + ':' + j);
+  }
+  return '{' + parts.join(',') + '}';
+}
+
 /* ------------------------------------------------------------ the file --- */
 const fileStore = {
   name: 'json file',
@@ -49,10 +78,26 @@ const fileStore = {
     } catch { return []; }
   },
   async flush(rows) {
-    fs.mkdirSync(path.dirname(FILE), { recursive: true });
-    // whole-file write: the file backend is for one small server, and a
-    // partial write here would be far worse than a slightly wasteful one
-    fs.writeFileSync(FILE, JSON.stringify(Object.fromEntries(rows)), 'utf8');
+    /* ASYNC AND ATOMIC, and the async half is the one that was hurting.
+
+       This used to be writeFileSync. Node is single-threaded, so a
+       synchronous whole-file write blocks EVERY socket message for its
+       whole duration — measured at 29 ms with six thousand profiles, which
+       is what the live store had grown to. It fires on a debounce after
+       every hole for every player, and while it runs a player pressing
+       strike gets nothing: the server is not listening. "Everything has
+       gone really slow and sometimes I can't even hit my ball" is precisely
+       what a blocked event loop feels like from the outside.
+
+       Temp file plus rename, because a whole-file write that is interrupted
+       halfway leaves a truncated JSON file and every career in it is gone.
+       rename() is atomic on every filesystem this runs on: the store is
+       either the old one or the new one, never half of each. */
+    const dir = path.dirname(FILE);
+    await fsp.mkdir(dir, { recursive: true });
+    const tmp = FILE + '.tmp';
+    await fsp.writeFile(tmp, serialise(rows), 'utf8');
+    await fsp.rename(tmp, FILE);
   }
 };
 
@@ -133,7 +178,13 @@ export async function openStore(rowsInto) {
 }
 
 /** Mark a profile changed; the flush is debounced. */
-export function touch(pid) { if (pid) dirty.add(pid); }
+export function touch(pid) {
+  if (!pid) return;
+  dirty.add(pid);
+  // and drop the cached serialisation, so the next flush re-does this one
+  // and only this one
+  jsonCache.delete(pid);
+}
 
 /** Schedule a write of everything touched since the last one. */
 export function saveSoon(rows) {
@@ -247,8 +298,12 @@ export function saveBlob(key, value, debounce = 900) {
       console.error(`  store: blob "${key}" write failed —`, e.message);
     }
     try {
-      fs.mkdirSync(BLOB_DIR, { recursive: true });
-      fs.writeFileSync(path.join(BLOB_DIR, key + '.json'), JSON.stringify(value), 'utf8');
+      // same reasoning as the profile store above: never block the loop,
+      // never leave a half-written file behind
+      await fsp.mkdir(BLOB_DIR, { recursive: true });
+      const tmp = path.join(BLOB_DIR, key + '.json.tmp');
+      await fsp.writeFile(tmp, JSON.stringify(value), 'utf8');
+      await fsp.rename(tmp, path.join(BLOB_DIR, key + '.json'));
     } catch (e) { console.error(`  store: blob "${key}" file write failed —`, e.message); }
   }, debounce);
   t.unref?.();

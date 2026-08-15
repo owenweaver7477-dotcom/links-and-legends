@@ -91,6 +91,7 @@ export function playIntro(canvas, opts = {}) {
 
   return new Promise(resolve => {
     let raf = 0, t = 0, last = 0, done = false;
+    const guards = [];        // timers to clear when this ends, however it ends
     let W = 0, H = 0, S = 1;                    // css size and the world scale
     const particles = [];
     const trail = [];                           // ring of past ball positions
@@ -656,6 +657,7 @@ export function playIntro(canvas, opts = {}) {
     function finish() {
       if (done) return;
       done = true;
+      for (const g of guards) g();
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', size);
       window.removeEventListener('keydown', onKey, true);
@@ -707,6 +709,21 @@ export function playIntro(canvas, opts = {}) {
 
     window.addEventListener('keydown', onKey, true);
     canvas.addEventListener('pointerdown', finish);
+
+    /* THE FAILSAFE, and it is the important line in this file.
+
+       Every other way out of this animation — the end of the timeline, the
+       wall-clock guard, the skip — runs inside the frame callback. So all of
+       them need requestAnimationFrame to fire, and rAF does NOT fire in a
+       backgrounded tab. Open the game, click play, switch tabs for a minute:
+       the intro never finishes, `finish()` never runs, and the canvas stays
+       over the whole page at z-index 60 eating every click. The game looks
+       completely dead and it is not even slow.
+
+       setTimeout keeps running when rAF does not. This is the one exit that
+       cannot be starved. */
+    const failsafe = setTimeout(finish, reduced ? 900 : 6000);
+    guards.push(() => clearTimeout(failsafe));
 
     if (reduced) {
       // one frame of the finished picture, held briefly so it does not flash

@@ -382,6 +382,11 @@ async function leaveLanding(target = 'play') {
     });
     canvas.classList.add('out');
     setTimeout(() => { canvas.hidden = true; document.body.classList.remove('introing'); }, 520);
+    /* Belt and braces: the canvas is hidden here AND by the failsafe inside
+       playIntro. It sits at z-index 60 over the whole page, so the cost of
+       it being left up is every button in the game being dead — which is
+       worth two independent ways of taking it down. */
+    setTimeout(() => { canvas.hidden = true; document.body.classList.remove('introing'); }, 7000);
   }
 
   ambienceOk = true;
@@ -3146,10 +3151,37 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
         drawFriends(res);
       });
     }
+    if (act === 'invite') { HUD.onFriendInvite([d.pid]); return; }
     if (act === 'remove' && !confirm('Remove this friend?')) return;
     Net.friends(act, { pid: d.pid }, res => {
       if (res.error) return HUD.friendError(res.error);
       drawFriends(res);
+    });
+  };
+
+  /* ---- invitations ----------------------------------------------------- */
+  HUD.bindInvites();
+  const drawInvites = r => HUD.renderInvites(r?.invites || []);
+  Net.onInvites(drawInvites);
+  Net.invites(drawInvites);
+  HUD.onInvite = (id, accept) => {
+    Net.answerInvite(id, accept, res => {
+      if (res.error) return HUD.toast(res.error, 'warn', 3000);
+      if (!res.room) return;
+      /* Joining takes the same path a room code does, so an invite and a
+         pasted code cannot end up behaving differently. */
+      HUD.el.inpCode.value = res.room;
+      document.getElementById('btnJoin').click();
+    });
+  };
+
+  /* Inviting FROM the friends list. The friend has to be in a lobby-ready
+     state on the server; this just names them and lets the server refuse. */
+  HUD.onFriendInvite = pids => {
+    Net.invite(pids, '', res => {
+      if (res.error) return HUD.toast(res.error, 'warn', 4000);
+      HUD.toast(res.sent?.length ? `Invited ${res.sent.join(', ')}.`
+                                 : 'Nobody could be invited.', 'good', 3000);
     });
   };
 

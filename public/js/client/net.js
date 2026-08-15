@@ -122,19 +122,60 @@ Net.connect = async () => {
   Net.socket.on('scramble:gather', d => fire('gather', d));
 };
 
+/* ═══════════════════════════════════════ EVERY ASK GETS AN ANSWER ═══════
+   The single worst bug this client could have, and it had it.
+
+   `Net.socket?.emit(...)` with an ack callback does NOTHING AT ALL when the
+   socket is null — the optional chain skips the call, the callback is never
+   invoked, and whatever was waiting on it waits forever. And even with a
+   live socket, an ack that is lost in flight never arrives either.
+
+   The caller for Play now shows the loading screen and then waits for the
+   callback. So on a dropped connection — or one slow ack — the game sat on
+   "Walking to the first tee…" permanently, with every button behind it
+   unreachable. "Most of the buttons don't work" is exactly what that looks
+   like from the outside, and it is not a performance problem at all.
+
+   So: nothing asks the server anything without a deadline. `ask` guarantees
+   the callback runs exactly once, with an answer or with an error, whatever
+   the socket is doing. */
+function ask(event, payload, cb, ms = 8000) {
+  let done = false;
+  const settle = res => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    cb(res);
+  };
+  const timer = setTimeout(() => settle({
+    ok: false,
+    error: Net.socket?.connected
+      ? 'The server did not answer. Try again.'
+      : 'You are offline — reconnecting.'
+  }), ms);
+
+  if (!Net.socket) { settle({ ok: false, error: 'Not connected yet.' }); return; }
+  try {
+    Net.socket.emit(event, payload, res => settle(res || { ok: false, error: 'Empty reply.' }));
+  } catch {
+    settle({ ok: false, error: 'Could not reach the server.' });
+  }
+}
+Net.ask = ask;
+
 Net.create = (name, courseId, cb, format) => {
   Net.lastName = name;
-  Net.socket?.emit('room:create', { name, courseId, format, pid: Net.pid }, res => {
+  ask('room:create', { name, courseId, format, pid: Net.pid }, res => {
     if (res?.ok) Net.code = res.code;
-    cb(res || { ok: false, error: 'No response from the server.' });
+    cb(res);
   });
 };
 
 Net.join = (code, name, cb) => {
   Net.lastName = name;
-  Net.socket?.emit('room:join', { code, name, pid: Net.pid }, res => {
+  ask('room:join', { code, name, pid: Net.pid }, res => {
     if (res?.ok) Net.code = res.code;
-    cb(res || { ok: false, error: 'No response from the server.' });
+    cb(res);
   });
 };
 
@@ -182,30 +223,27 @@ Net.quickMatch = (format, region, cb) => {
 };
 
 /** The world ranking, and where we sit in it. */
-Net.ranking = cb => {
-  if (!Net.socket) return cb({ top: [], me: null });
-  Net.socket.emit('world:ranking', null, res => cb(res || { top: [], me: null }));
-};
+Net.ranking = cb => ask('world:ranking', null, res => cb(res.error ? { top: [], me: null } : res));
 
 /* ------------------------------------------------------------------ names ---
    Checking is free and runs as you type; claiming is the one that costs. */
-Net.checkName = (name, cb) => {
-  if (!Net.socket) return cb?.({ ok: false, reason: 'Not connected.' });
-  Net.socket.emit('name:check', { name }, res => cb?.(res || { ok: false }));
-};
-Net.claimName = (name, cb) => {
-  if (!Net.socket) return cb?.({ error: 'Not connected.' });
-  Net.socket.emit('name:claim', { name }, res => cb?.(res || { error: 'No answer.' }));
-};
+Net.checkName = (name, cb) => ask('name:check', { name },
+  res => cb?.(res.error ? { ok: false, reason: res.error } : res), 5000);
+Net.claimName = (name, cb) => ask('name:claim', { name }, res => cb?.(res));
+
+/* ------------------------------------------------------------ invitations ---
+   Sent to friends, answered once, and pushed rather than polled — an invite
+   that arrives thirty seconds late is an invite to a round that started. */
+Net.invite = (pids, note, cb) => ask('invite:send', { pids, note }, res => cb?.(res));
+Net.answerInvite = (id, accept, cb) => ask('invite:answer', { id, accept }, res => cb?.(res));
+Net.invites = cb => ask('invite:list', null, res => cb?.(res.error ? { invites: [] } : res), 5000);
+Net.onInvites = fn => Net.socket?.on('invite:state', fn);
 
 /* ---------------------------------------------------------------- friends ---
    One call for eleven verbs, matching the server's single handler. The
    client never says who it IS — only who it wants to act on. */
-Net.friends = (act, payload, cb) => {
-  if (!Net.socket) return cb?.({ error: 'Not connected.' });
-  Net.socket.emit('friends:do', { act, ...(payload || {}) },
-    res => cb?.(res || { error: 'No answer from the server.' }));
-};
+Net.friends = (act, payload, cb) =>
+  ask('friends:do', { act, ...(payload || {}) }, res => cb?.(res));
 /** Pushed when somebody accepts, removes or blocks you. */
 Net.onFriends = fn => Net.socket?.on('friends:state', fn);
 
@@ -213,8 +251,7 @@ Net.onFriends = fn => Net.socket?.on('friends:state', fn);
 Net.boards = (courseId, cb) => {
   const empty = { handicap: [], level: [], weekly: [], season: [],
                   course: { rows: [] }, ratings: {}, me: null };
-  if (!Net.socket) return cb(empty);
-  Net.socket.emit('world:boards', { course: courseId }, res => cb(res || empty));
+  ask('world:boards', { course: courseId }, res => cb(res.error ? empty : res));
 };
 
 /** Who is online right now.  Polled from the menu; never while playing. */
