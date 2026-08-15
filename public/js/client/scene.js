@@ -367,6 +367,7 @@ export class GolfScene {
 
     /* ---- the world beyond the course ---- */
     g.add(this._buildHorizon(hole, bio));
+    g.add(this._buildBackdrop(hole, terrain, bio));
 
     /* ---- clouds ---- */
     this.clouds = this._buildClouds(hole, bio);
@@ -1958,6 +1959,120 @@ export class GolfScene {
     p.mat.opacity = 0.30 * Math.max(0, 1 - age / 30);
   }
 
+  /* ═══════════════════════════════════════════════ THE BACKDROP ═══════
+     What is out there, beyond the golf.
+
+     The surrounding land already rolls and there is a treeline on the
+     horizon, and it was still empty — because rolling green ground with
+     trees on it is the same in Iceland as it is in Arizona. Nothing said
+     WHERE you were. Look up from a tee shot on any of the eight courses and
+     the middle distance was interchangeable.
+
+     So each biome gets landforms: mesas in the desert, peaks in the Alps, a
+     volcano cone on Kyushu, dunes and sea on a links, cliffs on a fjord.
+     Big, simple, and far away — these sit between 1.2 and 3 km out, well
+     past anything playable, so they are silhouettes against the sky and
+     nothing more. A silhouette is all the eye wants at that distance and it
+     costs a few hundred triangles.
+
+     Deterministic from the hole seed, so the mountain you played under
+     yesterday is in the same place today, and so every client in a room
+     sees the same skyline. */
+  _buildBackdrop(hole, T, bio) {
+    const g = new THREE.Group();
+    g.name = 'backdrop';
+    const spec = BACKDROPS[bio.id];
+    if (!spec || (this.q?.scenery ?? 1) < 0.4) return g;
+
+    const rnd = mulberry32((hole.terrainSeed ^ 0x8ACD) >>> 0);
+    const b = hole.bounds;
+    const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+    const rim = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) * 0.5;
+    /* Base height: the far surround settles around here, so a landform
+       planted at 0 would float or sink depending on the biome's relief. */
+    const baseY = -bio.relief * 0.6;
+
+    const mat = (hex, op = 1) => {
+      const m = new THREE.MeshLambertMaterial({
+        color: new THREE.Color(hex), flatShading: true,
+        transparent: op < 1, opacity: op
+      });
+      return m;
+    };
+
+    /* One cone or wedge. Low-poly on purpose: at two kilometres a
+       twelve-sided mountain and a two-hundred-sided one are the same
+       picture, and one of them is free. */
+    const peak = (x, z, r, h, colour, sides = 7, tilt = 0) => {
+      const geo = new THREE.ConeGeometry(r, h, sides, 1);
+      const m = new THREE.Mesh(geo, mat(colour));
+      m.position.set(x, baseY + h * 0.5 - h * 0.12, z);
+      m.rotation.y = rnd() * Math.PI * 2;
+      if (tilt) m.rotation.z = (rnd() - 0.5) * tilt;
+      return m;
+    };
+    const slab = (x, z, w, h, d, colour) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(colour));
+      m.position.set(x, baseY + h * 0.5, z);
+      m.rotation.y = rnd() * Math.PI * 2;
+      return m;
+    };
+
+    for (let i = 0; i < spec.count; i++) {
+      /* Spread around the whole horizon rather than clustered: a skyline
+         with a gap in it is a skyline you notice the edge of. */
+      const a = (i / spec.count) * Math.PI * 2 + (rnd() - 0.5) * 0.55;
+      const dist = rim * (spec.near + rnd() * (spec.far - spec.near));
+      const x = cx + Math.sin(a) * dist, z = cz + Math.cos(a) * dist;
+      const scale = spec.size[0] + rnd() * (spec.size[1] - spec.size[0]);
+      const colour = spec.colours[(rnd() * spec.colours.length) | 0];
+
+      if (spec.kind === 'peak') {
+        const m = peak(x, z, scale * 0.62, scale, colour, 7, 0.06);
+        g.add(m);
+        /* Snow on the tall ones. Not on all of them — a range where every
+           summit is white reads as a Christmas card, and the snowline is a
+           height, which is the point. */
+        if (scale > spec.snowAbove) {
+          const cap = peak(x, z, scale * 0.62 * 0.34, scale * 0.34, '#e8eef4', 7);
+          cap.position.y = baseY + scale * 0.88 - scale * 0.12;
+          g.add(cap);
+        }
+      } else if (spec.kind === 'mesa') {
+        // flat-topped: a cone with its point cut off is a butte
+        const geo = new THREE.CylinderGeometry(scale * 0.42, scale * 0.66, scale, 6, 1);
+        const m = new THREE.Mesh(geo, mat(colour));
+        m.position.set(x, baseY + scale * 0.5, z);
+        m.rotation.y = rnd() * Math.PI * 2;
+        g.add(m);
+      } else if (spec.kind === 'dune') {
+        const geo = new THREE.SphereGeometry(scale, 9, 5, 0, Math.PI * 2, 0, Math.PI * 0.5);
+        const m = new THREE.Mesh(geo, mat(colour));
+        m.position.set(x, baseY - scale * 0.12, z);
+        m.scale.set(1.6 + rnd() * 0.8, 0.34 + rnd() * 0.2, 1.2);
+        m.rotation.y = rnd() * Math.PI * 2;
+        g.add(m);
+      } else {
+        g.add(slab(x, z, scale * (1.2 + rnd()), scale, scale * 0.7, colour));
+      }
+    }
+
+    /* A sea, where there should be one. A flat plane far out and slightly
+       below the land, so it reads as water meeting the horizon rather than
+       as a blue field — the fog does the rest of the work. */
+    if (spec.sea) {
+      const seaGeo = new THREE.PlaneGeometry(rim * 90, rim * 90);
+      seaGeo.rotateX(-Math.PI / 2);
+      const sea = new THREE.Mesh(seaGeo, new THREE.MeshLambertMaterial({
+        color: new THREE.Color(spec.sea), transparent: true, opacity: 0.92
+      }));
+      sea.position.set(cx, baseY - bio.relief * 1.5, cz);
+      sea.renderOrder = -1;
+      g.add(sea);
+    }
+    return g;
+  }
+
   /** Called by main.js when a round's weather is known. */
   setWeather(w) {
     const changed = (w?.condition || null) !== (this.weather?.condition || null)
@@ -2184,6 +2299,31 @@ function normaliseCanopy(species, parts) {
    lines later by setRGB(1,1,1). The tint has to ride the same channel the
    colour does. */
 let SEASON_TINT = null;
+
+/* What sits on each course's horizon. Distances are multiples of the hole's
+   own radius, so a long hole gets its skyline further out and the sense of
+   scale holds. `size` is in metres. */
+const BACKDROPS = {
+  parkland: { kind: 'peak', count: 9,  near: 3.0, far: 6.5, size: [70, 150],
+              snowAbove: 999, colours: ['#5d7a63', '#4e6b56', '#68866e'] },
+  links:    { kind: 'dune', count: 14, near: 2.2, far: 5.0, size: [40, 95],
+              snowAbove: 999, colours: ['#8f9a6a', '#9caa76', '#7d8a5e'],
+              sea: '#3f6f88' },
+  desert:   { kind: 'mesa', count: 11, near: 2.6, far: 6.0, size: [90, 220],
+              snowAbove: 999, colours: ['#a4674a', '#8f5a41', '#b0755a', '#7d4c38'] },
+  alpine:   { kind: 'peak', count: 12, near: 2.4, far: 6.5, size: [180, 420],
+              snowAbove: 250, colours: ['#6b7784', '#5a6672', '#7b8794'] },
+  tropical: { kind: 'peak', count: 7,  near: 3.2, far: 6.0, size: [80, 190],
+              snowAbove: 999, colours: ['#3f7a52', '#356b46', '#4a8a5e'],
+              sea: '#2f8aa8' },
+  sandbelt: { kind: 'dune', count: 10, near: 3.0, far: 6.0, size: [50, 110],
+              snowAbove: 999, colours: ['#8a8a56', '#7a7a4a', '#98986a'] },
+  volcanic: { kind: 'peak', count: 6,  near: 2.8, far: 5.5, size: [200, 460],
+              snowAbove: 340, colours: ['#4a4d52', '#3d4045', '#585c62'] },
+  fjord:    { kind: 'cliff', count: 13, near: 2.0, far: 4.8, size: [120, 300],
+              snowAbove: 999, colours: ['#4a4d52', '#3d4045', '#585c62', '#6a6e74'],
+              sea: '#2f4f66' }
+};
 
 function treeParts(species, bio) {
   const P = bio.palette;

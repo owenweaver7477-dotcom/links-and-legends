@@ -2335,3 +2335,90 @@ body.side-open .lp-play-fixed { opacity: .5; }
   background: rgba(255,255,255,.10); }
 .skin-bar i { display: block; height: 100%; border-radius: 2px; background: var(--c); }
 .skin-prog { font-size: 9px; color: #8fa596; }
+
+/* ═══════════════════════ THE OLDER SCREENS, BROUGHT UP TO DATE ══════════
+   The clubhouse, the boards and the world rating were built before the
+   landing page and the wardrobe set the house style, and they look it: flat
+   dark cards, hard borders, no depth and nothing that responds to a pointer.
+   Next to a glass panel over a live golf course they read as a different
+   product.
+
+   This is the same treatment applied consistently — a lifted surface, a
+   light source at the top, hover that moves, and one accent. Nothing here
+   changes a layout; it is the finish that was missing. */
+.card {
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgba(111,206,138,.10), rgba(0,0,0,0) 55%),
+    linear-gradient(180deg, rgba(22,37,28,.96), rgba(10,18,14,.98));
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 22px;
+  box-shadow: 0 28px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.03) inset;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.card h2 { letter-spacing: -.4px; }
+
+/* the tab bar: a rail with a lit pill, matching the wardrobe's */
+.hktabs { padding: 5px; border-radius: 15px;
+  background: rgba(0,0,0,.34); border-color: rgba(255,255,255,.06); }
+.hktab { border-radius: 11px; font-size: 12.5px;
+  transition: background .18s, color .18s, transform .18s; }
+.hktab:hover:not(.on) { transform: translateY(-1px); }
+.hktab.on {
+  background: linear-gradient(180deg, rgba(111,206,138,.30), rgba(47,138,74,.42));
+  color: #f2fbf4;
+  box-shadow: 0 4px 16px rgba(35,112,56,.38), 0 0 0 1px rgba(111,206,138,.34) inset;
+}
+
+/* section headings, everywhere: the same small caps the newer panels use */
+.lbl, .section > h4 {
+  font-size: 10px; letter-spacing: 1.8px; text-transform: uppercase;
+  color: #8fd0a2; font-weight: 700;
+}
+
+/* ── the world rating board ──────────────────────────────────────────── */
+#worldBox .wr-me {
+  padding: 14px 16px; border-radius: 16px; margin-bottom: 14px;
+  background: linear-gradient(100deg, rgba(232,193,90,.16), rgba(14,34,24,.30));
+  border: 1px solid rgba(232,193,90,.30);
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+#worldBox .wr-me .wr-rank { font-size: 30px; letter-spacing: -1px; }
+#worldBox .wrrow, #worldBox .wr-row {
+  padding: 9px 12px; border-radius: 11px; margin-bottom: 5px;
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.05);
+  transition: background .16s, border-color .16s, transform .16s;
+}
+#worldBox .wrrow:hover, #worldBox .wr-row:hover {
+  background: rgba(255,255,255,.07); border-color: rgba(111,206,138,.28);
+  transform: translateX(3px);
+}
+#worldBox .wrrow.me, #worldBox .wr-row.me {
+  background: rgba(111,206,138,.15); border-color: rgba(111,206,138,.40);
+}
+
+/* ── the career pane ─────────────────────────────────────────────────── */
+.career { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
+.career > * { padding: 12px 14px; border-radius: 13px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
+
+/* ── shop and record rows, same treatment ───────────────────────────── */
+.shopcard { border-radius: 14px; transition: transform .18s, border-color .18s, box-shadow .18s; }
+.shopcard:hover { transform: translateY(-2px); border-color: rgba(111,206,138,.34);
+  box-shadow: 0 12px 30px rgba(0,0,0,.35); }
+.shoptabs { gap: 5px; }
+.shoptab { border-radius: 10px; transition: background .16s, transform .16s; }
+.shoptab:hover:not(.on) { transform: translateY(-1px); }
+.recrow, .rec-row { border-radius: 11px; transition: background .16s, transform .16s; }
+.recrow:hover, .rec-row:hover { transform: translateX(3px); }
+
+/* the clubhouse and boards scroll inside a fixed frame rather than growing
+   the page — a card taller than the window with no scroll of its own is how
+   the controls tab used to run off the bottom */
+#screenShop .card, #screenBoards .card {
+  max-height: calc(100vh - 44px); overflow-y: auto;
+  scrollbar-width: thin;
+}
+#screenShop .card::-webkit-scrollbar, #screenBoards .card::-webkit-scrollbar { width: 7px; }
+#screenShop .card::-webkit-scrollbar-thumb,
+#screenBoards .card::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 4px; }
