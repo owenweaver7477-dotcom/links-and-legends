@@ -554,7 +554,16 @@
 
     <div class="section hkpane" data-pane="bag">
       <h4 class="lbl">Your bag <span id="bagCount"></span></h4>
-      <div class="bag" id="bagList"></div>
+      <!-- The same turntable the shop uses. Picking fourteen clubs out of
+           twenty-one from a list of abbreviations is a spreadsheet; seeing
+           the one you are hovering is the whole point of a bag. -->
+      <div class="shopwrap bagwrap">
+        <div class="shopview">
+          <canvas id="bagCanvas"></canvas>
+          <div class="shopview-cap" id="bagCap"></div>
+        </div>
+        <div class="bag" id="bagList"></div>
+      </div>
       <div class="bagbar">
         <button class="btn" id="btnBagReset">Reset to standard</button>
         <label class="unitsel"><input type="checkbox" id="optMetres"> distances in metres</label>

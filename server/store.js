@@ -155,7 +155,59 @@ function pgStore(url) {
  * server that boots with no profiles hands every returning player a brand new
  * career, which is far worse than being down.
  */
+/* ═══════════════════════════════════════════════ ONE WRITER ONLY ═══════
+   A lock file, and it exists because this has now destroyed data twice.
+
+   Two server processes pointed at the same data directory each hold their
+   own copy of every profile in memory and each flush the whole lot on a
+   debounce. The second one to start loads the file, the first one to flush
+   writes its older copy over the top, and everything that happened in
+   between is gone. It took the record board from six courses to two, and it
+   is exactly what "nothing saves" looks like from a player's seat: you buy
+   something, it works, you come back and it never happened.
+
+   Refusing to start is the right answer rather than trying to merge. A
+   merge would have to guess which of two divergent copies is correct, and
+   the honest answer is that nobody knows.
+
+   Stale locks are cleared: the pid in the file is checked, and a lock left
+   by a process that is no longer running is simply taken over. Without that,
+   one hard kill would leave the game unable to start at all — which is a
+   worse failure than the one being prevented. */
+function claimLock() {
+  const lockFile = path.join(DATA_DIR, '.writer.lock');
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const held = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
+    if (held?.pid && held.pid !== process.pid) {
+      let alive = false;
+      try { process.kill(held.pid, 0); alive = true; } catch { alive = false; }
+      if (alive) {
+        console.error('');
+        console.error('  ✖  ANOTHER SERVER IS ALREADY USING THIS DATA DIRECTORY');
+        console.error(`     process ${held.pid}, started ${new Date(held.at).toLocaleString()}`);
+        console.error(`     directory: ${DATA_DIR}`);
+        console.error('');
+        console.error('     Two servers on one data directory overwrite each');
+        console.error("     other's profiles — careers vanish. Stop the other one,");
+        console.error('     or set GOLF_DATA_DIR to give this one its own.');
+        console.error('');
+        process.exit(1);
+      }
+    }
+  } catch { /* no lock, or an unreadable one: ours now */ }
+  try {
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, at: Date.now() }), 'utf8');
+    const drop = () => { try { fs.unlinkSync(lockFile); } catch { /* already gone */ } };
+    process.on('exit', drop);
+    for (const sig of ['SIGINT', 'SIGTERM']) {
+      process.on(sig, () => { drop(); process.exit(0); });
+    }
+  } catch { /* read-only disk: the lock is advisory, carry on */ }
+}
+
 export async function openStore(rowsInto) {
+  claimLock();
   const url = process.env.DATABASE_URL;
   if (url) {
     try {

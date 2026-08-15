@@ -2518,7 +2518,7 @@ function renderClubhouse() {
   HUD.renderShop(prof, item => Net.buy(item));
   bagDraft = me()?.bag?.length ? me().bag.slice()
     : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true }));
-  HUD.renderBag(bagDraft, toggleClubInBag);
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0);
   HUD.setHomeCoins(prof?.coins ?? 0);
   HUD.setCoins(prof?.coins ?? 0);
   /* Back the career up where the PLAYER's platform keeps it.
@@ -2567,13 +2567,13 @@ function toggleClubInBag(key) {
     set.add(key);
   }
   bagDraft = normaliseBag([...set]);   // optimistic; the server echo confirms it
-  HUD.renderBag(bagDraft, toggleClubInBag);
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0);
   Net.prefs({ bag: bagDraft });
 }
 
 document.getElementById('btnBagReset').addEventListener('click', () => {
   bagDraft = normaliseBag(DEFAULT_BAG, { pad: true });
-  HUD.renderBag(bagDraft, toggleClubInBag);
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0);
   Net.prefs({ bag: bagDraft });
 });
 

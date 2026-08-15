@@ -2303,3 +2303,7 @@ body.side-open .lp-play-fixed { opacity: .5; }
   .shopwrap { grid-template-columns: 1fr; }
   .shopview { aspect-ratio: 16 / 9; max-height: 200px; }
 }
+
+/* the bag's turntable sits beside the club grid, same shape as the shop's */
+.bagwrap { align-items: start; }
+.bagwrap .bag { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 7px; }

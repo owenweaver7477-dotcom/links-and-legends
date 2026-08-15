@@ -391,7 +391,8 @@ HUD.renderColours = (room, myPid, onPick, rating = 0) => {
   }
 };
 
-HUD.renderBag = (bag, onToggle) => {
+HUD.renderBag = (bag, onToggle, clubTier = 0) => {
+  HUD.myClubTier = clubTier;
   el.bagList.innerHTML = '';
   const carried = new Set(bag);
   el.bagCount.textContent = `(${bag.length}/${BAG_SIZE})`;
@@ -403,7 +404,32 @@ HUD.renderBag = (bag, onToggle) => {
     const carry = c.putter ? '' : Math.round(dist(CARRY[c.key] || 0)) + ' ' + HUD.unit();
     b.innerHTML = `<b>${c.label}</b><span>${c.putter ? 'always in' : c.loft + '° · ' + carry}</span>`;
     if (!c.putter) b.addEventListener('click', () => onToggle(c.key));
+    /* Hovering a club shows it. Fourteen picks out of twenty-one from a list
+       of abbreviations is a spreadsheet; seeing the club you are about to
+       add or drop is what makes it a bag. */
+    const view = { kind: 'club', key: c.key, tier: HUD.myClubTier || 0,
+                   name: c.name || c.label,
+                   sub: c.putter ? 'Always in the bag' : `${c.loft}° · ${carry}` };
+    const show = () => HUD.previewBagClub(view);
+    b.addEventListener('pointerover', show);
+    b.addEventListener('focus', show);
     el.bagList.appendChild(b);
+  }
+  // open on the first club rather than on an empty stage
+  const first = CLUBS[0];
+  HUD.previewBagClub({ kind: 'club', key: first.key, tier: HUD.myClubTier || 0,
+    name: first.name || first.label, sub: `${first.loft}° · stock` });
+};
+
+/** The bag's own turntable — same renderer as the shop, different canvas. */
+HUD.previewBagClub = what => {
+  const cv = document.getElementById('bagCanvas');
+  if (!cv || !what) return;
+  showShopItem(cv, what);
+  const cap = document.getElementById('bagCap');
+  if (cap) {
+    cap.innerHTML = `<b>${escapeHtml(what.name || '')}</b>` +
+      (what.sub ? `<small>${escapeHtml(what.sub)}</small>` : '');
   }
 };
 

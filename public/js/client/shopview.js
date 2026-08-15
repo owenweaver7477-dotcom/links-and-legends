@@ -23,12 +23,16 @@ import { CLUBS, CLUB_BY_KEY } from '../shared/clubs.js';
 import { decalTexture } from './decals.js';
 import { DECALS } from '../shared/wardrobe.js';
 
-let R = null;          // renderer, scene, camera — built on first use
-let spin = 0;
+/* ONE RENDERER PER CANVAS. The shop and the bag are two different canvases
+   on two different panes, and a single module-level renderer bound to
+   whichever was asked for last meant opening the bag left the shop's
+   turntable frozen on its final frame — and vice versa. Keyed by the canvas
+   element, so each keeps its own scene, camera and spin. */
+const views = new Map();
 let raf = 0;
-let current = null;
 
 function build(canvas) {
+  let R = views.get(canvas);
   if (R) return R;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -52,7 +56,8 @@ function build(canvas) {
   const stage = new THREE.Group();
   scene.add(stage);
 
-  R = { renderer, scene, camera, stage, canvas };
+  R = { renderer, scene, camera, stage, canvas, spin: 0, current: null };
+  views.set(canvas, R);
   return R;
 }
 
@@ -163,8 +168,8 @@ export function showItem(canvas, what) {
   if (!canvas) return;
   const r = build(canvas);
   const sig = JSON.stringify(what);
-  if (sig === current) return;               // same item: keep it spinning
-  current = sig;
+  if (sig === r.current) return;             // same item: keep it spinning
+  r.current = sig;
 
   // clear the stage, freeing only what this module made
   for (const c of [...r.stage.children]) {
@@ -207,27 +212,33 @@ export function showItem(canvas, what) {
   r.camera.lookAt(0, 0, 0);
   r.camera.updateProjectionMatrix();
 
-  spin = 0;
+  r.spin = 0;
   start();
 }
 
 function frame() {
   raf = requestAnimationFrame(frame);
-  if (!R) return;
-  const c = R.canvas;
-  const w = c.clientWidth || 240, h = c.clientHeight || 320;
-  if (c.width !== w || c.height !== h) {
-    R.renderer.setSize(w, h, false);
-    R.camera.aspect = w / h;
-    R.camera.updateProjectionMatrix();
+  /* Every live turntable, not just the last one asked for. Both are cheap —
+     a dozen boxes each — and skipping the hidden one would mean tracking
+     which pane is open, which is a second source of truth about something
+     the DOM already knows. */
+  for (const R of views.values()) {
+    const c = R.canvas;
+    if (!c.isConnected || !c.clientWidth) continue;   // its pane is closed
+    const w = c.clientWidth, h = c.clientHeight || 240;
+    if (c.width !== w || c.height !== h) {
+      R.renderer.setSize(w, h, false);
+      R.camera.aspect = w / h;
+      R.camera.updateProjectionMatrix();
+    }
+    R.spin += 0.012;
+    R.stage.rotation.y = R.spin;
+    /* A slight nod as well as the turn. A pure Y spin is a lazy susan; the
+       tilt is what lets you see the sole of a club and the face of a badge
+       in the same revolution. */
+    R.stage.rotation.x = Math.sin(R.spin * 0.6) * 0.16;
+    R.renderer.render(R.scene, R.camera);
   }
-  spin += 0.012;
-  R.stage.rotation.y = spin;
-  /* A slight nod as well as the turn. A pure Y spin is a lazy susan; the
-     tilt is what lets you see the sole of a club and the face of a badge in
-     the same revolution. */
-  R.stage.rotation.x = Math.sin(spin * 0.6) * 0.16;
-  R.renderer.render(R.scene, R.camera);
 }
 
 export function start() { if (!raf) raf = requestAnimationFrame(frame); }
@@ -236,10 +247,11 @@ export function stop() { cancelAnimationFrame(raf); raf = 0; }
 /** Free the whole thing — the shop is closed. */
 export function disposeShopView() {
   stop();
-  if (!R) return;
-  R.scene.traverse(o => {
-    if (o.isMesh) { o.geometry.dispose(); if (!o.material.map) o.material.dispose(); }
-  });
-  R.renderer.dispose();
-  R = null; current = null;
+  for (const R of views.values()) {
+    R.scene.traverse(o => {
+      if (o.isMesh) { o.geometry.dispose(); if (!o.material.map) o.material.dispose(); }
+    });
+    R.renderer.dispose();
+  }
+  views.clear();
 }
