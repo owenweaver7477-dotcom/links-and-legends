@@ -23,7 +23,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const FILE = path.join(process.cwd(), 'data', 'profiles.json');
+/* WHERE THE DATA LIVES.
+   -------------------------------------------------------------------------
+   Overridable, and it has to be. The test suite starts real servers and
+   plays real rounds against them, and with a hard-coded path every one of
+   those wrote into the live store — five and a half thousand profiles named
+   `atk1` and `persist_prob`, most with no name and no rounds, all of them
+   eligible for the leaderboards. That is where the phantom golfers holding
+   records came from, and no amount of filtering fixes a test suite that
+   scribbles on production data. */
+const DATA_DIR = process.env.GOLF_DATA_DIR || path.join(process.cwd(), 'data');
+const FILE = path.join(DATA_DIR, 'profiles.json');
 const SAVE_DEBOUNCE = 800;
 
 let impl = null;          // the chosen backend
@@ -160,7 +170,7 @@ export const storeName = () => impl?.name || '(not open)';
    So it rides the same DATABASE_URL switch: a file when there is no
    database, a row in a tiny key-value table when there is.
    ========================================================================= */
-const BLOB_DIR = path.join(process.cwd(), 'data');
+const BLOB_DIR = DATA_DIR;
 let blobPool = null;
 
 async function blobPg() {

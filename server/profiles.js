@@ -406,7 +406,27 @@ export function colorAllowed(pid, hex) {
      leaderboard.
    ========================================================================= */
 const RANKED_MIN_ROUNDS = 5;
-const isBot = pid => /^bot\d|^scr\d|^demo/.test(String(pid));
+/* Ids the test suite invents. It has its own server and its own data
+   directory now, so nothing new arrives here — but three years of runs went
+   into the live store before that, and a board is not the place to discover
+   one was missed. Cheap, and it can only ever exclude. */
+const TEST_PID = /^(bot\d|scr\d|demo|shop[-_]|host[-_]|rec-|leave_|persist|atk\d|test[A-Z]|P[AB]$|softlock|xp[-_]|res[-_]|restore-|seed[-_]|Rec-)/;
+const isBot = pid => TEST_PID.test(String(pid));
+
+/**
+ * Is this profile a person we can name on a board?
+ *
+ * "Golfer" sitting at number one in the world was the visible half of a
+ * bigger problem: the socket tests connected to whatever was on port 3000,
+ * which in development is the live server, so every fake player they
+ * invented became a real profile. Those are gone now and the tests have
+ * their own server — but the rule stays, because a row nobody can identify
+ * is not a ranking, it is a gap with a number next to it.
+ *
+ * A name is the bar. Anybody who has played five rounds has been asked for
+ * one; anybody who never gave one is not who the board is for.
+ */
+const rankable = (pid, p) => !isBot(pid) && !!(p.name && p.name.trim());
 
 /* ═══════════════════════════════════════════════ THE RANKING BOARDS ═══
    Four ladders, and they exist because one ladder answers one question. A
@@ -424,11 +444,11 @@ const isBot = pid => /^bot\d|^scr\d|^demo/.test(String(pid));
 export function handicapRanking(limit = 100) {
   const rows = [];
   for (const [pid, p] of profiles) {
-    if (isBot(pid)) continue;
+    if (!rankable(pid, p)) continue;
     const idx = indexOf(p);
     if (idx === null) continue;                 // fewer than three carded rounds
     rows.push({
-      pid, name: p.name || 'Golfer',
+      pid, name: p.name,
       index: idx,
       level: levelFromXp(p.xp || 0).level,
       rounds: p.rounds || 0,
@@ -446,7 +466,7 @@ export function handicapPlace(pid) {
   if (mine === null) return { place: null, of: 0, index: null };
   let place = 1, of = 0;
   for (const [id, p] of profiles) {
-    if (isBot(id)) continue;
+    if (!rankable(id, p)) continue;
     const idx = indexOf(p);
     if (idx === null) continue;
     of++;
@@ -459,10 +479,10 @@ export function handicapPlace(pid) {
 export function levelRanking(limit = 100) {
   const rows = [];
   for (const [pid, p] of profiles) {
-    if (isBot(pid)) continue;
+    if (!rankable(pid, p)) continue;
     const lv = levelFromXp(p.xp || 0);
     if (lv.level < 2) continue;                 // level 1 is everybody
-    rows.push({ pid, name: p.name || 'Golfer', level: lv.level, xp: p.xp || 0,
+    rows.push({ pid, name: p.name, level: lv.level, xp: p.xp || 0,
                 rounds: p.rounds || 0 });
   }
   rows.sort((a, b) => b.xp - a.xp);
@@ -497,11 +517,11 @@ export function stampPeriods(p) {
 function periodBoard(baseKey, limit) {
   const rows = [];
   for (const [pid, p] of profiles) {
-    if (isBot(pid)) continue;
+    if (!rankable(pid, p)) continue;
     stampPeriods(p);
     const gained = (p.xp || 0) - (p[baseKey] || 0);
     if (gained <= 0) continue;
-    rows.push({ pid, name: p.name || 'Golfer', gained,
+    rows.push({ pid, name: p.name, gained,
                 level: levelFromXp(p.xp || 0).level });
   }
   rows.sort((a, b) => b.gained - a.gained);
@@ -523,11 +543,11 @@ export const seasonBoard = (limit = 100) => periodBoard('snBase', limit);
 export function courseBoard(courseId, limit = 50) {
   const rows = [];
   for (const [pid, p] of profiles) {
-    if (isBot(pid)) continue;
+    if (!rankable(pid, p)) continue;
     const e = p.byCourse?.[courseId];
     if (!e || e.n < 2) continue;                // one round is not form
     const vs = Math.round(e.vs * 10) / 10;
-    rows.push({ pid, name: p.name || 'Golfer', vs, rounds: e.n,
+    rows.push({ pid, name: p.name, vs, rounds: e.n,
                 best: e.best ?? null, tier: ratingTier(vs)?.id || null });
   }
   rows.sort((a, b) => a.vs - b.vs || b.rounds - a.rounds);
@@ -537,9 +557,9 @@ export function courseBoard(courseId, limit = 50) {
 export function worldRanking(limit = 50) {
   const rows = [];
   for (const [pid, p] of profiles) {
-    if (isBot(pid) || (p.rounds || 0) < RANKED_MIN_ROUNDS) continue;
+    if (!rankable(pid, p) || (p.rounds || 0) < RANKED_MIN_ROUNDS) continue;
     rows.push({
-      pid, name: p.name || 'Golfer',
+      pid, name: p.name,
       rating: Math.round(p.rating || 0),
       level: levelFromXp(p.xp || 0).level,
       rounds: p.rounds || 0,

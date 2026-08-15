@@ -7,15 +7,15 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test test/ && npm run verify:bundle",
-    "test:physics": "node test/physics.mjs",
-    "test:server": "node test/server-hardening.mjs",
-    "test:resilience": "node test/resilience.mjs",
-    "test:round": "node test/round.mjs",
+    "test": "node tools/test-server.mjs && npm run verify:bundle",
+    "test:physics": "GOLF_DATA_DIR=.test-data node test/physics.mjs",
+    "test:server": "GOLF_DATA_DIR=.test-data node test/server-hardening.mjs",
+    "test:resilience": "GOLF_DATA_DIR=.test-data node test/resilience.mjs",
+    "test:round": "GOLF_DATA_DIR=.test-data node test/round.mjs",
     "share": "node share.mjs",
-    "test:cart": "node test/cart.mjs",
+    "test:cart": "GOLF_DATA_DIR=.test-data node test/cart.mjs",
     "verify:bundle": "node tools/verify-bundle.mjs",
-    "test:portal": "node --test test/portal.test.mjs",
+    "test:portal": "GOLF_DATA_DIR=.test-data node --test test/portal.test.mjs",
     "migrate:db": "node tools/migrate-db.mjs"
   },
   "engines": {

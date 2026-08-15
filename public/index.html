@@ -249,6 +249,11 @@
         <span class="lp-txt"><b>Choose a course</b><small id="lpCourseName">Claude National</small></span>
         <span class="lp-arrow" aria-hidden="true">→</span>
       </button>
+      <button class="lp-item" data-panel="golfer">
+        <span class="lp-ico">👕</span>
+        <span class="lp-txt"><b>Your golfer</b><small>appearance, outfits and decals</small></span>
+        <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
       <button class="lp-item" data-go="clubhouse">
         <span class="lp-ico">🏌️‍♂️</span>
         <span class="lp-txt"><b>Clubhouse</b><small>your golfer, career and pro shop</small></span>
@@ -317,6 +322,29 @@
     <!-- course picker -->
     <div class="lp-pane" data-pane="course" hidden>
       <div class="cp-row" id="homeCourses"></div>
+    </div>
+
+    <!-- YOUR GOLFER. It lived inside the old home screen, which is now
+         hidden forever — so it was unreachable, and "I can't change the
+         appearance of anything" was exactly right. -->
+    <div class="lp-pane" data-pane="golfer" hidden>
+      <div class="lp-block">
+        <div class="hk-head">
+          <h5>Your character</h5>
+          <button class="btn mini" id="btnRandomLook" title="Surprise me">🎲</button>
+        </div>
+        <div class="charcard" id="charCard"></div>
+        <button class="btn wardrobe-btn" id="btnWardrobe">
+          <span class="wb-ico">👔</span>
+          <span class="wb-txt"><b>Open the wardrobe</b><small>outfits, decals and the full preview</small></span>
+          <span class="wb-arr" aria-hidden="true">→</span>
+        </button>
+      </div>
+      <div class="lp-block">
+        <h5>Quick change</h5>
+        <div class="looker" id="lookPicker"></div>
+        <p class="tiny">That's them on the tee — changes show up instantly.</p>
+      </div>
     </div>
   </aside>
 
@@ -399,19 +427,6 @@
   <div class="home-scrim" aria-hidden="true"></div>
   <div class="wordmark"><p class="wm-sub" id="wmSub"></p></div>
   <div class="venues" id="venueStrip"></div>
-  <div class="home-golfer">
-    <div class="hk-head">
-      <h4 class="lbl">Your character</h4>
-      <button class="btn mini" id="btnRandomLook" title="Surprise me">🎲</button>
-    </div>
-    <div class="charcard" id="charCard"></div>
-    <button class="btn wardrobe-btn" id="btnWardrobe">
-      <span class="wb-ico">👔</span>
-      <span class="wb-txt"><b>Open the wardrobe</b><small>outfits, decals and the full preview</small></span>
-      <span class="wb-arr" aria-hidden="true">→</span>
-    </button>
-    <div class="looker" id="lookPicker"></div>
-  </div>
   <div class="onlinenow" id="onlineNowLegacy" hidden></div>
 </div>
 

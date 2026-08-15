@@ -321,7 +321,7 @@ function landingFrame(dt) {
 /* The side panel. One pane at a time, closed by default, and it lives on
    the landing page rather than replacing it — which is the difference
    between a front door with rooms off it and a stack of screens. */
-const SIDE_TITLE = { friends: 'Friends & players online', course: 'Choose a course' };
+const SIDE_TITLE = { friends: 'Friends & players online', course: 'Choose a course', golfer: 'Your golfer' };
 function openSide(pane) {
   const side = HUD.el.lpSide;
   if (!side) return;
@@ -332,6 +332,7 @@ function openSide(pane) {
   for (const p of side.querySelectorAll('.lp-pane')) p.hidden = p.dataset.pane !== pane;
   document.body.classList.add('side-open');
   if (pane === 'friends') { refreshRoomsSafe(); loadFriendsSafe(); }
+  if (pane === 'golfer') drawLookSafe();
 }
 function closeSide() {
   const side = HUD.el.lpSide;
@@ -346,6 +347,7 @@ function closeSide() {
    the community legend. */
 let refreshRoomsSafe = () => {};
 let loadFriendsSafe = () => {};
+let drawLookSafe = () => {};
 
 /* Leaving the landing page.  The intro plays over the top of it and the
    destination screen is revealed underneath — so the animation is a
@@ -2447,6 +2449,7 @@ function drawLookPicker() {
     if (G.joined) Net.setLook(lookDraft);
   }, G.profile?.level ?? 1);
 }
+drawLookSafe = drawLookPicker;
 
 const LOOK_KEY = 'golf.look';
 const saveLook = look => { try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch { /* private mode */ } };
@@ -2682,21 +2685,25 @@ function stampRoomUrl(code) {
  * the room and starts the round in one click; hosting and joining are still
  * there for people who actually want company.
  */
-document.getElementById('btnPlay').addEventListener('click', () => {
+/* The one path onto a course, called by the legend and by the pinned
+   button. Two copies of this is how they got to disagree. */
+function startRoundNow() {
   HUD.homeError('');
   const btn = document.getElementById('btnPlay');
-  btn.disabled = true;                       // a double click must not make two rooms
+  if (btn?.disabled) return;                 // a double click must not make two rooms
+  if (btn) btn.disabled = true;
   HUD.show('load');
   HUD.loading('Walking to the first tee…');
   Net.create(nameValue(), pickedCourse, res => {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
     if (!res.ok) { HUD.show('landing'); return HUD.homeError(res.error); }
     G.joined = true; G.myPid = res.pid; G.room = res.state;
     stampRoomUrl(res.code);
     Net.start();                             // no lobby: tee off
     route();
   });
-});
+}
+document.getElementById('btnPlay')?.addEventListener('click', startRoundNow);
 
 document.getElementById('btnCreate').addEventListener('click', () => {
   HUD.homeError('');
@@ -3131,6 +3138,11 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
          this page is the whole point — "play with friends" used to mean
          leaving the front door for a screen of form fields. */
       if (b.dataset.panel) { openSide(b.dataset.panel); return; }
+      /* "Play now" STARTS A ROUND. It used to hand off to the old home
+         screen, where a second Play button did the actual work — but the
+         landing page IS the home screen now, so that handed off to the page
+         it was already on and the button did nothing at all. */
+      if (b.dataset.go === 'play') { closeSide(); startRoundNow(); return; }
       if (b.dataset.go) leaveLanding(b.dataset.go);
     });
     HUD.el.lpSideClose.addEventListener('click', () => closeSide());
