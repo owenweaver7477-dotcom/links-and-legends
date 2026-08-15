@@ -17,7 +17,7 @@ import { EMOTES, MELEES, meleesAt, meleeById } from './celebrations.js';
 import { UNLOCKS, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
-import { playIntro } from './intro.js';
+import { playIntro3D } from './intro3d.js';
 import { wearOutfit, normaliseCustom, outfitEffect } from '../shared/wardrobe.js';
 import { weatherText, weatherEffects } from '../shared/weather.js';
 import { tickHolo } from './decals.js';
@@ -357,6 +357,7 @@ let drawLookSafe = () => {};
    comes back tomorrow should get the whole thing again; a player who
    reloads twice in a minute should not). */
 let introBusy = false;
+let introStep = null;    // set while the opener is running; drives it per frame
 let ambienceOk = false;   // set at the first click: audio may not start before one
 async function leaveLanding(target = 'play') {
   if (introBusy) return;
@@ -366,40 +367,66 @@ async function leaveLanding(target = 'play') {
   let seen = false;
   try { seen = sessionStorage.getItem('lg_seen_intro') === '1'; } catch { /* private mode */ }
 
-  if (!seen && canvas) {
+  if (!seen) {
     try { sessionStorage.setItem('lg_seen_intro', '1'); } catch { /* private mode */ }
-    canvas.hidden = false;
-    canvas.classList.remove('out');
     document.body.classList.add('introing');
     /* The one gesture-gated moment in the game: a click got us here, so the
-       audio context may legally start, and the intro is where the ambience
-       belongs — it is the first thing that makes the page feel inhabited. */
+       audio context may legally start. */
     ambienceOk = true;
     Sound.ambience(true);
-    await playIntro(canvas, {
-      onStrike: () => Sound.strike({ type: 'wood' }, 1),
-      onImpact: () => Sound.bounce('green', 14)
+
+    /* THE OPENER IS THE REAL GAME NOW.
+
+       It used to be a 2D canvas, drawn because three.js might not be ready.
+       That reasoning expired: the landing page renders the real course
+       behind itself, so the renderer, the terrain and the avatars all exist
+       before anybody presses play. An ace on the third at Claude National,
+       shot from two hundred metres up, with six golfers on the green. */
+    const c3 = getCourse('parkland');
+    const h3 = c3.holes[2];                    // 147 yards, par 3
+    const T3 = terrainFor(h3, BIOMES.parkland);
+    G.course = c3; G.hole = h3; G.T = T3; G.bio = BIOMES.parkland;
+    /* The opener gets its OWN weather, and it is always the same: a clear
+       late afternoon. Everything else in this game rolls the sky from a
+       seed, which is right for a round and wrong for a trailer — the first
+       thing anybody ever sees cannot be a wet grey Tuesday because that is
+       what the dice said. 4:40 pm is low enough for long shadows and warm
+       light without being so late it goes orange. */
+    scene.setWeather({
+      season: 'summer', seasonName: 'Summer', condition: 'clear',
+      conditionName: 'Clear', icon: '☀️', hour: 16.7,
+      vis: 1, cloud: 0.16, wet: 0, rain: 0, snow: 0,
+      carry: 1, roll: 1, windMul: 0.8, grip: 1
     });
-    canvas.classList.add('out');
-    setTimeout(() => { canvas.hidden = true; document.body.classList.remove('introing'); }, 520);
-    /* Belt and braces: the canvas is hidden here AND by the failsafe inside
-       playIntro. It sits at z-index 60 over the whole page, so the cost of
-       it being left up is every button in the game being dead — which is
-       worth two independent ways of taking it down. */
-    setTimeout(() => { canvas.hidden = true; document.body.classList.remove('introing'); }, 7000);
+    scene.loadHole(h3, T3, BIOMES.parkland);
+    G.loadedKey = 'parkland:2';
+    menu.key = null;                           // the menu backdrop rebuilds after
+
+    await new Promise(res => {
+      playIntro3D(scene, h3, T3, {
+        onStrike: () => Sound.strike({ type: 'iron', loft: 28 }, 1),
+        onDrop: () => { Sound.holed(); Sound.celebrate(3); },
+        /* The intro drives itself off OUR frame loop rather than starting a
+           second one — two rAF loops rendering the same scene is a fight
+           over the camera nobody wins. */
+        onFrame: step => { introStep = step; }
+      }).then(() => { introStep = null; res(); });
+    });
+
+    document.body.classList.remove('introing');
+    scene.setWeather(G.weather || null);       // give the sky back to the round
+    menuBackdrop();                            // back to the landing aerial
   }
 
   ambienceOk = true;
-  G.screen = 'landing';
-  HUD.show('landing');
-  // replay the stagger so the menu ARRIVES rather than being there already
-  const home = HUD.el.screenHome;
-  home.classList.remove('revealing');
-  void home.offsetWidth;                       // restart the animation
-  home.classList.add('revealing');
-  setTimeout(() => home.classList.remove('revealing'), 900);
-
-  if (target && target !== 'play') openLegend(target);
+  /* Only re-show the front page for the legends that STAY on it. When the
+     caller is about to tee off, showing the landing page first is a flash
+     of the menu between the opener and the first tee. */
+  if (target !== 'play') {
+    G.screen = 'landing';
+    HUD.show('landing');
+    openLegend(target);
+  }
   introBusy = false;
 }
 
@@ -1291,6 +1318,9 @@ function frame(now) {
   feedAvatars();
   // the title screen: the course drifting behind the menu (and behind the
   // lobby, for a host who has not started yet)
+  /* The opener owns the camera and the scene while it runs, so it comes
+     before every other framing decision. */
+  if (introStep) { if (!introStep(dt)) introStep = null; return; }
   if (G.screen === 'landing' && menu.key && G.hole) { landingFrame(dt); return; }
   if (G.screen === 'wardrobe' && menu.key && G.hole) { wardrobeFrame(dt); return; }
   if (menu.key && G.hole && (!G.joined || G.room?.state === 'lobby')) { menuFrame(dt); return; }
@@ -3226,7 +3256,16 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
          screen, where a second Play button did the actual work — but the
          landing page IS the home screen now, so that handed off to the page
          it was already on and the button did nothing at all. */
-      if (b.dataset.go === 'play') { closeSide(); startRoundNow(); return; }
+      /* Play now runs the opener (once a session) and THEN tees off. These
+         two were fixed in separate commits and collided: making the legend
+         call startRoundNow directly cured "Play now does nothing" and
+         skipped the intro entirely, because the intro lived in the path it
+         had just stopped using. One await, one order, one place. */
+      if (b.dataset.go === 'play') {
+        closeSide();
+        leaveLanding('play').then(startRoundNow);
+        return;
+      }
       if (b.dataset.go) leaveLanding(b.dataset.go);
     });
     HUD.el.lpSideClose.addEventListener('click', () => closeSide());
