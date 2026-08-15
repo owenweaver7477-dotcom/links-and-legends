@@ -225,7 +225,11 @@
         <button class="btn mini" id="btnNotYou">Change</button>
       </div>
       <label class="field lp-name" id="nameField"><span>Your name</span>
-        <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
+        <input id="inpName" type="text" maxlength="20" placeholder="e.g. Owen" autocomplete="off" spellcheck="false">
+        <!-- Checked as you type. A name is claimed for good, so finding out
+             it was taken AFTER pressing play is the wrong moment. -->
+        <span class="nm-state" id="nameState"></span>
+        <span class="nm-suggest" id="nameSuggest"></span></label>
     </div>
 
     <!-- The legends. Each one either GOES somewhere or opens the panel on

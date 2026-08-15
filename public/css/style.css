@@ -2178,3 +2178,14 @@ body.side-open .lp-play-fixed { opacity: .5; }
 .rkrow.pal { background: rgba(232,193,90,.10); border-color: rgba(232,193,90,.26); }
 .rkstar { font-style: normal; color: #e8c15a; font-size: 11px; }
 .rkrow.me.pal { background: rgba(111,206,138,.16); border-color: rgba(111,206,138,.40); }
+
+/* ── the name field: checked as you type ─────────────────────────────── */
+.lp-name { position: relative; }
+.nm-state { display: block; font-size: 11px; margin-top: 4px; min-height: 14px; }
+.nm-state.ok { color: #6fce8a; }
+.nm-state.bad { color: #e8a08a; }
+.nm-state.busy { color: #9fbaa6; }
+.nm-suggest { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.nm-suggest button { padding: 3px 8px; border-radius: 7px; font-size: 11px; cursor: pointer;
+  background: rgba(111,206,138,.16); border: 1px solid rgba(111,206,138,.32); color: #cfe0d4; }
+.nm-suggest button:hover { background: rgba(111,206,138,.28); }

@@ -187,6 +187,17 @@ Net.ranking = cb => {
   Net.socket.emit('world:ranking', null, res => cb(res || { top: [], me: null }));
 };
 
+/* ------------------------------------------------------------------ names ---
+   Checking is free and runs as you type; claiming is the one that costs. */
+Net.checkName = (name, cb) => {
+  if (!Net.socket) return cb?.({ ok: false, reason: 'Not connected.' });
+  Net.socket.emit('name:check', { name }, res => cb?.(res || { ok: false }));
+};
+Net.claimName = (name, cb) => {
+  if (!Net.socket) return cb?.({ error: 'Not connected.' });
+  Net.socket.emit('name:claim', { name }, res => cb?.(res || { error: 'No answer.' }));
+};
+
 /* ---------------------------------------------------------------- friends ---
    One call for eleven verbs, matching the server's single handler. The
    client never says who it IS — only who it wants to act on. */

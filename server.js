@@ -22,6 +22,8 @@ import { Server } from 'socket.io';
 import { allCourses, getCourse } from './public/js/shared/coursegen.js';
 import { ratingsFor } from './public/js/shared/handicap.js';
 import { weatherFor } from './public/js/shared/weather.js';
+import { loadNames, claimName, checkName, adoptName, nameOf as claimedName,
+         renameQuote, nameHistory } from './server/names.js';
 import { loadFriends, friendState, friendCode, requestFriend, acceptFriend,
          declineFriend, removeFriend, blockPlayer, unblockPlayer,
          toggleFavourite, friendsOf, areFriends } from './server/friends.js';
@@ -91,6 +93,11 @@ function liveOf(pid) {
 }
 
 const nameOf = pid => {
+  /* The REGISTRY first, because it is the only copy anybody claimed. The
+     live room name and the profile copy are both caches of it, and a cache
+     that outranks its source is how two players end up looking like one. */
+  const claimed = claimedName(pid);
+  if (claimed) return claimed;
   for (const ref of sockets.values()) if (ref.pid === pid && ref.name) return ref.name;
   return getProfile(pid).name || 'Golfer';
 };
@@ -206,6 +213,7 @@ calibrateCarries();
 await loadProfiles();
 await loadRecords();
 await loadFriends();
+await loadNames();
 /* Say it out loud when the board cannot survive a deploy. Without a database
    the records live in a file, and a host with no persistent disk (Render's
    free tier, for one) discards it every time you push. Records set today will
@@ -1086,7 +1094,14 @@ io.on('connection', socket => {
     // The clubhouse is outside any room, so this is where an offline-capable
     // name has to be captured too — a friends list that only learns names
     // from rooms shows "Golfer" for everybody who has not played today.
-    if (d?.name) rememberName(pid, cleanName(d.name));
+    if (d?.name) {
+      const n = cleanName(d.name);
+      rememberName(pid, n);
+      /* Grandfathering. Anybody already playing under a name keeps it,
+         registered but not enforced against the others who share it — see
+         names.js. Only a NEW claim has to be unique. */
+      adoptName(pid, n);
+    }
     // A player we have never seen may be a genuinely new player, or the same
     // player after this host wiped its disk on a deploy.  seedProfile tells
     // those apart safely: it only ever fills a blank, and only within clamps.
@@ -1327,6 +1342,43 @@ io.on('connection', socket => {
     else if (act !== 'state') return ack({ error: 'Unknown action.' });
 
     ack({ ...r, state: decorate(pid), people: friendPeople(pid) });
+  });
+
+  /* ═══════════════════════════════════════════════════════ NAMES ═══════
+     Checking is free and unlimited — it runs as the player types. Claiming
+     is the one that costs, and the cost is decided by the registry rather
+     than by anything the client sends. */
+  socket.on('name:check', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || socket.data?.pid || null;
+    ack({ ...checkName(d?.name, pid), quote: pid ? renameQuote(pid) : null });
+  });
+
+  socket.on('name:claim', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || socket.data?.pid || null;
+    if (!pid) return ack({ error: 'Not connected.' });
+    /* The charge is a callback so names.js never has to know what a coin is,
+       and so the deduction and the claim cannot end up half-applied: if the
+       player cannot pay, the name is never taken. */
+    const res = claimName(pid, d?.name, cost => {
+      const prof = getProfile(pid);
+      if ((prof.coins || 0) < cost) return false;
+      prof.coins -= cost;
+      return true;
+    });
+    if (res.ok) {
+      rememberName(pid, res.name);
+      // and everyone in the room they are standing in sees it change
+      const ref = sockets.get(socket.id);
+      const room = ref?.code ? rooms.get(ref.code) : null;
+      if (room) {
+        const pl = room.players.find(x => x.pid === pid);
+        if (pl) { pl.name = res.name; broadcastState(room); }
+      }
+      socket.emit('profile', publicProfile(pid));
+    }
+    ack({ ...res, quote: renameQuote(pid), history: nameHistory(pid) });
   });
 
   socket.on('rooms:open', (d, ack) => {

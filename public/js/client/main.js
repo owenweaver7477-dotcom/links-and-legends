@@ -3055,6 +3055,58 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     drawLookPicker();
     route();
   });
+  /* ---- your name ------------------------------------------------------
+     Checked as you type and CLAIMED when you leave the field. A name is
+     taken for good, so finding out it was gone after pressing Play is the
+     wrong moment to find out. */
+  const nmState = document.getElementById('nameState');
+  const nmSuggest = document.getElementById('nameSuggest');
+  let nmTimer = 0, nmLast = '';
+  const showName = (cls, msg) => {
+    if (!nmState) return;
+    nmState.className = 'nm-state ' + cls;
+    nmState.textContent = msg || '';
+  };
+  const checkNameSoon = () => {
+    const v = HUD.el.inpName.value.trim();
+    clearTimeout(nmTimer);
+    nmSuggest.innerHTML = '';
+    if (!v) { showName('', ''); return; }
+    showName('busy', 'Checking…');
+    /* Debounced, because this is a socket round trip on every keystroke
+       otherwise — and 300 ms is under the point where a person notices a
+       delay but well over the gap between two keys. */
+    nmTimer = setTimeout(() => {
+      Net.checkName(v, res => {
+        if (HUD.el.inpName.value.trim() !== v) return;   // they kept typing
+        if (res.ok) { showName('ok', 'That name is free ✓'); return; }
+        showName('bad', res.reason || 'Not available.');
+        nmSuggest.innerHTML = (res.suggestions || [])
+          .map(t => `<button type="button" data-nm="${t}">${t}</button>`).join('');
+      });
+    }, 300);
+  };
+  HUD.el.inpName.addEventListener('input', checkNameSoon);
+  nmSuggest?.addEventListener('click', e => {
+    const b = e.target.closest('[data-nm]');
+    if (!b) return;
+    HUD.el.inpName.value = b.dataset.nm;
+    checkNameSoon();
+  });
+  const claimNameNow = () => {
+    const v = HUD.el.inpName.value.trim();
+    if (!v || v === nmLast) return;
+    Net.claimName(v, res => {
+      if (res.error) { showName('bad', res.error); return; }
+      nmLast = res.name;
+      HUD.el.inpName.value = res.name;
+      showName('ok', res.charged ? `Changed — ${res.charged} coins.` : 'Saved ✓');
+      Net.lastName = res.name;
+      Net.fetchProfile();
+    });
+  };
+  HUD.el.inpName.addEventListener('blur', claimNameNow);
+
   /* ---- friends --------------------------------------------------------- */
   HUD.bindFriends();
   let myFriendCode = null;
