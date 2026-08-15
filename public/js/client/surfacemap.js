@@ -14,7 +14,29 @@ import { edgeScale } from '../shared/coursegen.js';
 
 const MAX_PX = 2048;
 
-export function buildSurfaceTexture(hole, bio) {
+/**
+ * The whole hole, painted once.
+ *
+ * @param season  optional [r,g,b] multipliers from weather.js. The biome's
+ *                own palette is TINTED rather than replaced, so a links
+ *                course in autumn is still recognisably a links course —
+ *                which is the difference between a season and a filter.
+ */
+/** Multiply every colour in a palette by an [r,g,b] triple. */
+function tintPalette(P, mul) {
+  const out = {};
+  for (const [k, v] of Object.entries(P)) {
+    if (typeof v !== 'string' || v[0] !== '#') { out[k] = v; continue; }
+    const n = parseInt(v.slice(1), 16);
+    const r = Math.min(255, Math.round(((n >> 16) & 255) * mul[0]));
+    const g = Math.min(255, Math.round(((n >> 8) & 255) * mul[1]));
+    const b = Math.min(255, Math.round((n & 255) * mul[2]));
+    out[k] = '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+  }
+  return out;
+}
+
+export function buildSurfaceTexture(hole, bio, season = null) {
   const b = hole.bounds;
   const spanX = b.maxX - b.minX, spanZ = b.maxZ - b.minZ;
   const aspect = spanX / spanZ;
@@ -25,7 +47,11 @@ export function buildSurfaceTexture(hole, bio) {
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const g = cv.getContext('2d');
-  const P = bio.palette;
+  /* The palette, through the season. One derived object rather than a tint
+     applied at each of the thirty draw calls below — every one of those
+     would be a place to forget, and a hole with an autumn fairway and a
+     summer rough is worse than no seasons at all. */
+  const P = season ? tintPalette(bio.palette, season) : bio.palette;
   const rnd = mulberry32(hole.terrainSeed ^ 0xBEEF);
 
   // world -> pixel

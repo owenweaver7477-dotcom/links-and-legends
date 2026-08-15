@@ -1259,6 +1259,7 @@ let smokeAt = 0;                 // countdown between puffs from a damaged cart
    five places an avatar is updated is five places to forget one. Cheap: two
    property writes per golfer, and only when the hole or the wind changes. */
 let _liveKey = '';
+let _stride = 0, _strideSide = 1;   // footfall accumulator
 function feedAvatars() {
   const key = `${G.loadedKey}|${G.wind.speed}|${G.wind.dir.toFixed(2)}`;
   if (key === _liveKey || !G.T) return;
@@ -1377,6 +1378,20 @@ function frame(now) {
   }
   updateLandingDot(now);
   walker.update(dt, cameraYaw(), G.T, G.hole);
+  /* Footprints, on the stride. Driven from the DISTANCE walked rather than
+     from a timer, so a jog leaves prints the same distance apart as a stroll
+     rather than the same number per second. */
+  if (walker.speed > 0.4) {
+    _stride += walker.speed * dt;
+    if (_stride > 0.62) {
+      _stride = 0;
+      _strideSide = -_strideSide;
+      const a = walker.heading ?? cameraYaw();
+      scene.addPrint(
+        walker.x + Math.cos(a) * 0.16 * _strideSide,
+        walker.z - Math.sin(a) * 0.16 * _strideSide, a);
+    }
+  }
   carts.render(dt, G.T, G.myPid, tintOf, now);
   pushMyPosition(now);
   updateAvatars(dt);

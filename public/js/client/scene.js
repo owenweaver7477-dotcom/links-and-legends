@@ -254,6 +254,11 @@ export class GolfScene {
        zone error that takes the whole boot down rather than just the sky. */
     const cloudy = W ? W.cloud : 0;
     const SEA = W ? (SEASONS.find(x => x.id === W.season) || null) : null;
+    /* Stashed on the scene, because _buildTerrain and the tree builder are
+       separate methods called from here — a local of loadHole is not in
+       scope in either of them, which is how `SEA is not defined` took the
+       whole boot down. */
+    this._season = SEA;
     const tint = (hex, mul) => {
       const c = new THREE.Color(hex);
       if (!mul) return c;
@@ -489,7 +494,12 @@ export class GolfScene {
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
     geo.computeVertexNormals();
 
-    const tex = new THREE.CanvasTexture(buildSurfaceTexture(hole, bio));
+    /* Painted through the season. `SEA.grass` is a triple of multipliers
+       from weather.js — autumn is [1.12, 0.94, 0.74], which takes the green
+       down and the red up without touching what makes each course itself. */
+    const SEA = this._season || null;
+    SEASON_TINT = SEA?.tree || null;      // read where instance colours are set
+    const tex = new THREE.CanvasTexture(buildSurfaceTexture(hole, bio, SEA?.grass || null));
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.flipY = false;
     tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
@@ -1334,6 +1344,11 @@ export class GolfScene {
           m4.compose(pos, q, scl);
           inst.setMatrixAt(i, m4);
           col.copy(part.color).offsetHSL(0, (t.tone - 0.5) * 0.06, (t.tone - 0.5) * 0.11);
+          if (SEASON_TINT) {
+            col.r = Math.min(1, col.r * SEASON_TINT[0]);
+            col.g = Math.min(1, col.g * SEASON_TINT[1]);
+            col.b = Math.min(1, col.b * SEASON_TINT[2]);
+          }
           inst.setColorAt(i, col);
         }
         inst.instanceMatrix.needsUpdate = true;
@@ -1879,6 +1894,70 @@ export class GolfScene {
     p.pts.position.set(c.x, (this.T ? this.T.heightAt(c.x, c.z) : 0), c.z);
   }
 
+  /* ═════════════════════════════════════════════════ FOOTPRINTS ═══════
+     Where somebody has walked, for thirty seconds.
+
+     A pool, not a growing list. A player walking a 500-metre hole leaves
+     about seven hundred prints, and allocating a mesh for each one is a
+     hundred allocations a minute for something that is invisible within
+     half a minute. Sixty slots, reused oldest-first, and the whole system
+     costs one instanced mesh.
+
+     Depth-offset rather than lifted off the ground: a print floating a
+     centimetre above the turf catches the light from underneath and reads
+     as a sticker. */
+  _initPrints() {
+    if (this._prints) return;
+    const N = 60;
+    const geo = new THREE.PlaneGeometry(1, 1);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x1c2a18, transparent: true, opacity: 0.30, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
+    });
+    const inst = new THREE.InstancedMesh(geo, mat, N);
+    inst.frustumCulled = false;
+    inst.count = N;
+    inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // every slot starts collapsed to nothing rather than stacked at the origin
+    const m4 = new THREE.Matrix4().makeScale(0, 0, 0);
+    for (let i = 0; i < N; i++) inst.setMatrixAt(i, m4);
+    inst.instanceMatrix.needsUpdate = true;
+    this.scene.add(inst);
+    this._prints = { inst, geo, mat, N, next: 0, born: new Float32Array(N) };
+  }
+
+  /** Stamp one footprint. Called by the walker on each footfall. */
+  addPrint(x, z, facing = 0, size = 0.16) {
+    if (!this.T) return;
+    this._initPrints();
+    const p = this._prints;
+    const i = p.next; p.next = (p.next + 1) % p.N;
+    p.born[i] = this.t;
+    const m4 = new THREE.Matrix4();
+    m4.compose(
+      new THREE.Vector3(x, this.T.heightAt(x, z) + 0.006, z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, facing, 0)),
+      new THREE.Vector3(size, 1, size * 2.1));
+    p.inst.setMatrixAt(i, m4);
+    p.inst.instanceMatrix.needsUpdate = true;
+  }
+
+  _fadePrints() {
+    const p = this._prints;
+    if (!p) return;
+    /* One opacity for the whole pool rather than per print: an instanced
+       mesh shares its material, and sixty materials to fade sixty prints
+       independently would cost more than the prints do. The oldest print
+       decides, which means a fresh one arriving refreshes the set — close
+       enough at 30% opacity that nobody has ever noticed. */
+    let oldest = Infinity;
+    for (let i = 0; i < p.N; i++) if (p.born[i] > 0) oldest = Math.min(oldest, p.born[i]);
+    if (!Number.isFinite(oldest)) return;
+    const age = this.t - oldest;
+    p.mat.opacity = 0.30 * Math.max(0, 1 - age / 30);
+  }
+
   /** Called by main.js when a round's weather is known. */
   setWeather(w) {
     const changed = (w?.condition || null) !== (this.weather?.condition || null)
@@ -2002,6 +2081,7 @@ export class GolfScene {
       this.clouds.instanceMatrix.needsUpdate = true;
     }
     this._stepPrecip(dt);
+    this._fadePrints();
     if (this.fx) this.fx.update(dt);
   }
 
@@ -2094,6 +2174,16 @@ function normaliseCanopy(species, parts) {
   }
   return parts;
 }
+
+/* The season's foliage multiplier, set once per hole and read where the
+   PER-INSTANCE colour is written.
+
+   Not on the material, which is where it went first and where it does
+   nothing: the instancing path sets every leaf material to white and carries
+   the real colour per instance, so a tinted material is overwritten two
+   lines later by setRGB(1,1,1). The tint has to ride the same channel the
+   colour does. */
+let SEASON_TINT = null;
 
 function treeParts(species, bio) {
   const P = bio.palette;

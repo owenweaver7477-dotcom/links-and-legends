@@ -128,6 +128,11 @@ export class Avatar {
     // kept, because breathing scales it and nothing else in the rig moves
     // when a golfer is standing still
     this.chest = part(this.mats.shirt, W * B.chest, H * 0.140, D * B.depth, 0, H * 0.7200, 0);
+    /* part() SIZES A UNIT CUBE THROUGH ITS SCALE, so the breathing must
+       multiply that base rather than set a scale of its own. Setting it
+       replaced a 0.42 x 0.25 x 0.24 chest with a one-metre cube — a golfer
+       with a slab for a torso, which is exactly what appeared on screen. */
+    this._chestBase = this.chest.scale.clone();
     this.body.add(this.chest);
     if (B.bust > 0) {
       // sits proud of the chest front, so it reads in silhouette rather than
@@ -966,7 +971,10 @@ export class Avatar {
     this.hat.rotation.x = P.hatRx;
     // breathing: the chest rises, and it is the only thing that ever moves
     // when a golfer is doing nothing at all
-    if (this.chest) this.chest.scale.set(1 + L.breath * 0.03, 1, 1 + L.breath * 0.05);
+    if (this.chest) {
+      const b = this._chestBase;
+      this.chest.scale.set(b.x * (1 + L.breath * 0.03), b.y, b.z * (1 + L.breath * 0.05));
+    }
   }
 
   /** Static seat pose: knees up, hands forward on the wheel or the rail. */
