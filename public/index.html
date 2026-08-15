@@ -452,6 +452,7 @@
       <button class="hktab" data-tab="shop" role="tab">Pro shop</button>
       <button class="hktab" data-tab="bag" role="tab">Your bag</button>
       <button class="hktab" data-tab="world" role="tab">World</button>
+      <button class="hktab" data-tab="ranks" role="tab">Rankings</button>
       <button class="hktab" data-tab="keys" role="tab">Controls</button>
     </div>
 
@@ -485,6 +486,24 @@
     <div class="section hkpane" data-pane="world">
       <h4 class="lbl nojs-only">World ranking</h4>
       <div id="worldBox"></div>
+    </div>
+
+    <!-- RANKINGS. Five ladders, because one ladder has a top ten that never
+         changes. Handicap answers "who is the best golfer", level answers
+         "who has put the hours in", the weekly and seasonal boards give
+         somebody who started on Monday something they can still win, and the
+         course board is form rather than a single lucky round. -->
+    <div class="section hkpane" data-pane="ranks">
+      <h4 class="lbl nojs-only">Rankings</h4>
+      <div id="rankMe"></div>
+      <div class="rkbtabs" id="rkbTabs" role="tablist">
+        <button class="rkbtab on" data-board="handicap">Handicap</button>
+        <button class="rkbtab" data-board="level">Levels</button>
+        <button class="rkbtab" data-board="weekly">This week</button>
+        <button class="rkbtab" data-board="season">Season</button>
+        <button class="rkbtab" data-board="course">By course</button>
+      </div>
+      <div id="rankBody"></div>
     </div>
 
     <div class="section hkpane" data-pane="keys">

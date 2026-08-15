@@ -1093,6 +1093,12 @@ HUD.showClubhouseTab = (name) => {
   }
   // a tab switch should start you at the top of the room you just walked into
   document.querySelector('#screenShop .card')?.scrollTo?.({ top: 0 });
+  /* The two tabs whose contents live on the server rather than in the
+     profile the client already holds. Fetched on ARRIVAL rather than on
+     open-the-clubhouse, because five ladders and a hundred rows each is not
+     something to pull down for somebody who came to buy a putter. */
+  if (name === 'ranks') HUD.onBoards?.(null);
+  if (name === 'world') HUD.onWorldTab?.();
 };
 
 /* ------------------------------------------------------------- the world --- */
@@ -1683,5 +1689,126 @@ HUD.bindWardrobe = () => {
   el.screenWardrobe.addEventListener('input', e => {
     if (e.target.id !== 'wdInitials') return;
     HUD.onWardrobe({ __custom: { txt: e.target.value }, __keepFocus: true });
+  });
+};
+
+/* ═══════════════════════════════════════════════════ THE RANKINGS ═══════
+   Five ladders behind one set of tabs, and your own standing above all of
+   them — a leaderboard whose first job is to show you other people is a
+   leaderboard nobody scrolls past the first screen of. */
+import {
+  RANK_TIERS, rankTier, handicapText, handicapBand, topPercent,
+  RATING_TIERS, ratingTier, nextMilestone, MILESTONES
+} from '../shared/handicap.js';
+
+HUD.rkBoard = 'handicap';
+HUD.rkCourse = null;
+HUD.onBoards = () => {};
+
+/** Your handicap, your tier, your place. The header above every board. */
+HUD.renderRankMe = (profile, me, name) => {
+  const box = document.getElementById('rankMe');
+  if (!box) return;
+  const lv = profile?.level ?? 1;
+  const t = rankTier(lv);
+  const idx = profile?.index ?? null;
+  const place = me?.handicap?.place ?? null;
+  const of = me?.handicap?.of ?? 0;
+  const pct = topPercent(place, of);
+  const next = nextMilestone(lv);
+
+  /* The five-band ladder, lit as far as this level reaches. It is the one
+     piece here that shows a player where they are GOING rather than where
+     they are, which is the whole reason a tier system exists. */
+  const bands = RANK_TIERS.map(b => {
+    const done = lv >= b.to, into = lv >= b.from && lv <= b.to;
+    const fill = done ? 1 : into ? (lv - b.from + 1) / (b.to - b.from + 1) : 0;
+    return `<i style="background:linear-gradient(90deg,${b.color} ${fill * 100}%,rgba(255,255,255,.12) ${fill * 100}%)"></i>`;
+  }).join('');
+
+  box.className = 'rkme';
+  box.innerHTML =
+    `<div class="rkme-badge" style="background:${t.glow};color:${t.color}">${t.badge}</div>
+     <div class="rkme-mid">
+       <b>${name || 'Your golfer'} <span style="color:${t.color}">· ${t.name}</span></b>
+       <span>Level ${lv} · ${t.ranks}</span>
+       <div class="rktier">${bands}</div>
+       ${place ? `<div class="rkme-place">Handicap rank <i>#${place.toLocaleString()}</i> of ${of.toLocaleString()}${pct ? ` · ${pct}` : ''}</div>`
+                : `<div class="rkme-place">${next ? `Next: ${next.name} at level ${next.at} — ${next.gives}` : 'Hall of Fame'}</div>`}
+     </div>
+     <div class="rkme-hcp"><b>${handicapText(idx)}</b><em>handicap</em>
+       <div class="rksub" style="max-width:150px">${handicapBand(idx)}</div></div>`;
+};
+
+/** One board. Every row shape is different, so each gets its own formatter. */
+HUD.renderBoards = (data, myPid, courseNames) => {
+  const body = document.getElementById('rankBody');
+  const tabs = document.getElementById('rkbTabs');
+  if (!body) return;
+  tabs?.querySelectorAll('.rkbtab').forEach(b =>
+    b.classList.toggle('on', b.dataset.board === HUD.rkBoard));
+
+  const row = (r, main, sub, tag) =>
+    `<div class="rkrow${r.pid === myPid ? ' me' : ''}">
+       <span class="rkn${r.rank <= 3 ? ' gold' : ''}">${r.rank}</span>
+       <span class="rkname"><b>${escapeHtml(r.name)}</b>${tag || ''}</span>
+       <span class="rkv">${main}</span>
+       <span class="rksub">${sub}</span>
+     </div>`;
+
+  const tierTag = id => {
+    const t = RATING_TIERS.find(x => x.id === id);
+    return t ? `<span class="rktag" style="color:${t.color}">${t.id}</span>` : '';
+  };
+  const lvTag = lv => {
+    const t = rankTier(lv);
+    return `<span class="rktag" style="color:${t.color}">${t.badge} ${lv}</span>`;
+  };
+
+  let rows = [], head = '';
+  if (HUD.rkBoard === 'handicap') {
+    rows = (data.handicap || []).map(r =>
+      row(r, handicapText(r.index), `${r.rounds} rounds`, lvTag(r.level)));
+  } else if (HUD.rkBoard === 'level') {
+    rows = (data.level || []).map(r =>
+      row(r, 'Lv ' + r.level, `${r.xp.toLocaleString()} XP`, lvTag(r.level)));
+  } else if (HUD.rkBoard === 'weekly') {
+    head = `<p class="tiny">XP gained since Monday. Resets every week.</p>`;
+    rows = (data.weekly || []).map(r =>
+      row(r, '+' + r.gained.toLocaleString(), 'XP this week', lvTag(r.level)));
+  } else if (HUD.rkBoard === 'season') {
+    head = `<p class="tiny">XP gained this quarter. Resets in January, April, July and October.</p>`;
+    rows = (data.season || []).map(r =>
+      row(r, '+' + r.gained.toLocaleString(), 'XP this season', lvTag(r.level)));
+  } else {
+    const c = data.course || {};
+    head =
+      `<div class="rkcourses">${(courseNames || []).map(cn =>
+        `<button class="rkc${cn.id === c.id ? ' on' : ''}" data-rkc="${cn.id}">${cn.name}</button>`).join('')}</div>` +
+      `<div class="rkrate"><span>Course rating <b>${c.rating ?? '—'}</b></span>` +
+      `<span>Slope <b>${c.slope ?? '—'}</b></span>` +
+      `<span>Par <b>36</b></span></div>` +
+      `<p class="tiny">Average score against the rating, over at least two rounds. ` +
+      RATING_TIERS.map(t => `<b style="color:${t.color}">${t.id}</b> ${t.blurb}`).join(' · ') + `</p>`;
+    rows = (c.rows || []).map(r =>
+      row(r, (r.vs > 0 ? '+' : '') + r.vs.toFixed(1), `${r.rounds} rounds`, tierTag(r.tier)));
+  }
+
+  body.innerHTML = head + (rows.length ? rows.join('')
+    : `<div class="rkempty">Nobody has qualified for this board yet.<br>
+       <span class="tiny">Play a few rounds and you will be the first.</span></div>`);
+};
+
+let boardsBound = false;
+HUD.bindBoards = () => {
+  if (boardsBound) return;
+  boardsBound = true;
+  document.getElementById('rkbTabs')?.addEventListener('click', e => {
+    const b = e.target.closest('.rkbtab');
+    if (b) { HUD.rkBoard = b.dataset.board; HUD.onBoards(null); }
+  });
+  document.getElementById('rankBody')?.addEventListener('click', e => {
+    const c = e.target.closest('[data-rkc]');
+    if (c) { HUD.rkCourse = c.dataset.rkc; HUD.onBoards(c.dataset.rkc); }
   });
 };

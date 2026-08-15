@@ -1971,3 +1971,58 @@ body.introing .lp-inner, body.introing .lp-veil { opacity: 0; transition: opacit
 .wb-txt b { font-size: 13px; }
 .wb-txt small { font-size: 10.5px; color: #9fbaa6; }
 .wb-arr { margin-left: auto; color: #6fce8a; }
+
+/* ═══════════════════════════════════════════════════ THE RANKINGS ═══════ */
+/* Your own standing, at the top, before any board. A leaderboard whose first
+   job is to show you other people is a leaderboard nobody scrolls. */
+.rkme { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center;
+  padding: 14px 16px; border-radius: 14px; margin-bottom: 12px;
+  background: linear-gradient(100deg, rgba(38,96,58,.34), rgba(14,34,24,.24));
+  border: 1px solid rgba(255,255,255,.10); }
+.rkme-badge { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center;
+  font-size: 25px; border: 1px solid rgba(255,255,255,.14); }
+.rkme-hcp { text-align: right; }
+.rkme-hcp b { font-size: 30px; font-weight: 800; letter-spacing: -1px; display: block; line-height: 1; }
+.rkme-hcp em { font-style: normal; font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #8fbf9c; }
+.rkme-mid b { font-size: 15px; display: block; }
+.rkme-mid span { font-size: 11.5px; color: #9fbaa6; }
+.rkme-place { font-size: 11.5px; color: #cfe0d4; margin-top: 3px; }
+.rkme-place i { font-style: normal; color: #6fce8a; font-weight: 700; }
+
+/* the tier ladder: where this level sits among the five bands */
+.rktier { display: flex; gap: 3px; margin-top: 7px; }
+.rktier i { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,.12); }
+
+.rkbtabs { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
+.rkbtab { padding: 6px 11px; border-radius: 9px; font-size: 11.5px; cursor: pointer;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); color: #cfe0d4; }
+.rkbtab.on { background: rgba(111,206,138,.20); border-color: rgba(111,206,138,.44); color: #eaf3ec; }
+
+.rkrow { display: grid; grid-template-columns: 34px 1fr auto auto; gap: 10px; align-items: center;
+  padding: 8px 11px; border-radius: 10px; font-size: 12.5px;
+  background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.05); margin-bottom: 4px; }
+.rkrow.me { background: rgba(111,206,138,.16); border-color: rgba(111,206,138,.40); }
+.rkrow .rkn { font-weight: 700; color: #8fbf9c; text-align: center; }
+.rkrow .rkn.gold { color: #e8c15a; }
+.rkrow .rkname { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.rkrow .rkname b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rkrow .rkv { font-weight: 700; }
+.rkrow .rksub { font-size: 10.5px; color: #8fa596; }
+.rktag { font-size: 9.5px; padding: 2px 6px; border-radius: 6px; font-weight: 700;
+  border: 1px solid currentColor; }
+.rkempty { padding: 18px; text-align: center; color: #8fa596; font-size: 12.5px; }
+
+/* course picker on the by-course board */
+.rkcourses { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 9px; }
+.rkc { padding: 5px 9px; border-radius: 8px; font-size: 11px; cursor: pointer;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07); color: #cfe0d4; }
+.rkc.on { background: rgba(111,206,138,.20); border-color: rgba(111,206,138,.44); color: #eaf3ec; }
+.rkrate { display: flex; gap: 14px; font-size: 11px; color: #9fbaa6; margin-bottom: 9px; }
+.rkrate b { color: #eaf3ec; }
+
+@media (max-width: 640px) {
+  .rkme { grid-template-columns: auto 1fr; }
+  .rkme-hcp { grid-column: 1 / -1; text-align: left; }
+  .rkrow { grid-template-columns: 28px 1fr auto; font-size: 11.5px; }
+  .rkrow .rksub { display: none; }
+}

@@ -187,6 +187,14 @@ Net.ranking = cb => {
   Net.socket.emit('world:ranking', null, res => cb(res || { top: [], me: null }));
 };
 
+/** Every ladder at once. One round trip, because the screen is tabs. */
+Net.boards = (courseId, cb) => {
+  const empty = { handicap: [], level: [], weekly: [], season: [],
+                  course: { rows: [] }, ratings: {}, me: null };
+  if (!Net.socket) return cb(empty);
+  Net.socket.emit('world:boards', { course: courseId }, res => cb(res || empty));
+};
+
 /** Who is online right now.  Polled from the menu; never while playing. */
 Net.presence = cb => {
   if (!Net.socket) return cb([]);

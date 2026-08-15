@@ -374,6 +374,7 @@ function openLegend(target) {
     HUD.show('shop');
     try { HUD.bindClubhouse?.(); HUD.showClubhouseTab(tab); } catch (e) { console.error('clubhouse:', e); }
     if (tab === 'world') Net.ranking(d => HUD.renderWorld(d, G.myPid));
+    if (tab === 'ranks') HUD.onBoards(null);
     return;
   }
   if (target === 'community') {
@@ -2947,6 +2948,19 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     drawLookPicker();
     route();
   });
+  /* ---- the ranking boards --------------------------------------------- */
+  HUD.bindBoards();
+  const courseNames = COURSE_ORDER.map(id => ({ id, name: BIOMES[id].name }));
+  const loadBoards = (courseId) => {
+    Net.boards(courseId || HUD.rkCourse || pickedCourse, data => {
+      HUD.renderRankMe(G.profile, data.me,
+        Net.lastName || document.getElementById('inpName')?.value);
+      HUD.renderBoards(data, G.myPid, courseNames);
+    });
+  };
+  HUD.onBoards = loadBoards;
+  HUD.onWorldTab = () => Net.ranking(d => HUD.renderWorld(d, G.myPid));
+
   document.getElementById('btnBindsReset')?.addEventListener('click', () => {
     resetBinds();
     HUD.renderBinds();

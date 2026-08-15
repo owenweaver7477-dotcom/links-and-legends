@@ -20,6 +20,18 @@ import express from 'express';
 import { Server } from 'socket.io';
 
 import { allCourses, getCourse } from './public/js/shared/coursegen.js';
+import { ratingsFor } from './public/js/shared/handicap.js';
+
+/* Course rating and slope, computed once per course and kept. The geometry
+   is a pure function of the seed, so these cannot change while the process
+   is up — and recomputing them for every player at the end of every round
+   would walk nine holes of hazards eight times for an answer that never
+   moves. */
+const _ratings = new Map();
+const courseRatings = id => {
+  if (!_ratings.has(id)) _ratings.set(id, ratingsFor(getCourse(id)));
+  return _ratings.get(id);
+};
 import { terrainFor } from './public/js/shared/terrain.js';
 import { BIOMES, COURSE_ORDER, BALL_COLORS, MAX_PLAYERS, HOLES_PER_COURSE } from './public/js/shared/biomes.js';
 import { ShotSim, calibrateCarries } from './public/js/shared/ballistics.js';
@@ -28,7 +40,8 @@ import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile,
-         worldRanking, worldPlace } from './server/profiles.js';
+         worldRanking, worldPlace, handicapRanking, handicapPlace, levelRanking,
+         weeklyGainers, seasonBoard, courseBoard } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
 import { EMOTES, meleeById } from './public/js/client/celebrations.js';
 import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allowChat, PHRASES } from './server/chat.js';
@@ -553,7 +566,13 @@ function nextHole(room) {
       const total = p.scores.reduce((a, v) => a + (v ?? 0), 0);
       const holeScores = p.scores.map((s, i) => s == null ? null : { strokes: s, par: pars[i] }).filter(Boolean);
       const rc = settleRound(p.pid, room.courseId, holeScores);
-      const prof = recordRound(p.pid, total - parTotal, played);
+      /* The card the handicap is built from. Computed HERE rather than in
+         profiles.js because this is the only place that has the course
+         object — and it has to be the course as it is right now, since a
+         rating derived from the geometry moves when the generator does. */
+      const cr = courseRatings(room.courseId);
+      const prof = recordRound(p.pid, total - parTotal, played,
+        played >= 9 ? { courseId: room.courseId, gross: total, rating: cr.rating, slope: cr.slope } : null);
       /* The record board only ever sees rounds THIS server simulated, and
          only complete ones — see records.js for why both matter. */
       const beat = submitRound(room.courseId, p.name, p.pid, holeScores);
@@ -1090,6 +1109,27 @@ io.on('connection', socket => {
     const ref = sockets.get(socket.id);
     const pid = ref?.pid || socket.data?.pid || null;
     ack({ top: worldRanking(50), me: pid ? worldPlace(pid) : null });
+  });
+
+  /* Every ladder in one call. Four boards plus your own place on two of
+     them is one round trip; asking for them separately would be four, and
+     the screen shows them as tabs the player flips between — so they all
+     have to be there before the first tab is drawn or every flip is a wait. */
+  socket.on('world:boards', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const ref = sockets.get(socket.id);
+    const pid = ref?.pid || socket.data?.pid || null;
+    const courseId = COURSE_ORDER.includes(d?.course) ? d.course : COURSE_ORDER[0];
+    ack({
+      handicap: handicapRanking(100),
+      level: levelRanking(100),
+      weekly: weeklyGainers(50),
+      season: seasonBoard(100),
+      course: { id: courseId, rows: courseBoard(courseId, 50),
+                ...courseRatings(courseId) },
+      ratings: Object.fromEntries(COURSE_ORDER.map(id => [id, courseRatings(id)])),
+      me: pid ? { world: worldPlace(pid), handicap: handicapPlace(pid) } : null
+    });
   });
 
   socket.on('rooms:open', (d, ack) => {

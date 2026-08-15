@@ -13,6 +13,7 @@
 
 import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp } from '../public/js/shared/economy.js';
 import { openStore, touch, saveSoon as storeSaveSoon } from './store.js';
+import { handicapIndex, differential, ratingTier } from '../public/js/shared/handicap.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
    moment a player opens it rather than after several rounds. */
@@ -155,6 +156,27 @@ export function seedProfile(pid, snap) {
   return true;
 }
 
+/** Every differential we can compute from a history, oldest first. */
+export function differentialsOf(p) {
+  return (p.history || [])
+    .filter(h => h && typeof h === 'object' && Number.isFinite(h.g) && Number.isFinite(h.r))
+    .map(h => differential(h.g, h.r, h.s));
+}
+
+/** The handicap index, or null while the sample is too thin to mean one. */
+export const indexOf = p => handicapIndex(differentialsOf(p));
+
+/** Per-course form with its tier, for the board and the profile panel. */
+function courseForm(p) {
+  const out = {};
+  for (const [id, e] of Object.entries(p.byCourse || {})) {
+    if (!e || !e.n) continue;
+    const vs = Math.round(e.vs * 10) / 10;
+    out[id] = { n: e.n, vs, best: e.best, tier: ratingTier(vs)?.id || null };
+  }
+  return out;
+}
+
 /** What the lobby shows and the client caches. */
 export function publicProfile(pid) {
   const p = getProfile(pid);
@@ -167,7 +189,12 @@ export function publicProfile(pid) {
     clubTier: p.clubTier ?? 0, refine: p.refine ?? 0, cleared: (p.cleared || []).length,
     stars: p.stars || {},
     pro: Object.entries(p.stars || {}).filter(([, n]) => n >= STARS_FOR_PRO).map(([c]) => c),
+    /* Both numbers, because they answer different questions. `rating` is
+       ours and moves every round; `index` is the handicap a golfer would
+       recognise, and is null until three rounds have a course on them. */
     handicap: handicapFor(p.rating),
+    index: indexOf(p),
+    byCourse: courseForm(p),
     avgPutts: p.holes ? +(p.putts / p.holes).toFixed(2) : null,
     fairwayPct: p.fairwayChances ? Math.round(p.fairways / p.fairwayChances * 100) : null,
     girPct: p.holes ? Math.round(p.gir / p.holes * 100) : null,
@@ -279,13 +306,37 @@ export function settleRound(pid, courseId, holeScores) {
   return rc;
 }
 
-export function recordRound(pid, relToPar, holesPlayed) {
+export function recordRound(pid, relToPar, holesPlayed, card = null) {
   if (!holesPlayed) return;
   const p = getProfile(pid);
   p.rounds++;
   if (p.best === null || relToPar < p.best) p.best = relToPar;
-  p.history.push(relToPar);
+  /* History used to be a bare number per round, which is all the rating
+     needed. A handicap needs more: the differential is (score − rating) ×
+     113 ÷ slope, so the entry has to remember WHICH course and what it was
+     rated when you played it. Old numeric entries are left alone and read
+     back as `{rel}` with no course — they still feed the rating, they just
+     cannot produce a differential, which is the honest outcome for a round
+     nobody recorded the venue of. */
+  p.history.push(card
+    ? { rel: relToPar, c: card.courseId, r: card.rating, s: card.slope,
+        g: card.gross, h: holesPlayed }
+    : relToPar);
   if (p.history.length > 20) p.history.shift();
+
+  /* Per-course form, for the tier boards. Kept as a running mean rather
+     than a list because it is only ever read as an average, and eight
+     courses times twenty rounds of stored cards is a profile that grows
+     without bound for a number that does not need them. */
+  if (card?.courseId && Number.isFinite(card.gross) && Number.isFinite(card.rating)) {
+    p.byCourse = p.byCourse || {};
+    const e = p.byCourse[card.courseId] || { n: 0, vs: 0, best: null };
+    const vs = card.gross - card.rating;
+    e.vs = (e.vs * e.n + vs) / (e.n + 1);
+    e.n++;
+    if (e.best === null || relToPar < e.best) e.best = relToPar;
+    p.byCourse[card.courseId] = e;
+  }
   // Rating: exponential pull toward a scratch-anchored target.  Level par
   // for nine holes reads as ~70; +9 as ~35; -5 as ~90.  Moves a fifth of the
   // way each round, so one great day is progress and one bad day is not ruin.
@@ -338,6 +389,132 @@ export function colorAllowed(pid, hex) {
    ========================================================================= */
 const RANKED_MIN_ROUNDS = 5;
 const isBot = pid => /^bot\d|^scr\d|^demo/.test(String(pid));
+
+/* ═══════════════════════════════════════════════ THE RANKING BOARDS ═══
+   Four ladders, and they exist because one ladder answers one question. A
+   rating board rewards the player who has been here longest; a handicap
+   board rewards the best golfer; a weekly board gives somebody who started
+   on Monday something they can win. A game with a single leaderboard has a
+   top ten that never changes, which is a top ten nobody looks at twice.
+
+   Every board here shares two rules. Bots never appear on one — a ladder
+   with a bot in the top five is a ladder that is telling you it is empty.
+   And nothing is ranked before it means something: five rounds for the
+   rating boards, three carded rounds for the handicap. */
+
+/** Best golfers, by handicap index. Lower is better, so this sorts up. */
+export function handicapRanking(limit = 100) {
+  const rows = [];
+  for (const [pid, p] of profiles) {
+    if (isBot(pid)) continue;
+    const idx = indexOf(p);
+    if (idx === null) continue;                 // fewer than three carded rounds
+    rows.push({
+      pid, name: p.name || 'Golfer',
+      index: idx,
+      level: levelFromXp(p.xp || 0).level,
+      rounds: p.rounds || 0,
+      best: p.best ?? null
+    });
+  }
+  rows.sort((a, b) => a.index - b.index || b.rounds - a.rounds);
+  return rows.slice(0, limit).map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+/** Where one player sits on the handicap board, and how big the field is. */
+export function handicapPlace(pid) {
+  const me = profiles.get(pid);
+  const mine = me ? indexOf(me) : null;
+  if (mine === null) return { place: null, of: 0, index: null };
+  let place = 1, of = 0;
+  for (const [id, p] of profiles) {
+    if (isBot(id)) continue;
+    const idx = indexOf(p);
+    if (idx === null) continue;
+    of++;
+    if (idx < mine || (idx === mine && (p.rounds || 0) > (me.rounds || 0))) place++;
+  }
+  return { place, of, index: mine };
+}
+
+/** The level ladder. Separate from rating: time played, not skill. */
+export function levelRanking(limit = 100) {
+  const rows = [];
+  for (const [pid, p] of profiles) {
+    if (isBot(pid)) continue;
+    const lv = levelFromXp(p.xp || 0);
+    if (lv.level < 2) continue;                 // level 1 is everybody
+    rows.push({ pid, name: p.name || 'Golfer', level: lv.level, xp: p.xp || 0,
+                rounds: p.rounds || 0 });
+  }
+  rows.sort((a, b) => b.xp - a.xp);
+  return rows.slice(0, limit).map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+/* ---- the two boards that reset -----------------------------------------
+   A weekly and a seasonal ladder need a baseline: how much XP you had when
+   the period started. Stored on the profile rather than computed from a log
+   because there is no log — the game keeps totals, not events.
+
+   `stampPeriods` is called on every profile read, so a player who has not
+   been seen since last season gets rolled over the moment they come back
+   rather than appearing at the top of a board with a whole season of XP
+   counted as this week's. */
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+/** Which week we are in, counted from a fixed Monday so every server agrees. */
+const EPOCH_MON = Date.UTC(2024, 0, 1);         // a Monday
+export const weekIndex = (t = Date.now()) => Math.floor((t - EPOCH_MON) / WEEK_MS);
+export const seasonIndex = (t = Date.now()) => {
+  const d = new Date(t);
+  return d.getUTCFullYear() * 4 + Math.floor(d.getUTCMonth() / 3);
+};
+
+export function stampPeriods(p) {
+  const w = weekIndex(), s = seasonIndex();
+  if (p.wkIdx !== w) { p.wkIdx = w; p.wkBase = p.xp || 0; }
+  if (p.snIdx !== s) { p.snIdx = s; p.snBase = p.xp || 0; }
+  return p;
+}
+
+function periodBoard(baseKey, limit) {
+  const rows = [];
+  for (const [pid, p] of profiles) {
+    if (isBot(pid)) continue;
+    stampPeriods(p);
+    const gained = (p.xp || 0) - (p[baseKey] || 0);
+    if (gained <= 0) continue;
+    rows.push({ pid, name: p.name || 'Golfer', gained,
+                level: levelFromXp(p.xp || 0).level });
+  }
+  rows.sort((a, b) => b.gained - a.gained);
+  return rows.slice(0, limit).map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+/** Fastest XP this week. Resets Monday. */
+export const weeklyGainers = (limit = 50) => periodBoard('wkBase', limit);
+/** Fastest XP this quarter. */
+export const seasonBoard = (limit = 100) => periodBoard('snBase', limit);
+
+/**
+ * Best average-versus-rating on one course. The tier board.
+ *
+ * Ranked on FORM rather than on a single round, which is the difference
+ * between this and the course records: the record board is who once went
+ * lowest, this is who plays the place well.
+ */
+export function courseBoard(courseId, limit = 50) {
+  const rows = [];
+  for (const [pid, p] of profiles) {
+    if (isBot(pid)) continue;
+    const e = p.byCourse?.[courseId];
+    if (!e || e.n < 2) continue;                // one round is not form
+    const vs = Math.round(e.vs * 10) / 10;
+    rows.push({ pid, name: p.name || 'Golfer', vs, rounds: e.n,
+                best: e.best ?? null, tier: ratingTier(vs)?.id || null });
+  }
+  rows.sort((a, b) => a.vs - b.vs || b.rounds - a.rounds);
+  return rows.slice(0, limit).map((r, i) => ({ ...r, rank: i + 1 }));
+}
 
 export function worldRanking(limit = 50) {
   const rows = [];
