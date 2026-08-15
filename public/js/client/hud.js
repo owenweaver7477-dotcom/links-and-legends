@@ -28,7 +28,7 @@ for (const id of [
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
-  'wArrow', 'wSpeed', 'wDesc',
+  'wArrow', 'wSpeed', 'wDesc', 'wWeather',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
   'playbar', 'clubName', 'clubCarry', 'clubUp', 'clubDown', 'mFill', 'mFaceDot', 'mLabel', 'aimTxt', 'mPct',
   'shotinfo', 'toasts', 'mapwrap', 'mapc', 'minic', 'miniPanel',
@@ -1487,6 +1487,7 @@ import {
   outfitStats, spinWord, outfitById
 } from '../shared/wardrobe.js';
 import { decalTexture } from './decals.js';
+import { weatherEffects, clockText } from '../shared/weather.js';
 
 /** Set by main.js. Receives a partial look. */
 HUD.onWardrobe = () => {};
@@ -1811,4 +1812,20 @@ HUD.bindBoards = () => {
     const c = e.target.closest('[data-rkc]');
     if (c) { HUD.rkCourse = c.dataset.rkc; HUD.onBoards(c.dataset.rkc); }
   });
+};
+
+/* The weather, under the wind rose. Shown once when a round's weather
+   arrives rather than every frame — it does not change within a round, and
+   rewriting this every frame would be a DOM write per frame for a string
+   that is the same string. */
+HUD.setWeather = w => {
+  if (!el.wWeather) return;
+  if (!w) { el.wWeather.hidden = true; return; }
+  el.wWeather.hidden = false;
+  const fx = weatherEffects(w);
+  el.wWeather.innerHTML =
+    `<span class="wcond">${w.icon} ${w.conditionName}</span>` +
+    `<span class="wclock">${clockText(w.hour)} · ${w.seasonName.toLowerCase()}</span>` +
+    (fx.length ? `<div class="wfx">${fx.map(f =>
+      `<i class="${f.good ? 'good' : 'bad'}">${f.label} ${f.value}</i>`).join('')}</div>` : '');
 };

@@ -98,7 +98,17 @@ export class ShotSim {
     // so an upgraded ball or forged irons change the flight for real — and a
     // shot with no gear multiplies by exactly 1 everywhere.
     const fx = gearEffect(shot.gear, club);
-    let speed = club.speed * power * Math.min(1, lieSpeed + cfx.lieMercy) * fx.speed * cfx.speed;
+    /* The weather, as two numbers that ride on the shot the same way gear
+       does. `carry` is on the ball speed, so cold dense air and rain cost
+       distance in the air; `roll` is held for _stepGround, because a wet
+       fairway is not a shorter carry, it is a ball that stops dead when it
+       lands. Defaulting both to 1 means every existing caller — the caddie's
+       probes, the tests, a shot taken before the weather arrived — behaves
+       exactly as it did. */
+    this.wx = shot.weather || null;
+    const wCarry = this.wx?.carry ?? 1;
+    this.rollMul = this.wx?.roll ?? 1;
+    let speed = club.speed * power * Math.min(1, lieSpeed + cfx.lieMercy) * fx.speed * cfx.speed * wCarry;
     let launch = club.launch + attack;
     if (lieSurface.id === 'sand') launch += 5;         // you have to dig it out
     if (lieSurface.id === 'deep' || lieSurface.id === 'rough') launch += 2.5;
@@ -361,7 +371,10 @@ export class ShotSim {
 
     // rolling resistance, scaled by how fast the greens are on this course
     const greenAdj = surf.id === 'green' || surf.id === 'fringe' ? (1 / (this.T.bio.greenSpeed || 1)) : 1;
-    const mu = surf.roll * greenAdj;
+    /* Wet ground grabs. `rollMul` below 1 means less roll, so it has to
+       INCREASE the resistance — dividing rather than multiplying, which is
+       the sort of sign error that would have made rain add fifty yards. */
+    const mu = surf.roll * greenAdj / (this.rollMul || 1);
     const decel = mu * G;
 
     let ax = gax, az = gaz;

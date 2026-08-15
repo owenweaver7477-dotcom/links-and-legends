@@ -2026,3 +2026,14 @@ body.introing .lp-inner, body.introing .lp-veil { opacity: 0; transition: opacit
   .rkrow { grid-template-columns: 28px 1fr auto; font-size: 11.5px; }
   .rkrow .rksub { display: none; }
 }
+
+/* the weather line under the wind rose */
+.w-weather { margin-top: 7px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.09);
+  font-size: 10.5px; color: #cfe0d4; line-height: 1.5; }
+.w-weather .wcond { display: block; font-weight: 700; font-size: 11.5px; }
+.w-weather .wclock { color: #9fbaa6; }
+.w-weather .wfx { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.w-weather .wfx i { font-style: normal; font-size: 9.5px; padding: 1px 5px; border-radius: 5px;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.07); }
+.w-weather .wfx i.bad { color: #e8a08a; border-color: rgba(232,160,138,.30); }
+.w-weather .wfx i.good { color: #8fe07a; border-color: rgba(143,224,122,.30); }

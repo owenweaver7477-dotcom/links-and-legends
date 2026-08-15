@@ -21,6 +21,7 @@ import { Server } from 'socket.io';
 
 import { allCourses, getCourse } from './public/js/shared/coursegen.js';
 import { ratingsFor } from './public/js/shared/handicap.js';
+import { weatherFor } from './public/js/shared/weather.js';
 
 /* Course rating and slope, computed once per course and kept. The geometry
    is a pure function of the seed, so these cannot change while the process
@@ -364,8 +365,15 @@ const teeOf = room => (hole(room).tees || {})[room.teeSet] || hole(room).tee;
 function rollWind(room) {
   const bio = biome(room);
   const rk = rngKit(hashSeed(room.code, room.holeIndex, 0x1d));
+  /* The weather scales the wind rather than replacing it: a blowing day on
+     a links is the links wind turned up, not a different wind. Computed
+     from the ROOM code alone, so it holds for the whole round — weather
+     that changed between holes would be a different game every hole, and
+     the ball-flight numbers a player learned on the first tee would be
+     lies by the fourth. */
+  const w = room.weather || (room.weather = weatherFor(hashSeed(room.code, 0, 0x1d), room.courseId));
   // capped at 13 m/s (~29 mph): beyond that even a wedge becomes a lottery
-  const speed = clamp(bio.windBase + rk.gauss() * bio.windGust, 0, 13);
+  const speed = clamp((bio.windBase + rk.gauss() * bio.windGust) * w.windMul, 0, 13);
   room.wind = { dir: rk.f(-Math.PI, Math.PI), speed: Math.round(speed * 10) / 10 };
 }
 
@@ -632,6 +640,12 @@ function snapshot(room) {
     state: room.state,
     turnPid: room.turnPid,
     wind: room.wind,
+    /* Sent rather than re-derived on the client. The client COULD compute
+       it from the room code — it is a pure function — but then a change to
+       the weather tables would need both sides redeployed in lockstep, and
+       a client one version behind would be playing different weather from
+       the server it is scored by. */
+    weather: room.weather || null,
     records: recordsFor(room.courseId),
     format: room.format,
     teams: teamCard(room),

@@ -19,6 +19,7 @@ import { SwingController, SWING } from './swing.js';
 import { HUD } from './hud.js';
 import { playIntro } from './intro.js';
 import { wearOutfit, normaliseCustom, outfitEffect } from '../shared/wardrobe.js';
+import { weatherText, weatherEffects } from '../shared/weather.js';
 import { tickHolo } from './decals.js';
 import { isAct, actionFor, keysFor, resetBinds } from './binds.js';
 import { Net } from './net.js';
@@ -605,7 +606,12 @@ function carryMult(club) {
      strike: the wardrobe advertises "+2.5% drive", so the yardage the game
      promises has to already contain it. A stat that changes the shot but not
      the number the player aims with is worse than no stat at all. */
-  return fx.speed * cfx.speed * outfitEffect(lookDraft).speed;
+  /* The weather is the last factor and it is the only one that can make
+     the number go DOWN. Cold, dense air and rain cost carry; the panel
+     under the club name has to say so, or a player whose driver suddenly
+     flies 240 instead of 250 will conclude the game is broken rather than
+     that it is raining. */
+  return fx.speed * cfx.speed * outfitEffect(lookDraft).speed * (G.weather?.carry ?? 1);
 }
 
 /** The same figure without a club in hand, for choosing one in the first place. */
@@ -683,7 +689,7 @@ function refreshAimPreview(force) {
   const showRunOut = !isPutt || (myCrew?.roller || 0) >= 4 || (myGear?.putter || 0) >= 1;
   const sim = new ShotSim(G.T, {
     x: b.x, z: b.z, clubKey, power: Math.min(previewPower, 1.12), aim: swing.aim,
-    faceDeg: 0, attackDeg: 0, wind: G.wind, ignoreCup: showRunOut, gear: myGear,
+    faceDeg: 0, attackDeg: 0, wind: G.wind, weather: G.weather, ignoreCup: showRunOut, gear: myGear,
     crew: myCrew, clubTier: myTier, refine: myRefine
   });
   const r = sim.runToEnd();
@@ -912,7 +918,7 @@ function updateLandingDot(now) {
   const r = new ShotSim(G.T, {
     x: b.x, z: b.z, clubKey,
     power: Math.min(m.power, 1.12), aim: swing.aim,
-    faceDeg: m.face || 0, attackDeg: 0, wind: G.wind,
+    faceDeg: m.face || 0, attackDeg: 0, wind: G.wind, weather: G.weather,
     gear: G.profile?.gear || null, crew: G.profile?.crew || null,
     clubTier: G.profile?.clubTier ?? 0, refine: G.profile?.refine ?? 0
   }).runToEnd();
@@ -2077,6 +2083,17 @@ Net.on('state', s => {
   G.room = s;
   G.myPid = Net.pid;
   G.wind = s.wind || G.wind;
+  /* Weather arrives with the state and is applied ONCE per round, not per
+     broadcast — rebuilding fourteen hundred rain particles ten times a
+     second is a stutter, and the weather does not change within a round. */
+  if (s.weather && s.weather.condition !== G.weather?.condition) {
+    G.weather = s.weather;
+    HUD.setWeather(s.weather);
+  }
+  /* Handed to the scene on every hole too, not only when it changes: a new
+     hole builds a fresh set of lights, and they come out of loadHole lit for
+     whatever the scene last knew. */
+  if (G.weather && scene.weather !== G.weather) scene.setWeather(G.weather);
 
   if (s.state !== 'lobby') ensureHole(s.courseId, s.holeIndex);
   else if (!G.loadedKey) { /* lobby: nothing loaded yet, that's fine */ }

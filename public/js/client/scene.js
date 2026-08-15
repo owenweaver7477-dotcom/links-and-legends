@@ -12,6 +12,7 @@ import { mulberry32, clamp, lerp, fbm, smoothstep } from '../shared/rng.js';
 import { BALL_RADIUS } from '../shared/ballistics.js';
 import { sharedBlobTexture } from './avatar.js';
 import { crownOf } from '../shared/biomes.js';
+import { lightAt, sunAt, SEASONS } from '../shared/weather.js';
 
 const GRID_STEP = 1.8;          // metres between terrain vertices.  2.6 read
                                 // as polygonal on every mound; 1.8 is the
@@ -237,8 +238,34 @@ export class GolfScene {
     this.scene.add(g);
 
     const P = bio.palette;
-    const skyTop = new THREE.Color(P.sky[0]);
-    const skyBot = new THREE.Color(P.sky[1]);
+    /* WEATHER AND TIME OF DAY.
+       -------------------------------------------------------------------
+       Everything below reads the biome palette through the weather rather
+       than straight: the light warms and drops as the hour gets late, the
+       sky darkens, the fog closes in. The multipliers come from
+       weather.js so the server computes the same numbers — a client that
+       thinks it is a clear noon while the server thinks it is raining is a
+       client whose ball goes further than the server allows. */
+    const W = this.weather || null;
+    const L = W ? lightAt(W.hour, W.season) : null;
+    /* Declared HERE, with the other weather derivations, and not down in the
+       sun block where it is mostly used — the hemisphere light reads it
+       first, and a `const` used above its declaration is a temporal dead
+       zone error that takes the whole boot down rather than just the sky. */
+    const cloudy = W ? W.cloud : 0;
+    const SEA = W ? (SEASONS.find(x => x.id === W.season) || null) : null;
+    const tint = (hex, mul) => {
+      const c = new THREE.Color(hex);
+      if (!mul) return c;
+      c.r = Math.min(1, c.r * mul[0]); c.g = Math.min(1, c.g * mul[1]); c.b = Math.min(1, c.b * mul[2]);
+      return c;
+    };
+    const skyTop = tint(P.sky[0], L?.skyTop);
+    const skyBot = tint(P.sky[1], L?.skyBot);
+    if (L?.night) {
+      // night is not "the same picture, darker": it is a different palette
+      skyTop.setRGB(0.06, 0.09, 0.19); skyBot.setRGB(0.13, 0.17, 0.29);
+    }
 
     /* ---- atmosphere ---- */
     /* AERIAL PERSPECTIVE, which is the thing that was missing.
@@ -254,7 +281,18 @@ export class GolfScene {
        treeline at a third, which is the gradient the eye reads as depth. The
        near course is untouched — nothing within 260 m is fogged at all, and
        the longest shot in the game is 300. */
-    this.scene.fog = new THREE.Fog(new THREE.Color(P.fog), 260, 1900);
+    /* Visibility. Fog is the one weather effect that changes how the hole is
+       PLAYED rather than how it looks — at 0.16 (thick fog) the far distance
+       closes to about 300 m and you cannot see the green from the tee, which
+       is exactly what fog does on a golf course. The near plane scales too,
+       or thick fog would sit as a wall at a fixed distance instead of
+       surrounding you. */
+    const vis = W ? W.vis : 1;
+    const fogCol = L?.night
+      ? new THREE.Color(0.10, 0.13, 0.22)
+      : tint(P.fog, L?.skyBot);
+    if (W && W.wet) fogCol.lerp(new THREE.Color('#9fb0b8'), W.wet * 0.35);
+    this.scene.fog = new THREE.Fog(fogCol, 260 * Math.max(0.28, vis), 1900 * vis);
     this.scene.background = skyBot.clone();
 
     /* The hemisphere light's GROUND colour is the bounce coming back up off
@@ -265,13 +303,26 @@ export class GolfScene {
        screen as a silhouette. A fairway you can stand on bounces fairway
        light. */
     const bounce = new THREE.Color(P.fairway).lerp(new THREE.Color(P.rough), 0.45);
-    const hemi = new THREE.HemisphereLight(skyTop.clone(), bounce, bio.ambient * 1.15);
+    const hemiPow = bio.ambient * 1.15 * (L ? L.ambient : 1) * (1 + cloudy * 0.28);
+    const hemi = new THREE.HemisphereLight(skyTop.clone(), bounce, hemiPow);
     g.add(hemi);
+    this.hemi = hemi;
 
-    const sunDir = dirFromAngles(bio.sunElev, bio.sunAzim);
+    /* The sun moves. Its elevation and bearing come from the hour, so a
+       morning round has long shadows pointing west and an evening one has
+       them pointing east — and at dusk the key goes orange because that is
+       what happens when light travels through more atmosphere. */
+    const SUN = W ? sunAt(W.hour, W.season) : null;
+    const sunDir = SUN
+      ? dirFromAngles(Math.max(4, SUN.elev), SUN.azim)
+      : dirFromAngles(bio.sunElev, bio.sunAzim);
     // a brighter key against a slightly cooler fill reads as sunlight rather
 // than as a uniformly lit model
-    const sun = new THREE.DirectionalLight(new THREE.Color(P.sun), 1.78);
+    /* Cloud cover flattens the key and lifts the fill, which is what an
+       overcast day actually is — not a dimmer switch on a sunny one. */
+    const sunCol = L?.night ? new THREE.Color(0.52, 0.60, 0.86) : tint(P.sun, L?.warm);
+    const sunPow = (L ? L.strength : 1.78 / 1.14) * 1.14 * (1 - cloudy * 0.55);
+    const sun = new THREE.DirectionalLight(sunCol, Math.max(0.10, sunPow));
     sun.position.set(sunDir.x * 600, sunDir.y * 600, sunDir.z * 600);
     sun.castShadow = !!this.q?.shadows;
     // 2048 over 1536: the shadow frustum covers 70 m, so this is the
@@ -1715,6 +1766,185 @@ export class GolfScene {
   ballObj(pid) { return this.balls.get(pid); }
 
   /* ------------------------------------------------------------ frame --- */
+  /* ═════════════════════════════════════════════ PRECIPITATION ═══════
+     Rain and snow, as one instanced particle box that FOLLOWS THE CAMERA.
+
+     That last part is the whole trick. Weather over a 900-metre course
+     would be a quarter of a million particles, almost all of them behind
+     you or too far to see. A 26-metre box locked to the camera, with every
+     particle wrapping to the other side when it falls out, is 1,400
+     particles that look like weather everywhere you go — because you can
+     only ever see the weather near you anyway.
+
+     Rain is drawn as stretched vertical lines rather than dots, which is
+     what a camera with a shutter records and what the eye expects; snow is
+     drawn as points with a drift, because a snowflake has no motion blur at
+     the speed it falls. */
+  _buildPrecip(kind, strength) {
+    this._killPrecip();
+    if (!kind || strength <= 0) return;
+    const rain = kind === 'rain';
+    const N = Math.round((rain ? 1400 : 900) * strength * (this.q?.precip ?? 1));
+    if (N < 20) return;
+
+    const BOX = 26, HIGH = 18;
+    const pos = new Float32Array(N * 3);
+    const spd = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * BOX;
+      pos[i * 3 + 1] = Math.random() * HIGH;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * BOX;
+      spd[i] = rain ? 14 + Math.random() * 9 : 1.1 + Math.random() * 1.0;
+    }
+    const geo = new THREE.BufferGeometry();
+    let mat, pts, seg = null;
+
+    if (rain) {
+      /* LINE SEGMENTS, not points. A raindrop crossing the frame in a
+         sixtieth of a second is a streak to any camera and to the eye, and
+         the first version drew it as a round dot — which reads as dust, or
+         as snow, or as a rendering fault, but never as rain. Two vertices
+         per drop, the lower one trailing by the fall distance of about one
+         frame. */
+      seg = new Float32Array(N * 6);
+      for (let i = 0; i < N; i++) {
+        const j = i * 6;
+        seg[j] = pos[i * 3]; seg[j + 1] = pos[i * 3 + 1]; seg[j + 2] = pos[i * 3 + 2];
+        seg[j + 3] = pos[i * 3]; seg[j + 4] = pos[i * 3 + 1] + spd[i] * 0.032; seg[j + 5] = pos[i * 3 + 2];
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(seg, 3));
+      mat = new THREE.LineBasicMaterial({
+        color: 0xc6d9e8, transparent: true, opacity: 0.5,
+        depthWrite: false, fog: false
+      });
+      pts = new THREE.LineSegments(geo, mat);
+    } else {
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      mat = new THREE.PointsMaterial({
+        color: 0xffffff, size: 0.11, transparent: true, opacity: 0.85,
+        depthWrite: false, sizeAttenuation: true,
+        fog: false            // precipitation is BETWEEN you and the fog
+      });
+      pts = new THREE.Points(geo, mat);
+    }
+    pts.frustumCulled = false;    // it is always around the camera
+    pts.renderOrder = 4;
+    this.scene.add(pts);
+    this._precip = { pts, geo, mat, pos, spd, seg, N, BOX, HIGH, rain };
+  }
+
+  _killPrecip() {
+    if (!this._precip) return;
+    this.scene.remove(this._precip.pts);
+    this._precip.geo.dispose();
+    this._precip.mat.dispose();
+    this._precip = null;
+  }
+
+  _stepPrecip(dt) {
+    const p = this._precip;
+    if (!p) return;
+    const c = this.camera.position;
+    const { pos, spd, N, BOX, HIGH } = p;
+    // wind pushes it sideways, which is what makes rain read as weather
+    const wx = Math.sin(this.windDir || 0) * (p.rain ? 2.4 : 1.1);
+    const wz = Math.cos(this.windDir || 0) * (p.rain ? 2.4 : 1.1);
+    const sway = p.rain ? 0 : 0.5;
+    for (let i = 0; i < N; i++) {
+      const j = i * 3;
+      pos[j + 1] -= spd[i] * dt;
+      pos[j] += wx * dt + (sway ? Math.sin(this.t * 1.6 + i) * sway * dt : 0);
+      pos[j + 2] += wz * dt;
+      // wrap: out of the box on any axis and it comes back on the far side
+      if (pos[j + 1] < -2) { pos[j + 1] = HIGH; }
+      if (pos[j] > BOX / 2) pos[j] -= BOX; else if (pos[j] < -BOX / 2) pos[j] += BOX;
+      if (pos[j + 2] > BOX / 2) pos[j + 2] -= BOX; else if (pos[j + 2] < -BOX / 2) pos[j + 2] += BOX;
+    }
+    /* Rain keeps a second vertex per drop, so the streak has to be written
+       back as well as the head — and the trail LENGTH scales with fall
+       speed, which is what makes heavy rain look heavier rather than just
+       denser. */
+    if (p.seg) {
+      const seg = p.seg;
+      for (let i = 0; i < N; i++) {
+        const j = i * 6, k = i * 3;
+        seg[j] = pos[k]; seg[j + 1] = pos[k + 1]; seg[j + 2] = pos[k + 2];
+        seg[j + 3] = pos[k] - wx * 0.03;
+        seg[j + 4] = pos[k + 1] + spd[i] * 0.034;
+        seg[j + 5] = pos[k + 2] - wz * 0.03;
+      }
+    }
+    p.geo.attributes.position.needsUpdate = true;
+    // the box rides with the camera, snapped so particles do not slide
+    p.pts.position.set(c.x, (this.T ? this.T.heightAt(c.x, c.z) : 0), c.z);
+  }
+
+  /** Called by main.js when a round's weather is known. */
+  setWeather(w) {
+    const changed = (w?.condition || null) !== (this.weather?.condition || null)
+                 || (w?.hour ?? null) !== (this.weather?.hour ?? null);
+    this.weather = w || null;
+    if (!w) { this._killPrecip(); this._tuneAtmosphere(); return; }
+    if (changed) {
+      this._buildPrecip(w.snow > 0 ? 'snow' : w.rain > 0 ? 'rain' : null,
+                        w.snow || w.rain || 0);
+    }
+    this._tuneAtmosphere();
+  }
+
+  /* Re-point the sky at the current weather WITHOUT rebuilding the hole.
+
+     This exists because of an ordering fact that is not going to change: the
+     hole is built when the course loads, and the weather arrives with the
+     first state broadcast, which is later. Baking the atmosphere into
+     loadHole alone meant every round was lit for a clear noon no matter what
+     the sky was doing, and the fog, the sun colour and the light level all
+     silently ignored the weather they had been given.
+
+     Only the handful of properties that depend on it are touched — no
+     geometry, no materials, no allocation — so this is safe to call whenever
+     the weather changes and cheap enough not to think about. */
+  _tuneAtmosphere() {
+    if (!this.bio || !this.sun) return;
+    const P = this.bio.palette;
+    const W = this.weather;
+    const L = W ? lightAt(W.hour, W.season) : null;
+    const cloudy = W ? W.cloud : 0;
+    const tint = (hex, mul) => {
+      const c = new THREE.Color(hex);
+      if (!mul) return c;
+      c.r = Math.min(1, c.r * mul[0]); c.g = Math.min(1, c.g * mul[1]); c.b = Math.min(1, c.b * mul[2]);
+      return c;
+    };
+
+    const skyBot = tint(P.sky[1], L?.skyBot);
+    const skyTop = tint(P.sky[0], L?.skyTop);
+    if (L?.night) { skyTop.setRGB(0.06, 0.09, 0.19); skyBot.setRGB(0.13, 0.17, 0.29); }
+    this.scene.background = skyBot.clone();
+
+    const vis = W ? W.vis : 1;
+    const fogCol = L?.night ? new THREE.Color(0.10, 0.13, 0.22) : tint(P.fog, L?.skyBot);
+    if (W?.wet) fogCol.lerp(new THREE.Color('#9fb0b8'), W.wet * 0.35);
+    if (this.scene.fog) {
+      this.scene.fog.color.copy(fogCol);
+      this.scene.fog.near = 260 * Math.max(0.28, vis);
+      this.scene.fog.far = 1900 * vis;
+    }
+
+    this.sun.color.copy(L?.night ? new THREE.Color(0.52, 0.60, 0.86) : tint(P.sun, L?.warm));
+    this.sun.intensity = Math.max(0.10,
+      (L ? L.strength : 1.78 / 1.14) * 1.14 * (1 - cloudy * 0.55));
+    if (W) {
+      const SUN = sunAt(W.hour, W.season);
+      this.sunDir = dirFromAngles(Math.max(4, SUN.elev), SUN.azim);
+    }
+    if (this.hemi) {
+      this.hemi.color.copy(skyTop);
+      this.hemi.intensity = this.bio.ambient * 1.15 * (L ? L.ambient : 1) * (1 + cloudy * 0.28);
+    }
+    if (this.fill) this.fill.color.copy(skyBot);
+  }
+
   update(dt) {
     this.t += dt;
     // slide the shadow frustum along with the camera so the visible ground is
@@ -1771,6 +2001,7 @@ export class GolfScene {
       }
       this.clouds.instanceMatrix.needsUpdate = true;
     }
+    this._stepPrecip(dt);
     if (this.fx) this.fx.update(dt);
   }
 
