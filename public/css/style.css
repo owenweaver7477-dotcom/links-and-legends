@@ -2398,9 +2398,13 @@ body.side-open .lp-play-fixed { opacity: .5; }
 }
 
 /* ── the career pane ─────────────────────────────────────────────────── */
-.career { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
-.career > * { padding: 12px 14px; border-radius: 13px;
-  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
+/* NO GRID HERE. This block once set `display: grid` with auto-fit columns,
+   which is the layout the career pane was deliberately moved OFF — see the
+   note by `.career { display: block }` above. Its children are full-width
+   sections, and columns stacked the rating header, the charts and the dials
+   on top of one another. The styling below is the part that was wanted:
+   spacing between the sections, and no box drawn around them. */
+.career > * + * { margin-top: 12px; }
 
 /* ── shop and record rows, same treatment ───────────────────────────── */
 .shopcard { border-radius: 14px; transition: transform .18s, border-color .18s, box-shadow .18s; }

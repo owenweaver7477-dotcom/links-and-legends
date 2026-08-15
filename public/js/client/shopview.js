@@ -77,6 +77,26 @@ const box = (mat, w, h, d, x, y, z) => {
    Built from the same proportions the avatar's club uses, scaled up. A
    preview that is a different object from the one in your hands is a
    preview of something the game does not have. */
+/* Real head volumes, in cc. A driver is 460 by rule and a 7 wood is about
+   135, which is a 1.5x difference in every linear dimension — and the shop
+   drew all four woods at one size, so the only thing separating a £4,000
+   driver from a 7 wood was the word. Cube root, because volume is cubic. */
+const WOOD_CC = { DR: 460, W3: 175, W5: 155, W7: 135 };
+
+/** A rounded head — a squashed sphere, not a box. */
+function blob(mat, w, h, d, x, y, z) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 14), mat);
+  m.scale.set(w, h, d); m.position.set(x, y, z);
+  return m;
+}
+
+/** A disc/rod — hosels, ferrules, grip taper. */
+function rod(mat, rTop, rBot, h, x, y, z) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, 1, 16), mat);
+  m.scale.y = h; m.position.set(x, y, z);
+  return m;
+}
+
 function buildClub(key, tier = 0, skinId = 'stock') {
   const club = CLUB_BY_KEY[key] || CLUBS[0];
   const g = new THREE.Group();
@@ -91,28 +111,145 @@ function buildClub(key, tier = 0, skinId = 'stock') {
   const gripCol = sk.grip || ['#2b2b2f', '#2b2b2f', '#1c1c20', '#101014'][tier] || '#2b2b2f';
   const shine = sk.sheen ?? (0.6 + tier * 0.1);
 
-  g.add(box(M(gripCol), 0.075, 0.42, 0.075, 0, 0.62, 0));
-  g.add(box(M(shaftCol, shine), 0.042, 1.5, 0.042, 0, -0.12, 0));
+  /* SHAFT LENGTH IS A CLUB'S MOST VISIBLE PROPERTY and the preview did not
+     have it: every club stood exactly 1.5 units of shaft tall, so a driver
+     and a lob wedge were the same object with a different lump on the end.
+     A real driver is 45 inches and a lob wedge 35 — a fifth shorter, which
+     you can see across a room. Woods are long, the putter shortest, and
+     irons shorten steadily as the loft climbs. */
+  const shaftLen = club.putter ? 1.06
+    : club.type === 'wood' ? 1.62 - (club.loft - 10.5) * 0.008
+    : club.type === 'hybrid' ? 1.44
+    : 1.42 - (club.loft - 18) * 0.0065;
+  const gripLen = club.putter ? 0.50 : 0.40;
+  const top = shaftLen / 2;
 
+  /* A tapered grip, not a straight box — every real grip is fatter at the
+     butt, and the putter's is flat-topped and thicker still. */
+  g.add(rod(M(gripCol), club.putter ? 0.045 : 0.040, 0.030,
+            gripLen, 0, top + gripLen / 2 - 0.02, 0));
+  g.add(rod(M(shaftCol, shine), 0.017, 0.024, shaftLen, 0, 0, 0));
+
+  const headY = -top;
   const head = new THREE.Group();
-  head.position.set(0, -0.90, 0);
-  if (club.putter) {
-    head.add(box(M(headCol, 0.8), 0.34, 0.09, 0.12, 0, 0, 0.03));
-    head.add(box(M('#c8382f'), 0.03, 0.10, 0.02, 0, 0.005, -0.03));   // the sightline
-  } else if (club.type === 'wood' || club.type === 'hybrid') {
-    head.add(box(M(headCol, 0.9), 0.30, 0.20, 0.26, 0, -0.02, 0.08));
-    head.add(box(M('#1a1c20'), 0.28, 0.02, 0.24, 0, -0.12, 0.08));    // the sole
-  } else {
-    // an iron: a blade with a visible set of grooves
-    head.add(box(M(headCol, 0.75), 0.26, 0.16, 0.055, 0, 0, 0.03));
-    head.add(box(M('#1a1c20'), 0.26, 0.03, 0.075, 0, -0.08, 0.035));
-    for (let i = 0; i < 5; i++) {
-      head.add(box(M('#8a8f96'), 0.20, 0.006, 0.012, 0, 0.045 - i * 0.022, 0.058));
-    }
+  head.position.set(0, headY, 0);
+
+  /* The ferrule: the little black collar where the shaft enters the head.
+     It is two millimetres of a real club and its absence is why these read
+     as shapes stuck on sticks rather than as clubs. Not on woods, which
+     have none. */
+  if (!club.putter && club.type !== 'wood') {
+    g.add(rod(M('#15171a'), 0.026, 0.030, 0.05, 0, headY + 0.055, 0));
   }
+
+  if (club.putter) {
+    /* A MALLET, built like one. The old putter was two boxes and a red
+       tick, which is the least detailed club in the bag being the one you
+       use most — roughly half of all strokes in a round are putts. */
+    head.add(box(M(headCol, 0.85), 0.30, 0.075, 0.10, 0, 0, 0.015));   // the blade
+    // the flange: the weight hanging out the back, and what makes it a mallet
+    head.add(blob(M(headCol, 0.7), 0.29, 0.062, 0.20, 0, -0.004, 0.15));
+    head.add(box(M('#0f1114'), 0.30, 0.016, 0.19, 0, -0.036, 0.15));   // sole plate
+    // a milled face insert, inset rather than painted on
+    head.add(box(M('#8a8f96', 0.25), 0.26, 0.056, 0.012, 0, 0, -0.038));
+    // TWO parallel alignment lines, which is how you actually aim a mallet
+    head.add(box(M('#e8eaee'), 0.014, 0.008, 0.20, -0.045, 0.038, 0.14));
+    head.add(box(M('#e8eaee'), 0.014, 0.008, 0.20, 0.045, 0.038, 0.14));
+    head.add(box(M('#c8382f'), 0.055, 0.009, 0.045, 0, 0.039, 0.225));  // the sightdot
+    // a plumber's-neck hosel, offset forward — the shaft does not meet a
+    // putter head in the middle, and that offset is the whole design
+    head.add(rod(M(shaftCol, shine), 0.016, 0.016, 0.10, 0, 0.075, -0.02));
+    head.add(box(M(shaftCol, shine), 0.030, 0.020, 0.055, 0, 0.030, -0.038));
+
+  } else if (club.type === 'wood') {
+    /* Sized from real head volume, so the driver towers over the 7 wood the
+       way it does in a bag. */
+    const s = Math.cbrt((WOOD_CC[key] ?? 150) / 460);
+    const w = 0.34 * s, h = 0.21 * s, d = 0.30 * s;
+    head.add(blob(M(headCol, 0.9), w, h, d, 0, 0, d * 0.28));           // the crown
+    head.add(box(M('#15171a'), w * 0.92, 0.022, d * 0.88, 0, -h * 0.42, d * 0.28));
+    // the face, with its own insert — a driver face is a visible plate
+    head.add(box(M(headCol, 1), w * 0.80, h * 0.66, 0.020, 0, 0.004, -d * 0.30));
+    head.add(box(M('#7d838b', 0.4), w * 0.62, h * 0.46, 0.010, 0, 0.004, -d * 0.335));
+    // scoring lines across the face, which woods do have
+    for (let i = 0; i < 4; i++) {
+      head.add(box(M('#4a4f56'), w * 0.54, 0.005, 0.006,
+                   0, h * 0.16 - i * h * 0.11, -d * 0.345));
+    }
+
+  } else if (club.type === 'hybrid') {
+    /* Deliberately BETWEEN the two, because that is what a hybrid is: a
+       wood's rounded sole with an iron's shallow face. Drawing it as a
+       small wood — which the old code did, sharing the branch — threw away
+       the only reason the club exists. */
+    /* Hybrids run 19° to 25° and the heads shrink across that range the way
+       the woods do — the first pass hard-coded one size, which made the 3,
+       4 and 5 hybrid the same object. Caught by the shape test, not by me. */
+    const u = Math.min(1, Math.max(0, (club.loft - 19) / 6));   // 0 at H3, 1 at H5
+    const hw = 0.245 - u * 0.030, hh = 0.148 + u * 0.014, hd = 0.180 - u * 0.022;
+    head.add(blob(M(headCol, 0.85), hw, hh, hd, 0, 0, hd * 0.26));
+    head.add(box(M('#15171a'), hw * 0.9, 0.020, hd * 0.86, 0, -hh * 0.42, hd * 0.26));
+    head.add(box(M(headCol, 0.9), hw * 0.9, hh * 0.76, 0.018, 0, 0.005, -hd * 0.24));
+    for (let i = 0; i < 5; i++) {
+      head.add(box(M('#5a6068'), hw * 0.7, 0.005, 0.006,
+                   0, hh * 0.21 - i * hh * 0.105, -hd * 0.30));
+    }
+    head.add(rod(M(headCol, 0.8), 0.020, 0.024, 0.07, hw * 0.35, hh * 0.37, 0));
+
+  } else {
+    /* IRONS AND WEDGES, and they are not the same club. A 3 iron is a long
+       thin cavity-backed blade; a lob wedge is a short deep slab with a
+       wide bounce sole and grooves to the top edge. `t` runs 0 at the 2
+       iron to 1 at the flop, and every dimension below rides it — so the
+       set forms a visible progression instead of twelve copies. */
+    const t = Math.min(1, Math.max(0, (club.loft - 18) / 46));
+    const wedge = club.type === 'wedge';
+    const w = 0.30 - t * 0.055;              // blades shorten as loft climbs
+    const h = 0.135 + t * 0.055;             // and get deeper
+    const faceD = 0.030 + t * 0.016;
+
+    head.add(box(M(headCol, 0.75), w, h, faceD, 0, 0, 0));
+
+    /* The back tells you which club it is. Long irons are cavity-backed for
+       forgiveness — a rim with a hollow — and short irons and wedges are
+       muscle-backs, solid with the weight behind the middle of the face. */
+    if (!wedge && t < 0.45) {
+      head.add(box(M(headCol, 0.6), w * 0.94, h * 0.20, 0.030, 0, h * 0.36, faceD * 0.8));
+      head.add(box(M(headCol, 0.6), w * 0.94, h * 0.16, 0.030, 0, -h * 0.30, faceD * 0.8));
+      head.add(box(M(headCol, 0.6), w * 0.10, h * 0.86, 0.030, -w * 0.42, 0, faceD * 0.8));
+      head.add(box(M(headCol, 0.6), w * 0.10, h * 0.86, 0.030, w * 0.42, 0, faceD * 0.8));
+      head.add(box(M('#101216'), w * 0.78, h * 0.52, 0.012, 0, 0, faceD * 0.72));
+    } else {
+      head.add(blob(M(headCol, 0.6), w * 0.72, h * 0.52, 0.055, 0, -h * 0.12, faceD * 0.75));
+    }
+
+    /* The sole, and its width is the bounce. A wedge's is visibly thick —
+       it is the part that stops the club digging — and a 3 iron's is a thin
+       edge. Same box, very different number. */
+    const sole = wedge ? 0.030 + t * 0.030 : 0.018;
+    head.add(box(M('#15171a'), w, sole, faceD + 0.030 + t * 0.030,
+                 0, -h / 2 + sole / 2, faceD * 0.25));
+
+    /* Grooves. A wedge has them across the whole face and an iron only over
+       the hitting area, and there are more of them the more loft there is —
+       which is exactly the detail that was one hard-coded 5 for every club
+       from the 2 iron to the flop. */
+    const n = wedge ? 11 : 6 + Math.round(t * 3);
+    const span = h * (wedge ? 0.74 : 0.56);
+    for (let i = 0; i < n; i++) {
+      head.add(box(M('#8a8f96'), w * (wedge ? 0.86 : 0.74), 0.005, 0.006,
+                   0, span / 2 - (i * span) / (n - 1), -faceD / 2 - 0.003));
+    }
+
+    // the hosel, angled in from the heel the way a real iron's is
+    const hos = rod(M(headCol, 0.7), 0.019, 0.023, 0.09, w * 0.44, h * 0.42, 0);
+    hos.rotation.z = 0.22;
+    head.add(hos);
+  }
+
   /* Loft is real: the face lies back by the club's own number, so a wedge
      visibly points at the sky and a driver does not. */
-  head.rotation.x = -(club.loft || 10) * Math.PI / 180 * 0.55;
+  head.rotation.x = (club.loft || 10) * Math.PI / 180 * 0.55;
   g.add(head);
 
   /* A glow on the feat finishes. They are the only things in the game that
@@ -123,12 +260,28 @@ function buildClub(key, tier = 0, skinId = 'stock') {
       new THREE.SphereGeometry(0.30, 14, 10),
       new THREE.MeshBasicMaterial({ color: new THREE.Color(sk.glow), transparent: true,
                                     opacity: 0.16, depthWrite: false }));
-    halo.position.y = -0.90;
+    halo.position.y = headY;      // follows the head, which now moves per club
     g.add(halo);
   }
-  g.scale.setScalar(0.86);
+  /* FRAME ON THE HEAD. A club is nine parts shaft, so framing the whole
+     object fits a metre and a half of tube on screen and leaves the head —
+     the only part that differs between two clubs, and the only part anybody
+     is buying — about ten pixels tall. Every shop in the world photographs
+     a club by filling the frame with the head and letting the shaft run out
+     of shot, and for the same reason.
+
+     Tilted, too: a club stood straight up is a pole. Leaning it puts the
+     sole, the face and the topline all in one view. */
+  g.rotation.z = 0.30;
+  g.userData.focus = head;
   return g;
 }
+
+/* The head geometry is the thing the shop exists to show, so it is worth
+   asserting rather than eyeballing — twelve irons that differ by a number
+   nobody checked is how they ended up identical in the first place. */
+export const __buildClubForTest = (key, tier = 0, skin = 'stock') =>
+  buildClub(key, tier, skin);
 
 /* -------------------------------------------------------------- decals ---
    Shown on a flat plate rather than floating: a badge in mid-air is a
@@ -217,14 +370,23 @@ export function showItem(canvas, what) {
      box that exactly fits face-on clips its own corners a quarter turn
      later. */
   r.stage.rotation.set(0, 0, 0);
-  const bb = new THREE.Box3().setFromObject(obj);
+  /* An item can nominate the part worth looking at (clubs do — see the note
+     in buildClub). Framing on that instead of on the whole object is the
+     difference between a picture of a club head and a picture of a shaft. */
+  const focus = obj.userData?.focus || obj;
+  const bb = new THREE.Box3().setFromObject(focus);
   const size = bb.getSize(new THREE.Vector3());
   const mid = bb.getCenter(new THREE.Vector3());
-  obj.position.y -= mid.y;                       // sit it on the turntable centre
+  /* Put the focus ON the spin axis, both ways. Y alone was enough while the
+     whole object was framed and symmetrical; a club head hangs off the end
+     of a leaning shaft, so leaving X be would swing it around the turntable
+     instead of turning it on the spot. */
+  obj.position.y -= mid.y;
+  obj.position.x -= mid.x;
   const reach = Math.max(size.y, Math.hypot(size.x, size.z)) * 0.5;
   const fovR = r.camera.fov * Math.PI / 180;
-  const dist = (reach * 1.55) / Math.tan(fovR / 2);
-  r.camera.position.set(0, reach * 0.22, dist);
+  const dist = (reach * 2.0) / Math.tan(fovR / 2);
+  r.camera.position.set(0, reach * 0.30, dist);
   r.camera.lookAt(0, 0, 0);
   r.camera.updateProjectionMatrix();
 

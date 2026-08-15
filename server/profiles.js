@@ -583,9 +583,15 @@ export function worldPlace(pid) {
   if ((me.rounds || 0) < RANKED_MIN_ROUNDS) {
     return { ranked: false, need: RANKED_MIN_ROUNDS - (me.rounds || 0) };
   }
+  /* THE SAME FILTER THE LIST USES. This counted with `isBot` alone while
+     worldRanking counted with `rankable`, which also requires a name — so
+     the field size included players who can never appear in the list below
+     it, and `ahead` counted them too. That is how you end up ranked 14th of
+     60 on a board showing nine people: both numbers were real, they were
+     just answering a different question from the one the list answers. */
   let ahead = 0, total = 0;
   for (const [id, p] of profiles) {
-    if (isBot(id) || (p.rounds || 0) < RANKED_MIN_ROUNDS) continue;
+    if (!rankable(id, p) || (p.rounds || 0) < RANKED_MIN_ROUNDS) continue;
     total++;
     if ((p.rating || 0) > (me.rating || 0)) ahead++;
   }
