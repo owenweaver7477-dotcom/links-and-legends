@@ -20,10 +20,11 @@ const $ = id => document.getElementById(id);
 const el = {};
 for (const id of [
   'screenHome', 'screenLobby', 'screenResults', 'screenLoad', 'screenHoleOver', 'screenShop',
-  'screenLanding', 'introCanvas', 'lpLegend', 'lpLive',
+  'screenLanding', 'introCanvas', 'lpLegend', 'lpLive', 'lpSide', 'lpSideTitle',
+  'lpSideClose', 'lpOnlineCount', 'lpCourseName', 'lpCourseSub', 'lpFriendSub',
   'screenWardrobe', 'wdCarousel', 'wdCourseName', 'wdCourseWhere', 'wdDots', 'wdPrev', 'wdNext',
   'wdAuto', 'wdCats', 'wdFits', 'wdRTabs', 'wdRBody', 'wdName', 'wdFit', 'wdStats',
-  'wdRandom', 'wdSeeIn', 'wdDone',
+  'wdRandom', 'wdCustom', 'wdDone',
   'btnClubhouse', 'btnShopBack', 'homeCoins',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
@@ -76,9 +77,19 @@ HUD.dist = dist;
 
 /* ---------------------------------------------------------------- screens */
 HUD.show = which => {
-  el.screenLanding.hidden = which !== 'landing';
+  /* 'home' and 'landing' are the SAME SCREEN now. The old home screen was a
+     column of eleven controls beside a course picker beside a character
+     editor, and the landing page it sat behind was better at being a front
+     door than it was — so the front door became the whole thing, and every
+     control that earned its place moved onto it.
+
+     `screenHome` still exists in the DOM, hidden, because the wardrobe and
+     the clubhouse both render into the character panel inside it by id.
+     Showing it is never right. */
+  const landing = which === 'landing' || which === 'home';
+  el.screenLanding.hidden = !landing;
   el.screenWardrobe.hidden = which !== 'wardrobe';
-  el.screenHome.hidden = which !== 'home';
+  el.screenHome.hidden = true;
   el.screenLobby.hidden = which !== 'lobby';
   el.screenResults.hidden = which !== 'results';
   el.screenHoleOver.hidden = which !== 'holeover';
@@ -88,7 +99,7 @@ HUD.show = which => {
   // piece of in-round chrome, so the transparent title screen never shows
   // the backdrop hole's own scorecard and minimap through itself.
   document.body.classList.toggle('playing', which == null);
-  document.body.classList.toggle('landed', which === 'landing');
+  document.body.classList.toggle('landed', landing);
 };
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
 HUD.setHomeCoins = n => { el.homeCoins.textContent = '🪙 ' + (n || 0).toLocaleString(); };
@@ -1492,6 +1503,7 @@ import { weatherEffects, clockText } from '../shared/weather.js';
 /** Set by main.js. Receives a partial look. */
 HUD.onWardrobe = () => {};
 HUD.wdCat = 'tour';
+HUD.wdDetail = false;      // the piece-by-piece panel starts closed
 HUD.wdTab = 'garment';
 
 const lock = (it, level) => !!(it.at && level < it.at);
@@ -1524,12 +1536,19 @@ HUD.renderWardrobeStats = look => {
   const st = outfitStats(look);
   const pct = v => (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
   const cls = v => (v > 0.0005 ? 'up' : v < -0.0005 ? 'down' : 'flat');
+  /* Four numbers was three too many for a screen whose job is "does this
+     look good". Drive is the one that changes the golf and style is the one
+     that answers the question; accuracy and spin are on the detail panel,
+     where somebody who cares about them already is. */
   el.wdStats.innerHTML =
     `<div class="wd-stat"><em>Drive</em><b class="${cls(st.drive)}">${pct(st.drive)}</b></div>` +
-    `<div class="wd-stat"><em>Accuracy</em><b class="${cls(st.accuracy)}">${pct(st.accuracy)}</b></div>` +
-    `<div class="wd-stat"><em>Spin</em><b class="${cls(st.spin)}">${spinWord(st.spin)}</b></div>` +
     `<div class="wd-stat"><em>Style</em><b class="up">${st.style.toFixed(1)}<small>/10</small></b>` +
-      `<div class="wd-styleb"><i style="width:${st.style * 10}%"></i></div></div>`;
+      `<div class="wd-styleb"><i style="width:${st.style * 10}%"></i></div></div>` +
+    (HUD.wdDetail
+      ? `<div class="wd-stat"><em>Accuracy</em><b class="${cls(st.accuracy)}">${pct(st.accuracy)}</b></div>` +
+        `<div class="wd-stat"><em>Spin</em><b class="${cls(st.spin)}">${spinWord(st.spin)}</b></div>`
+      : '');
+  el.wdStats.classList.toggle('four', !!HUD.wdDetail);
 };
 
 HUD.renderWardrobe = (look, level, name) => {
@@ -1551,7 +1570,7 @@ HUD.renderWardrobe = (look, level, name) => {
   ).join('');
 
   const cat = OUTFIT_CATS.find(c => c.id === HUD.wdCat) || OUTFIT_CATS[0];
-  el.wdFits.innerHTML = `<p class="tiny">${cat.blurb}</p>` + OUTFITS
+  el.wdFits.innerHTML = OUTFITS
     .filter(o => o.cat === HUD.wdCat)
     .map(o => {
       const L = o.at > lv;
@@ -1563,6 +1582,9 @@ HUD.renderWardrobe = (look, level, name) => {
     }).join('');
 
   /* ---- the pieces ----------------------------------------------------- */
+  const right = document.getElementById('wdRight');
+  if (right) right.hidden = !HUD.wdDetail;
+  if (!HUD.wdDetail) return;             // nothing below this is on screen
   el.wdRTabs.querySelectorAll('.wd-rtab').forEach(b =>
     b.classList.toggle('on', b.dataset.rt === HUD.wdTab));
 

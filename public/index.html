@@ -215,39 +215,101 @@
       <p class="lp-tag" id="lpTag">Play a round in ninety seconds.</p>
     </div>
 
-    <!-- The legend box. Five links, each with its own icon, label and the
-         one line that says what is behind it — a bare icon row is a puzzle,
-         and a visitor should never have to click to find out what a thing is. -->
+    <!-- Who you are. One line, not a form: the name is the only thing the
+         game needs before it can let you play, and the chip replaces it the
+         moment it knows. -->
+    <div class="lp-who">
+      <div class="identity" id="identityChip" hidden>
+        <div class="id-face">⛳</div>
+        <div class="id-txt"><b>Playing as <span id="idName">—</span></b></div>
+        <button class="btn mini" id="btnNotYou">Change</button>
+      </div>
+      <label class="field lp-name" id="nameField"><span>Your name</span>
+        <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
+    </div>
+
+    <!-- The legends. Each one either GOES somewhere or opens the panel on
+         the right — nothing here dumps a wall of controls into this column,
+         which is the whole reason this page reads better than the one it
+         replaced. -->
     <nav class="lp-legend" id="lpLegend" aria-label="Main">
       <button class="lp-item lp-primary" data-go="play">
         <span class="lp-ico">🏌️</span>
-        <span class="lp-txt"><b>Click here to play</b><small>straight onto the first tee</small></span>
+        <span class="lp-txt"><b>Play now</b><small id="lpCourseSub">straight onto the first tee</small></span>
         <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
+      <button class="lp-item" data-panel="friends">
+        <span class="lp-ico">👥</span>
+        <span class="lp-txt"><b>Friends &amp; players online</b><small id="lpFriendSub">join a round, or host one</small></span>
+        <span class="lp-count" id="lpOnlineCount" hidden>0</span>
+        <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
+      <button class="lp-item" data-panel="course">
+        <span class="lp-ico">🗺️</span>
+        <span class="lp-txt"><b>Choose a course</b><small id="lpCourseName">Claude National</small></span>
+        <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
+      <button class="lp-item" data-go="clubhouse">
+        <span class="lp-ico">🏌️‍♂️</span>
+        <span class="lp-txt"><b>Clubhouse</b><small>your golfer, career and pro shop</small></span>
+        <span class="lp-coins" id="homeCoins">🪙 0</span>
       </button>
       <button class="lp-item" data-go="leaderboards">
-        <span class="lp-ico">📊</span>
-        <span class="lp-txt"><b>Leaderboards</b><small>course and hole records</small></span>
-        <span class="lp-arrow" aria-hidden="true">→</span>
-      </button>
-      <button class="lp-item" data-go="rankings">
         <span class="lp-ico">🏆</span>
-        <span class="lp-txt"><b>Rankings</b><small>the world top hundred</small></span>
-        <span class="lp-arrow" aria-hidden="true">→</span>
-      </button>
-      <button class="lp-item" data-go="community">
-        <span class="lp-ico">👥</span>
-        <span class="lp-txt"><b>Community</b><small>find a game, any region</small></span>
-        <span class="lp-arrow" aria-hidden="true">→</span>
-      </button>
-      <button class="lp-item" data-go="settings">
-        <span class="lp-ico">⚙️</span>
-        <span class="lp-txt"><b>Settings</b><small>controls, sound and units</small></span>
+        <span class="lp-txt"><b>Leaderboards</b><small>records, handicaps and rankings</small></span>
         <span class="lp-arrow" aria-hidden="true">→</span>
       </button>
     </nav>
 
+    <p class="err" id="homeErr"></p>
     <p class="lp-foot"><span id="lpLive">Eight courses · nine holes each · play solo or with up to eight</span></p>
   </div>
+
+  <!-- THE SIDE PANEL. One at a time, and closed by default — this is where
+       everything that used to be permanently on screen now lives. -->
+  <aside class="lp-side" id="lpSide" hidden>
+    <div class="lp-side-head">
+      <h3 id="lpSideTitle">Friends</h3>
+      <button class="btn mini" id="lpSideClose" aria-label="Close">✕</button>
+    </div>
+
+    <!-- friends / online -->
+    <div class="lp-pane" data-pane="friends">
+      <div class="onlinenow" id="onlineNow" hidden></div>
+      <div class="lp-block">
+        <h5>Join with a code</h5>
+        <div class="lp-join">
+          <input id="inpCode" type="text" maxlength="5" placeholder="ABCD" autocomplete="off" spellcheck="false" class="code">
+          <button class="btn" id="btnJoin">Join</button>
+        </div>
+      </div>
+      <div class="lp-block">
+        <h5>Open rounds</h5>
+        <div class="qm-row">
+          <label class="qm-sel"><span>Region</span><select id="qmRegion"></select></label>
+          <label class="qm-sel"><span>Mode</span><select id="qmFormat"></select></label>
+        </div>
+        <button class="btn primary" id="btnQuick">Find a game</button>
+        <div class="roomlist" id="roomList"></div>
+      </div>
+      <div class="lp-block">
+        <h5>Host your own</h5>
+        <div class="fmt-row" id="formatRow"></div>
+        <button class="btn primary" id="btnCreate">Host a round</button>
+        <p class="tiny">You pick the course, friends join with your link.</p>
+      </div>
+    </div>
+
+    <!-- course picker -->
+    <div class="lp-pane" data-pane="course" hidden>
+      <div class="cp-row" id="homeCourses"></div>
+    </div>
+  </aside>
+
+  <!-- Play now lives here as well as in the legend list: on a phone the
+       column scrolls and the one button everybody came for must not be the
+       thing they have to scroll to find. -->
+  <button class="btn primary lp-play-fixed" id="btnPlay">Play now<span class="huge-sub">straight onto the first tee</span></button>
 </div>
 
 <!-- ═══════════════════════════════════════════════ THE WARDROBE ════════
@@ -274,15 +336,21 @@
     <button class="wd-auto on" id="wdAuto" title="Cycle through the courses">⏸</button>
   </div>
 
-  <!-- LEFT: ready-made outfits, by category -->
+  <!-- OUTFITS, and by default that is the whole screen.
+
+       The first version showed outfits down the left AND every individual
+       garment down the right AND a stats bar AND a course carousel, all at
+       once — four panels of controls around a golfer you could barely see.
+       Most people want to pick a look, not art-direct one, so picking a look
+       is what this page does now; building one is one click away and takes
+       over the panel when you ask for it. -->
   <div class="wd-panel wd-left">
-    <h3>Outfits</h3>
     <div class="wd-cats" id="wdCats" role="tablist"></div>
     <div class="wd-fits" id="wdFits"></div>
   </div>
 
-  <!-- RIGHT: the pieces, for somebody who wants to build their own -->
-  <div class="wd-panel wd-right">
+  <!-- The detail panel. Hidden until "Customise" is pressed. -->
+  <div class="wd-panel wd-right" id="wdRight" hidden>
     <div class="wd-rtabs" id="wdRTabs" role="tablist">
       <button class="wd-rtab on" data-rt="garment">Garments</button>
       <button class="wd-rtab" data-rt="extras">Accessories</button>
@@ -300,7 +368,7 @@
     <div class="wd-stats" id="wdStats"></div>
     <div class="wd-acts">
       <button class="btn" id="wdRandom" title="Surprise me">🎲</button>
-      <button class="btn" id="wdSeeIn">See in-game</button>
+      <button class="btn" id="wdCustom">Customise</button>
       <button class="btn primary" id="wdDone">Done</button>
     </div>
   </div>
@@ -309,131 +377,28 @@
 <!-- The title screen.  Behind it the REAL first tee is rendered live, with
      your golfer standing on it — the menu is a column on the left, and the
      course sells the game the way no card of form fields can. -->
-<div class="screen home" id="screenHome">
+<!-- The old title screen. Everything a player touches has moved onto the
+     landing page, which is now the home screen — what is left here is the
+     character panel the wardrobe and the clubhouse both render into, kept in
+     the DOM because both of them address it by id. Never shown. -->
+<div class="screen home" id="screenHome" hidden>
   <div class="home-scrim" aria-hidden="true"></div>
-
-  <!-- The wordmark is its own block, not the first child of the menu column.
-       On a phone the whole page becomes one scrolling column and Play now has
-       to come near the top — but not ABOVE the title, or a visitor meets a
-       list of course names before they know what game this is. Separating it
-       is what lets the two be ordered independently. -->
-  <div class="home-brand">
-    <div class="wordmark">
-      <span class="wm-eyebrow">⛳ Online golf</span>
-      <h1>Links <em>&amp;</em> Legends</h1>
-      <p class="wm-sub" id="wmSub">Nine holes · up to eight friends</p>
-    </div>
-  </div>
-
-  <div class="home-hero">
-    <div class="identity" id="identityChip" hidden>
-      <div class="id-face">⛳</div>
-      <div class="id-txt">
-        <b>Playing as <span id="idName">—</span></b>
-        <span>Career, coins and gear saved on this browser.</span>
-      </div>
-      <button class="btn" id="btnNotYou">Change</button>
-    </div>
-    <label class="field" id="nameField"><span>Your name</span>
-      <input id="inpName" type="text" maxlength="14" placeholder="e.g. Owen" autocomplete="off" spellcheck="false"></label>
-
-    <!-- PLAY ONLINE.
-         "Play with friends" needed a code somebody handed you, so a player
-         with nobody to play with had exactly one option: play alone. This is
-         the other half of a multiplayer game — pick what you want and where,
-         and either join a room that exists or open one. -->
-    <details class="friends" id="onlineBox">
-      <summary>Play online</summary>
-      <div class="qm-row">
-        <label class="qm-sel"><span>Region</span>
-          <select id="qmRegion"></select></label>
-        <label class="qm-sel"><span>Mode</span>
-          <select id="qmFormat"></select></label>
-      </div>
-      <button class="btn primary big" id="btnQuick">Find a game</button>
-      <div class="roomlist" id="roomList"></div>
-    </details>
-
-    <details class="friends" id="friendsBox">
-      <summary>Play with friends</summary>
-      <!-- The format lives with HOSTING, not with Play now: a scramble needs
-           four to eight people, and offering it on the solo button would be
-           an invitation to a game that cannot start. -->
-      <div class="formatpick">
-        <span class="cp-label">Format</span>
-        <div class="fmt-row" id="formatRow"></div>
-      </div>
-      <div class="split">
-        <div class="split-col">
-          <button class="btn primary big" id="btnCreate">Host a round</button>
-          <p class="tiny">You pick the course, friends join with your link.</p>
-        </div>
-        <div class="or"><span>or</span></div>
-        <div class="split-col">
-          <label class="field"><span>Room code</span>
-            <input id="inpCode" type="text" maxlength="5" placeholder="ABCD" autocomplete="off" spellcheck="false" class="code"></label>
-          <button class="btn big" id="btnJoin">Join friends</button>
-        </div>
-      </div>
-    </details>
-
-    <button class="btn big clubhouse-btn" id="btnClubhouse">
-      <span class="ch-ico">🏌️</span>
-      <span class="ch-txt"><b>Clubhouse</b><small>career · pro shop · your bag</small></span>
-      <span class="ch-coins" id="homeCoins">🪙 0</span>
-    </button>
-
-    <p class="err" id="homeErr"></p>
-    <!-- Written by the script from COURSE_ORDER, not typed here. Both of
-         these said "five courses" for a while after the eighth one shipped,
-         which is the kind of thing a player notices and quietly reads as
-         nobody being home. -->
-    <div class="venues" id="venueStrip"></div>
-  </div>
-
-  <!-- PLAY NOW, in the middle of the screen.
-       It was the last item in a left-hand column of eight, which is where a
-       form puts its submit button and not where a game puts the one thing
-       a visitor arrived to press. Dead centre, over the first tee, with the
-       course choice attached to it — because Play now goes straight to the
-       tee, so a solo player who cannot choose here can only ever play the
-       first course. -->
-  <div class="home-play">
-    <div class="coursepick">
-      <span class="cp-label">Course</span>
-      <div class="cp-row" id="homeCourses"></div>
-    </div>
-    <button class="btn primary huge" id="btnPlay">Play now<span class="huge-sub">straight onto the first tee</span></button>
-    <!-- Who else is on the course right now.  Presence rather than a friends
-         list: see the note in server.js — a CrazyGames guest has no durable
-         identity to hang a friend list on, but "who is playing now" is only
-         ever a claim about right now, so it works for everybody. -->
-    <div class="onlinenow" id="onlineNow" hidden></div>
-  </div>
-
-  <!-- YOUR CHARACTER — its own section, not a strip of swatches.
-       The figure on the tee IS the preview, so this panel carries who they
-       are rather than a second picture of them: the name, the level, and the
-       rating. The rating especially belongs here and not buried in the
-       clubhouse — it is the number that says how good you are, it is hard to
-       hold, and it should be sitting next to the golfer who earned it. -->
+  <div class="wordmark"><p class="wm-sub" id="wmSub"></p></div>
+  <div class="venues" id="venueStrip"></div>
   <div class="home-golfer">
     <div class="hk-head">
       <h4 class="lbl">Your character</h4>
       <button class="btn mini" id="btnRandomLook" title="Surprise me">🎲</button>
     </div>
     <div class="charcard" id="charCard"></div>
-    <!-- The way into the full wardrobe. It sits above the swatches rather
-         than below them because it is the more capable of the two: the
-         swatches are the quick change, this is the whole thing. -->
     <button class="btn wardrobe-btn" id="btnWardrobe">
       <span class="wb-ico">👔</span>
       <span class="wb-txt"><b>Open the wardrobe</b><small>outfits, decals and the full preview</small></span>
       <span class="wb-arr" aria-hidden="true">→</span>
     </button>
     <div class="looker" id="lookPicker"></div>
-    <p class="tiny hk-hint">That's them on the tee — changes show up instantly.</p>
   </div>
+  <div class="onlinenow" id="onlineNowLegacy" hidden></div>
 </div>
 
 <!-- ══════════════ CLUBHOUSE — career, pro shop and your bag ══════════════ -->

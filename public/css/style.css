@@ -2037,3 +2037,109 @@ body.introing .lp-inner, body.introing .lp-veil { opacity: 0; transition: opacit
   background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.07); }
 .w-weather .wfx i.bad { color: #e8a08a; border-color: rgba(232,160,138,.30); }
 .w-weather .wfx i.good { color: #8fe07a; border-color: rgba(143,224,122,.30); }
+
+/* ══════════════ THE LANDING PAGE IS THE HOME SCREEN ═══════════════════
+   Everything a player touches is here now. The rule that keeps it from
+   turning back into the screen it replaced: the left column holds only
+   things that FIT ON ONE LINE, and anything bigger opens the side panel. */
+.lp-who { display: flex; flex-direction: column; gap: 6px; }
+.lp-name { max-width: 260px; }
+.lp-name span { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #8fbf9c; }
+.lp-name input { padding: 8px 11px; font-size: 13.5px; }
+.lp-who .identity { display: flex; align-items: center; gap: 10px; padding: 7px 11px;
+  border-radius: 11px; background: rgba(9,18,14,.5); border: 1px solid rgba(255,255,255,.09);
+  max-width: 300px; }
+.lp-who .identity .id-txt b { font-size: 12.5px; font-weight: 600; }
+.lp-who .identity .id-face { font-size: 17px; }
+
+/* a count badge and a coin pill sit where the arrow would */
+.lp-count, .lp-coins { position: relative; margin-left: auto; font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 8px; }
+.lp-count { background: #6fce8a; color: #07120c; }
+.lp-coins { background: rgba(232,193,90,.18); color: #e8c15a; border: 1px solid rgba(232,193,90,.28); }
+.lp-item:has(.lp-count) .lp-arrow, .lp-item:has(.lp-coins) .lp-arrow { display: none; }
+
+/* ── the side panel ─────────────────────────────────────────────────── */
+.lp-side { position: absolute; z-index: 4; top: 0; right: 0; bottom: 0;
+  width: min(370px, 92vw); padding: 18px 18px 26px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+  background: rgba(6,14,10,.90); border-left: 1px solid rgba(255,255,255,.10);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: -18px 0 50px rgba(0,0,0,.5);
+  animation: sideIn .26s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes sideIn { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+.lp-side::-webkit-scrollbar { width: 6px; }
+.lp-side::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius: 3px; }
+.lp-side-head { display: flex; align-items: center; justify-content: space-between; }
+.lp-side-head h3 { font-size: 13px; letter-spacing: 1.6px; text-transform: uppercase; color: #8fd0a2; }
+.lp-block { display: flex; flex-direction: column; gap: 7px;
+  padding-top: 13px; border-top: 1px solid rgba(255,255,255,.08); }
+.lp-block:first-of-type { border-top: none; padding-top: 0; }
+.lp-block h5 { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #8fbf9c; }
+.lp-join { display: flex; gap: 7px; }
+.lp-join input { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 10px; font: inherit;
+  font-size: 15px; letter-spacing: 4px; text-transform: uppercase; text-align: center;
+  background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.11); color: #eaf3ec; }
+.lp-side .cp-row { display: flex; flex-direction: column; gap: 6px; }
+.lp-side .roomlist { max-height: 190px; overflow-y: auto; }
+
+/* Play now, pinned. On a phone the column scrolls and the one button
+   everybody arrived to press must never be below the fold. */
+.lp-play-fixed { position: absolute; z-index: 5; left: clamp(22px, 5vw, 62px); bottom: 26px;
+  min-width: 230px; padding: 14px 22px; font-size: 16px; font-weight: 700; }
+.lp-play-fixed .huge-sub { display: block; font-size: 10.5px; font-weight: 400; opacity: .8; margin-top: 2px; }
+body.side-open .lp-play-fixed { opacity: .5; }
+
+@media (max-width: 700px) {
+  .lp-inner { justify-content: flex-start; padding-top: 26px; padding-bottom: 96px; }
+  .lp-side { width: 100%; }
+  .lp-play-fixed { left: 18px; right: 18px; bottom: 16px; min-width: 0; }
+  .lp-name { max-width: none; }
+}
+
+/* ── the simplified wardrobe ─────────────────────────────────────────────
+   Outfits are the page. The detail panel is a room off it, not a second
+   wall of controls competing for the same glance. */
+.wd-panel.wd-left { width: min(330px, 30vw); }
+.wd-stats { grid-template-columns: repeat(2, 1fr); }
+.wd-stats.four { grid-template-columns: repeat(4, 1fr); }
+.wd-fit { padding: 11px 13px; }
+.wd-fit b { font-size: 13.5px; }
+.wd-cats { margin-bottom: 3px; }
+/* with the right panel closed the golfer gets the room it was using */
+.screen.wardrobe:has(#wdRight[hidden]) .wd-veil {
+  background:
+    linear-gradient(90deg, rgba(4,12,9,.88) 0%, rgba(4,12,9,.28) 30%, rgba(4,12,9,0) 46%,
+                    rgba(4,12,9,0) 82%, rgba(4,12,9,.34) 100%),
+    linear-gradient(to top, rgba(4,12,9,.90) 0%, rgba(4,12,9,.32) 22%, rgba(4,12,9,0) 42%); }
+
+/* ── fitting the home column ────────────────────────────────────────────
+   Five legends, a wordmark, a name field and a footer is more than a 720px
+   viewport holds at the spacing the landing page was designed with when it
+   carried three of those. Tighter gaps, a scrolling column, and the pinned
+   Play now becomes phone-only — on a desktop it was a second copy of the
+   button already at the top of the list, sitting on top of the fifth. */
+.screen.landing { overflow: hidden; }
+.lp-inner { justify-content: center; gap: 18px; overflow-y: auto; overscroll-behavior: contain;
+  padding-top: 26px; padding-bottom: 26px; }
+.lp-inner::-webkit-scrollbar { width: 5px; }
+.lp-inner::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 3px; }
+.lp-title { font-size: clamp(34px, 5.4vw, 58px); }
+.lp-tag { margin-top: 9px; font-size: 14px; }
+.lp-legend { gap: 7px; }
+.lp-item { padding: 10px 14px; }
+.lp-item.lp-primary { padding: 13px 15px; }
+.lp-ico { width: 38px; height: 38px; font-size: 19px; }
+.lp-play-fixed { display: none; }
+
+@media (max-width: 700px) {
+  /* On a phone the column really does scroll, so the button has to be pinned
+     or it is below the fold on the one screen that matters most. */
+  .lp-play-fixed { display: block; }
+  .lp-inner { justify-content: flex-start; padding-bottom: 108px; }
+}
+@media (max-height: 620px) and (min-width: 701px) {
+  .lp-item small { display: none; }
+  .lp-who, .lp-foot { display: none; }
+  .lp-title { font-size: 34px; }
+}

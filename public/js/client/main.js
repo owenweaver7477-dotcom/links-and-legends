@@ -310,10 +310,40 @@ function landingFrame(dt) {
   );
   // look a little past the middle, down the hole, so the green is in shot
   scene.camera.lookAt((mid[0] + far[0]) * 0.5, gy + 4, (mid[1] + far[1]) * 0.5);
+  const t0 = h.tee;
+  scene.setBall('menu', t0.x, G.T.heightAt(t0.x, t0.z) + BALL_RADIUS, t0.z);
   scene.windDir = 0.6;
   scene.update(dt);
   scene.render(scene.camera);
 }
+
+/* The side panel. One pane at a time, closed by default, and it lives on
+   the landing page rather than replacing it — which is the difference
+   between a front door with rooms off it and a stack of screens. */
+const SIDE_TITLE = { friends: 'Friends & players online', course: 'Choose a course' };
+function openSide(pane) {
+  const side = HUD.el.lpSide;
+  if (!side) return;
+  if (!side.hidden && side.dataset.pane === pane) { closeSide(); return; }
+  side.hidden = false;
+  side.dataset.pane = pane;
+  HUD.el.lpSideTitle.textContent = SIDE_TITLE[pane] || '';
+  for (const p of side.querySelectorAll('.lp-pane')) p.hidden = p.dataset.pane !== pane;
+  document.body.classList.add('side-open');
+  if (pane === 'friends') refreshRoomsSafe();
+}
+function closeSide() {
+  const side = HUD.el.lpSide;
+  if (!side) return;
+  side.hidden = true;
+  side.dataset.pane = '';
+  document.body.classList.remove('side-open');
+}
+/* refreshRooms lives inside boot(); this is the hook boot fills in, so the
+   panel can ask for a room list without this function reaching into a scope
+   it is not in. That exact mistake shipped once already — see the note on
+   the community legend. */
+let refreshRoomsSafe = () => {};
 
 /* Leaving the landing page.  The intro plays over the top of it and the
    destination screen is revealed underneath — so the animation is a
@@ -351,8 +381,8 @@ async function leaveLanding(target = 'play') {
   }
 
   ambienceOk = true;
-  G.screen = 'home';
-  HUD.show('home');
+  G.screen = 'landing';
+  HUD.show('landing');
   // replay the stagger so the menu ARRIVES rather than being there already
   const home = HUD.el.screenHome;
   home.classList.remove('revealing');
@@ -368,6 +398,7 @@ async function leaveLanding(target = 'play') {
    exists — the landing page is a front door onto the game, not five new
    pages that have to be kept in step with it. */
 function openLegend(target) {
+  if (target === 'clubhouse') { HUD.openClubhouse?.(); return; }
   const tab = { leaderboards: 'records', rankings: 'world', settings: 'keys' }[target];
   if (tab) {
     renderClubhouse();
@@ -436,6 +467,13 @@ function wardrobeFrame(dt) {
      owns the bottom fifth of the screen, and a centred golfer has their
      shoes behind it — which are a slot you can put a decal on. */
   scene.camera.lookAt(cx, gy + 0.80, cz);
+  /* Re-place the ball every frame, exactly as menuFrame does. It is drawn
+     oversized and grows with camera distance so it stays followable at 200
+     metres — which means a ball last positioned while the camera was 168 m
+     up in the landing aerial is drawn about ten times life size, and the
+     wardrobe opened on a golfer standing next to a beach ball. */
+  const tee0 = G.hole.tee;
+  scene.setBall('menu', tee0.x, G.T.heightAt(tee0.x, tee0.z) + BALL_RADIUS, tee0.z);
   menu.av?.update(dt, 0);
   scene.windDir = 0.6;
   scene.update(dt);
@@ -2317,7 +2355,7 @@ function route() {
        menu about a second after it appeared — for everyone with a fast
        connection, which is to say everyone. */
     if (G.screen === 'landing') { menuBackdrop(); return; }
-    G.screen = 'home'; HUD.show('home');
+    G.screen = 'landing'; HUD.show('landing');
     menuBackdrop();                  // back out of a room: the tee returns
     return;
   }
@@ -2614,7 +2652,7 @@ document.getElementById('btnPlay').addEventListener('click', () => {
   HUD.loading('Walking to the first tee…');
   Net.create(nameValue(), pickedCourse, res => {
     btn.disabled = false;
-    if (!res.ok) { HUD.show('home'); return HUD.homeError(res.error); }
+    if (!res.ok) { HUD.show('landing'); return HUD.homeError(res.error); }
     G.joined = true; G.myPid = res.pid; G.room = res.state;
     stampRoomUrl(res.code);
     Net.start();                             // no lobby: tee off
@@ -2828,6 +2866,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      other half of a multiplayer game. */
   const qmRegion = document.getElementById('qmRegion');
   const qmFormat = document.getElementById('qmFormat');
+  refreshRoomsSafe = () => refreshRooms();
   const refreshRooms = () => Net.openRooms(list => {
     const reg = qmRegion?.value || 'any';
     HUD.renderRooms(reg === 'any' ? list : list.filter(r => r.region === reg), joinByCode);
@@ -2865,7 +2904,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       HUD.show('load');
       HUD.loading('Opening a game…');
       Net.create(nameValue(), res.courseId, r => {
-        if (!r.ok) { HUD.show('home'); return HUD.homeError(r.error); }
+        if (!r.ok) { HUD.show('landing'); return HUD.homeError(r.error); }
         G.joined = true; G.myPid = r.pid; G.room = r.state;
         stampRoomUrl(r.code);
         route();
@@ -2913,7 +2952,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   if (!room) menuBackdrop();
 
   // the clubhouse: career, pro shop and bag, reachable without hosting a game
-  HUD.el.btnClubhouse.addEventListener('click', () => {
+  const openClubhouse = () => {
     renderClubhouse();
     /* Showing the screen comes FIRST and the tab wiring is guarded, in that
        order deliberately. Anything that can throw between the click and
@@ -2923,7 +2962,8 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     G.screen = 'shop';
     HUD.show('shop');
     try { HUD.bindClubhouse?.(); } catch (e) { console.error('clubhouse tabs:', e); }
-  });
+  };
+  HUD.el.btnClubhouse?.addEventListener('click', openClubhouse);
   HUD.el.btnShopBack.addEventListener('click', () => route());
 
   /* ---- the wardrobe ---------------------------------------------------- */
@@ -2952,10 +2992,15 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      renderer, so this is not a different picture — it is the same golfer at
      the distance you will actually play them from, which is the one thing
      the turntable cannot tell you. */
-  HUD.el.wdSeeIn.addEventListener('click', () => {
+  document.getElementById('wdCustom')?.addEventListener('click', () => {
+    HUD.wdDetail = !HUD.wdDetail;
+    document.getElementById('wdCustom').textContent = HUD.wdDetail ? 'Done customising' : 'Customise';
+    drawWardrobe();
+  });
+  HUD.el.wdSeeIn?.addEventListener('click', () => {
     wd.auto = false; syncAuto();
-    G.screen = 'home';
-    HUD.show('home');
+    G.screen = 'landing';
+    HUD.show('landing');
     showGolferCloseUp(7);
     HUD.toast('This is your golfer on the first tee. Press Play when you like it.', 'info', 3600);
   });
@@ -2990,13 +3035,24 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      now — sending them to a landing page first would be answering a knock
      at the door with a brochure. Everybody else gets the landing page. */
   if (room) {
-    HUD.show('home');
+    HUD.show('landing');
   } else {
     G.screen = 'landing';
     HUD.show('landing');
     HUD.el.lpLegend.addEventListener('click', e => {
       const b = e.target.closest('.lp-item');
-      if (b) leaveLanding(b.dataset.go);
+      if (!b) return;
+      /* Two kinds of legend. One GOES somewhere and takes the intro with it;
+         the other opens the side panel in place. Keeping the second kind on
+         this page is the whole point — "play with friends" used to mean
+         leaving the front door for a screen of form fields. */
+      if (b.dataset.panel) { openSide(b.dataset.panel); return; }
+      if (b.dataset.go) leaveLanding(b.dataset.go);
+    });
+    HUD.el.lpSideClose.addEventListener('click', () => closeSide());
+    document.getElementById('lpSide')?.addEventListener('click', e => {
+      // picking a course closes the panel: the choice IS the confirmation
+      if (e.target.closest('.cpbtn')) setTimeout(closeSide, 220);
     });
     /* Enter on a focused legend is free — they are real buttons. This is for
        the visitor who presses a key at the title screen expecting something
