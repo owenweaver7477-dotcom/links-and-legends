@@ -2172,3 +2172,9 @@ body.side-open .lp-play-fixed { opacity: .5; }
 .fr-empty { padding: 12px 4px; font-size: 11.5px; color: #8fa596; line-height: 1.5; }
 .fr-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px;
   letter-spacing: 3px; color: #6fce8a; }
+
+/* a friend's row on any board: starred and tinted, because one or the other
+   alone is missable in a hundred rows */
+.rkrow.pal { background: rgba(232,193,90,.10); border-color: rgba(232,193,90,.26); }
+.rkstar { font-style: normal; color: #e8c15a; font-size: 11px; }
+.rkrow.me.pal { background: rgba(111,206,138,.16); border-color: rgba(111,206,138,.40); }

@@ -108,6 +108,38 @@ function decorate(pid) {
   return st;
 }
 
+/**
+ * Every friend as a leaderboard row, ranked among themselves.
+ *
+ * Not a filter over the global board: a friends-only view that can only show
+ * friends who happen to be in the world top hundred is a view that is empty
+ * for almost everybody, which is the opposite of what it is for.
+ */
+function friendBoardRows(pid) {
+  const rows = [];
+  for (const fid of [pid, ...friendsOf(pid)]) {
+    const p = publicProfile(fid);
+    if (!p) continue;
+    rows.push({
+      pid: fid, name: nameOf(fid),
+      index: p.index ?? null, level: p.level, xp: p.xp || 0,
+      rounds: p.rounds || 0, best: p.best ?? null,
+      rating: p.rating,
+      friend: fid !== pid, me: fid === pid,
+      online: !!liveOf(fid)
+    });
+  }
+  /* Ranked on handicap where there is one, and everybody without one goes
+     to the bottom — a player with three rounds is not better than a scratch
+     golfer just because their index is null. */
+  rows.sort((a, b) => {
+    const ai = a.index == null ? 1e9 : a.index;
+    const bi = b.index == null ? 1e9 : b.index;
+    return ai - bi || b.level - a.level;
+  });
+  return rows.map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
 /** Push a fresh friends payload to one player, if they are connected. */
 function pushFriends(pid) {
   if (!pid) return;
@@ -1233,14 +1265,25 @@ io.on('connection', socket => {
     const ref = sockets.get(socket.id);
     const pid = ref?.pid || socket.data?.pid || null;
     const courseId = COURSE_ORDER.includes(d?.course) ? d.course : COURSE_ORDER[0];
+    /* Who on these boards is a friend. Sent as a SET OF IDS rather than a
+       flag on every row, because the same player appears on up to five
+       boards and marking each row is five copies of one fact — and because
+       a friends-only view needs the set anyway. */
+    const mine = pid ? new Set(friendsOf(pid)) : new Set();
+    const mark = rows => rows.map(r => (mine.has(r.pid) ? { ...r, friend: true } : r));
+
     ack({
-      handicap: handicapRanking(100),
-      level: levelRanking(100),
-      weekly: weeklyGainers(50),
-      season: seasonBoard(100),
-      course: { id: courseId, rows: courseBoard(courseId, 50),
+      handicap: mark(handicapRanking(100)),
+      level: mark(levelRanking(100)),
+      weekly: mark(weeklyGainers(50)),
+      season: mark(seasonBoard(100)),
+      course: { id: courseId, rows: mark(courseBoard(courseId, 50)),
                 ...courseRatings(courseId) },
       ratings: Object.fromEntries(COURSE_ORDER.map(id => [id, courseRatings(id)])),
+      /* Friends who did not make the top hundred still belong on the
+         friends-only view, so their rows are computed separately rather than
+         filtered out of a list they were never in. */
+      friendRows: pid ? friendBoardRows(pid) : [],
       me: pid ? { world: worldPlace(pid), handicap: handicapPlace(pid) } : null
     });
   });

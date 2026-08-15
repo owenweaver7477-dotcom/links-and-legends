@@ -1771,10 +1771,14 @@ HUD.renderBoards = (data, myPid, courseNames) => {
   tabs?.querySelectorAll('.rkbtab').forEach(b =>
     b.classList.toggle('on', b.dataset.board === HUD.rkBoard));
 
+  /* A friend's row is marked twice: a star before the name and a tinted
+     background. One or the other alone is too easy to miss in a hundred
+     rows, which is the whole point of the feature — finding the two people
+     you know in a list of strangers. */
   const row = (r, main, sub, tag) =>
-    `<div class="rkrow${r.pid === myPid ? ' me' : ''}">
+    `<div class="rkrow${r.pid === myPid || r.me ? ' me' : ''}${r.friend ? ' pal' : ''}">
        <span class="rkn${r.rank <= 3 ? ' gold' : ''}">${r.rank}</span>
-       <span class="rkname"><b>${escapeHtml(r.name)}</b>${tag || ''}</span>
+       <span class="rkname">${r.friend ? '<i class="rkstar">★</i>' : ''}<b>${escapeHtml(r.name)}</b>${tag || ''}</span>
        <span class="rkv">${main}</span>
        <span class="rksub">${sub}</span>
      </div>`;
@@ -1803,6 +1807,16 @@ HUD.renderBoards = (data, myPid, courseNames) => {
     head = `<p class="tiny">XP gained this quarter. Resets in January, April, July and October.</p>`;
     rows = (data.season || []).map(r =>
       row(r, '+' + r.gained.toLocaleString(), 'XP this season', lvTag(r.level)));
+  } else if (HUD.rkBoard === 'friends') {
+    const rows2 = data.friendRows || [];
+    head = rows2.length > 1
+      ? `<p class="tiny">You and your friends, ranked by handicap. Anybody
+         without three carded rounds sits at the bottom until they have one.</p>`
+      : `<p class="tiny">Add a friend from the front page and you will both
+         appear here.</p>`;
+    rows = rows2.map(r =>
+      row(r, handicapText(r.index), `Lv ${r.level} · ${r.rounds} rounds`,
+          r.online ? '<span class="rktag" style="color:#6fce8a">online</span>' : ''));
   } else {
     const c = data.course || {};
     head =
