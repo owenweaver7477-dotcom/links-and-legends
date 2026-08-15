@@ -14,6 +14,7 @@
 import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp } from '../public/js/shared/economy.js';
 import { openStore, touch, saveSoon as storeSaveSoon } from './store.js';
 import { handicapIndex, differential, ratingTier } from '../public/js/shared/handicap.js';
+import { normaliseSkin } from '../public/js/shared/clubskins.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
    moment a player opens it rather than after several rounds. */
@@ -56,6 +57,7 @@ export function getProfile(pid) {
       gear: { ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 },
       crew: { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
       clubTier: 0, refine: 0, cleared: [],
+      clubSkin: 'stock',        // earned finish, never bought — see clubskins.js
       stars: {},                // courseId -> full rounds finished there
 
       history: []               // last 20 rounds, [relToPar]
@@ -205,6 +207,10 @@ export function publicProfile(pid) {
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
     crew: p.crew || { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
     clubTier: p.clubTier ?? 0, refine: p.refine ?? 0, cleared: (p.cleared || []).length,
+    clubSkin: p.clubSkin || 'stock',
+    /* Records held, because a club finish is gated on it and the client
+       cannot count them — the board lives on the server. */
+    records: p.recordsHeld || 0,
     stars: p.stars || {},
     pro: Object.entries(p.stars || {}).filter(([, n]) => n >= STARS_FOR_PRO).map(([c]) => c),
     /* Both numbers, because they answer different questions. `rating` is
@@ -584,4 +590,18 @@ export function worldPlace(pid) {
     if ((p.rating || 0) > (me.rating || 0)) ahead++;
   }
   return { ranked: true, rank: ahead + 1, of: total, rating: Math.round(me.rating || 0) };
+}
+
+/**
+ * Choose a club finish. Validated against what this profile has actually
+ * done — the client picks, the server decides, the same way every other
+ * earned cosmetic works.
+ */
+export function setClubSkin(pid, id) {
+  const p = getProfile(pid);
+  const pub = publicProfile(pid);
+  const ok = normaliseSkin(id, pub);
+  p.clubSkin = ok;
+  saveSoon();
+  return ok;
 }

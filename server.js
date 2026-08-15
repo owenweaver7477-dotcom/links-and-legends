@@ -201,6 +201,7 @@ import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/av
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile,
          worldRanking, worldPlace, handicapRanking, handicapPlace, levelRanking, rememberName,
+         setClubSkin,
          weeklyGainers, seasonBoard, courseBoard } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
 import { EMOTES, meleeById } from './public/js/client/celebrations.js';
@@ -1479,6 +1480,16 @@ io.on('connection', socket => {
     if (!room) return ack({ error: 'That round is no longer there.' });
     if (room.state !== 'lobby') return ack({ error: 'That round has already started.' });
     ack({ ok: true, room: inv.room });
+  });
+
+  /* The club finish. Picked by the client, decided here — a finish gated on
+     a hole in one is worth nothing if the client can just claim it. */
+  socket.on('club:skin', (d, ack) => {
+    const pid = sockets.get(socket.id)?.pid || socket.data?.pid;
+    if (!pid) return typeof ack === 'function' && ack({ error: 'Not connected.' });
+    const got = setClubSkin(pid, d?.id);
+    socket.emit('profile', publicProfile(pid));
+    if (typeof ack === 'function') ack({ ok: true, skin: got });
   });
 
   socket.on('rooms:open', (d, ack) => {

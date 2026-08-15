@@ -391,8 +391,9 @@ HUD.renderColours = (room, myPid, onPick, rating = 0) => {
   }
 };
 
-HUD.renderBag = (bag, onToggle, clubTier = 0) => {
+HUD.renderBag = (bag, onToggle, clubTier = 0, skin = 'stock') => {
   HUD.myClubTier = clubTier;
+  HUD.mySkin = skin;
   el.bagList.innerHTML = '';
   const carried = new Set(bag);
   el.bagCount.textContent = `(${bag.length}/${BAG_SIZE})`;
@@ -408,6 +409,7 @@ HUD.renderBag = (bag, onToggle, clubTier = 0) => {
        of abbreviations is a spreadsheet; seeing the club you are about to
        add or drop is what makes it a bag. */
     const view = { kind: 'club', key: c.key, tier: HUD.myClubTier || 0,
+                   skin: HUD.mySkin || 'stock',
                    name: c.name || c.label,
                    sub: c.putter ? 'Always in the bag' : `${c.loft}° · ${carry}` };
     const show = () => HUD.previewBagClub(view);
@@ -419,6 +421,51 @@ HUD.renderBag = (bag, onToggle, clubTier = 0) => {
   const first = CLUBS[0];
   HUD.previewBagClub({ kind: 'club', key: first.key, tier: HUD.myClubTier || 0,
     name: first.name || first.label, sub: `${first.loft}° · stock` });
+};
+
+/* ═══════════════════════════════════════════════ CLUB FINISHES ══════════
+   Earned, never bought, and they change nothing about the ball — which is
+   exactly why an ace can hand one out. A locked finish shows the thing to
+   go and DO, with how close you are, because "Level 44" is a target and
+   "34/44" is a reason to play another round. */
+HUD.renderClubSkins = (prof, onPick) => {
+  const box = document.getElementById('skinList');
+  if (!box) return;
+  const cur = prof?.clubSkin || 'stock';
+  box.innerHTML = CLUB_SKINS.map(sk => {
+    const got = skinEarned(sk, prof);
+    const pr = skinProgress(sk, prof);
+    const swatch = sk.shaft || '#c9ccd2';
+    return `<button class="skin${got ? '' : ' locked'}${sk.id === cur ? ' on' : ''}
+        ${sk.feat ? ' feat' : ''}" data-skin="${sk.id}"${got ? '' : ' disabled'}
+        style="--c:${swatch}">
+      <span class="skin-sw"><i style="background:${sk.shaft || '#c9ccd2'}"></i><i
+        style="background:${sk.head || '#e2e5ea'}"></i><i
+        style="background:${sk.grip || '#2b2b2f'}"></i></span>
+      <span class="skin-txt">
+        <b>${escapeHtml(sk.name)}${sk.feat ? ' <em>feat</em>' : ''}</b>
+        <small>${got ? escapeHtml(sk.blurb) : escapeHtml(skinRequirement(sk))}</small>
+        ${!got && pr && pr.want > 1
+          ? `<span class="skin-bar"><i style="width:${pr.pct * 100}%"></i></span>
+             <span class="skin-prog">${pr.have} of ${pr.want}</span>` : ''}
+      </span>
+    </button>`;
+  }).join('');
+  if (!box.dataset.wired) {
+    box.dataset.wired = '1';
+    box.addEventListener('click', e => {
+      const b = e.target.closest('[data-skin]');
+      if (b && !b.disabled) onPick(b.dataset.skin);
+    });
+    const hover = e => {
+      const b = e.target.closest('[data-skin]');
+      if (!b) return;
+      const sk = CLUB_SKINS.find(x => x.id === b.dataset.skin);
+      HUD.previewBagClub({ kind: 'club', key: 'DR', tier: HUD.myClubTier || 0,
+        skin: sk.id, name: sk.name, sub: sk.blurb });
+    };
+    box.addEventListener('pointerover', hover);
+  }
 };
 
 /** The bag's own turntable — same renderer as the shop, different canvas. */
@@ -1664,6 +1711,7 @@ import {
 } from '../shared/wardrobe.js';
 import { decalTexture } from './decals.js';
 import { showItem as showShopItem } from './shopview.js';
+import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress } from '../shared/clubskins.js';
 import { weatherEffects, clockText } from '../shared/weather.js';
 
 /** Set by main.js. Receives a partial look. */

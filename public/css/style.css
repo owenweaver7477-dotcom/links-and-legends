@@ -2307,3 +2307,31 @@ body.side-open .lp-play-fixed { opacity: .5; }
 /* the bag's turntable sits beside the club grid, same shape as the shop's */
 .bagwrap { align-items: start; }
 .bagwrap .bag { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 7px; }
+
+/* ── club finishes: earned, never bought ─────────────────────────────── */
+.skin-head { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: #8fbf9c; margin: 16px 0 7px; font-weight: 700; }
+.skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 6px; }
+.skin { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 11px;
+  cursor: pointer; text-align: left; color: #eaf3ec; font: inherit;
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.07);
+  transition: border-color .16s, background .16s, transform .16s; }
+.skin:hover:not(.locked) { transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--c) 55%, transparent); background: rgba(255,255,255,.08); }
+.skin.on { border-color: #6fce8a; background: rgba(111,206,138,.14); }
+.skin.locked { opacity: .5; cursor: not-allowed; }
+.skin.feat { border-color: rgba(232,193,90,.26); }
+.skin.feat.on { border-color: #e8c15a; background: rgba(232,193,90,.14); }
+.skin-sw { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; overflow: hidden;
+  display: grid; grid-template-rows: 1fr 1fr 1fr; border: 1px solid rgba(0,0,0,.4); }
+.skin-txt { min-width: 0; }
+.skin-txt b { display: block; font-size: 12px; }
+.skin-txt b em { font-style: normal; font-size: 8.5px; letter-spacing: .6px; color: #e8c15a;
+  text-transform: uppercase; padding: 1px 4px; border-radius: 4px;
+  background: rgba(232,193,90,.16); margin-left: 3px; }
+.skin-txt small { display: block; font-size: 10px; color: #8fa596; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.skin-bar { display: block; height: 3px; border-radius: 2px; margin-top: 4px;
+  background: rgba(255,255,255,.10); }
+.skin-bar i { display: block; height: 100%; border-radius: 2px; background: var(--c); }
+.skin-prog { font-size: 9px; color: #8fa596; }

@@ -2518,7 +2518,13 @@ function renderClubhouse() {
   HUD.renderShop(prof, item => Net.buy(item));
   bagDraft = me()?.bag?.length ? me().bag.slice()
     : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true }));
-  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0);
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, G.profile?.clubSkin || 'stock');
+  HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
+    if (res?.error) return HUD.toast(res.error, 'warn', 3000);
+    if (G.profile) G.profile.clubSkin = res.skin;
+    HUD.renderClubSkins(G.profile, () => {});
+    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, res.skin);
+  }));
   HUD.setHomeCoins(prof?.coins ?? 0);
   HUD.setCoins(prof?.coins ?? 0);
   /* Back the career up where the PLAYER's platform keeps it.
@@ -2567,13 +2573,25 @@ function toggleClubInBag(key) {
     set.add(key);
   }
   bagDraft = normaliseBag([...set]);   // optimistic; the server echo confirms it
-  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0);
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, G.profile?.clubSkin || 'stock');
+  HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
+    if (res?.error) return HUD.toast(res.error, 'warn', 3000);
+    if (G.profile) G.profile.clubSkin = res.skin;
+    HUD.renderClubSkins(G.profile, () => {});
+    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, res.skin);
+  }));
   Net.prefs({ bag: bagDraft });
 }
 
 document.getElementById('btnBagReset').addEventListener('click', () => {
   bagDraft = normaliseBag(DEFAULT_BAG, { pad: true });
-  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0);
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, G.profile?.clubSkin || 'stock');
+  HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
+    if (res?.error) return HUD.toast(res.error, 'warn', 3000);
+    if (G.profile) G.profile.clubSkin = res.skin;
+    HUD.renderClubSkins(G.profile, () => {});
+    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, res.skin);
+  }));
   Net.prefs({ bag: bagDraft });
 });
 

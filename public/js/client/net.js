@@ -260,6 +260,8 @@ Net.presence = cb => {
   Net.socket.emit('presence:who', null, res => cb(res?.online || []));
 };
 Net.buy = item => Net.socket?.emit('shop:buy', { item });
+/** Pick a club finish. The server decides whether it is earned. */
+Net.setClubSkin = (id, cb) => ask('club:skin', { id }, res => cb?.(res));
 Net.start = () => Net.socket?.emit('game:start');
 
 /* Leave the room you are in.  Dropping and remaking the socket is the honest

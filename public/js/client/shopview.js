@@ -22,6 +22,7 @@ import * as THREE from '../../vendor/three.module.js';
 import { CLUBS, CLUB_BY_KEY } from '../shared/clubs.js';
 import { decalTexture } from './decals.js';
 import { DECALS } from '../shared/wardrobe.js';
+import { skinById } from '../shared/clubskins.js';
 
 /* ONE RENDERER PER CANVAS. The shop and the bag are two different canvases
    on two different panes, and a single module-level renderer bound to
@@ -76,18 +77,22 @@ const box = (mat, w, h, d, x, y, z) => {
    Built from the same proportions the avatar's club uses, scaled up. A
    preview that is a different object from the one in your hands is a
    preview of something the game does not have. */
-function buildClub(key, tier = 0) {
+function buildClub(key, tier = 0, skinId = 'stock') {
   const club = CLUB_BY_KEY[key] || CLUBS[0];
   const g = new THREE.Group();
 
-  /* Tiers are finishes, not shapes: the same head in steel, then brushed,
-     then black, then a carbon face. That is what a club upgrade IS. */
-  const shaftCol = ['#c9ccd2', '#d8dbe0', '#8f9298', '#2e3136'][tier] || '#c9ccd2';
-  const headCol = ['#c9ccd2', '#e2e5ea', '#5a5f66', '#22252a'][tier] || '#c9ccd2';
-  const gripCol = ['#2b2b2f', '#2b2b2f', '#1c1c20', '#101014'][tier] || '#2b2b2f';
+  /* Tiers are the SET — what you bought, and what it does. A skin is the
+     finish over the top, earned rather than bought, and it changes nothing
+     but the colour. Where a skin says nothing the tier's own look shows
+     through, which is why 'stock' is null rather than a colour. */
+  const sk = skinById(skinId);
+  const shaftCol = sk.shaft || ['#c9ccd2', '#d8dbe0', '#8f9298', '#2e3136'][tier] || '#c9ccd2';
+  const headCol = sk.head || ['#c9ccd2', '#e2e5ea', '#5a5f66', '#22252a'][tier] || '#c9ccd2';
+  const gripCol = sk.grip || ['#2b2b2f', '#2b2b2f', '#1c1c20', '#101014'][tier] || '#2b2b2f';
+  const shine = sk.sheen ?? (0.6 + tier * 0.1);
 
   g.add(box(M(gripCol), 0.075, 0.42, 0.075, 0, 0.62, 0));
-  g.add(box(M(shaftCol, 0.6 + tier * 0.1), 0.042, 1.5, 0.042, 0, -0.12, 0));
+  g.add(box(M(shaftCol, shine), 0.042, 1.5, 0.042, 0, -0.12, 0));
 
   const head = new THREE.Group();
   head.position.set(0, -0.90, 0);
@@ -110,6 +115,17 @@ function buildClub(key, tier = 0) {
   head.rotation.x = -(club.loft || 10) * Math.PI / 180 * 0.55;
   g.add(head);
 
+  /* A glow on the feat finishes. They are the only things in the game that
+     cannot be bought or ground out, so they are allowed to announce
+     themselves. */
+  if (sk.glow) {
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.30, 14, 10),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(sk.glow), transparent: true,
+                                    opacity: 0.16, depthWrite: false }));
+    halo.position.y = -0.90;
+    g.add(halo);
+  }
   g.scale.setScalar(0.86);
   return g;
 }
@@ -184,7 +200,7 @@ export function showItem(canvas, what) {
   }
 
   let obj;
-  if (what?.kind === 'club') obj = buildClub(what.key || 'DR', what.tier || 0);
+  if (what?.kind === 'club') obj = buildClub(what.key || 'DR', what.tier || 0, what.skin || 'stock');
   else if (what?.kind === 'decal') obj = buildDecal(what.key);
   else if (what?.kind === 'ball') obj = buildBall(what.hex);
   else obj = buildGeneric(what?.hex);
