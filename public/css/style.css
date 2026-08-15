@@ -2422,3 +2422,277 @@ body.side-open .lp-play-fixed { opacity: .5; }
 #screenShop .card::-webkit-scrollbar, #screenBoards .card::-webkit-scrollbar { width: 7px; }
 #screenShop .card::-webkit-scrollbar-thumb,
 #screenBoards .card::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 4px; }
+
+/* ═════════════════════════════════════════════════════════ ON A PHONE ═══
+   A full redo of the in-round layout, because the old one was not a layout —
+   it was the desktop HUD with smaller numbers, and on a 375-wide screen that
+   is six panels overlapping at the top and forty per cent of the height
+   given to buttons at the bottom. Somebody handed a phone could see their
+   golfer and almost nothing else.
+
+   THE RULE: the middle of the screen belongs to the golf. Everything else
+   is a thin bar at the top, a control block at the bottom, and nothing at
+   all in between. Anything that is not needed on every single shot lives
+   behind a toggle.
+
+   Sizes are picked against the 44px touch minimum rather than scaled down
+   from the desktop — a control that is merely smaller is not a control that
+   fits a thumb. */
+@media (max-width: 560px) {
+
+  /* ---- the top: ONE bar, not six panels ---------------------------- */
+  body.playing #stage .panel.hud {
+    top: 6px; left: 6px; right: 6px; padding: 7px 11px;
+    display: flex; align-items: baseline; gap: 9px;
+    border-radius: 12px; background: rgba(8,15,12,.74);
+  }
+  body.playing .panel.hud .h-course { display: none; }   /* you know the course */
+  body.playing .panel.hud .h-title { margin: 0; gap: 7px; }
+  body.playing .panel.hud #hNum { font-size: 15px; }
+  body.playing .panel.hud .h-par { font-size: 10.5px; padding: 1px 5px; }
+  body.playing .panel.hud .h-meta { font-size: 10.5px; margin: 0; margin-left: auto; }
+
+  /* distance sits under it, right-aligned and small — it is a readout, not
+     a headline, and it was taking a quarter of the width */
+  body.playing #stage .panel.dist {
+    top: 44px; right: 6px; left: auto; padding: 5px 10px; border-radius: 10px;
+    background: rgba(8,15,12,.7);
+  }
+  body.playing .panel.dist .d-big { display: flex; align-items: baseline; gap: 4px; }
+  body.playing .panel.dist .d-big span { font-size: 19px; }
+  body.playing .panel.dist .d-big em { font-size: 9px; }
+  body.playing .panel.dist .d-sub { font-size: 9.5px; }
+
+  /* the wind rose shrinks to a chip on the left, under the bar */
+  body.playing #stage .panel.wind {
+    top: 44px; left: 6px; right: auto; padding: 5px 8px; border-radius: 10px;
+    display: flex; align-items: center; gap: 6px; background: rgba(8,15,12,.7);
+  }
+  body.playing .panel.wind .wrose { width: 26px; height: 26px; }
+  body.playing .panel.wind .w-txt { display: flex; align-items: baseline; gap: 3px; }
+  body.playing .panel.wind .w-txt b { font-size: 13px; }
+  body.playing .panel.wind .w-txt em, body.playing .panel.wind .w-txt span { font-size: 9px; }
+  /* the weather line is the first thing to go: it is three shots' worth of
+     information on a screen with room for one */
+  body.playing .w-weather { display: none; }
+
+  /* the turn banner clears both of them */
+  body.playing .turnbar { top: 84px; font-size: 11.5px; padding: 5px 12px; }
+
+  /* nothing else may sit over the course */
+  body.playing .panel.roster, body.playing .hintbar,
+  body.playing .panel.minimap, body.playing .chatpanel { display: none !important; }
+  body.playing .walkbar { bottom: 176px; font-size: 10.5px; padding: 5px 10px; }
+  body.playing .walkbar kbd { display: none; }        /* there is no keyboard */
+
+  /* the scorecard collapses to a tap target in the top bar's row */
+  body.playing #stage .panel.board {
+    top: 6px; right: 6px; left: auto; bottom: auto; width: auto;
+    max-width: 62vw; padding: 0; border-radius: 12px; z-index: 12;
+  }
+  body.playing .panel.board:not(.open) #boardRows,
+  body.playing .panel.board:not(.open) .roomtag { display: none; }
+  body.playing .panel.board .board-head { padding: 7px 10px; }
+  body.playing .panel.board.open { top: 44px; max-height: 46vh; overflow-y: auto; }
+
+  /* ---- the bottom: one block, and the meter owns it ----------------- */
+  body.playing .playbar {
+    left: 6px; right: 6px; bottom: 62px; width: auto;
+    display: grid; grid-template-columns: 74px 1fr 74px; gap: 7px;
+    align-items: end; padding: 8px; border-radius: 15px;
+    background: rgba(8,15,12,.80); border: 1px solid rgba(255,255,255,.09);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  body.playing .playbar .clubsel,
+  body.playing .playbar .aimsel { flex-direction: column; gap: 3px; padding: 0; background: none; border: 0; }
+  body.playing .playbar .clubsel { order: 1; }
+  body.playing .playbar .meter { order: 2; min-width: 0; }
+  body.playing .playbar .aimsel { order: 3; }
+  body.playing .playbar .cbtn { width: 100%; height: 30px; font-size: 15px; }
+  body.playing .playbar .cinfo b { font-size: 12px; }
+  body.playing .playbar .cinfo span { font-size: 9px; }
+  /* THE METER IS THE GAME. It was a 90px box sharing a row with everything
+     else; it gets the whole middle column and a thumb-sized track. */
+  body.playing .playbar .m-track { height: 34px; }
+  body.playing .playbar .m-label { font-size: 10px; line-height: 1.25; margin-top: 3px; }
+  body.playing .playbar .m-face { height: 16px; }
+  body.playing .cancelshot {
+    position: absolute; top: -13px; right: 8px; padding: 3px 9px;
+    font-size: 10px; border-radius: 9px;
+  }
+  body.playing .cancelshot span { display: none; }
+
+  /* the action row: icons only, one line, 46px tall */
+  body.playing .touchpad {
+    left: 6px; right: 6px; bottom: 8px; top: auto;
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px;
+    width: auto; flex-direction: row;
+  }
+  body.playing .touchpad .tbtn {
+    width: auto; height: 46px; padding: 0; border-radius: 12px;
+    font-size: 19px; display: grid; place-items: center;
+  }
+  body.playing .touchpad .tbtn span { display: none; }   /* the icon is the label */
+
+  /* phrases hide behind the Say button */
+  body.playing .phrasebar { display: none; }
+  body.playing.saying .phrasebar {
+    display: flex; flex-wrap: wrap; gap: 5px;
+    left: 6px; right: 6px; bottom: 60px; top: auto; width: auto;
+    padding: 9px; border-radius: 14px; z-index: 14;
+    background: rgba(8,15,12,.94); border: 1px solid rgba(255,255,255,.10);
+  }
+  body.playing.saying .phrasebtn { font-size: 12px; padding: 8px 11px; }
+  /* and the swing controls get out of the way while it is open */
+  body.playing.saying .playbar { opacity: .25; pointer-events: none; }
+
+  /* the cart bar, when driving, replaces the swing block rather than
+     stacking on top of it */
+  body.playing .cartbar { left: 6px; right: 6px; bottom: 62px; width: auto; }
+  body.playing .cartbar .c-keys { display: none; }
+  body.playing .cartbar .c-dial { transform: scale(.8); transform-origin: left center; }
+
+  /* the emote wheel and the map are full-screen on a phone, not floating */
+  body.playing .mapwrap { padding: 8px; }
+  .quitbtn { display: none; }          /* it lives in the More sheet now */
+}
+
+/* very short screens — a phone in landscape */
+@media (max-height: 460px) and (max-width: 900px) {
+  body.playing .panel.dist, body.playing .panel.wind { display: none; }
+  body.playing .playbar { bottom: 56px; padding: 6px; }
+  body.playing .playbar .m-track { height: 26px; }
+  body.playing .playbar .m-label { display: none; }
+  body.playing .touchpad .tbtn { height: 40px; font-size: 17px; }
+}
+
+/* ── phone: the four things the first pass got wrong ─────────────────── */
+@media (max-width: 560px) {
+  /* 1. the hole card must leave room for the scorecard beside it, or they
+        sit on top of each other — both were pinned to the same corner */
+  body.playing #stage .panel.hud { right: 132px; }
+
+  /* 2. Leave was still floating over the course. `body.playing .quitbtn`
+        sets display:block with a later, more specific rule than the one
+        hiding it, so it has to be hidden with the same specificity. */
+  body.playing .quitbtn { display: none !important; }
+
+  /* 3. the club arrows sat above and below the name, a thumb-span apart.
+        Name on top, both arrows in a row under it. */
+  body.playing .playbar .clubsel { display: grid; grid-template-areas: 'n n' 'l r';
+    gap: 4px; }
+  body.playing .playbar .clubsel .cinfo { grid-area: n; text-align: center; }
+  body.playing .playbar .clubsel .cbtn:first-child { grid-area: l; }
+  body.playing .playbar .clubsel .cbtn:last-child { grid-area: r; }
+  body.playing .playbar .aimsel { display: grid; grid-template-areas: 'n n' 'l r';
+    gap: 4px; }
+  body.playing .playbar .aimsel .cinfo { grid-area: n; text-align: center; }
+  body.playing .playbar .aimsel .cbtn:first-child { grid-area: l; }
+  body.playing .playbar .aimsel .cbtn:last-child { grid-area: r; }
+
+  /* 4. cancel sat across the bottom of the meter it was meant to cancel */
+  body.playing .cancelshot { top: -12px; right: 6px; bottom: auto; left: auto; }
+}
+
+/* ── phone: the playbar laid out by NAME, not by source order ────────── */
+@media (max-width: 560px) {
+  /* The children were being placed by document order with `order` on three
+     of the four, so the cancel button — which has no order — landed first
+     and got pushed into a row of its own under the meter, across the label
+     it was sitting on. Named areas leave nothing to infer. */
+  body.playing .playbar {
+    grid-template-columns: 74px 1fr 74px;
+    grid-template-areas: 'club meter aim';
+    /* NO position here. The playbar is already absolutely positioned against
+       the stage, and an absolutely positioned element is already a
+       containing block for its absolute children — declaring position:
+       relative overrode the anchoring and dropped the whole swing bar into
+       normal flow at the TOP of the screen, over the hole card. */
+  }
+  body.playing .playbar .clubsel { grid-area: club; }
+  body.playing .playbar .meter   { grid-area: meter; }
+  body.playing .playbar .aimsel  { grid-area: aim; }
+  body.playing .playbar .cancelshot {
+    position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    right: auto; bottom: auto; z-index: 3;
+    padding: 3px 14px; font-size: 11px; border-radius: 9px;
+  }
+}
+
+/* ── phone: tab bars WRAP rather than scroll ────────────────────────────
+   Five clubhouse tabs need 492px and a phone has 375. The bar scrolls
+   horizontally, which is technically fine and practically useless: two of
+   the five were off the right edge with nothing to say they were there, so
+   Your bag and Controls simply did not exist for anybody on a phone.
+   Wrapping shows all five at once, which is what a tab bar is for. */
+@media (max-width: 560px) {
+  .hktabs { flex-wrap: wrap; overflow-x: visible; }
+  .hktab { flex: 1 1 auto; min-width: 28%; padding: 8px 6px; font-size: 11.5px; }
+  .bd-tabs .hktab { min-width: 30%; }
+  /* the boards and clubhouse cards use the full width on a phone */
+  #screenShop, #screenBoards { padding: 8px 6px; }
+  #screenShop .card, #screenBoards .card { padding: 14px 12px; border-radius: 16px; }
+  .bd-head h2 { font-size: 18px; }
+}
+
+/* ═══════════════════════════════ THE WARDROBE, ON A PHONE ═══════════════
+   The desktop layout is two side panels flanking the golfer. Narrowed to a
+   phone that becomes two columns of about 170px, which is not enough for a
+   category chip — so the seven of them stacked one per line down the left,
+   the outfit names wrapped onto three, and the golfer you came to look at
+   was behind all of it.
+
+   On a phone it is horizontal instead: categories scroll across the top,
+   outfits scroll across the bottom, and the whole middle is the golfer.
+   Same information, and the thing being previewed is actually visible. */
+@media (max-width: 820px) {
+  .screen.wardrobe { display: block; }
+
+  .wd-panel.wd-left {
+    position: absolute; left: 0; right: 0; top: 62px; bottom: auto;
+    width: auto; height: auto; padding: 0 8px;
+    display: block; overflow: visible;
+  }
+  /* categories: one scrolling row, not seven stacked chips */
+  .wd-cats {
+    display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto;
+    padding-bottom: 4px; scrollbar-width: none;
+  }
+  .wd-cats::-webkit-scrollbar { display: none; }
+  .wd-cat { flex: 0 0 auto; white-space: nowrap; padding: 7px 12px; font-size: 12px; }
+
+  /* outfits: a scrolling shelf pinned above the base bar, so the middle of
+     the screen belongs to the golfer */
+  .wd-fits {
+    position: fixed; left: 0; right: 0; bottom: 168px;
+    flex-direction: row; gap: 8px; overflow-x: auto; overflow-y: hidden;
+    padding: 4px 8px 6px; scrollbar-width: none;
+  }
+  .wd-fits::-webkit-scrollbar { display: none; }
+  .wd-fit {
+    flex: 0 0 auto; width: 152px; flex-direction: column; align-items: flex-start;
+    gap: 6px; padding: 9px 10px;
+  }
+  .wd-fit:hover { transform: none; }
+  .wd-fit b { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 130px; }
+  .wd-fit small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+  .wd-fits .tiny { display: none; }
+
+  /* the detail panel becomes a sheet over the bottom half when opened */
+  .wd-panel.wd-right {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    width: auto; height: 62vh; padding: 12px 12px 16px;
+    background: rgba(6,14,10,.96); border-top: 1px solid rgba(255,255,255,.10);
+    border-radius: 18px 18px 0 0; z-index: 6;
+    box-shadow: 0 -18px 50px rgba(0,0,0,.5);
+  }
+
+  .wd-base { width: calc(100% - 16px); left: 8px; transform: none; bottom: 8px; }
+  .wd-carousel { top: 8px; }
+  /* with the shelf and the base bar both pinned, the veil only needs to
+     darken the two ends */
+  .wd-veil { background:
+    linear-gradient(to bottom, rgba(4,12,9,.86) 0%, rgba(4,12,9,.20) 18%, rgba(4,12,9,0) 34%),
+    linear-gradient(to top, rgba(4,12,9,.92) 0%, rgba(4,12,9,.40) 22%, rgba(4,12,9,0) 40%); }
+}

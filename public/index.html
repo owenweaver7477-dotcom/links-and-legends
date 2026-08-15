@@ -151,12 +151,19 @@
 
   <!-- Touch controls.  Walking, the cart, the map and the view were keyboard
        only, which on a phone means you cannot reach your own ball — the game
-       is unplayable rather than merely awkward.  Shown only on touch devices. -->
+       is unplayable rather than merely awkward.  Shown only on touch devices.
+
+       On a phone these are icon-only and live in one row with the emote and
+       menu toggles: the labelled two-by-two grid they used to be took a
+       hundred and sixteen pixels of a screen that is eight hundred tall, and
+       it sat on top of the golf. -->
   <div class="touchpad" id="touchPad">
     <button class="tbtn" id="tbBall" title="Walk to your ball">🚶<span>Ball</span></button>
     <button class="tbtn" id="tbCart" title="Get in or out of a cart">🛺<span>Cart</span></button>
     <button class="tbtn" id="tbView" title="Change view">🎥<span>View</span></button>
     <button class="tbtn" id="tbMap" title="Hole map">🗺️<span>Map</span></button>
+    <button class="tbtn phone-only" id="tbSay" title="Say something">💬<span>Say</span></button>
+    <button class="tbtn phone-only" id="tbMore" title="Scorecard and settings">☰<span>More</span></button>
   </div>
 
   <!-- There was no way to leave a round at all once you were in one. -->

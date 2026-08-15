@@ -506,12 +506,18 @@ function wardrobeFrame(dt) {
      what you just chose is visible. */
   const aim = Math.atan2(G.hole.pin.x - tee.x, G.hole.pin.z - tee.z);
   const a = aim + wd.t * 0.22;
-  const r = 3.4;
+  /* Back off on a narrow screen. three.js's fov is VERTICAL, so a phone held
+     upright does not automatically show more of a standing figure — it shows
+     the same height in a narrower window, and the outfit shelf and the stats
+     bar then eat into it from both ends. Widening the orbit is what puts the
+     whole golfer between them. */
+  const narrow = Math.min(1, Math.max(0, (1.1 - scene.camera.aspect) / 0.7));
+  const r = 3.4 + narrow * 1.9;
   scene.camera.position.set(cx + Math.sin(a) * r, gy + 1.34, cz + Math.cos(a) * r);
   /* Aimed BELOW the golfer's middle so they sit high in frame: the stats bar
      owns the bottom fifth of the screen, and a centred golfer has their
      shoes behind it — which are a slot you can put a decal on. */
-  scene.camera.lookAt(cx, gy + 0.80, cz);
+  scene.camera.lookAt(cx, gy + 0.80 + narrow * 0.1, cz);
   /* Re-place the ball every frame, exactly as menuFrame does. It is drawn
      oversized and grows with camera distance so it stays followable at 200
      metres — which means a ball last positioned while the camera was 168 m
@@ -3076,6 +3082,31 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      was missing: the legend rendered, was clickable, and did nothing. */
   HUD.openClubhouse = openClubhouse;
   HUD.el.btnClubhouse?.addEventListener('click', openClubhouse);
+  /* ---- the two phone-only toggles -------------------------------------
+     Both exist because a phone has room for the golf OR for a panel, never
+     both — so everything that is not needed on every shot is one tap away
+     rather than permanently on screen. */
+  document.getElementById('tbSay')?.addEventListener('click', () => {
+    document.body.classList.toggle('saying');
+  });
+  /* Saying something closes the tray: on a phone the tray covers the swing
+     controls, so leaving it open after a tap would mean the next shot is
+     played blind. */
+  document.getElementById('phraseBar')?.addEventListener('click', e => {
+    if (e.target.closest('.phrasebtn')) document.body.classList.remove('saying');
+  });
+  document.getElementById('tbMore')?.addEventListener('click', () => {
+    const board = document.getElementById('board');
+    board?.classList.toggle('open');
+  });
+  /* The scorecard header is a tap target in its own right, so the card can
+     be closed by the thing that opened it. */
+  document.querySelector('#board .board-head')?.addEventListener('click', e => {
+    if (window.innerWidth <= 560 && !e.target.closest('.roomtag')) {
+      document.getElementById('board')?.classList.toggle('open');
+    }
+  });
+
   HUD.el.btnShopBack.addEventListener('click', () => route());
   HUD.bindLevelTrack();
   HUD.el.bdBack.addEventListener('click', () => route());
