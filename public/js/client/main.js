@@ -243,6 +243,7 @@ function refreshMenuAvatar() {
   const aim = Math.atan2(G.hole.pin.x - tee.x, G.hole.pin.z - tee.z);
   const spot = addressSpot(tee, aim);
   const av = menu.av = new Avatar(lookDraft || normaliseLook(null), '#f6f9f4');
+  _liveKey = '';                       // a fresh avatar needs the ground now
   scene.actorGroup.add(av.root);
   av.place(spot.x, G.T.heightAt(spot.x, spot.z), spot.z, aim);
   av.setClub('DR', G.profile?.clubTier ?? 0);
@@ -813,6 +814,7 @@ function syncAvatars(players) {
     if (!av || av.lookKey !== key) {
       if (av) { scene.actorGroup.remove(av.root); av.dispose(); }
       av = new Avatar(look, pl.color);
+      _liveKey = '';                   // and so does a player who just joined
       av.lookKey = key;
       scene.actorGroup.add(av.root);
       G.avatars.set(pl.pid, av);
@@ -1251,6 +1253,25 @@ const celebrating = () => (G.celebUntil || 0) > performance.now();
 /* ===================================================================== */
 let last = 0;
 let smokeAt = 0;                 // countdown between puffs from a damaged cart
+/* The ground and the wind, handed to every avatar that exists.
+
+   Both are per-hole rather than per-avatar, and setting them at each of the
+   five places an avatar is updated is five places to forget one. Cheap: two
+   property writes per golfer, and only when the hole or the wind changes. */
+let _liveKey = '';
+function feedAvatars() {
+  const key = `${G.loadedKey}|${G.wind.speed}|${G.wind.dir.toFixed(2)}`;
+  if (key === _liveKey || !G.T) return;
+  _liveKey = key;
+  const give = av => {
+    if (!av) return;
+    av.setTerrain?.(G.T);
+    av.setWind?.(G.wind.speed, G.wind.dir);
+  };
+  give(menu.av);
+  for (const a of G.avatars.values()) give(a);
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = last ? clamp((now - last) / 1000, 0, 0.1) : 0;
@@ -1259,6 +1280,7 @@ function frame(now) {
      sound and an ambient bed under a putt is a distraction. Idempotent, so
      calling it every frame costs a comparison. */
   Sound.ambience(ambienceOk && G.screen !== 'game');
+  feedAvatars();
   // the title screen: the course drifting behind the menu (and behind the
   // lobby, for a host who has not started yet)
   if (G.screen === 'landing' && menu.key && G.hole) { landingFrame(dt); return; }

@@ -29,7 +29,14 @@
 export const POSE_KEYS = [
   'legLx', 'legRx', 'armLx', 'armRx', 'armLz', 'armRz',
   'bodyY', 'bodyRx', 'bodyRz', 'yaw', 'headRx', 'headRy', 'hatY', 'hatRx',
-  'twist', 'armLy', 'armRy', 'legLz', 'legRz'
+  'twist', 'armLy', 'armRy', 'legLz', 'legRz',
+  /* Added with the two-segment limbs. Every one defaults to 0, so a clip
+     written before they existed produces exactly the pose it always did —
+     which is why blankPose zeroing the whole list matters more than it
+     looks. */
+  'kneeL', 'kneeR', 'elbowL', 'elbowR',
+  'footL', 'footR',      // ankle lift, from the ground under each shoe
+  'headRz', 'breath'
 ];
 
 export function blankPose(P = {}) {

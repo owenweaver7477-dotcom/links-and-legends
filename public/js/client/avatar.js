@@ -14,6 +14,7 @@ import { UNLOCKS } from '../shared/unlocks.js';
 import { CLIPS, EMOTE_CLIPS, SHOVE_CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
 import { CLUB_BY_KEY } from '../shared/clubs.js';
 import { FABRICS, GLOVES, WATCHES, CUTS, SHOE_TYPES, DECAL_SLOTS } from '../shared/wardrobe.js';
+import { makeLife, blankLayer, breathe, footPlant, walkKnees, swingLayers } from './anim.js';
 import { shirtMaterial, decalMaterial } from './decals.js';
 
 /* One unit box, reused by every part of every avatar.
@@ -76,6 +77,7 @@ function faceParts() {
   return { geo: _faceGeo, mat: _faceMat };
 }
 
+const ZERO = blankLayer();       // for the paths that have no layer
 const H = AVATAR_HEIGHT;          // 1.78 m
 const SEATED_LEG = 0.62;          // knee-less legs, tucked into the footwell
 const part = (mat, w, h, d, x, y, z) => {
@@ -123,7 +125,10 @@ export class Avatar {
     // hips -> waist -> chest, spanning the same H*0.47 .. H*0.79 as before
     this.body.add(part(this.mats.trousers, W * B.hips, H * 0.075, D * B.depth, 0, H * 0.5075, 0));
     this.body.add(part(this.mats.shirt, W * B.waist, H * 0.105, D * 0.95 * B.depth, 0, H * 0.5975, 0));
-    this.body.add(part(this.mats.shirt, W * B.chest, H * 0.140, D * B.depth, 0, H * 0.7200, 0));
+    // kept, because breathing scales it and nothing else in the rig moves
+    // when a golfer is standing still
+    this.chest = part(this.mats.shirt, W * B.chest, H * 0.140, D * B.depth, 0, H * 0.7200, 0);
+    this.body.add(this.chest);
     if (B.bust > 0) {
       // sits proud of the chest front, so it reads in silhouette rather than
       // only head-on; two boxes rather than one so it is not a shelf
@@ -160,11 +165,29 @@ export class Avatar {
     this.body.add(this.head);
 
     /* --- limbs, pivoted at the shoulder / hip so they can swing --------- */
+    /* A limb is TWO segments with a joint between them.
+
+       It was one box from shoulder to hand and one from hip to foot, which
+       is why every walk in this game has been a scissor and every swing a
+       pair of straight sticks: a limb with no elbow cannot bend, so the only
+       animation available was rotating the whole thing about its root.
+
+       The joint group hangs at the halfway point and carries the lower
+       segment and the extremity, so rotating it bends the limb exactly where
+       a knee or an elbow is. The outer group still rotates from the hip or
+       shoulder and every existing clip that sets armLx or legRx keeps
+       working untouched — this only ADDS somewhere to bend. */
     const limb = (mat, w, len, x, y, endMat, endLen) => {
       const g = new THREE.Group();
       g.position.set(x, y, 0);
-      g.add(part(mat, w, len, w, 0, -len / 2, 0));
-      if (endMat) g.add(part(endMat, w * 1.05, endLen, w * 1.5, 0, -len - endLen / 2, 0.02));
+      const half = len / 2;
+      g.add(part(mat, w, half, w, 0, -half / 2, 0));      // thigh / upper arm
+      const joint = new THREE.Group();
+      joint.position.set(0, -half, 0);
+      joint.add(part(mat, w * 0.94, half, w * 0.94, 0, -half / 2, 0));
+      if (endMat) joint.add(part(endMat, w * 1.05, endLen, w * 1.5, 0, -half - endLen / 2, 0.02));
+      g.add(joint);
+      g.joint = joint;                                    // the knee or elbow
       return g;
     };
     /* Mind the sign — this is why the golfer was left-handed.
@@ -181,10 +204,14 @@ export class Avatar {
     const aw = 0.115 * (0.94 + 0.06 * B.limb);
     this.armL = limb(this.mats.shirt, aw, H * 0.30, 0.262, H * 0.775, this.mats.skin, H * 0.06);
     this.armR = limb(this.mats.shirt, aw, H * 0.30, -0.262, H * 0.775, this.mats.skin, H * 0.06);
+    this.elbowL = this.armL.joint; this.elbowR = this.armR.joint;
     // legs are free to change: nothing is mounted to them
     const lw = 0.145 * B.limb, lx = 0.105 * B.hipSpread, ll = H * 0.42 * B.legLen;
     this.legL = limb(this.mats.trousers, lw, ll, lx, H * 0.47, this.mats.shoe, H * 0.05);
     this.legR = limb(this.mats.trousers, lw, ll, -lx, H * 0.47, this.mats.shoe, H * 0.05);
+    this.kneeL = this.legL.joint; this.kneeR = this.legR.joint;
+    // the rest position of the knee group, which the foot IK offsets FROM
+    this._legHalf = ll / 2;
     this.body.add(this.armL, this.armR, this.legL, this.legR);
 
     /* Worn accessories that hang off the body rather than the head.  Built
@@ -224,6 +251,10 @@ export class Avatar {
     this.clubTierIdx = -1;
     this.setClub('I7', 0);
 
+    /* Its own phase, its own breath rate, its own fidget timer. Eight
+       players breathing in unison is worse than eight not breathing. */
+    this.life = makeLife(Math.random());
+    this._layer = blankLayer();
     this._dressWardrobe(look, M);
 
     this.root.add(this.body);
@@ -717,6 +748,8 @@ export class Avatar {
     if (this.cel && speed > 1.8) this.cel = null;
 
     const moving = speed > 0.15;
+    this._swinging = false;      // set again below if a swing clip is running
+    this._swingLay = null;
     // stride frequency rises with speed but flattens off, like a real gait
     this.phase += dt * (moving ? 2.1 + Math.min(speed, 10) * 0.62 : 0);
 
@@ -816,6 +849,12 @@ export class Avatar {
       P.headRx = 0.32 - Math.max(0, f - 0.6) * 1.05;
       P.headRy = 0.18 * b - 0.30 * Math.max(0, f - 0.6);
       P.bodyY = -0.02 * b;                     // sits into the backswing a touch
+      /* The three things a pendulum does not do: shift its weight, coil the
+         shoulders past the hips, and lag the club before releasing it.
+         Layered rather than folded into the numbers above, so the clip keeps
+         owning the TIMING and this only shapes what happens at each beat. */
+      this._swinging = true;
+      this._swingLay = { f: bA > 0 ? bA : fA, back: bA > 0 };
       // wrists: hinge going back, release through, rehinge over the shoulder
       this.club.rotation.x = 0.25 - 1.15 * b + wristLag
         + (f > 0.55 ? (f - 0.55) * 1.6 : f * 0.5);
@@ -845,41 +884,89 @@ export class Avatar {
       }
     }
 
-    this._apply(P);
+    /* ---- the always-on layers ------------------------------------------
+       Added LAST, over whatever the clip or the walk produced, and never
+       instead of them. Breathing, wind lean and idle fidgets have no start
+       and no end, so they cannot be clips; the feet have to be last because
+       they answer a question — where is the ground — that nothing above them
+       knows the answer to. */
+    const L = blankLayer(this._layer);        // ZEROED every frame — see anim.js
+    breathe(L, this.life, dt, {
+      moving, swinging: !!this._swinging, seated: this.seated,
+      wind: this._wind || 0, windDir: this._windDir || 0, facing: this._yaw
+    });
+    walkKnees(L, this.life, speed);
+    if (this._swingLay) swingLayers(L, this._swingLay.f, this._swingLay.back);
+    if (this._terrain) {
+      footPlant(L, this.life, dt, {
+        T: this._terrain,
+        x: this.root.position.x, z: this.root.position.z,
+        facing: this._yaw, moving, ground: this.root.position.y
+      });
+    }
+
+    this._apply(P, L);
   }
 
-  /** Write a pose onto the rig.  The only place joints are touched. */
-  _apply(P) {
+  /** The terrain to stand on. Set once per hole by the scene. */
+  setTerrain(T) { this._terrain = T; }
+  /** Wind, for the lean. Speed in m/s and a bearing in radians. */
+  setWind(speed, dir) { this._wind = speed; this._windDir = dir; }
+
+  /**
+   * Write a pose onto the rig. The only place joints are touched.
+   *
+   * `L` is the always-on layer — breathing, wind, idles, foot placement —
+   * added here rather than merged into P, because P is a persistent buffer
+   * that clips assign into. Adding a layer into it compounds every frame.
+   */
+  _apply(P, L = ZERO) {
     this.legL.rotation.x = P.legLx;
     this.legR.rotation.x = P.legRx;
-    this.legL.rotation.z = P.legLz;
-    this.legR.rotation.z = P.legRz;
-    this.armL.rotation.x = P.armLx;
-    this.armR.rotation.x = P.armRx;
-    this.armL.rotation.z = P.armLz;
-    this.armR.rotation.z = P.armRz;
+    this.legL.rotation.z = P.legLz + L.legLz;
+    this.legR.rotation.z = P.legRz + L.legRz;
+    this.armL.rotation.x = P.armLx + L.armLx;
+    this.armR.rotation.x = P.armRx + L.armRx;
+    this.armL.rotation.z = P.armLz + L.armLz;
+    this.armR.rotation.z = P.armRz + L.armRz;
     this.armL.rotation.y = P.armLy;
     this.armR.rotation.y = P.armRy;
-    this.body.position.y = P.bodyY;      // the hop lifts the body, not the root,
-    this.body.rotation.x = P.bodyRx;     // so the blob stays on the ground
-    this.body.rotation.z = P.bodyRz;
+    this.body.position.y = P.bodyY + L.bodyY;      // the hop lifts the body, not the root,
+    this.body.rotation.x = P.bodyRx + L.bodyRx;     // so the blob stays on the ground
+    this.body.rotation.z = P.bodyRz + L.bodyRz;
     /* TWIST vs YAW.
        The arms and the legs are both children of `body`, so turning body.y
        turns the whole figure — a pivot on the spot, which is all the rig
        could ever do. Counter-rotating the legs by the same angle holds the
        feet where they are and lets the shoulders turn against the hips,
        which is what every throw, swing and slap is actually made of. */
-    this.body.rotation.y = this._yaw + P.yaw + P.twist;
-    if (P.twist) {
-      this.legL.rotation.y = -P.twist;
-      this.legR.rotation.y = -P.twist;
+    this.body.rotation.y = this._yaw + P.yaw + P.twist + L.twist;
+    if (P.twist || L.twist) {
+      this.legL.rotation.y = -(P.twist + L.twist);
+      this.legR.rotation.y = -(P.twist + L.twist);
     } else if (this.legL.rotation.y) {
       this.legL.rotation.y = 0; this.legR.rotation.y = 0;
     }
-    this.head.rotation.x = P.headRx;
-    this.head.rotation.y = P.headRy;
+    /* Knees and elbows. Clamped to one direction only, because a knee that
+       bends forward is the single most unsettling thing a character rig can
+       do and a clip written before these existed has no idea it must not. */
+    this.kneeL.rotation.x = Math.max(0, (P.kneeL || 0) + L.kneeL);
+    this.kneeR.rotation.x = Math.max(0, (P.kneeR || 0) + L.kneeR);
+    this.elbowL.rotation.x = Math.min(0, (P.elbowL || 0) + L.elbowL);
+    this.elbowR.rotation.x = Math.min(0, (P.elbowR || 0) + L.elbowR);
+    /* Foot placement, from the terrain under each shoe. `footL/R` lifts the
+       ankle and `footLx/Rx` tilts it to the slope — without both, a golfer
+       standing across a hill has one foot buried and the other in the air. */
+    this.kneeL.position.y = this._legHalf * -1 + L.footL;
+    this.kneeR.position.y = this._legHalf * -1 + L.footR;
+    this.head.rotation.x = P.headRx + L.headRx;
+    this.head.rotation.y = P.headRy + L.headRy;
+    this.head.rotation.z = (P.headRz || 0) + L.headRz;
     this.hat.position.y = P.hatY;
     this.hat.rotation.x = P.hatRx;
+    // breathing: the chest rises, and it is the only thing that ever moves
+    // when a golfer is doing nothing at all
+    if (this.chest) this.chest.scale.set(1 + L.breath * 0.03, 1, 1 + L.breath * 0.05);
   }
 
   /** Static seat pose: knees up, hands forward on the wheel or the rail. */
