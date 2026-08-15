@@ -439,6 +439,56 @@
      out of the way, it says who and where, and it goes when answered. -->
 <div class="invites" id="inviteTray"></div>
 
+<!-- ═══════════════════════════════════ LEADERBOARDS ═══════════════════
+     Its own screen, not a tab inside the clubhouse. The clubhouse is where
+     you spend coins and change your bag; the boards are where you find out
+     where you stand, and burying them three clicks inside a shop is the
+     wrong shape for the second thing anybody does in a competitive game. -->
+<div class="screen boards" id="screenBoards" hidden>
+  <div class="card wide bd-card">
+    <div class="bd-head">
+      <h2>Leaderboards</h2>
+      <button class="btn" id="bdBack">← Back</button>
+    </div>
+    <div class="hktabs bd-tabs" id="bdTabs" role="tablist">
+      <button class="hktab on" data-bd="ranks" role="tab">Rankings</button>
+      <button class="hktab" data-bd="records" role="tab">Course records</button>
+      <button class="hktab" data-bd="world" role="tab">World rating</button>
+    </div>
+    <div class="bd-body">
+<div class="section bdpane" data-pane="ranks">
+      <h4 class="lbl nojs-only">Rankings</h4>
+      <div id="rankMe"></div>
+      <div class="rkbtabs" id="rkbTabs" role="tablist">
+        <button class="rkbtab on" data-board="handicap">Handicap</button>
+        <button class="rkbtab" data-board="level">Levels</button>
+        <button class="rkbtab" data-board="weekly">This week</button>
+        <button class="rkbtab" data-board="season">Season</button>
+        <button class="rkbtab" data-board="course">By course</button>
+        <button class="rkbtab" data-board="friends">Friends</button>
+      </div>
+      <div id="rankBody"></div>
+    </div>
+
+    <div class="section bdpane" data-pane="records">
+      <h4 class="lbl nojs-only">Course records</h4>
+      <div id="recordBox"></div>
+    </div>
+
+    <div class="section bdpane" data-pane="world">
+      <h4 class="lbl nojs-only">World ranking</h4>
+      <div id="worldBox"></div>
+    </div>
+
+    <!-- RANKINGS. Five ladders, because one ladder has a top ten that never
+         changes. Handicap answers "who is the best golfer", level answers
+         "who has put the hours in", the weekly and seasonal boards give
+         somebody who started on Monday something they can still win, and the
+         course board is form rather than a single lucky round. -->
+        </div>
+  </div>
+</div>
+
 <!-- ══════════════ CLUBHOUSE — career, pro shop and your bag ══════════════ -->
 <div class="screen" id="screenShop" hidden>
   <div class="card wide">
@@ -455,11 +505,8 @@
     <div class="hktabs" id="hkTabs" role="tablist" hidden>
       <button class="hktab on" data-tab="career" role="tab">Career</button>
       <button class="hktab" data-tab="rewards" role="tab">Rewards</button>
-      <button class="hktab" data-tab="records" role="tab">Records</button>
       <button class="hktab" data-tab="shop" role="tab">Pro shop</button>
       <button class="hktab" data-tab="bag" role="tab">Your bag</button>
-      <button class="hktab" data-tab="world" role="tab">World</button>
-      <button class="hktab" data-tab="ranks" role="tab">Rankings</button>
       <button class="hktab" data-tab="keys" role="tab">Controls</button>
     </div>
 
@@ -480,38 +527,9 @@
       <div id="rewardBox"></div>
     </div>
 
-    <div class="section hkpane" data-pane="records">
-      <h4 class="lbl nojs-only">Course records</h4>
-      <div id="recordBox"></div>
-    </div>
-
     <div class="section hkpane" data-pane="shop">
       <h4 class="lbl">Pro shop <span class="coinbal" id="coinBal"></span></h4>
       <div id="shopList"></div>
-    </div>
-
-    <div class="section hkpane" data-pane="world">
-      <h4 class="lbl nojs-only">World ranking</h4>
-      <div id="worldBox"></div>
-    </div>
-
-    <!-- RANKINGS. Five ladders, because one ladder has a top ten that never
-         changes. Handicap answers "who is the best golfer", level answers
-         "who has put the hours in", the weekly and seasonal boards give
-         somebody who started on Monday something they can still win, and the
-         course board is form rather than a single lucky round. -->
-    <div class="section hkpane" data-pane="ranks">
-      <h4 class="lbl nojs-only">Rankings</h4>
-      <div id="rankMe"></div>
-      <div class="rkbtabs" id="rkbTabs" role="tablist">
-        <button class="rkbtab on" data-board="handicap">Handicap</button>
-        <button class="rkbtab" data-board="level">Levels</button>
-        <button class="rkbtab" data-board="weekly">This week</button>
-        <button class="rkbtab" data-board="season">Season</button>
-        <button class="rkbtab" data-board="course">By course</button>
-        <button class="rkbtab" data-board="friends">Friends</button>
-      </div>
-      <div id="rankBody"></div>
     </div>
 
     <div class="section hkpane" data-pane="keys">

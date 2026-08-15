@@ -435,7 +435,16 @@ async function leaveLanding(target = 'play') {
    pages that have to be kept in step with it. */
 function openLegend(target) {
   if (target === 'clubhouse') { HUD.openClubhouse?.(); return; }
-  const tab = { leaderboards: 'records', rankings: 'world', settings: 'keys' }[target];
+  /* The boards are their own screen now, so the legend goes straight there
+     rather than into the clubhouse and along to a tab. */
+  if (target === 'leaderboards' || target === 'rankings') {
+    G.screen = 'boards';
+    HUD.show('boards');
+    HUD.bindBoardsScreen();
+    HUD.showBoardTab(target === 'rankings' ? 'ranks' : 'records');
+    return;
+  }
+  const tab = { settings: 'keys' }[target];
   if (tab) {
     renderClubhouse();
     G.screen = 'shop';
@@ -3043,8 +3052,16 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     HUD.show('shop');
     try { HUD.bindClubhouse?.(); } catch (e) { console.error('clubhouse tabs:', e); }
   };
+  /* Named on HUD as well as bound to a button, because the button it used
+     to live on no longer exists — the clubhouse is a landing-page legend
+     now, and openLegend calls HUD.openClubhouse. Assigning it here is what
+     was missing: the legend rendered, was clickable, and did nothing. */
+  HUD.openClubhouse = openClubhouse;
   HUD.el.btnClubhouse?.addEventListener('click', openClubhouse);
   HUD.el.btnShopBack.addEventListener('click', () => route());
+  HUD.bindLevelTrack();
+  HUD.el.bdBack.addEventListener('click', () => route());
+  HUD.onRecordsTab = () => Net.records(r => { G.records = r; HUD.renderRecords(COURSES, r, G.myPid); });
 
   /* ---- the wardrobe ---------------------------------------------------- */
   HUD.onWardrobe = applyWardrobe;

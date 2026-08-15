@@ -20,6 +20,7 @@ const $ = id => document.getElementById(id);
 const el = {};
 for (const id of [
   'screenHome', 'screenLobby', 'screenResults', 'screenLoad', 'screenHoleOver', 'screenShop',
+  'screenBoards', 'bdTabs', 'bdBack',
   'screenLanding', 'introCanvas', 'lpLegend', 'lpLive', 'lpSide', 'lpSideTitle',
   'lpSideClose', 'lpOnlineCount', 'lpCourseName', 'lpCourseSub', 'lpFriendSub',
   'nameState', 'nameSuggest',
@@ -88,6 +89,7 @@ HUD.show = which => {
      the clubhouse both render into the character panel inside it by id.
      Showing it is never right. */
   const landing = which === 'landing' || which === 'home';
+  el.screenBoards.hidden = which !== 'boards';
   el.screenLanding.hidden = !landing;
   el.screenWardrobe.hidden = which !== 'wardrobe';
   el.screenHome.hidden = true;
@@ -1273,34 +1275,131 @@ HUD.bindsListening = () => !!listening;
  * without ever showing it to them — and a ladder you cannot see the top of
  * is not a reason to keep playing.
  */
+/* ═══════════════════════════════════════════════ THE LEVEL TRACK ════════
+   A hundred levels as a horizontal line you scroll along, rather than a
+   vertical list of a hundred rows.
+
+   The list answered "what have I got". The question people actually have is
+   "what am I working towards", and a list is the wrong shape for it: your
+   position in it is a scroll offset, the next reward is wherever your eye
+   lands, and the distance between here and level 100 is not visible at all.
+
+   A track shows all three at once. Where you are is a marker on a line, what
+   is next is the node to the right of it, and how far there is to go is the
+   length of the line. It opens scrolled to YOUR position rather than to
+   level 1, because the interesting part of a hundred-level ladder is
+   wherever you happen to be standing on it.
+*/
 HUD.renderRewards = (prof) => {
   const box = document.getElementById('rewardBox');
   if (!box) return;
   const level = prof?.level ?? 1;
+  HUD.myLevel = level;
+  const xp = prof?.xp ?? 0;
   const owned = UNLOCKS.filter(u => u.at <= level).length;
+  const tier = rTier(level);
 
-  const rows = UNLOCKS.map(u => {
-    const got = u.at <= level;
-    const kind = UNLOCK_KINDS[u.kind] || { name: u.kind, blurb: '' };
-    return `<li class="rw ${got ? 'got' : 'locked'}">
-      <span class="rw-lvl">${u.at}</span>
-      <span class="rw-swatch" style="background:${u.color || 'transparent'};
-        ${u.color ? '' : 'border-style:dashed'}"></span>
-      <span class="rw-name"><b>${escapeHtml(u.name)}</b>
-        <small>${escapeHtml(kind.name)}</small></span>
-      <span class="rw-state">${got ? 'earned' : 'level ' + u.at}</span>
-    </li>`;
+  /* One node per level that gives something, plus the five tier boundaries
+     — a track with a hundred identical ticks on it is a ruler, not a
+     progression. */
+  const stops = new Map();
+  for (const u of UNLOCKS) {
+    if (!stops.has(u.at)) stops.set(u.at, { at: u.at, items: [] });
+    stops.get(u.at).items.push(u);
+  }
+  for (const t of RANK_TIERS) {
+    if (!stops.has(t.from)) stops.set(t.from, { at: t.from, items: [] });
+    stops.get(t.from).tier = t;
+  }
+  const list = [...stops.values()].sort((a, b) => a.at - b.at);
+  const maxAt = Math.max(100, list[list.length - 1].at);
+
+  const nodes = list.map(s => {
+    const got = s.at <= level;
+    const here = s.at === level;
+    const t = rTier(s.at);
+    const label = s.items.length
+      ? s.items.map(u => escapeHtml(u.name)).join(' · ')
+      : (s.tier ? s.tier.name : '');
+    const swatch = s.items.find(u => u.color)?.color || t.color;
+    return `<button class="lv-node${got ? ' got' : ''}${here ? ' here' : ''}"
+        data-lv="${s.at}" style="--c:${swatch}"
+        title="Level ${s.at} — ${label}">
+      <span class="lv-dot"></span>
+      <span class="lv-n">${s.at}</span>
+      <span class="lv-what">${label ? escapeHtml(label.slice(0, 22)) : ''}</span>
+    </button>`;
   }).join('');
 
+  const pct = Math.min(100, (level / maxAt) * 100);
   box.innerHTML =
-    `<div class="rw-head">
-       <div><b>${owned}</b><span>of ${UNLOCKS.length} earned</span></div>
-       <p class="tiny">Levels buy identity, never distance — nothing on this
-         list makes the ball go further. Equip what you have earned from
-         <b>Your character</b> on the front page.</p>
+    `<div class="lv-top">
+       <div class="lv-me" style="--c:${tier.color}">
+         <span class="lv-badge">${tier.badge}</span>
+         <span><b>Level ${level}</b><small>${tier.name} · ${owned} of ${UNLOCKS.length} unlocked</small></span>
+       </div>
+       <div class="lv-xp"><b>${xp.toLocaleString()}</b><em>XP</em></div>
      </div>
-     <ul class="rwlist">${rows}</ul>`;
+     <div class="lv-track" id="lvTrack">
+       <div class="lv-rail"><i style="width:${pct}%"></i></div>
+       <div class="lv-nodes">${nodes}</div>
+     </div>
+     <div class="lv-preview" id="lvPreview"></div>
+     <p class="tiny">Levels buy identity, never distance — nothing on this
+       track makes the ball go further.</p>`;
+
+  /* Open on YOUR level rather than on level 1. A hundred-level track that
+     starts at the far left shows a new player nothing they can reach and a
+     level-70 player nothing they have not already got. */
+  /* setTimeout, not requestAnimationFrame. rAF does not run in a
+     backgrounded tab, and a track that opens on level 1 for a level-70
+     player because they alt-tabbed while it rendered is a track that
+     silently forgot the one thing it is for. */
+  setTimeout(() => {
+    const track = document.getElementById('lvTrack');
+    const here = track?.querySelector('.lv-node.here') || track?.querySelector('.lv-node:not(.got)');
+    if (track && here) track.scrollLeft = here.offsetLeft - track.clientWidth / 2 + here.offsetWidth / 2;
+  });
+  HUD.showLevelPreview(level, level);
 };
+
+/** What one level on the track gives you, under the track. */
+HUD.showLevelPreview = (at, myLevel) => {
+  const box = document.getElementById('lvPreview');
+  if (!box) return;
+  const items = UNLOCKS.filter(u => u.at === at);
+  const t = rTier(at);
+  const mile = MILESTONES.find(m => m.at === at);
+  const got = at <= myLevel;
+  box.className = 'lv-preview' + (got ? ' got' : '');
+  box.innerHTML =
+    `<div class="lv-pv-head" style="--c:${t.color}">
+       <span class="lv-pv-badge">${t.badge}</span>
+       <span><b>Level ${at}</b><small>${t.name}${got ? ' · earned' : ' · locked'}</small></span>
+     </div>` +
+    (mile ? `<p class="lv-pv-mile"><b>${escapeHtml(mile.name)}</b> — ${escapeHtml(mile.gives)}</p>` : '') +
+    (items.length
+      ? `<div class="lv-pv-items">${items.map(u => {
+          const kind = UNLOCK_KINDS[u.kind] || { name: u.kind };
+          return `<div class="lv-pv-item">
+            <span class="lv-pv-sw" style="background:${u.color || 'transparent'};
+              ${u.color ? '' : 'border-style:dashed'}"></span>
+            <span><b>${escapeHtml(u.name)}</b><small>${escapeHtml(kind.name)}</small></span>
+          </div>`;
+        }).join('')}</div>`
+      : `<p class="tiny">A rank, rather than an item — ${escapeHtml(t.ranks)}.</p>`);
+};
+
+let lvBound = false;
+HUD.bindLevelTrack = () => {
+  if (lvBound) return;
+  lvBound = true;
+  document.getElementById('rewardBox')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-lv]');
+    if (b) HUD.showLevelPreview(Number(b.dataset.lv), HUD.myLevel ?? 1);
+  });
+};
+
 
 /* ------------------------------------------------------------ records --- */
 /**
@@ -1987,5 +2086,33 @@ HUD.bindInvites = () => {
   document.getElementById('inviteTray')?.addEventListener('click', e => {
     const b = e.target.closest('[data-inv]');
     if (b) HUD.onInvite(b.dataset.inv, !!b.dataset.yes);
+  });
+};
+
+/* The boards screen's own tabs. Separate from the clubhouse's, because they
+   are separate screens now — sharing showClubhouseTab would have meant one
+   of them hiding the other's panes. */
+HUD.bdTab = 'ranks';
+HUD.showBoardTab = name => {
+  HUD.bdTab = name;
+  for (const b of document.querySelectorAll('#bdTabs .hktab')) {
+    const on = b.dataset.bd === name;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+  for (const p of document.querySelectorAll('.bdpane')) p.hidden = p.dataset.pane !== name;
+  document.querySelector('#screenBoards .card')?.scrollTo?.({ top: 0 });
+  if (name === 'ranks') HUD.onBoards?.(null);
+  if (name === 'world') HUD.onWorldTab?.();
+  if (name === 'records') HUD.onRecordsTab?.();
+};
+
+let bdBound = false;
+HUD.bindBoardsScreen = () => {
+  if (bdBound) return;
+  bdBound = true;
+  document.getElementById('bdTabs')?.addEventListener('click', e => {
+    const b = e.target.closest('.hktab');
+    if (b) HUD.showBoardTab(b.dataset.bd);
   });
 };
