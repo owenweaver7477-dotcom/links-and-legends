@@ -3671,7 +3671,44 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      sitting on a dead menu is the worst outcome, and on a portal it is also
      the most likely one — a static bundle depends on the backend being awake
      (a free-tier host sleeps when idle and takes ~30 s to come back). */
+  /* ── the boot screen ───────────────────────────────────────────────────
+     The static overlay in index.html, now that there is something to say.
+     Two jobs, and they are different: the bundle downloading (quick, and
+     the player just needs to know it is happening) and the SERVER waking
+     (slow, and the player needs to know it is normal and worth waiting for).
+
+     Never a bare "Loading…" once we know it is the second one. A free-tier
+     host takes about half a minute to cold-start, and thirty seconds of an
+     unexplained spinner is indistinguishable from a broken game — which is
+     the single most likely reason somebody arriving from a portal leaves
+     before playing. */
   let wakeTries = 0;
+  const bootEl = () => document.getElementById('bootScreen');
+  const bootSay = (msg, pct) => {
+    const m = document.getElementById('bootMsg');
+    const b = document.getElementById('bootBar');
+    if (m && msg) m.textContent = msg;
+    if (b && pct != null) b.style.width = pct + '%';
+  };
+  const bootDone = () => {
+    const el = bootEl();
+    if (!el) return;
+    el.style.transition = 'opacity .45s ease';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 500);
+  };
+  /* A loading screen that outlives the load is worse than none, so it comes
+     off on a timer if nothing is happening — a boot that threw somewhere
+     should leave the player looking at the game rather than at a reassuring
+     message about a game they cannot reach.
+
+     But NOT while the server is being woken, which is the one case where a
+     long wait is correct and the message is the whole point. Dropping the
+     screen at twenty-five seconds into a fifty-second cold start would take
+     the explanation away at exactly the moment it is doing its job. */
+  setTimeout(() => { if (!wakeTries) bootDone(); }, 25000);
+  bootSay('Loading the course…', 25);
+
   Net.on('offline', () => {
     /* Almost always a sleeping host rather than a dead one: a free-tier
        instance takes about half a minute to cold-start, so the FIRST attempt
@@ -3679,12 +3716,25 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
        the wait reads as progress rather than a hung menu, and never stop
        retrying — the player has nothing else to do here. */
     wakeTries++;
-    HUD.homeError(wakeTries < 12
-      ? `Waking the game server up… this takes about half a minute on a cold start. (attempt ${wakeTries})`
-      : 'Still cannot reach the game server. It may be down — this page will keep trying.');
+    /* Worded for somebody who has never heard of a cold start. "Waking the
+       game server up (attempt 4)" is honest and reads like something going
+       wrong; what a player needs to know is that the wait is expected, that
+       it is nearly over, and that it will not happen next time. */
+    const msg = wakeTries < 14
+      ? 'Waking the course up — the server sleeps when nobody is playing. '
+        + 'This takes up to a minute the first time, then it is instant.'
+      : 'Still trying to reach the game server. Leave this open — it will '
+        + 'connect as soon as the server answers.';
+    bootSay(msg, Math.min(90, 30 + wakeTries * 5));
+    HUD.homeError(wakeTries < 14 ? '' : msg);
     setTimeout(() => Net.connect(), Math.min(3000 + wakeTries * 1000, 10000));
   });
-  Net.on('connect', () => { wakeTries = 0; HUD.homeError(''); });
+  Net.on('connect', () => {
+    wakeTries = 0;
+    HUD.homeError('');
+    bootSay('Ready', 100);
+    bootDone();
+  });
   await Net.connect();
   watchPresence();
   /* The quick phrases. Fixed text we wrote, so they skip the filter — and on

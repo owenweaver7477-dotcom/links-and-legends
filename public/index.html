@@ -28,6 +28,33 @@
 </head>
 <body>
 
+<!-- ═══════════════════════════ BEFORE ANYTHING ELSE ═══════════════════════
+     The first thing in the body, with its styles written ON it rather than in
+     the stylesheet, so it is painted even if nothing else has arrived yet.
+
+     Until now the first thing a new player saw was a dark page with a few
+     empty panels scattered over it and no explanation, for as long as the
+     bundle took to download — and on a portal, over a phone connection, that
+     is a few seconds of looking like a broken site. The fix is not to make
+     it faster; it is to say what is happening.
+
+     Removed by main.js once the game is up, with a failsafe in case boot
+     throws — a loading screen that outlives the load is worse than none. -->
+<div id="bootScreen" style="position:fixed;inset:0;z-index:9999;display:flex;
+     align-items:center;justify-content:center;flex-direction:column;gap:18px;
+     background:#0d1a12;color:#cfeddb;
+     font:500 15px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;
+     text-align:center;padding:24px">
+  <div style="font-size:34px">⛳</div>
+  <div style="font-size:19px;font-weight:700;letter-spacing:-.2px">Links &amp; Legends</div>
+  <div id="bootMsg" style="opacity:.72;max-width:min(420px,86vw)">Loading the course…</div>
+  <div style="width:min(240px,70vw);height:3px;border-radius:99px;
+              background:rgba(255,255,255,.12);overflow:hidden">
+    <div id="bootBar" style="width:0;height:100%;background:#6fce8a;
+         transition:width .4s ease"></div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════ THE COURSE ═══════════════════════════ -->
 <div id="stage">
   <canvas id="gl"></canvas>
