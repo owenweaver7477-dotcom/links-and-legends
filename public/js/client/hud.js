@@ -165,10 +165,22 @@ HUD.setDistance = (metres, lieLabel, elevM) => {
 };
 
 const BEAUFORT = s => s < 1 ? 'calm' : s < 3.5 ? 'light' : s < 7 ? 'breezy' : s < 11 ? 'blustery' : s < 16 ? 'strong' : 'howling';
+/* 'exact' quotes the number; 'rough' gives you the word and no digits.
+   Set from the difficulty, defaulting to exact so nothing that never sets
+   it changes behaviour. */
+let windDetail = 'exact';
+HUD.setWindDetail = mode => { windDetail = mode === 'rough' ? 'rough' : 'exact'; };
+
 HUD.setWind = (wind, viewHeading) => {
   const mph = wind.speed * 2.23694;
-  el.wSpeed.textContent = Math.round(mph);
+  /* On Pro and above you get the arrow and a word for it. The arrow stays,
+     because a wind you cannot see the DIRECTION of is not a harder read, it
+     is a coin toss — and the flags and the trees show it anyway. What goes
+     is the precision: judging "blustery" is a skill, subtracting 9 mph is
+     arithmetic. */
+  el.wSpeed.textContent = windDetail === 'rough' ? '' : Math.round(mph);
   el.wDesc.textContent = BEAUFORT(wind.speed);
+  el.wSpeed.parentElement?.classList.toggle('rough', windDetail === 'rough');
   // show the wind relative to the way the player is facing
   const rel = wind.dir - (viewHeading || 0);
   el.wArrow.setAttribute('transform', `rotate(${(rel * 180 / Math.PI).toFixed(1)} 30 30)`);

@@ -131,12 +131,21 @@ export const radialOpen = () => open;
  * differently under a finger would be a wheel that only ever got tested
  * with a mouse.
  */
-export function bindRadial(el, listFn, cb, { holdMs = 180 } = {}) {
+/**
+ * @param buttons  which mouse buttons arm the hold. Defaults to the left/
+ *   primary button, which is right for a UI control; the course itself
+ *   passes [1, 2] so that holding the RIGHT button opens the wheel and the
+ *   left button is left alone for the swing. Touch reports button 0 for
+ *   every contact, so a touch always arms regardless of this list.
+ */
+export function bindRadial(el, listFn, cb, { holdMs = 180, buttons = null } = {}) {
   if (!el) return;
   let timer = 0, startX = 0, startY = 0, armed = false;
 
   const down = e => {
-    if (e.button != null && e.button > 1) return;
+    const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
+    if (!touch && buttons && !buttons.includes(e.button)) return;
+    if (!touch && !buttons && e.button != null && e.button > 1) return;
     startX = e.clientX; startY = e.clientY;
     armed = true;
     pointer = e.pointerId;

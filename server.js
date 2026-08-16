@@ -1845,9 +1845,29 @@ io.on('connection', socket => {
     p.ax = p.x; p.az = p.z;
     p.x = result.x; p.z = result.z; p.lie = result.lie;
 
-    let capped = false;
+    let capped = false, conceded = false;
     if (result.holed) p.finished = true;
     else if (p.strokes >= h.maxStrokes) { p.strokes = h.maxStrokes; p.finished = true; capped = true; }
+    else {
+      /* THE GIMME. Inside this range the putt is conceded and counted — the
+         "that's good, pick it up" of every friendly round. It costs you the
+         stroke either way, so this is not a shortcut; it saves you tapping
+         in from ten inches, which is not golf, it is admin.
+
+         Ranged by difficulty and zero on Tournament, where you hole
+         everything out. Decided by the SERVER off its own result, because a
+         client that could concede its own putts could concede them from the
+         fringe. */
+      const gim = difficultyById(difficultyOf(p.pid)).aids.gimme;
+      if (gim > 0 && result.lie === 'green') {
+        const cup = h.cup || h.pin;
+        if (Math.hypot(result.x - cup.x, result.z - cup.z) <= gim) {
+          p.strokes++;                       // the tap-in you were given
+          p.finished = true;
+          conceded = true;
+        }
+      }
+    }
 
     if (p.finished) p.scores[room.holeIndex] = p.strokes;
 
@@ -1859,7 +1879,7 @@ io.on('connection', socket => {
       result: {
         x: result.x, z: result.z, holed: result.holed, penalty: result.penalty,
         reason: result.reason, lie: result.lie, carry: result.carry,
-        total: result.total, apex: result.apex, capped,
+        total: result.total, apex: result.apex, capped, conceded,
         strokes: p.strokes, splash: result.splash || null
       }
     });

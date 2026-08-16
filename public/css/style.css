@@ -1593,8 +1593,15 @@ body.hktabbed .nojs-only { display: none; }
 .trow .ptotal { font-weight: 900; font-size: 14px; color: #eaf3ea; }
 
 /* ------------------------------------------------------------- controls --- */
-.keyhead { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
-.keyhead p { margin: 0; flex: 1; }
+/* Wraps rather than overlapping. The button has a fixed width and the
+   paragraph did not shrink below its content, so at tablet widths the text
+   ran underneath it — flex will happily overflow a child whose min-width is
+   auto, which is the default and is almost never what you want in a row
+   that has to survive being narrowed. */
+.keyhead { display: flex; align-items: center; gap: 14px; margin-bottom: 12px;
+  flex-wrap: wrap; }
+.keyhead p { margin: 0; flex: 1 1 260px; min-width: 0; }
+.keyhead .btn { flex: 0 0 auto; }
 .bindgroup { margin: 14px 0 6px; font-size: 10px; letter-spacing: 1.4px;
   text-transform: uppercase; color: #8ba492; font-weight: 800; }
 .bindgroup:first-child { margin-top: 0; }
@@ -2893,4 +2900,55 @@ body.hudfade .windbox, body.hudfade .onlinenow {
 
   .shop { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
   .diffrow { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ═══════════════════════════════ THE SCORECARD ON A SMALL SCREEN ══════
+   Eleven columns do not fit in 375px, so the card scrolls sideways — which
+   is right, except that the two columns it scrolled off the edge were the
+   player's name and their TOTAL. A results screen whose default view hides
+   who won is a results screen you have to operate before it answers the
+   only question you opened it to ask.
+
+   So the name sticks to the left edge and the totals to the right, and the
+   holes scroll between them. */
+@media (max-width: 700px) {
+  .cardwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .scorecard { border-collapse: separate; border-spacing: 0; }
+  .scorecard .nm {
+    position: sticky; left: 0; z-index: 2;
+    background: #16241b; min-width: 74px; max-width: 74px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Two sticky right columns, so they stack against the edge in order
+     rather than on top of each other. 44px is the ± column's own width. */
+  .scorecard .tot { position: sticky; right: 0; z-index: 2; background: #16241b;
+    min-width: 44px; }
+  /* nth-last-child, NOT :first-of-type — the latter ignores the class and
+     asks "is this the first th in the row", which is the Player heading. So
+     it matched nothing, both pinned columns landed on right:0, and the
+     Total header sat underneath the ± one. */
+  .scorecard th.tot:nth-last-child(2), .scorecard td.tot:nth-last-child(2) { right: 44px; }
+  /* A hairline so the pinned columns read as pinned and not as a rendering
+     artifact where the scrolled numbers slide under them. */
+  .scorecard .nm { box-shadow: 1px 0 0 rgba(255,255,255,.10); }
+  .scorecard .tot:nth-last-child(2) { box-shadow: -1px 0 0 rgba(255,255,255,.10); }
+  .parrow .nm, .parrow .tot { background: #13201a; }
+}
+
+/* ═════════════════════════════════════════ TABLETS ════════════════════
+   768px is neither of the two layouts that were built. It is wide enough
+   that the phone's single-column stack wastes half the screen, and narrow
+   enough that the desktop's fixed panels collide. Between the two, the
+   panels stay but everything is sized off the touch minimum rather than
+   the mouse one. */
+@media (min-width: 561px) and (max-width: 900px) {
+  .lp-side { width: min(420px, 84vw); }
+  .diffrow { grid-template-columns: 1fr 1fr; }
+  .rescmp { grid-template-columns: 1fr 1fr; }
+  .shop { grid-template-columns: 1fr 1fr; }
+  .hktab { min-width: 0; flex: 1 1 30%; }
+  /* Touch targets, not mouse targets — a tablet is a finger device with a
+     desktop-sized viewport, which is exactly the case that gets missed. */
+  .btn, .hktab, .cbtn, .tbtn { min-height: 44px; }
+  .shotcard { bottom: 150px; width: 260px; }
 }

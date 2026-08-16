@@ -1706,6 +1706,10 @@ export class GolfScene {
 
   setTrace(path, upTo) {
     const l = this.traceLine;
+    /* Back to full brightness: the previous shot's line may have been left
+       dimmed by holdTrace, and a live tracer drawn at 42% would look like a
+       rendering fault rather than like the shot that is happening now. */
+    if (l.material && l.material.opacity !== 1) l.material.opacity = 1;
     if (!path || path.length < 2) { l.geometry.setDrawRange(0, 0); return; }
     const arr = l.geometry.attributes.position.array;
     const n = Math.min(upTo == null ? path.length : upTo, 1200);
@@ -1717,6 +1721,20 @@ export class GolfScene {
   }
 
   clearTrace() { this.traceLine.geometry.setDrawRange(0, 0); }
+
+  /**
+   * Leave the line where it is, dimmed, instead of wiping it.
+   *
+   * The trace is the most useful thing on the screen for working out what
+   * the wind actually did to you, and it was being thrown away at the exact
+   * moment it became readable — the ball stops and the evidence vanishes.
+   * Dimmed rather than left bright so it reads as history and not as a live
+   * aim line; the next shot overwrites it.
+   */
+  holdTrace() {
+    const m = this.traceLine.material;
+    if (m) { m.transparent = true; m.opacity = 0.42; }
+  }
 
   /* ------------------------------------------------------------ balls --- */
   syncBalls(players) {

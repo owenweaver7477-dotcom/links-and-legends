@@ -792,6 +792,10 @@ function applyDifficulty() {
   const a = AIDS();
   setForgiveness(a.forgive);
   setMarkBand(a.power !== 'blind');
+  /* The wind readout keeps its ARROW and loses its digits — a wind whose
+     direction you cannot see is not a harder read, it is a coin toss, and
+     the flags and the trees show it anyway. */
+  HUD.setWindDetail(a.wind);
   if (!a.trace) hideShotCard();
   previewKey = '';                       // the line may be drawn differently now
   refreshAimPreview(true);
@@ -1341,7 +1345,11 @@ function stepAnim(dt, now) {
     const s = a.srv;
     G.balls[a.pid] = { x: s.x, y: G.T.heightAt(s.x, s.z) + BALL_RADIUS, z: s.z };
     scene.setBall(a.pid, G.balls[a.pid].x, G.balls[a.pid].y, G.balls[a.pid].z);
-    scene.clearTrace();
+    /* Tournament does not leave the line your ball drew hanging in the air
+       after it lands. Everywhere else it stays until the next shot, which
+       is the single most useful thing on the screen for working out what
+       the wind did to you. */
+    if (AIDS().trace) scene.holdTrace?.(); else scene.clearTrace();
     G.anim = null;
     scene.setBallGlow(null);
     pumpQueue();
@@ -1375,6 +1383,14 @@ function announce(a) {
   } else if (r.capped) {
     fireReaction(a.pid, r.strokes, G.hole.par, true);
     HUD.toast(`${who} picked up at ${r.strokes}`, 'warn', 2600);
+  } else if (r.conceded) {
+    /* A gimme still counts the stroke, so this celebrates the score rather
+       than the putt — it is a holed-out hole in everything but the tap. */
+    const rel = r.strokes - G.hole.par;
+    fireReaction(a.pid, r.strokes, G.hole.par, false);
+    HUD.flash(HUD.scoreName(rel), `${who} — that's good`,
+      rel < 0 ? '#8fe07a' : '#fff', REACTION_TIER[reactionFor(r.strokes, G.hole.par, false)] || 0);
+    HUD.toast(`⛳ ${who} — given, ${r.strokes}`, 'good', 2600);
   } else if (a.pid === G.myPid) {
     const lie = SURFACES[r.lie]?.label || 'Rough';
     HUD.flash(`${yd(r.carry)} ${HUD.unit()}`, `carry · ${yd(r.total)} total · ${lie}`, '#eaf4ec');
@@ -3303,7 +3319,22 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       { id: 'card',  icon: '📋', name: 'Scorecard' }
     ];
   };
+  /* ON DESKTOP TOO. The wheel was bound only to the phone-only More button,
+     so on a mouse it existed and was unreachable — the same class of mistake
+     as the clubhouse legend that rendered, was clickable, and did nothing.
+     Middle-click or hold the right button anywhere on the course; both are
+     gestures nothing else in the game uses. */
+  const stage = document.getElementById('stage') || document.body;
+  stage.addEventListener('contextmenu', e => {
+    if (G.screen === 'game') e.preventDefault();   // the hold opens the wheel
+  });
+  bindRadial(stage, RADIAL_ACTIONS, (id, item) => radialPick(id, item),
+             { holdMs: 220, buttons: [1, 2] });
   bindRadial(document.getElementById('tbMore'), RADIAL_ACTIONS, (id, item) => {
+    radialPick(id, item);
+  });
+
+  function radialPick(id, item) {
     if (!id) { if (item) HUD.toast(`${item.name} — ${item.sub || 'not now'}`, 'warn', 1500); return; }
     if (id === 'emote') {
       HUD.renderEmotes(G.profile?.level ?? 1, e => { Net.emote(e); HUD.showEmotes(false); });
@@ -3315,7 +3346,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     else if (id === 'map') toggleMap();
     else if (id === 'view') toggleView();
     else if (id === 'card') document.getElementById('board')?.classList.toggle('open');
-  });
+  }
   /* The scorecard header is a tap target in its own right, so the card can
      be closed by the thing that opened it. */
   document.querySelector('#board .board-head')?.addEventListener('click', e => {
