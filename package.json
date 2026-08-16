@@ -2,7 +2,7 @@
   "name": "claude-national-golf",
   "version": "1.0.0",
   "private": true,
-  "description": "Ultrarealistic online multiplayer golf \u2014 5 courses, 9 holes each, first-person",
+  "description": "Online multiplayer golf \u2014 twelve courses, nine holes each, no sign-up",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -23,14 +23,12 @@
   },
   "dependencies": {
     "express": "^4.21.2",
+    "pg": "^8.13.1",
     "socket.io": "^4.8.1",
     "three": "^0.169.0"
   },
   "type": "module",
   "devDependencies": {
     "socket.io-client": "^4.8.1"
-  },
-  "optionalDependencies": {
-    "pg": "^8.13.1"
   }
 }

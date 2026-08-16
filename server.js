@@ -192,6 +192,7 @@ const courseRatings = id => {
   if (!_ratings.has(id)) _ratings.set(id, ratingsFor(getCourse(id)));
   return _ratings.get(id);
 };
+import { storeName } from './server/store.js';
 import { terrainFor } from './public/js/shared/terrain.js';
 import { BIOMES, COURSE_ORDER, BALL_COLORS, MAX_PLAYERS, HOLES_PER_COURSE,
          biomeFor, courseMeta } from './public/js/shared/biomes.js';
@@ -410,12 +411,26 @@ app.use((req, res, next) => {
   if (!rec) return next();
   sendAsset(req, res, rec);
 });
-app.get('/healthz', (_req, res) => res.json({
-  ok: true, rooms: rooms.size,
-  players: [...rooms.values()].reduce((n, r) => n + r.players.length, 0),
-  courses: COURSES.map(c => ({ id: c.id, name: c.name, par: c.par, yards: c.yards })),
-  uptime: Math.round(process.uptime())
-}));
+app.get('/healthz', (_req, res) => {
+  /* WHERE THE CAREERS ARE GOING, checkable with a URL. The store says this
+     at boot, but a boot message is only findable by whoever is reading the
+     logs at the time — and the failure it reports is silent from every other
+     angle: a wrong DATABASE_URL leaves the game working perfectly and
+     quietly writing to a disk that the next deploy wipes. `persistent:
+     false` here is the one place you can check it in a second, from
+     anywhere, after the fact. */
+  const store = storeName();
+  res.json({
+    ok: true, rooms: rooms.size,
+    players: [...rooms.values()].reduce((n, r) => n + r.players.length, 0),
+    store,
+    persistent: store === 'postgres',
+    warning: store === 'postgres' ? undefined
+      : 'No database: careers and records reset when this host redeploys. Set DATABASE_URL.',
+    courses: COURSES.map(c => ({ id: c.id, name: c.name, par: c.par, yards: c.yards })),
+    uptime: Math.round(process.uptime())
+  });
+});
 /**
  * A field-error beacon.
  *

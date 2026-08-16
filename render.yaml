@@ -11,3 +11,12 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      # WITHOUT THIS, careers and course records live on Render's disk, which
+      # is wiped on every deploy. Render prompts for the value when you first
+      # apply the blueprint; paste your Postgres connection string in.
+      #
+      # On Supabase use the SESSION POOLER string, not the direct one — Render
+      # is IPv4-only and Supabase's direct host resolves to IPv6. Check it
+      # took by opening /healthz: it reports "persistent": true.
+      - key: DATABASE_URL
+        sync: false

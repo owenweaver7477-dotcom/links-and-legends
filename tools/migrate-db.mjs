@@ -48,6 +48,21 @@ const played = entries.filter(([, p]) =>
   (p?.clubTier || 0) > 0 || Object.values(p?.gear || {}).some(v => v > 0));
 console.log(`  ${played.length} of them have actually played — migrating those`);
 
+/* The boards, listed the same way whether this is a rehearsal or the real
+   thing. A dry run that reports on the profiles and stays silent about the
+   leaderboard is a dry run of half the job — and the boards are the half
+   somebody would only notice was missing after switching over. */
+function boardFiles() {
+  const dir = path.dirname(FILE);
+  return fs.readdirSync(dir)
+    .filter(f => f.endsWith('.json') && f !== 'profiles.json' && !f.endsWith('.seed.json'))
+    .map(f => f.slice(0, -'.json'.length));
+}
+const boards = boardFiles();
+console.log(boards.length
+  ? `  boards to copy: ${boards.join(', ')}`
+  : '  no boards to copy (no records, friends or names yet)');
+
 if (DRY) {
   console.log('\n  --dry-run: nothing written. Re-run without it to migrate.\n');
   process.exit(0);
@@ -93,7 +108,37 @@ try {
     console.error('  The file is untouched. Do NOT set DATABASE_URL yet.\n');
     process.exit(2);
   }
-  console.log(`\n  done — ${inDb} profiles in the database, ${FILE} untouched.`);
+
+  /* ── AND THE BOARDS ────────────────────────────────────────────────────
+     Course records, friendships and claimed names do not live in
+     profiles.json — they are separate blobs, and this tool used to leave
+     every one of them behind. You would migrate, switch DATABASE_URL, and
+     find the leaderboard empty, nobody's friends list intact and every
+     reserved name free again, with the old data sitting in files the server
+     had stopped reading. Copied here for the same reason and by the same
+     rule: overwrite nothing that is already in the database. */
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS blobs (
+      key  TEXT PRIMARY KEY,
+      data JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+
+  const dataDir = path.dirname(FILE);
+  let blobs = 0;
+  for (const key of boards) {
+    let body;
+    try { body = JSON.parse(fs.readFileSync(path.join(dataDir, key + '.json'), 'utf8')); }
+    catch { console.warn(`  skipped ${key} — not valid JSON`); continue; }
+    await pool.query(
+      `INSERT INTO blobs (key, data, updated_at) VALUES ($1, $2::jsonb, now())
+       ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
+      [key, JSON.stringify(body)]);
+    console.log(`  copied ${key}`);
+    blobs++;
+  }
+  console.log(`\n  done — ${inDb} profiles and ${blobs} board${blobs === 1 ? '' : 's'} in the database.`);
+  console.log(`  ${FILE} untouched.`);
   console.log('  Set DATABASE_URL on the server to switch over.');
   console.log('  Unset it to switch straight back.\n');
 } finally {
