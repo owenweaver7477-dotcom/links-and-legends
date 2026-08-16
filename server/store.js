@@ -199,10 +199,18 @@ function claimLock() {
   try {
     fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, at: Date.now() }), 'utf8');
     const drop = () => { try { fs.unlinkSync(lockFile); } catch { /* already gone */ } };
+    /* ON EXIT ONLY. This used to also listen for SIGINT and SIGTERM and call
+       `process.exit(0)` from inside them — which released the lock correctly
+       and, because Node runs signal listeners in the order they were
+       registered and this one is registered when the store opens, killed the
+       process before ANY shutdown handler the application added later could
+       run. A graceful shutdown written in server.js was silently dead code:
+       it never logged, never flushed, and every deploy dropped whatever was
+       inside the save debounce.
+
+       'exit' still fires however the process goes down, so the lock is
+       released just the same — it simply no longer decides WHEN to go. */
     process.on('exit', drop);
-    for (const sig of ['SIGINT', 'SIGTERM']) {
-      process.on(sig, () => { drop(); process.exit(0); });
-    }
   } catch { /* read-only disk: the lock is advisory, carry on */ }
 }
 
@@ -226,6 +234,16 @@ export async function openStore(rowsInto) {
   const rows = await impl.load();
   for (const [pid, p] of rows) rowsInto.set(pid, p);
   console.log(`  store: json file — ${rows.length} profiles`);
+  /* The records board already says this loudly and careers did not, which
+     is the wrong way round: a lost leaderboard is a shame and a lost career
+     is the thing a player will actually leave over. Said once, at boot,
+     where whoever is deploying will see it. */
+  if (!process.env.DATABASE_URL) {
+    console.log('  store: NO DATABASE_URL — every career lives in this file.');
+    console.log('         On a host with an ephemeral disk (Render, Fly, most');
+    console.log('         free tiers) that means coins, levels and outfits reset');
+    console.log('         on every deploy. Set DATABASE_URL to keep them.');
+  }
   return impl.name;
 }
 

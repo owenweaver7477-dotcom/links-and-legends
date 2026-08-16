@@ -209,7 +209,8 @@ import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allo
 import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound, setDifficulty, difficultyOf,
-         setLook, setBallColor, setBag, kitOf, markSeen } from './server/profiles.js';
+         setLook, setBallColor, setBag, kitOf, markSeen,
+         flushProfiles } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
 import { loadRecords, recordsFor, allRecords, submitRound,
@@ -966,7 +967,56 @@ function castSoon(room, p) {
 const toast = (room, msg, kind) => io.to(room.code).emit('toast', { msg, kind: kind || 'info' });
 
 /* ------------------------------------------------------------------ sockets */
+/* ── one player cannot spoil the room ─────────────────────────────────────
+   Chat has always been rate limited; nothing else was. A client emitting
+   `player:look` in a loop makes the server re-serialise and re-write the
+   whole profile store every 800 ms, and every other player in every other
+   room pays for it — which is the same blocked-event-loop failure that
+   already produced "everything has gone really slow and sometimes I can't
+   even hit my ball", just triggered deliberately.
+
+   A token bucket per socket, not per message type: the thing being
+   protected is the server's time, and it does not care which message spent
+   it. Sized so that no honest client can reach it — a busy round sends
+   position updates ten times a second, which is a fifth of this — and so
+   that a loop hits it within a few frames.
+
+   Position updates are exempt because they are the ten-a-second channel,
+   they do no work beyond a rebroadcast, and rate limiting them would make a
+   golfer stutter across the fairway on a bad connection. */
+const BUCKET_MAX = 50;             // messages
+const BUCKET_REFILL = 50;          // per second
+const CHEAP = new Set(['player:move']);
+
+function overRate(socket, event) {
+  if (CHEAP.has(event)) return false;
+  const now = Date.now();
+  const b = socket.data._bucket || (socket.data._bucket = { t: now, n: BUCKET_MAX });
+  b.n = Math.min(BUCKET_MAX, b.n + ((now - b.t) / 1000) * BUCKET_REFILL);
+  b.t = now;
+  if (b.n < 1) {
+    /* Told once, then silence. A client that is looping will trip this on
+       every message, and a warning per message is a second flood. */
+    if (!socket.data._warned) {
+      socket.data._warned = true;
+      socket.emit('toast', { msg: 'Slow down a moment — too many requests.', kind: 'warn' });
+      setTimeout(() => { socket.data._warned = false; }, 5000);
+    }
+    return true;
+  }
+  b.n -= 1;
+  return false;
+}
+
 io.on('connection', socket => {
+  /* Applied to every handler at once rather than remembered at each one:
+     a guard you have to add by hand is a guard somebody forgets on the
+     handler that needed it most. */
+  socket.use(([event], next) => {
+    if (overRate(socket, event)) return;   // dropped, deliberately silently
+    next();
+  });
+
 
   function bind(room, player) {
     // Claim the seat FIRST.  Kicking the old socket runs its disconnect
@@ -2052,8 +2102,44 @@ httpServer.listen(PORT, HOST, () => {
   console.log('');
 });
 
-process.on('SIGTERM', () => httpServer.close(() => process.exit(0)));
-process.on('SIGINT', () => httpServer.close(() => process.exit(0)));
+/* ── shutting down without losing the last few seconds ──────────────────
+   This used to be `httpServer.close(() => process.exit(0))`, which throws
+   away every profile change still sitting in the store's 800 ms debounce.
+   A host that redeploys on every push does that several times a day, and it
+   is indistinguishable from the game not saving.
+
+   The order matters. Stop taking new connections first, tell the people
+   already here what is happening so their client can say so rather than
+   just dying, then write. The socket layer is closed LAST because a player
+   mid-swing should get the message before the pipe goes. */
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n  ${signal} — finishing up`);
+
+  httpServer.close();
+  try { io.emit('toast', { msg: 'Server restarting — back in a moment.', kind: 'warn' }); }
+  catch { /* nobody connected */ }
+
+  /* Bounded, because the platform sends SIGKILL a few seconds later and a
+     hung database call must not eat the whole window: better a partial save
+     than none. */
+  try {
+    await Promise.race([
+      flushProfiles(),
+      new Promise(r => setTimeout(r, 4000))
+    ]);
+    console.log('  profiles written');
+  } catch (e) {
+    console.error('  store: final save failed —', e?.message || e);
+  }
+
+  try { io.close(); } catch { /* already down */ }
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // The last line of defence, never the first: every handler above normalises
 // its own input, but no single bug should ever take down every room on the

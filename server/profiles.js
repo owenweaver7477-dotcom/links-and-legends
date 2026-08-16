@@ -12,7 +12,7 @@
    ========================================================================= */
 
 import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp } from '../public/js/shared/economy.js';
-import { openStore, touch, saveSoon as storeSaveSoon } from './store.js';
+import { openStore, touch, saveSoon as storeSaveSoon, flushNow as flushStore } from './store.js';
 import { handicapIndex, differential, ratingTier } from '../public/js/shared/handicap.js';
 import { normaliseSkin } from '../public/js/shared/clubskins.js';
 import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js';
@@ -25,6 +25,20 @@ export const STARTING_COINS = 900;
 const profiles = new Map();
 
 /** Bring the store up. Async now — the database has to connect. */
+/**
+ * Write everything pending, right now.
+ *
+ * Saves are debounced by 800 ms, and the shutdown path called
+ * `process.exit()` the moment the HTTP server closed — so every deploy threw
+ * away whatever had changed in the last fraction of a second, and a host
+ * that restarts on every push does that several times a day. The debounce
+ * timer is also `unref`'d, which means an otherwise idle process can exit
+ * naturally without ever firing it.
+ */
+export async function flushProfiles() {
+  await flushStore(profiles);
+}
+
 export async function loadProfiles() {
   await openStore(profiles);
   const fixed = repairBests();
