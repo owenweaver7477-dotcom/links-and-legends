@@ -39,7 +39,8 @@ const REF = {
   greenR: 13.5,       // metres, green radius
   bunkers: 14,        // per nine
   waters: 3,          // per nine
-  climb: 34           // metres of cumulative elevation change per nine
+  climb: 34,          // metres of cumulative elevation change per nine
+  wind: 3.4           // m/s of prevailing wind — a normal breezy afternoon
 };
 
 /* Strokes per unit of departure. Every one of these is the answer to "how
@@ -53,14 +54,30 @@ const W = {
   green: 0.075,       // per metre the greens are smaller
   bunker: 0.030,      // per bunker over the reference
   water: 0.150,       // per water hazard over the reference — the expensive one
-  climb: 0.0065       // per metre of cumulative climb
+  climb: 0.0065,      // per metre of cumulative climb
+  /* Per m/s of prevailing wind over the reference. Wind was missing from
+     this model entirely, which meant a headland course that plays in a
+     permanent 7 m/s gale rated exactly the same as a sheltered meadow with
+     the same yardage — and it is the single thing players would name first
+     if you asked which of the two was harder.
+
+     Weighted like roughly two-thirds of a club per m/s over nine holes: it
+     costs a scratch player some clubbing decisions and it costs an ordinary
+     one a lot of golf balls, which is exactly what slope measures. */
+  wind: 0.085
 };
 
 /* A bogey golfer is hurt MORE than a scratch golfer by the same feature, and
    by different amounts for different features: length and forced carries are
    brutal, a small green barely registers when you were not going to hit it
    anyway. The gap between the two ratings is what slope measures. */
-const BOGEY = { yards: 2.6, narrow: 2.2, rough: 2.4, green: 0.7, bunker: 1.8, water: 3.1, climb: 1.4 };
+/* Wind at 2.9 is the second-highest multiplier here, behind water and just
+   ahead of yardage — deliberately. A scratch player flights the ball down
+   and takes more club; an ordinary one balloons it, loses thirty yards into
+   the breeze and puts it in the gorse. Nothing else on this list separates
+   the two as sharply. */
+const BOGEY = { yards: 2.6, narrow: 2.2, rough: 2.4, green: 0.7, bunker: 1.8,
+                water: 3.1, climb: 1.4, wind: 2.9 };
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -84,10 +101,15 @@ function measure(course) {
     if (e) climb += Math.abs(e.drop || 0) + Math.abs(e.midBump || 0) * 1.4;
   }
   const n = holes.length;
+  /* Wind is a property of the PLACE, not of a hole, so it comes off the
+     biome rather than being averaged out of the holes like everything else.
+     A course with no biome attached falls back to the reference, which
+     leaves such a course rated exactly as it was before wind existed. */
+  const wind = course.biome?.windBase ?? REF.wind;
   return {
     n, par, yards,
     fairway: fairway / n, rough: rough / n, greenR: greenR / n,
-    bunkers, waters, climb
+    bunkers, waters, climb, wind
   };
 }
 
@@ -101,21 +123,42 @@ export function courseRating(course) {
   const d = departures(m);
   const over =
     d.yards * W.yards + d.narrow * W.narrow + d.rough * W.rough +
-    d.green * W.green + d.bunker * W.bunker + d.water * W.water + d.climb * W.climb;
+    d.green * W.green + d.bunker * W.bunker + d.water * W.water + d.climb * W.climb +
+    d.wind * W.wind;
   return Math.round((m.par + over) * 10) / 10;
 }
 
-/** How far this course sits from the reference nine, feature by feature. */
+/* How much a GENEROUS feature counts for, against what a punishing one
+   counts against. Not symmetric, because golf is not: taking ten metres off
+   a fairway costs an ordinary player far more than adding ten metres saves
+   them — at some width you simply stop missing it, and every metre after
+   that is free. */
+const EASE = 0.45;
+
+/**
+ * How far this course sits from the reference nine, feature by feature.
+ *
+ * These four used to be clamped at zero, so a course could only ever be
+ * measured as harder than the reference and never as easier: fifty-two metre
+ * fairways were scored as thirty-four, and a flat course with big greens got
+ * no credit for either. The lowest slope the whole model could produce was
+ * about 112 — against a real-world floor of 55 — which meant a beginners'
+ * course was not a thing the game could describe, let alone build.
+ */
 function departures(m) {
   const scale = m.n / 9;                   // so a different hole count still works
+  /* Positive is harder. Below the reference the same distance counts for
+     less, rather than not at all. */
+  const eased = v => (v >= 0 ? v : v * EASE);
   return {
     yards: m.yards - REF.yards * scale,
-    narrow: Math.max(0, REF.fairway - m.fairway),
-    rough: Math.max(0, m.rough - REF.rough),
-    green: Math.max(0, REF.greenR - m.greenR),
+    narrow: eased(REF.fairway - m.fairway),
+    rough: eased(m.rough - REF.rough),
+    green: eased(REF.greenR - m.greenR),
     bunker: m.bunkers - REF.bunkers * scale,
     water: m.waters - REF.waters * scale,
-    climb: Math.max(0, m.climb - REF.climb * scale)
+    climb: eased(m.climb - REF.climb * scale),
+    wind: eased(m.wind - REF.wind)
   };
 }
 
@@ -135,6 +178,7 @@ export function slopeRating(course) {
   gap += d.bunker * W.bunker * (BOGEY.bunker - 1);
   gap += d.water * W.water * (BOGEY.water - 1);
   gap += d.climb * W.climb * (BOGEY.climb - 1);
+  gap += d.wind * W.wind * (BOGEY.wind - 1);
   /* A bogey golfer is about 8 strokes worse than scratch over nine on a
      course of average difficulty; that baseline is what 113 represents.
      5.381 is the WHS constant for men, applied to the nine-hole gap. */

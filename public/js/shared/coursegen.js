@@ -193,8 +193,13 @@ function placeBunkers(rk, bio, dense, cum, total, green, par) {
   const n = rk.i(lo, hi);
   const pot = bio.bunkerStyle === 'pot';
 
-  // 1–2 greenside bunkers, angled off the green
-  const greensideCount = clamp(Math.round(n * 0.55), 1, 3);
+  /* 1–2 greenside bunkers, angled off the green — unless the biome asked
+     for none at all. The floor used to be a hard 1, so a course configured
+     with `bunkerCount: [0, 2]` still got a greenside bunker on every single
+     hole and could never come in under nine: the beginners' course was
+     built with more sand than the reference nine has, which is the opposite
+     of what its config said. A zero roll now means zero. */
+  const greensideCount = n > 0 ? clamp(Math.round(n * 0.55), 1, 3) : 0;
   for (let i = 0; i < greensideCount; i++) {
     const a = rk.f(0, Math.PI * 2);
     const d = green.r * rk.f(1.15, 1.5);
@@ -560,7 +565,14 @@ function makeHole(courseId, bio, number, seed) {
   const parSet = PAR_SETS[hashSeed(courseId) % PAR_SETS.length];
   const par = parSet[number - 1];
   const [lmin, lmax] = LENGTH_BY_PAR[par];
-  const lengthM = rk.f(lmin, lmax);
+  /* A course can be longer or shorter than the standard card. Hole length
+     was a single global table, so every course on the roster played to the
+     same yardage band whatever it was meant to be — a beginners' meadow and
+     a championship headland were dealt identical holes and could only
+     differ in what was beside them. Optional, and 1 is exactly the old
+     behaviour, so no existing course moves. */
+  const ls = bio.lengthScale ?? 1;
+  const lengthM = rk.f(lmin * ls, lmax * ls);
 
   const { pts, shape } = buildRoute(rk, lengthM, par);
   const dense = smoothRoute(pts, 3);

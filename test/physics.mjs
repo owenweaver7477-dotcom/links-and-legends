@@ -7,7 +7,17 @@
    illegal.  Run with `npm run test:physics`.
    ========================================================================= */
 
-import { allCourses } from '../public/js/shared/coursegen.js';
+import { allCourses, getCourse } from '../public/js/shared/coursegen.js';
+
+/* BY ID, NOT BY POSITION. These used to be `allCourses()[0]` and `[3]` with
+   the matching biome named separately — so the day the course list was
+   reordered by difficulty, the test built parkland's terrain model around
+   Willowbank's holes and then reported that putting and out-of-bounds were
+   broken. The two halves of "which course" have to come from one place. */
+const courseAndBiome = id => {
+  const c = getCourse(id);
+  return { c, bio: c.biome };
+};
 import { terrainFor } from '../public/js/shared/terrain.js';
 import { BIOMES } from '../public/js/shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower } from '../public/js/shared/ballistics.js';
@@ -50,7 +60,7 @@ ok('a lob wedge checks up, a driver runs',
 /* -------------------------------------------------------------- putting */
 console.log('\nputting: hole-out rate for a careful player (±1.5° off the read, ±5% pace)');
 {
-  const c = allCourses()[0], h = c.holes[1], T = terrainFor(h, BIOMES.parkland);
+  const { c, bio } = courseAndBiome('parkland'), h = c.holes[1], T = terrainFor(h, bio);
   // A green that breaks is the whole point of putting, so the modelled player
   // READS it — they aim along the line the caddie draws (the game shows this
   // as a curved aim line) and are then ±1.5° sloppy about that line.  Aiming
@@ -116,7 +126,7 @@ console.log('\nputting: hole-out rate for a careful player (±1.5° off the read
 /* ----------------------------------------------------------- the caddie */
 console.log("\ncaddie power suggestions land on the flag");
 {
-  const c = allCourses()[0], h = c.holes[1], T = terrainFor(h, BIOMES.parkland);
+  const { c, bio } = courseAndBiome('parkland'), h = c.holes[1], T = terrainFor(h, bio);
   let worstPct = 0, tested = 0, skipped = 0;
   // place the ball back down the CENTRELINE — putting it due-west of the pin
   // walks straight off the course, where there is no legal shot to suggest
@@ -177,7 +187,7 @@ console.log('\nall 45 holes');
 /* --------------------------------------- a ball never rests somewhere illegal */
 console.log('\ninvariants: 1900+ shots fired in all directions');
 {
-  const c = allCourses()[0], h = c.holes[0], T = terrainFor(h, BIOMES.parkland);
+  const { c, bio } = courseAndBiome('parkland'), h = c.holes[0], T = terrainFor(h, bio);
   const starts = [[h.tee.x, h.tee.z], [60, 60], [120, -20], [40, 120], [h.pin.x - 30, h.pin.z - 20]];
   let n = 0, water = 0, obs = 0, holed = 0;
   const bad = [];
@@ -203,14 +213,14 @@ console.log('\ninvariants: 1900+ shots fired in all directions');
 /* ------------------------------------------------------------ determinism */
 console.log('\ndeterminism');
 {
-  const c = allCourses()[3], h = c.holes[5], T = terrainFor(h, BIOMES.alpine);
+  const { c, bio } = courseAndBiome('alpine'), h = c.holes[5], T = terrainFor(h, bio);
   const shot = { x: h.tee.x, z: h.tee.z, clubKey: 'I5', power: 0.87, aim: 0.3, faceDeg: 2.4, attackDeg: -1, wind: { dir: 2, speed: 6 } };
   const a = new ShotSim(T, shot).runToEnd();
   const b = new ShotSim(T, shot).runToEnd();
   ok('identical inputs give a bit-identical result',
     a.x === b.x && a.z === b.z && a.reason === b.reason && a.carry === b.carry);
   // the same hole rebuilt from seed must be identical
-  const h2 = allCourses()[3].holes[5];
+  const h2 = getCourse('alpine').holes[5];
   ok('courses rebuild identically from their seed',
     JSON.stringify(h2.trees.slice(0, 20)) === JSON.stringify(h.trees.slice(0, 20)) &&
     h2.pin.x === h.pin.x && h2.total === h.total);

@@ -24,7 +24,7 @@ import { getProfile, seedProfile, STARTING_COINS } from '../server/profiles.js';
 import { SHOP, gearEffect } from '../public/js/shared/gear.js';
 import { CLUB_BY_KEY } from '../public/js/shared/clubs.js';
 import { ShotSim, calibrateCarries } from '../public/js/shared/ballistics.js';
-import { allCourses } from '../public/js/shared/coursegen.js';
+import { allCourses, getCourse } from '../public/js/shared/coursegen.js';
 import { terrainFor } from '../public/js/shared/terrain.js';
 import { BIOMES } from '../public/js/shared/biomes.js';
 
@@ -69,8 +69,11 @@ test('the payout still rewards good golf', () => {
 /* ------------------------------------------------------------- physics --- */
 
 test('each upgrade changes the ball the server actually simulates', () => {
-  const c = allCourses()[0], h = c.holes[1];
-  const T = terrainFor(h, BIOMES.parkland);
+  /* By id: this asked for `allCourses()[0]` and then named parkland's biome
+     separately, so reordering the roster gave it one course's holes and
+     another's terrain. See the same note in physics.mjs. */
+  const c = getCourse('parkland'), h = c.holes[1];
+  const T = terrainFor(h, c.biome);
   const aim = Math.atan2(h.pin.x - h.tee.x, h.pin.z - h.tee.z);
   const carry = (clubKey, extra) => new ShotSim(T, {
     x: h.tee.x, z: h.tee.z, clubKey, power: 1, aim,

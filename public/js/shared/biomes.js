@@ -323,12 +323,181 @@ export const BIOMES = {
        the whole course in half-light and you could not read the ground. 30
        still rakes long shadows across it; the ambient carries the rest. */
     ambient: 0.76, sunElev: 30, sunAzim: 240
+  },
+
+  /* ── the beginner's course ────────────────────────────────────────────
+     Deliberately the easiest thing in the game, and the gap that mattered
+     most: the softest course on the roster rated a slope of 113, which is
+     average BY DEFINITION. There was nowhere for somebody's first nine
+     holes to be easy. Everything here is turned the forgiving way — huge
+     fairways, big flat greens, almost no water and barely any wind — so a
+     new player can hit it, find it, and hit it again. */
+  meadow: {
+    id: 'meadow',
+    name: 'Willowbank',
+    lengthScale: 0.90,          // shorter holes as well as wider ones
+    blurb: 'A municipal meadow. Wide, flat and friendly — the place to learn.',
+    region: 'Shropshire, England',
+    continent: 'europe',
+    relief: 3,
+    reliefScale: 260,
+    ridged: 0,
+    fairwayWidth: [40, 52],
+    roughWidth: 30,
+    treeDensity: 0.34,
+    treeSpecies: ['oak', 'maple'],
+    treeHeight: [7, 12],
+    waterChance: 0.12,
+    waterKind: 'pond',
+    bunkerCount: [0, 2],
+    greenSpeed: 0.84,
+    greenSize: [17, 21],
+    windBase: 1.6,
+    windGust: 1.2,
+    palette: {
+      sky: ['#9ccbe6', '#e2eef6'],
+      sun: '#fff6e2',
+      fog: '#d3e3ee',
+      fairway: '#66a648', rough: '#487536', deep: '#365a28',
+      green: '#84cf62', fringe: '#6cae4d',
+      sand: '#e6d5a8', water: '#3d8fa2', dirt: '#6f6042',
+      trunk: '#6d5239'
+    },
+    ambient: 0.60, sunElev: 48, sunAzim: 140
+  },
+
+  /* ── heathland ────────────────────────────────────────────────────────
+     Heather instead of trees: the punishment is the LIE, not the obstacle.
+     Narrow corridors through gorse with almost nothing overhead, which is a
+     different kind of hard from the parkland's oaks — you can see the green
+     from anywhere on it, you simply cannot advance the ball out of the
+     stuff you are standing in. */
+  heath: {
+    id: 'heath',
+    name: 'Farnleigh Heath',
+    blurb: 'Heather and gorse over sand. You can see the green from anywhere in it.',
+    region: 'Surrey, England',
+    continent: 'europe',
+    relief: 6,
+    reliefScale: 170,
+    ridged: 0,
+    fairwayWidth: [22, 30],
+    roughWidth: 34,
+    treeDensity: 0.40,
+    treeSpecies: ['pine', 'gorse'],
+    treeHeight: [6, 13],
+    waterChance: 0.16,
+    waterKind: 'pond',
+    bunkerCount: [4, 8],
+    greenSpeed: 1.12,
+    greenSize: [11, 15],
+    windBase: 3.4,
+    windGust: 2.8,
+    palette: {
+      sky: ['#a8bcd0', '#dfe7ee'],
+      sun: '#fff0d6',
+      fog: '#ccd6e0',
+      fairway: '#6f9a4e', rough: '#6b4f6e', deep: '#4d3550',
+      green: '#8ac96a', fringe: '#71a851',
+      sand: '#dcc796', water: '#37788c', dirt: '#6a5740',
+      trunk: '#5f4733'
+    },
+    ambient: 0.52, sunElev: 40, sunAzim: 150
+  },
+
+  /* ── high veld ────────────────────────────────────────────────────────
+     Thin air and open ground: long carries, and a wind with nothing in the
+     way of it. Africa, which the roster did not have at all. */
+  veld: {
+    id: 'veld',
+    name: 'Kopjesrand',
+    blurb: 'High open veld. Thin air, long carries, and wind with nothing to break it.',
+    region: 'Free State, South Africa',
+    continent: 'africa',
+    relief: 9,
+    reliefScale: 220,
+    ridged: 0,
+    fairwayWidth: [26, 36],
+    roughWidth: 24,
+    treeDensity: 0.20,
+    treeSpecies: ['eucalypt', 'palo'],
+    treeHeight: [6, 11],
+    waterChance: 0.22,
+    waterKind: 'lake',
+    bunkerCount: [3, 6],
+    greenSpeed: 1.06,
+    greenSize: [12, 16],
+    windBase: 5.4,
+    windGust: 4.2,
+    palette: {
+      sky: ['#7fb8dd', '#e8ecdf'],
+      sun: '#fff3cf',
+      fog: '#dfe0cd',
+      fairway: '#89a54a', rough: '#8f8b47', deep: '#6f6a33',
+      green: '#95ce68', fringe: '#7fae52',
+      sand: '#e8d3a0', water: '#3d87a0', dirt: '#8a7048',
+      trunk: '#7a6142'
+    },
+    ambient: 0.62, sunElev: 66, sunAzim: 20
+  },
+
+  /* ── the hardest thing on the roster ──────────────────────────────────
+     A championship headland: cliff-edge holes, ocean on the wrong side, the
+     smallest and fastest greens in the game, and wind that never drops. The
+     ladder had nowhere to go past Grimsvik, so this is built to sit clearly
+     beyond it — somewhere a good player can still score and a careless one
+     cannot finish. */
+  headland: {
+    id: 'headland',
+    name: 'Cape Wrathe',
+    lengthScale: 1.06,          // a championship card, off the very back
+    blurb: 'Championship headland. Cliffs, ocean, tiny greens and a wind that never drops.',
+    region: 'Co. Clare, Ireland',
+    continent: 'europe',
+    relief: 16,
+    reliefScale: 130,
+    ridged: 0.35,
+    fairwayWidth: [17, 24],
+    roughWidth: 40,
+    treeDensity: 0.06,
+    treeSpecies: ['gorse'],
+    treeHeight: [3, 6],
+    waterChance: 0.62,
+    waterKind: 'ocean',
+    bunkerCount: [5, 10],
+    greenSpeed: 1.30,
+    greenSize: [9, 12],
+    windBase: 7.6,
+    windGust: 6.0,
+    palette: {
+      sky: ['#7f95ab', '#ccd7e0'],
+      sun: '#f4eede',
+      fog: '#bcc9d4',
+      fairway: '#5f8f4a', rough: '#4a6b3c', deep: '#35492b',
+      green: '#7cbe5f', fringe: '#699e4c',
+      sand: '#d8c8a4', water: '#2b5f7e', dirt: '#5d5340',
+      trunk: '#4f4030'
+    },
+    ambient: 0.46, sunElev: 30, sunAzim: 200
   }
 };
 
+/* IN ORDER OF DIFFICULTY, easiest first — and the order is checked against
+   the measured slope rating in test/difficultyorder.mjs rather than trusted.
+   It was previously the order the courses happened to be written in, which
+   put the sixth-hardest course first and the easiest one third; a player
+   working down the list got no sense of progression at all.
+
+   Slope is the right axis rather than yardage or par: it is exactly the
+   question "how much harder is this for an ordinary golfer than for a very
+   good one", it is computed from the real geometry in handicap.js, and it
+   is the number the handicap system already uses. */
 export const COURSE_ORDER = [
-  'parkland', 'links', 'desert', 'alpine', 'tropical',
-  'sandbelt', 'volcanic', 'fjord'
+  'meadow',                                   //  97 — the beginners' course
+  'veld', 'volcanic', 'desert', 'sandbelt',   // 110-114
+  'alpine', 'links', 'parkland', 'tropical',  // 120-125
+  'heath', 'fjord',                           // 128-133
+  'headland'                                  // 147 — the championship test
 ];
 
 /* ---------------------------------------------------------------- crowns ---
@@ -397,7 +566,9 @@ export const REGIONS = [
   { id: 'latin-america', name: 'Latin America', flag: '🏝️',
     blurb: 'Water, palms and soft greens that hold' },
   { id: 'asia-pacific', name: 'Asia Pacific', flag: '🌏',
-    blurb: 'Deep sand and cedar corridors — the widest driving and the tightest' }
+    blurb: 'Deep sand and cedar corridors — the widest driving and the tightest' },
+  { id: 'africa', name: 'Africa', flag: '🌍',
+    blurb: 'High open veld — thin air, long carries, and nothing to stop the wind' }
 ];
 
 /** Courses grouped by region, in REGIONS order, with empty regions dropped. */

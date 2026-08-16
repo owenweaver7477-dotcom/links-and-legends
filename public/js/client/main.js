@@ -35,6 +35,7 @@ import { showShot, hide as hideShotCard } from './shotcard.js';
 import { bindRadial, radialOpen, closeRadial } from './radial.js';
 
 import { allCourses, getCourse, defaultAim, aimPlan } from '../shared/coursegen.js';
+import { ratingsFor } from '../shared/handicap.js';
 import { FORMATS, formatById, isScramble, TEAM_NAMES } from '../shared/scramble.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
 import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf, REGIONS } from '../shared/biomes.js';
@@ -2722,7 +2723,8 @@ function renderLobbyAll(r) {
   const isHost = r.hostPid === G.myPid;
   const course = getCourse(r.courseId);
   HUD.renderLobby(r, G.myPid);
-  HUD.renderCourses(COURSES, r.courseId, isHost, id => Net.pickCourse(id));
+  HUD.renderCourses(COURSES, r.courseId, isHost, id => Net.pickCourse(id),
+    Object.fromEntries(COURSES.map(c => [c.id, ratingsFor(c)])));
   HUD.renderTees(course.holes[0], r.teeSet || 'back', isHost, t => Net.pickTees(t));
   HUD.renderColours(r, G.myPid, hex => Net.prefs({ color: hex }), G.profile?.rating || 0);
   bagDraft = me()?.bag?.length ? me().bag.slice() : normaliseBag(DEFAULT_BAG, { pad: true });
@@ -3105,8 +3107,23 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
         b.type = 'button';
         b.setAttribute('aria-pressed', c.id === pickedCourse ? 'true' : 'false');
         b.textContent = c.name;
+        /* The difficulty, computed here rather than fetched: `ratingsFor` is
+           shared code reading the same generated geometry the server reads,
+           so the answer is identical and costs no round trip. Regions are
+           filtered out of COURSE_ORDER, which is itself difficulty-ordered,
+           so the courses inside each region already run easiest first. */
+        const rt = meta.id ? ratingsFor(meta) : null;
+        if (rt) {
+          const band = HUD.slopeBand(rt.slope);
+          const chip = document.createElement('em');
+          chip.className = 'cp-diff ' + band.cls;
+          chip.textContent = band.name;
+          chip.title = `Course rating ${rt.rating} · slope ${rt.slope}`;
+          b.appendChild(chip);
+        }
         const sub = document.createElement('small');
-        sub.textContent = `${c.region} · par ${meta.par ?? 36}`;
+        sub.textContent = `${c.region} · par ${meta.par ?? 36}`
+          + (rt ? ` · ${meta.yards} yds` : '');
         b.appendChild(sub);
         b.addEventListener('click', () => {
           if (c.id === pickedCourse) return;

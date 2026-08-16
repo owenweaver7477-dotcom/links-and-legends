@@ -2336,7 +2336,7 @@ let SEASON_TINT = null;
 /* What sits on each course's horizon. Distances are multiples of the hole's
    own radius, so a long hole gets its skyline further out and the sense of
    scale holds. `size` is in metres. */
-const BACKDROPS = {
+export const BACKDROPS = {
   parkland: { kind: 'peak', count: 9,  near: 3.0, far: 6.5, size: [70, 150],
               snowAbove: 999, colours: ['#5d7a63', '#4e6b56', '#68866e'] },
   links:    { kind: 'dune', count: 14, near: 2.2, far: 5.0, size: [40, 95],
@@ -2355,7 +2355,23 @@ const BACKDROPS = {
               snowAbove: 340, colours: ['#4a4d52', '#3d4045', '#585c62'] },
   fjord:    { kind: 'cliff', count: 13, near: 2.0, far: 4.8, size: [120, 300],
               snowAbove: 999, colours: ['#4a4d52', '#3d4045', '#585c62', '#6a6e74'],
-              sea: '#2f4f66' }
+              sea: '#2f4f66' },
+
+  /* EVERY BIOME NEEDS A ROW HERE. `_buildBackdrop` returns an empty group
+     for anything it does not recognise, so a course added without one plays
+     against a bare horizon — which is exactly the "half-arsed empty
+     background" that got fixed once already, quietly reintroduced by adding
+     four courses and not this table. There is a test for it now. */
+  meadow:   { kind: 'peak', count: 8,  near: 3.4, far: 7.0, size: [50, 105],
+              snowAbove: 999, colours: ['#6d8a63', '#5e7a56', '#7a976e'] },
+  heath:    { kind: 'dune', count: 12, near: 2.6, far: 5.6, size: [55, 120],
+              snowAbove: 999, colours: ['#7a6a72', '#6b5f68', '#8a7a80'] },
+  veld:     { kind: 'mesa', count: 9,  near: 3.0, far: 6.4, size: [70, 170],
+              snowAbove: 999, colours: ['#9a8a5e', '#87794f', '#a99a6c', '#7a6e46'] },
+  /* Cliffs and open ocean — the sea is most of what you can see from it. */
+  headland: { kind: 'cliff', count: 15, near: 1.9, far: 4.6, size: [90, 240],
+              snowAbove: 999, colours: ['#5a5f56', '#4b5049', '#6b7166', '#3f443d'],
+              sea: '#2b5f7e' }
 };
 
 function treeParts(species, bio) {

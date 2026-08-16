@@ -3,7 +3,7 @@
    ========================================================================= */
 
 import { CARRY, CLUBS, CLUB_BY_KEY, BAG_SIZE, DEFAULT_BAG } from '../shared/clubs.js';
-import { HOLES_PER_COURSE, BALL_COLORS } from '../shared/biomes.js';
+import { HOLES_PER_COURSE, BALL_COLORS, COURSE_ORDER } from '../shared/biomes.js';
 import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
          HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES, bodiesOf } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
@@ -366,15 +366,37 @@ HUD.renderBoard = (room, myPid, course) => {
 };
 
 /* ----------------------------------------------------------------- lobby */
-HUD.renderCourses = (courses, selected, isHost, onPick) => {
+/* Slope bands, named. A number between 55 and 155 means something precise
+   to a golfer with a handicap and nothing at all to somebody picking their
+   first course, so the picker shows both — the word for choosing, the
+   number for anyone who wants it. Boundaries are the ones the WHS itself
+   treats as notable: 113 is average by definition, and 130 upward is where
+   a course starts being described as a championship test. */
+const SLOPE_BANDS = [
+  { max: 104, name: 'Gentle',     cls: 'd1' },
+  { max: 117, name: 'Easy',       cls: 'd2' },
+  { max: 126, name: 'Average',    cls: 'd3' },
+  { max: 136, name: 'Hard',       cls: 'd4' },
+  { max: 999, name: 'Punishing',  cls: 'd5' }
+];
+const bandFor = slope => SLOPE_BANDS.find(b => slope <= b.max) || SLOPE_BANDS[4];
+/** Shared with the landing page's picker, so both name a slope the same. */
+HUD.slopeBand = bandFor;
+
+HUD.renderCourses = (courses, selected, isHost, onPick, ratings = null) => {
   el.courseList.innerHTML = '';
   for (const c of courses) {
+    const r = ratings?.[c.id] || null;
+    const band = r ? bandFor(r.slope) : null;
     const b = document.createElement('button');
     b.className = 'ccard' + (c.id === selected ? ' on' : '') + (isHost ? '' : ' locked');
     b.innerHTML = `<div class="c-art art-${c.id}"></div>
+      ${band ? `<span class="cdiff ${band.cls}" title="slope ${r.slope} · rating ${r.rating}">
+        <i></i>${band.name}</span>` : ''}
       <b>${c.name}</b><span class="cr">${c.region}</span>
       <div class="cd">${c.blurb}</div>
-      <div class="cstat">${HOLES_PER_COURSE} holes · par ${c.par} · ${c.yards} yds</div>`;
+      <div class="cstat">${HOLES_PER_COURSE} holes · par ${c.par} · ${c.yards} yds${
+        r ? ` · <span title="course rating / slope">${r.rating} / ${r.slope}</span>` : ''}</div>`;
     if (isHost) b.addEventListener('click', () => onPick(c.id));
     el.courseList.appendChild(b);
   }
@@ -1619,7 +1641,7 @@ HUD.renderOnline = (list, myPid, onJoin) => {
   if (el.lpLive) {
     el.lpLive.textContent = others.length
       ? `${others.length} ${others.length === 1 ? 'golfer is' : 'golfers are'} on the course right now`
-      : 'Eight courses · nine holes each · play solo or with up to eight';
+      : `${COURSE_ORDER.length} courses · nine holes each · play solo or with up to eight`;
   }
 
   if (!box) return;

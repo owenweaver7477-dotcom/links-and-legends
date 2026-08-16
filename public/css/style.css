@@ -2952,3 +2952,30 @@ body.hudfade .windbox, body.hudfade .onlinenow {
   .btn, .hktab, .cbtn, .tbtn { min-height: 44px; }
   .shotcard { bottom: 150px; width: 260px; }
 }
+
+/* ══════════════════════════════════════════ HOW HARD IS THIS COURSE ═══
+   A slope of 140 means something exact to a golfer with a handicap and
+   nothing at all to somebody choosing their first course, so both are
+   shown: the word to choose by, the numbers on hover for anyone who wants
+   them. Five bands, running green to red. */
+.cdiff, .cp-diff {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-style: normal; font-size: 9.5px; font-weight: 800;
+  letter-spacing: .8px; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap;
+}
+.cdiff { position: absolute; top: 10px; right: 10px; z-index: 2; }
+.cp-diff { margin-left: 7px; padding: 2px 7px; font-size: 9px; }
+.cdiff i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ccard { position: relative; }
+
+.d1 { background: rgba(111,206,138,.18); color: #8fe0a4; }
+.d2 { background: rgba(160,206,111,.18); color: #b8dd85; }
+.d3 { background: rgba(232,193,90,.18);  color: #e8c15a; }
+.d4 { background: rgba(232,135,58,.20);  color: #f0a367; }
+.d5 { background: rgba(200,56,47,.22);   color: #f0857c; }
+
+/* the region lists now run easiest-first inside each region, so the button
+   needs room for a name and a badge on one line */
+.cpbtn { position: relative; }
+.cpbtn small { display: block; }
