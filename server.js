@@ -208,7 +208,10 @@ import { EMOTES, meleeById } from './public/js/client/celebrations.js';
 import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allowChat, PHRASES } from './server/chat.js';
 import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
-import { settleRound } from './server/profiles.js';
+import { settleRound, setDifficulty, difficultyOf,
+         setLook, setBallColor, setBag, kitOf } from './server/profiles.js';
+import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
+import * as Activity from './server/activity.js';
 import { loadRecords, recordsFor, allRecords, submitRound,
          offerRecords, restoreOpen, badgesFor } from './server/records.js';
 /* Shared, not server-only: the client needs the same format table to draw
@@ -543,18 +546,28 @@ function addPlayer(room, pid, name, spectator) {
   // every route into a room passes through here, so this is the one place
   // that has to remember the name for the friends list to read later
   rememberName(pid, name);
+  /* WHAT THEY ALREADY OWN. Appearance, ball colour and bag live on the
+     profile now — see setLook in profiles.js — so a player arrives dressed
+     as themselves rather than as the default golfer. */
+  const kit = kitOf(pid);
   const used = new Set(room.players.map(p => p.color));
-  const col = BALL_COLORS.find(c => !c.lockRating && !used.has(c.hex))
+  /* Their saved colour if it is free, otherwise the first unused one. Two
+     identical balls on one hole is genuinely confusing, so the room still
+     wins over the preference — but only when it has to. */
+  const saved = kit?.color && !used.has(kit.color)
+    ? BALL_COLORS.find(c => c.hex === kit.color) : null;
+  const col = saved
+    || BALL_COLORS.find(c => !c.lockRating && !used.has(c.hex))
     || BALL_COLORS.find(c => !c.lockRating) || BALL_COLORS[0];
   const h = hole(room);
   const t = teeOf(room);
   const p = {
     pid, name, color: col.hex, colorName: col.name,
-    look: normaliseLook(null, room.players.length),
+    look: normaliseLook(kit?.look || null, room.players.length),
     // where the golfer is standing, as opposed to where the ball is
     ax: t.x, az: t.z, arot: t.rot,
     cart: null, cartAt: 0,
-    bag: normaliseBag(DEFAULT_BAG, { pad: true }),
+    bag: normaliseBag(kit?.bag || DEFAULT_BAG, { pad: true }),
     scores: new Array(HOLES_PER_COURSE).fill(null),
     strokes: 0, penalties: 0, finished: false,
     x: t.x, z: t.z, lie: 'tee',
@@ -703,6 +716,13 @@ function dropIfNeverPlayed(room, p) {
   }
 }
 
+/** "two under", "level", "five over" — the way a golfer says a score. */
+function relName(rel) {
+  if (rel === 0) return 'level par';
+  const n = Math.abs(rel);
+  return `${n} ${rel < 0 ? 'under' : 'over'}`;
+}
+
 function finishHole(room) {
   const h = hole(room);
   for (const p of active(room)) {
@@ -715,6 +735,17 @@ function finishHole(room) {
       fairwayHit: h.par >= 4 ? !!p.holeFairway : null,
       gir: !!p.holeGir
     });
+    /* The moments worth telling a friend about, written as they happen
+       rather than at the end of the round — an ace on the third should be
+       in the feed while people are still playing the fourth. */
+    const rel = p.scores[room.holeIndex] - h.par;
+    if (p.scores[room.holeIndex] === 1) {
+      Activity.push(p.pid, 'ace', `holed out from the tee on ${course(room).name} ${h.number}`);
+    } else if (rel <= -3) {
+      Activity.push(p.pid, 'albatross', `made an albatross on ${course(room).name} ${h.number}`);
+    } else if (rel === -2) {
+      Activity.push(p.pid, 'eagle', `made an eagle on ${course(room).name} ${h.number}`);
+    }
     p.afterBad = p.scores[room.holeIndex] > h.par;    // Grit steadies the next tee
     // coins are banked hole by hole, so the counter should move hole by hole
     const sock = p.socketId && io.sockets.sockets.get(p.socketId);
@@ -738,7 +769,11 @@ function nextHole(room) {
       const played = p.scores.filter(v => v != null).length;
       const total = p.scores.reduce((a, v) => a + (v ?? 0), 0);
       const holeScores = p.scores.map((s, i) => s == null ? null : { strokes: s, par: pars[i] }).filter(Boolean);
-      const rc = settleRound(p.pid, room.courseId, holeScores);
+      /* Harder modes pay more — the multiplier is the only thing a
+         difficulty changes about the game's arithmetic. */
+      const mode = difficultyOf(p.pid);
+      const rc = settleRound(p.pid, room.courseId, holeScores, earnRate(mode));
+      rc.difficulty = mode;
       /* The card the handicap is built from. Computed HERE rather than in
          profiles.js because this is the only place that has the course
          object — and it has to be the course as it is right now, since a
@@ -748,7 +783,14 @@ function nextHole(room) {
         played >= 9 ? { courseId: room.courseId, gross: total, rating: cr.rating, slope: cr.slope } : null);
       /* The record board only ever sees rounds THIS server simulated, and
          only complete ones — see records.js for why both matter. */
-      const beat = submitRound(room.courseId, p.name, p.pid, holeScores);
+      /* RECORDS ARE GATED ON THE MODE. A course record set with the aim
+         line drawn for you, the putt read on the green and a marked sweet
+         spot is not the same achievement as one set without them, and a
+         board that mixes the two is a board nobody trusts. Casual plays the
+         same golf course — it just cannot write to the record book. */
+      const beat = allowsRecords(mode)
+        ? submitRound(room.courseId, p.name, p.pid, holeScores)
+        : { round: null, holes: [] };
       if (beat.round || beat.holes.length) {
         io.to(room.code).emit('toast', {
           msg: beat.round
@@ -784,7 +826,36 @@ function nextHole(room) {
            folded in, so the level-up has to be announced from here. */
         if (rc.leveledUp) sock.emit('levelup', rc.leveledUp);
       }
+
+      /* THE FEED. Written from the server's own numbers, at the one moment
+         it knows both what happened and what it beat. Everything here is
+         past tense and nameless — the reader's view puts the name on, so
+         one entry reads correctly as "You" and as "Sam". */
+      const rel = total - parTotal;
+      if (beat.round) {
+        Activity.push(p.pid, 'record', `set the course record at ${course(room).name} — ${total}`);
+      } else if (prof && prof.best === rel && played >= 9) {
+        Activity.push(p.pid, 'best', `carded a new personal best — ${relName(rel)} at ${course(room).name}`);
+      } else {
+        Activity.push(p.pid, 'round', `went round ${course(room).name} in ${relName(rel)}`);
+      }
+      if (rc.leveledUp) Activity.push(p.pid, 'level', `reached level ${rc.leveledUp.to}`);
     }
+
+    /* HEAD TO HEAD. Every pair in the room, which is why a four-ball is six
+       separate records — that is what playing one feels like. Only players
+       who actually finished count; a record that includes the round
+       somebody's connection died in is one that loses the argument it
+       exists to settle. */
+    Activity.recordHeadToHead(
+      active(room).map(p => ({
+        pid: p.pid, name: p.name,
+        total: p.scores.reduce((a, v) => a + (v ?? 0), 0),
+        finished: p.scores.filter(v => v != null).length >= HOLES_PER_COURSE
+      })),
+      pid => getProfile(pid)
+    );
+
     broadcastState(room);
     return;
   }
@@ -1018,10 +1089,20 @@ io.on('connection', socket => {
       if (wanted && !taken) {
         if (wanted.lockRating && !colorAllowed(ref.pid, wanted.hex)) {
           socket.emit('toast', { msg: `${wanted.name} unlocks at rating ${wanted.lockRating} — you are ${Math.round(getProfile(ref.pid).rating)}.`, kind: 'warn' });
-        } else { p.color = wanted.hex; p.colorName = wanted.name; }
+        } else {
+        p.color = wanted.hex; p.colorName = wanted.name;
+        setBallColor(ref.pid, wanted.hex, wanted.name);
+      }
       }
     }
-    if (Array.isArray(bag)) p.bag = normaliseBag(bag);
+    if (Array.isArray(bag)) { p.bag = normaliseBag(bag); setBag(ref.pid, p.bag); }
+    /* The mode is a profile setting, not a room one — see difficulty.js for
+       why. Stored and echoed back so the client's own picker is confirmed by
+       the server rather than trusted, the same as every other choice. */
+    if (typeof d?.difficulty === 'string') {
+      p.difficulty = setDifficulty(ref.pid, d.difficulty);
+      socket.emit('profile', publicProfile(ref.pid));
+    }
     // only broadcast a real change, and coalesce bursts (see castSoon)
     if (before === p.color + '|' + JSON.stringify(p.bag)) return;
     castSoon(room, p);
@@ -1089,19 +1170,40 @@ io.on('connection', socket => {
   });
 
   socket.on('player:look', (d) => {
-    const ref = sockets.get(socket.id); if (!ref) return;
-    const room = rooms.get(ref.code); if (!room) return;
-    const p = room.players.find(x => x.pid === ref.pid); if (!p) return;
+    /* THE WARDROBE IS OUTSIDE ANY ROOM. This used to bail when the sender
+       was not in one, which is where every player who has ever opened the
+       wardrobe from the front page is — so dressing your golfer there sent
+       a message the server dropped on the floor, and the changes were gone
+       the moment the page reloaded. The clubhouse and the profile socket
+       already worked this way; this one did not, and that is the whole of
+       "nothing saves".
+
+       So identity comes from the socket first and the room second, and the
+       room is used only for the parts that need one. */
+    const ref = sockets.get(socket.id);
+    const pid = ref?.pid || socket.data.pid;
+    if (!pid) return;
+    const room = ref ? rooms.get(ref.code) : null;
+    const p = room?.players.find(x => x.pid === pid) || null;
     /* Cosmetics ride in the look, so this is the gate on them. A client can
        ask for anything; what comes out is clamped to the level the SERVER
        has on record. Without this every decal, trail and title in the game
        is one hand-written socket message away from free, and a hundred
        levels of rewards mean nothing. */
-    const level = levelFromXp(getProfile(ref.pid)?.xp || 0).level;
-    const next = looksEarnedAt(d?.look, room.players.indexOf(p), level);
+    const level = levelFromXp(getProfile(pid)?.xp || 0).level;
+    const seat = p && room ? room.players.indexOf(p) : 0;
+    const next = looksEarnedAt(d?.look, seat, level);
+
+    // Not in a room: save it and stop. There is nobody to broadcast to.
+    if (!p) { setLook(pid, next); return; }
     // only broadcast a real change, and coalesce bursts (see castSoon)
-    if (JSON.stringify(next) === JSON.stringify(p.look)) return;
+    if (JSON.stringify(next) === JSON.stringify(p.look)) { setLook(pid, next); return; }
     p.look = next;
+    /* AND SAVE IT. The clamped version, not what the client asked for — so
+       what is written to the profile is what the server agreed to, and a
+       piece that gets un-earned somehow cannot be restored past the gate on
+       the next join. */
+    setLook(pid, next);
     castSoon(room, p);
   });
 
@@ -1340,6 +1442,25 @@ io.on('connection', socket => {
      forget the pid check. Every branch below re-reads the pid from the
      socket rather than trusting anything the client sent — the client
      supplies WHO IT WANTS TO ACT ON, never who it is. */
+  /* What your friends have been up to. Read-time filtered by friendship —
+     see activity.js for why that check cannot live at write time. */
+  socket.on('feed:list', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || cleanPid(d?.pid);
+    if (!pid) return ack({ items: [] });
+    ack({ items: Activity.feedFor(pid, { limit: 30, nameOf }) });
+  });
+
+  /* Your record against everybody you have finished a round with. */
+  socket.on('h2h:list', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || cleanPid(d?.pid);
+    if (!pid) return ack({ rows: [] });
+    const rows = Activity.headToHeadFor(getProfile(pid), 20)
+      .map(r => ({ ...r, name: nameOf(r.pid) || r.name }));
+    ack({ rows });
+  });
+
   socket.on('friends:do', (d, ack) => {
     if (typeof ack !== 'function') return;
     const pid = sockets.get(socket.id)?.pid || socket.data?.pid || null;
@@ -1588,7 +1709,14 @@ io.on('connection', socket => {
               : h ? `on the ${h.number}${['th','st','nd','rd'][h.number % 10 > 3 ? 0 : h.number % 10] || 'th'}`
                 : 'on the course',
           joinable: room.state === 'lobby' &&
-            room.players.filter(x => x.connected).length < MAX_PLAYERS
+            room.players.filter(x => x.connected).length < MAX_PLAYERS,
+          /* A room mid-round cannot be JOINED but can be WATCHED — the
+             server already seats a late arrival as a spectator, and has
+             since rooms existed. What was missing was any way to find out
+             that was possible: the panel showed "on the 4th" and no button,
+             so watching a friend play was a feature nobody could reach. */
+          watchable: (room.state === 'playing' || room.state === 'holeover') &&
+            room.players.length < MAX_PLAYERS * 3
         });
       }
     }

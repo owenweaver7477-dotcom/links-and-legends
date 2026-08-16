@@ -2700,3 +2700,197 @@ body.side-open .lp-play-fixed { opacity: .5; }
     linear-gradient(to bottom, rgba(4,12,9,.86) 0%, rgba(4,12,9,.20) 18%, rgba(4,12,9,0) 34%),
     linear-gradient(to top, rgba(4,12,9,.92) 0%, rgba(4,12,9,.40) 22%, rgba(4,12,9,0) 40%); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE POST-SHOT CARD, THE RADIAL, THE FEED, HEAD TO HEAD, DIFFICULTY
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ---- post-shot analysis -------------------------------------------------
+   Sits over the course on the side the ball is NOT on — bottom left, since
+   the swing controls own the bottom centre and the scorecard the right. */
+.shotcard {
+  position: fixed; left: 16px; bottom: 132px; z-index: 40;
+  width: 232px; padding: 12px 14px;
+  background: rgba(9,20,14,.86); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.11); border-radius: 15px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.45);
+  opacity: 0; transform: translateY(10px) scale(.97);
+  transition: opacity .22s ease, transform .22s cubic-bezier(.2,.9,.3,1.2);
+  cursor: pointer; pointer-events: auto;
+}
+.shotcard.in { opacity: 1; transform: none; }
+.sc-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sc-top b { font-size: 14px; letter-spacing: .2px; }
+.sc-tot { font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums;
+  letter-spacing: -.5px; color: #cfeddb; }
+.sc-tot i { font-size: 11px; font-style: normal; color: #7fa088; font-weight: 600; }
+.sc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 10px; margin-top: 10px; }
+.sc-grid span { display: flex; flex-direction: column; gap: 1px; }
+.sc-grid i { font-style: normal; font-size: 9px; text-transform: uppercase;
+  letter-spacing: 1px; color: #7fa088; font-weight: 700; }
+.sc-grid b { font-size: 13px; font-variant-numeric: tabular-nums; }
+.sc-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.sc-tags em { font-style: normal; font-size: 10px; font-weight: 700; padding: 3px 8px;
+  border-radius: 999px; background: rgba(255,255,255,.07); letter-spacing: .3px; }
+.sc-tags .sc-straight, .sc-tags .sc-flush { background: rgba(111,206,138,.20); color: #9ae0ad; }
+.sc-tags .sc-slice, .sc-tags .sc-hook { background: rgba(255,140,90,.18); color: #ffb495; }
+.sc-tags .sc-fade, .sc-tags .sc-draw, .sc-tags .sc-clean { background: rgba(143,208,255,.16); color: #9fd0f0; }
+.sc-tags .sc-fat, .sc-tags .sc-thin { background: rgba(255,215,107,.16); color: #ffd76b; }
+
+/* ---- the radial ---------------------------------------------------------
+   Anchored at the point the gesture started, so it opens under the thumb. */
+.radial { position: fixed; z-index: 90; width: 0; height: 0;
+  opacity: 0; transition: opacity .14s ease; pointer-events: none; }
+.radial.in { opacity: 1; }
+.radial::before {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 250px; height: 250px; transform: translate(-50%,-50%);
+  border-radius: 50%; background: radial-gradient(circle,
+    rgba(9,20,14,.80) 0%, rgba(9,20,14,.55) 55%, rgba(9,20,14,0) 72%);
+}
+.radial::after {
+  content: attr(data-label); position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%,-50%); font-size: 11.5px; font-weight: 700;
+  color: #cfeddb; text-align: center; width: 92px; line-height: 1.25;
+  text-shadow: 0 2px 8px rgba(0,0,0,.8);
+}
+.rad-item {
+  position: absolute; left: 50%; top: 50%;
+  width: 52px; height: 52px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(20,38,28,.92); border: 1px solid rgba(255,255,255,.13);
+  box-shadow: 0 6px 18px rgba(0,0,0,.4);
+  transition: background .12s, border-color .12s, box-shadow .12s;
+  cursor: pointer; padding: 0;
+}
+.rad-item .rad-ico { font-size: 21px; line-height: 1; }
+.rad-item.on { background: rgba(111,206,138,.30); border-color: rgba(111,206,138,.75);
+  box-shadow: 0 0 0 3px rgba(111,206,138,.22), 0 8px 22px rgba(0,0,0,.5); }
+.rad-item.locked { opacity: .38; }
+
+/* ---- the idle fade ------------------------------------------------------
+   The chrome gets out of the way; the controls never do. Pointer events go
+   with it, so a faded panel cannot swallow a click on the course. */
+body.hudfade .hud, body.hudfade .board, body.hudfade .minimap,
+body.hudfade .rosterpanel, body.hudfade .hintbar, body.hudfade .chatpanel,
+body.hudfade .windbox, body.hudfade .onlinenow {
+  opacity: .18; pointer-events: none;
+  transition: opacity .55s ease;
+}
+.hud, .board, .minimap, .rosterpanel, .hintbar, .chatpanel, .windbox {
+  transition: opacity .18s ease;
+}
+
+/* ---- difficulty ---------------------------------------------------- */
+.diffrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 9px; margin-bottom: 8px; }
+.diffcard { text-align: left; padding: 12px 13px; border-radius: 14px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+  display: flex; flex-direction: column; gap: 4px; cursor: pointer;
+  transition: border-color .16s, background .16s, transform .16s; color: inherit; }
+.diffcard:hover { transform: translateY(-2px); border-color: rgba(111,206,138,.36); }
+.diffcard.on { border-color: rgba(111,206,138,.75); background: rgba(111,206,138,.13); }
+.diffcard b { font-size: 14px; }
+.diffcard small { font-size: 11px; color: #a9c2ae; line-height: 1.4; }
+.diff-earn { font-size: 10.5px; font-weight: 700; color: #ffd76b; letter-spacing: .2px; }
+.diff-takes { font-size: 10px; color: #7fa088; line-height: 1.45; margin-top: 2px; }
+.diff-warn { font-size: 10px; font-weight: 700; color: #ffb495; }
+
+/* ---- the feed ------------------------------------------------------ */
+.feed { display: flex; flex-direction: column; gap: 2px; max-height: 210px; overflow-y: auto; }
+.feeditem { display: grid; grid-template-columns: 22px 1fr auto; align-items: baseline;
+  gap: 7px; padding: 6px 7px; border-radius: 9px; font-size: 11.5px; line-height: 1.4; }
+.feeditem:hover { background: rgba(255,255,255,.04); }
+.feeditem.mine { background: rgba(111,206,138,.09); }
+.fd-ico { font-size: 13px; }
+.fd-txt { color: #c3d8c8; }
+.fd-txt b { color: #eaf5ec; }
+.fd-when { font-size: 10px; color: #6c8a75; white-space: nowrap; }
+
+/* ---- head to head -------------------------------------------------- */
+.h2hlist { list-style: none; margin: 0; padding: 0; display: flex;
+  flex-direction: column; gap: 5px; }
+.h2h { display: grid; grid-template-columns: 1fr 90px auto; align-items: center;
+  gap: 10px; padding: 9px 12px; border-radius: 11px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); }
+.h2h.up { border-color: rgba(111,206,138,.34); }
+.h2h.down { border-color: rgba(255,140,90,.28); }
+.h2-name { font-weight: 700; font-size: 13px; }
+.h2-bar { height: 6px; border-radius: 999px; background: rgba(255,140,90,.30);
+  overflow: hidden; }
+.h2-bar i { display: block; height: 100%; background: #6fce8a; }
+.h2-rec { font-variant-numeric: tabular-nums; font-size: 14px; letter-spacing: -.3px; }
+.h2-rec b { font-weight: 800; }
+.h2-sub { grid-column: 1 / -1; font-size: 10px; color: #7fa088; margin-top: -2px; }
+
+/* ---- post-round comparison ----------------------------------------- */
+.rescmp { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px; margin: 12px 0 4px; }
+.rc { padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08); display: flex; flex-direction: column; gap: 2px; }
+.rc i { font-style: normal; font-size: 9px; text-transform: uppercase;
+  letter-spacing: 1px; color: #7fa088; font-weight: 700; }
+.rc b { font-size: 18px; font-variant-numeric: tabular-nums; letter-spacing: -.4px; }
+.rc small { font-size: 10px; color: #a9c2ae; }
+.rc.good { border-color: rgba(111,206,138,.42); background: rgba(111,206,138,.10); }
+.rc.good b { color: #9ae0ad; }
+.rc.bad b { color: #ffb495; }
+
+.on-join.watch { background: rgba(143,208,255,.16); border-color: rgba(143,208,255,.4);
+  color: #9fd0f0; }
+
+/* ---- phones ------------------------------------------------------------
+   The shot card moves above the control block and goes full width; at 375px
+   a 232px card floating in a corner is most of the screen anyway. */
+@media (max-width: 560px) {
+  .shotcard { left: 8px; right: 8px; width: auto; bottom: 178px; padding: 10px 12px; }
+  .sc-grid { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .sc-grid b { font-size: 12px; }
+  .diffrow { grid-template-columns: 1fr; }
+  .rescmp { grid-template-columns: 1fr 1fr; }
+  .h2h { grid-template-columns: 1fr auto; }
+  .h2-bar { display: none; }
+}
+
+/* ═══════════════════════════════════ THE CLUBHOUSE TAKES THE SCREEN ═══
+   It was an 820px card floating in the middle of a 1440px window: two
+   thirds of the display was empty dark green, the career charts were
+   squeezed into a column narrower than a phone, and the pro shop's grid
+   could fit two cards a row when there was room for four.
+
+   A card is the right shape for a dialogue — something you open, answer and
+   close. The clubhouse is not that. It is the place you go to look at your
+   career, spend your coins and build your bag, and it should use the room
+   it has. */
+#screenShop, #screenBoards { padding: 18px; align-items: stretch; }
+#screenShop .card, #screenBoards .card {
+  width: 100%; max-width: none;
+  max-height: none; height: 100%;
+  margin: 0; overflow-y: auto; scrollbar-width: thin;
+  display: flex; flex-direction: column;
+}
+/* The body scrolls, the tabs and title do not — so the tab you are on is
+   always reachable rather than scrolled off the top of a long pane. */
+#screenShop .hktabs, #screenBoards .bd-tabs { flex: 0 0 auto; }
+#screenShop .hkpane, #screenBoards .bd-body { flex: 1 1 auto; }
+
+/* With the width available, the career reads as a dashboard rather than a
+   single column: the rating and the form line side by side, the charts and
+   the dials below them. Still `display: block` at narrow widths — see the
+   note by `.career` — this only kicks in when there is genuinely room. */
+@media (min-width: 1000px) {
+  .career { display: grid; gap: 14px 16px;
+    grid-template-columns: minmax(280px, 360px) 1fr;
+    align-items: start; }
+  /* Picked by the classes the renderer ACTUALLY emits — .lvlrow, .cr-top,
+     .chart — rather than by nth-child, which would silently reshuffle the
+     whole panel the first time a row is added to it. */
+  .career > .lvlrow, .career > .cr-top, .career > .cr-dials { grid-column: 1; }
+  .career > .cr-h, .career > .chart, .career > .chart-empty { grid-column: 2; }
+  .career > .cr-tally { grid-column: 1 / -1; }
+  .career > * + * { margin-top: 0; }
+  .career > .cr-h { margin-top: 4px; }
+
+  .shop { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .diffrow { grid-template-columns: repeat(4, 1fr); }
+}

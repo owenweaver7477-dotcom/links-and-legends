@@ -15,6 +15,7 @@ import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp } from '../public/j
 import { openStore, touch, saveSoon as storeSaveSoon } from './store.js';
 import { handicapIndex, differential, ratingTier } from '../public/js/shared/handicap.js';
 import { normaliseSkin } from '../public/js/shared/clubskins.js';
+import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
    moment a player opens it rather than after several rounds. */
@@ -208,6 +209,14 @@ export function publicProfile(pid) {
     crew: p.crew || { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
     clubTier: p.clubTier ?? 0, refine: p.refine ?? 0, cleared: (p.cleared || []).length,
     clubSkin: p.clubSkin || 'stock',
+    /* What they look like, so a browser with an empty localStorage — a new
+       device, a cleared store, a private window — gets the golfer back
+       rather than the default one. */
+    look: p.look || null,
+    ballColor: p.ballColor || null,
+    bag: p.bag || null,
+    difficulty: normaliseDifficulty(p.difficulty),
+    earnRate: earnRate(p.difficulty),
     /* Records held, because a club finish is gated on it and the client
        cannot count them — the board lives on the server. */
     records: p.recordsHeld || 0,
@@ -299,11 +308,23 @@ export function handicapFor(rating) {
   return Math.max(0, Math.round((90 - r) * 0.38));
 }
 
-export function settleRound(pid, courseId, holeScores) {
+/**
+ * @param earn  the difficulty multiplier. Playing without the aim line and
+ *   the putt read is harder, so it pays more; playing on Casual pays less.
+ *   Applied to the round BONUS only — the per-hole coins were already banked
+ *   as they were played, and clawing those back at the end would mean the
+ *   counter went down when you finished a round.
+ */
+export function settleRound(pid, courseId, holeScores, earn = 1) {
   const p = getProfile(pid);
   const full = holeScores.length >= 9;
   const firstClear = courseId && !(p.cleared || []).includes(courseId) && full;
   const rc = roundCoins(holeScores, firstClear);
+  const rate = Number.isFinite(earn) && earn > 0 ? earn : 1;
+  if (rate !== 1) {
+    rc.total = Math.round(rc.total * rate);
+    rc.earnRate = rate;
+  }
   p.coins += rc.total - rc.holes;                  // holes already paid live
 
   /* XP: the holes already paid as they were played (recordHole), so this is
@@ -312,7 +333,7 @@ export function settleRound(pid, courseId, holeScores) {
      moment of it rather than a number quietly changing. */
   const before = levelFromXp(p.xp || 0).level;
   const holeXpPaid = holeScores.reduce((a, h) => a + holeXp(h.strokes, h.par), 0);
-  rc.xp = roundXp(holeScores) - holeXpPaid;
+  rc.xp = Math.round((roundXp(holeScores) - holeXpPaid) * rate);
   p.xp = (p.xp || 0) + rc.xp;
   const after = levelFromXp(p.xp).level;
   rc.level = after;
@@ -603,6 +624,60 @@ export function worldPlace(pid) {
  * done — the client picks, the server decides, the same way every other
  * earned cosmetic works.
  */
+/* ═══════════════════════════════════════════ WHAT YOU LOOK LIKE ═══════
+   Appearance, ball colour and bag used to live ONLY on the room player.
+   That object is created when you join a room and thrown away when the room
+   dies, so every one of them reset to a default the next time you played —
+   which is exactly "the appearance goes back to default". The wardrobe
+   saved nothing because there was nowhere for it to save to.
+
+   They belong on the profile with everything else that survives a round.
+   The room player is now a COPY made at join time, and the copy is what
+   gets broadcast and clamped; this is the original. */
+
+export function setLook(pid, look) {
+  const p = getProfile(pid);
+  p.look = look || null;
+  saveSoon();
+  return p.look;
+}
+
+export function setBallColor(pid, hex, name) {
+  const p = getProfile(pid);
+  p.ballColor = hex || null;
+  p.ballColorName = name || null;
+  saveSoon();
+}
+
+export function setBag(pid, bag) {
+  const p = getProfile(pid);
+  p.bag = Array.isArray(bag) ? bag : null;
+  saveSoon();
+}
+
+/** Everything a room player should start life wearing. Null means "default". */
+export const kitOf = pid => {
+  const p = profiles.get(pid);
+  return p ? { look: p.look || null, bag: p.bag || null,
+               color: p.ballColor || null, colorName: p.ballColorName || null } : null;
+};
+
+/**
+ * The difficulty a player has chosen. Lives on the profile rather than in
+ * the room, because it is a setting about how somebody likes to play and
+ * not a property of one game — and because it has to survive the round it
+ * was chosen in, or the coin multiplier would reset every time.
+ */
+export function setDifficulty(pid, id) {
+  const p = getProfile(pid);
+  p.difficulty = normaliseDifficulty(id);
+  saveSoon();
+  return p.difficulty;
+}
+
+export const difficultyOf = pid =>
+  normaliseDifficulty(profiles.get(pid)?.difficulty);
+
 export function setClubSkin(pid, id) {
   const p = getProfile(pid);
   const pub = publicProfile(pid);

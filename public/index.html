@@ -305,6 +305,13 @@
         <p class="err tiny" id="frErr"></p>
         <div class="fr-list" id="frList"></div>
       </div>
+      <!-- WHAT YOUR FRIENDS HAVE BEEN DOING. Without it the friends list is
+           a column of names with a green dot, which tells you who is online
+           and nothing about whether it is worth saying hello. -->
+      <div class="lp-block feedblock" id="feedBlock" hidden>
+        <h5>Lately</h5>
+        <div class="feed" id="feedList"></div>
+      </div>
       <div class="onlinenow" id="onlineNow" hidden></div>
       <div class="lp-block">
         <h5>Join with a room code</h5>
@@ -461,6 +468,7 @@
       <button class="hktab on" data-bd="ranks" role="tab">Rankings</button>
       <button class="hktab" data-bd="records" role="tab">Course records</button>
       <button class="hktab" data-bd="world" role="tab">World rating</button>
+      <button class="hktab" data-bd="h2h" role="tab">Head to head</button>
     </div>
     <div class="bd-body">
 <div class="section bdpane" data-pane="ranks">
@@ -485,6 +493,14 @@
     <div class="section bdpane" data-pane="world">
       <h4 class="lbl nojs-only">World ranking</h4>
       <div id="worldBox"></div>
+    </div>
+
+    <!-- HEAD TO HEAD. You can play the same person every evening for a
+         month; a game that never tells you the running score is throwing
+         away the only story it has. -->
+    <div class="section bdpane" data-pane="h2h" hidden>
+      <h4 class="lbl nojs-only">Head to head</h4>
+      <div id="h2hBox"></div>
     </div>
 
     <!-- RANKINGS. Five ladders, because one ladder has a top ten that never
@@ -550,6 +566,13 @@
     </div>
 
     <div class="section hkpane" data-pane="keys">
+      <!-- HOW MUCH THE GAME TELLS YOU. Not how hard the golf is: everybody
+           in a room plays the same course in the same wind. This is the
+           amount of help you get reading it. -->
+      <h4 class="lbl">Difficulty</h4>
+      <div class="diffrow" id="diffRow"></div>
+      <p class="tiny" id="diffNote"></p>
+
       <h4 class="lbl nojs-only">Controls</h4>
       <div class="keyhead">
         <p class="tiny">Click a key and press the one you want. Taking a key
@@ -657,8 +680,11 @@
     <h2 id="resTitle">Final</h2>
     <p class="sub" id="resSub"></p>
     <div class="cardwrap"><table class="scorecard" id="fullCard"></table></div>
+    <!-- HOW THIS ROUND COMPARED. A final score on its own is a number; a
+         number next to your average and your best is a result. -->
+    <div class="rescmp" id="resCmp" hidden></div>
     <div class="lobby-actions">
-      <button class="btn primary big" id="btnAgain">Play again</button>
+      <button class="btn primary big" id="btnAgain">Rematch</button>
       <button class="btn big" id="btnBackLobby">Change course</button>
     </div>
     <p class="tiny" id="resNote"></p>

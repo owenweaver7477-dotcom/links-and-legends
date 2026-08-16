@@ -226,8 +226,16 @@ HUD.setMeter = (m, enabled) => {
   el.mFace.classList.toggle('live', striking);
   // the green zone IS the forgiving band, so what you see is what forgives
   if (striking) {
-    const pct = (1 - (m.band ?? 0.2)) * 50;
-    el.mFace.querySelector('.m-face-zone').style.cssText = `left:${pct}%;right:${pct}%`;
+    /* On Pro and above the zone is not drawn. It still exists and still
+       forgives — hiding the target makes the strike a matter of feel, and
+       removing it would make it a coin flip. */
+    const zone = el.mFace.querySelector('.m-face-zone');
+    const mark = m.showBand !== false;
+    zone.hidden = !mark;
+    if (mark) {
+      const pct = (1 - (m.band ?? 0.2)) * 50;
+      zone.style.cssText = `left:${pct}%;right:${pct}%`;
+    }
   }
   const dotPct = striking ? 50 + clamp(m.sweep, -1, 1) * 48
     : clamp(50 + m.face * 4.4, 2, 98);
@@ -667,6 +675,11 @@ HUD.renderCareer = (prof) => {
      </div>`;
 };
 
+const CADDIE_HEX = {
+  ace: '#c8382f', bruiser: '#e8873a', steady: '#4f9fd8', roller: '#6fce8a',
+  pitstop: '#e8c15a', lucky: '#a98cd8', gale: '#7fd8d0', grit: '#9c8f76'
+};
+
 HUD.renderShop = (prof, onBuy) => {
   if (!el.shopList) return;
   el.coinBal.textContent = prof ? '🪙 ' + (prof.coins || 0) : '';
@@ -716,7 +729,11 @@ HUD.renderShop = (prof, onBuy) => {
       const cost = caddieCost(lvl);
       const card = document.createElement('div');
       card.className = 'shopcard caddie' + (lvl >= CADDIE_MAX ? ' owned' : '');
-      card.dataset.view = JSON.stringify({ kind: 'item', hex: '#e8c15a',
+      /* A colour per caddie, so the six of them are six people on the
+         turntable rather than one gold figure with different captions.
+         Keyed off the caddie id, which is stable — the stat strings are
+         display text and would take the previews with them if reworded. */
+      card.dataset.view = JSON.stringify({ kind: 'caddie', hex: CADDIE_HEX[key] || '#e8c15a',
         name: c.name, sub: c.stat });
       const pips = Array.from({ length: CADDIE_MAX }, (_, i) =>
         `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
@@ -1624,11 +1641,21 @@ HUD.renderOnline = (list, myPid, onJoin) => {
       b.className = 'on-join'; b.type = 'button'; b.textContent = 'Join';
       b.addEventListener('click', () => onJoin(o.code));
       row.appendChild(b);
+    } else if (o.watchable) {
+      /* WATCHING WAS ALWAYS POSSIBLE. The server has seated late arrivals as
+         spectators since rooms existed — there was simply no button, so the
+         panel said "on the 4th" and offered nothing, and the answer to "can
+         I watch my friend play" was no for a feature that worked. */
+      const b = document.createElement('button');
+      b.className = 'on-join watch'; b.type = 'button'; b.textContent = 'Watch';
+      b.title = 'Join as a spectator — you play from the next hole';
+      b.addEventListener('click', () => onJoin(o.code, true));
+      row.appendChild(b);
     }
     rows.appendChild(row);
   }
   box.appendChild(rows);
-  if (joinable.length === 0) {
+  if (joinable.length === 0 && !others.some(o => o.watchable)) {
     const note = document.createElement('p');
     note.className = 'on-note';
     note.textContent = 'All mid-round — start your own and invite them.';
@@ -1712,6 +1739,7 @@ import {
 import { decalTexture } from './decals.js';
 import { showItem as showShopItem } from './shopview.js';
 import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress } from '../shared/clubskins.js';
+import { DIFFICULTIES } from '../shared/difficulty.js';
 import { weatherEffects, clockText } from '../shared/weather.js';
 
 /** Set by main.js. Receives a partial look. */
@@ -2243,4 +2271,151 @@ HUD.previewShopItem = what => {
     cap.innerHTML = `<b>${escapeHtml(what.name || '')}</b>` +
       (what.sub ? `<small>${escapeHtml(what.sub)}</small>` : '');
   }
+};
+
+/* ═══════════════════════════════════════════════════ DIFFICULTY ═══════
+   Not how hard the golf is — everybody in a room plays the same course in
+   the same wind. This is how much of it the game reads for you, and the
+   card says exactly what changes, because a mode named "Pro" that does not
+   list what it takes away is a mode nobody picks. */
+HUD.renderDifficulty = (current, onPick) => {
+  const box = document.getElementById('diffRow');
+  if (!box) return;
+  const cur = current || 'standard';
+  box.innerHTML = DIFFICULTIES.map(d => {
+    const a = d.aids;
+    /* What you LOSE, listed. The alternative is a blurb, and a blurb is
+       how you end up with four modes nobody can tell apart. */
+    const takes = [];
+    if (a.line === 'none') takes.push('no aim line');
+    else if (a.line === 'aim') takes.push('pointer only');
+    else if (a.line === 'partial') takes.push('no run-out');
+    if (a.putt === 'none') takes.push('read your own putts');
+    if (!a.club) takes.push('pick your own club');
+    if (a.power === 'blind') takes.push('unmarked meter');
+    if (a.wind === 'rough') takes.push('wind by feel');
+    if (!a.gimme) takes.push('hole everything out');
+    return `<button class="diffcard${d.id === cur ? ' on' : ''}" data-diff="${d.id}">
+      <b>${escapeHtml(d.name)}</b>
+      <span class="diff-earn">${d.earn === 1 ? 'normal earnings'
+        : (d.earn > 1 ? '+' : '') + Math.round((d.earn - 1) * 100) + '% coins & XP'}</span>
+      <small>${escapeHtml(d.blurb)}</small>
+      ${takes.length ? `<span class="diff-takes">${takes.map(escapeHtml).join(' · ')}</span>` : ''}
+      ${d.records ? '' : '<span class="diff-warn">records not counted</span>'}
+    </button>`;
+  }).join('');
+  const note = document.getElementById('diffNote');
+  if (note) {
+    note.textContent = 'Everyone in a room plays the identical course in the ' +
+      'identical wind — this only changes how much of it is read for you.';
+  }
+  if (!box.dataset.wired) {
+    box.dataset.wired = '1';
+    box.addEventListener('click', e => {
+      const b = e.target.closest('[data-diff]');
+      if (b) onPick(b.dataset.diff);
+    });
+  }
+};
+
+/* ══════════════════════════════════════════════════ THE FEED ═══════════
+   Entries arrive nameless and past tense, so the same row reads correctly
+   whether it is yours or a friend's — see activity.js. */
+HUD.renderFeed = items => {
+  const box = document.getElementById('feedList');
+  const block = document.getElementById('feedBlock');
+  if (!box || !block) return;
+  if (!items?.length) { block.hidden = true; return; }
+  block.hidden = false;
+  box.innerHTML = items.map(it => {
+    const k = FEED_ICON[it.kind] || '•';
+    return `<div class="feeditem${it.mine ? ' mine' : ''}">
+      <span class="fd-ico">${k}</span>
+      <span class="fd-txt"><b>${escapeHtml(it.name)}</b> ${escapeHtml(it.text)}</span>
+      <span class="fd-when">${agoShort(it.t)}</span>
+    </div>`;
+  }).join('');
+};
+
+const FEED_ICON = { ace: '🎯', albatross: '🦅', eagle: '🦅', record: '🏆',
+                    best: '📈', level: '⭐', round: '⛳', joined: '👋' };
+
+/* "4m", "2h", "3d" — short, because it is a column and not a sentence.
+   Deliberately NOT the `ago` above: that one takes a duration and spells
+   the words out for a friends-list row, this one takes a timestamp and has
+   to fit in a gutter. Two names, because they are two different jobs. */
+function agoShort(t) {
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return 'just now';
+  if (s < 3600) return Math.round(s / 60) + 'm';
+  if (s < 86400) return Math.round(s / 3600) + 'h';
+  return Math.round(s / 86400) + 'd';
+}
+
+/* ═══════════════════════════════════════════════ HEAD TO HEAD ═════════ */
+HUD.renderH2H = rows => {
+  const box = document.getElementById('h2hBox');
+  if (!box) return;
+  if (!rows?.length) {
+    box.innerHTML = '<p class="tiny">Finish a round with somebody and your ' +
+      'record against them starts here.</p>';
+    return;
+  }
+  box.innerHTML = `<ol class="h2hlist">` + rows.map(r => {
+    const pct = r.played ? Math.round((r.w / r.played) * 100) : 0;
+    const lead = r.w > r.l ? 'up' : r.w < r.l ? 'down' : 'level';
+    return `<li class="h2h ${lead}">
+      <span class="h2-name">${escapeHtml(r.name)}</span>
+      <span class="h2-bar"><i style="width:${pct}%"></i></span>
+      <span class="h2-rec"><b>${r.w}</b>–<b>${r.l}</b>${r.d ? `–${r.d}` : ''}</span>
+      <span class="h2-sub">${r.played} round${r.played === 1 ? '' : 's'}</span>
+    </li>`;
+  }).join('') + `</ol>`;
+};
+
+/* ══════════════════════════════════════ POST-ROUND COMPARISON ═════════
+   A final score on its own is a number. Next to your average, your best and
+   what you have done on this course before, it is a result. */
+HUD.renderResultCompare = (myTotal, par, prof, courseId, opponents) => {
+  const box = document.getElementById('resCmp');
+  if (!box) return;
+  if (!prof || !Number.isFinite(myTotal)) { box.hidden = true; return; }
+  const rel = myTotal - par;
+  const bits = [];
+
+  /* Against your own best. `best` is relative to par and can legitimately
+     be 0, so this checks for null rather than for falsy — a level-par best
+     is not a missing one. */
+  if (prof.best != null) {
+    const d = rel - prof.best;
+    bits.push({
+      lbl: 'Your best', val: relLabel(prof.best),
+      note: d < 0 ? 'beaten' : d === 0 ? 'matched' : `${d} off it`,
+      good: d <= 0
+    });
+  }
+  const form = prof.byCourse?.[courseId];
+  if (form && form.n > 0) {
+    bits.push({ lbl: 'Here, usually', val: (form.vs > 0 ? '+' : '') + form.vs.toFixed(1),
+                note: `${form.n} round${form.n === 1 ? '' : 's'}`, good: rel - par < form.vs });
+  }
+  if (prof.index != null) bits.push({ lbl: 'Handicap', val: prof.index.toFixed(1), note: '', good: null });
+
+  /* And against whoever you just played, which is the comparison anybody
+     actually cares about. */
+  for (const o of (opponents || []).slice(0, 3)) {
+    const d = myTotal - o.total;
+    bits.push({
+      lbl: o.name, val: d === 0 ? 'tied' : `${d < 0 ? '-' : '+'}${Math.abs(d)}`,
+      note: o.record ? `${o.record.w}–${o.record.l} all time` : 'first meeting',
+      good: d <= 0
+    });
+  }
+  if (!bits.length) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = bits.map(b =>
+    `<div class="rc${b.good === true ? ' good' : b.good === false ? ' bad' : ''}">
+      <i>${escapeHtml(b.lbl)}</i><b>${escapeHtml(String(b.val))}</b>
+      ${b.note ? `<small>${escapeHtml(b.note)}</small>` : ''}
+    </div>`).join('');
 };

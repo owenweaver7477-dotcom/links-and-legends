@@ -15,7 +15,7 @@ import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
 import { EMOTES, MELEES, meleesAt, meleeById } from './celebrations.js';
 import { UNLOCKS, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
-import { SwingController, SWING } from './swing.js';
+import { SwingController, SWING, setForgiveness, setMarkBand } from './swing.js';
 import { HUD } from './hud.js';
 import { playIntro3D } from './intro3d.js';
 import { wearOutfit, normaliseCustom, outfitEffect } from '../shared/wardrobe.js';
@@ -30,6 +30,9 @@ import { initCG, loadingStart, loadingStop, gameplayStart, gameplayStop,
 // start, so this is the first thing the module does.
 loadingStart();
 import { Sound } from './sound.js';
+import { aidsFor, DEFAULT_DIFFICULTY } from '../shared/difficulty.js';
+import { showShot, hide as hideShotCard } from './shotcard.js';
+import { bindRadial, radialOpen, closeRadial } from './radial.js';
 
 import { allCourses, getCourse, defaultAim, aimPlan } from '../shared/coursegen.js';
 import { FORMATS, formatById, isScramble, TEAM_NAMES } from '../shared/scramble.js';
@@ -442,6 +445,7 @@ function openLegend(target) {
     HUD.show('boards');
     HUD.bindBoardsScreen();
     HUD.showBoardTab(target === 'rankings' ? 'ranks' : 'records');
+    Net.h2h(rows => HUD.renderH2H(rows));
     return;
   }
   const tab = { settings: 'keys' }[target];
@@ -598,7 +602,13 @@ function applyWardrobe(patch) {
 
   saveLook(lookDraft);
   refreshMenuAvatar();
-  if (G.joined) Net.setLook(lookDraft);
+  /* ALWAYS, not only in a room. The wardrobe is reached from the front page,
+     where `G.joined` is false — so this sent nothing at all in exactly the
+     place people actually dress their golfer, and the outfit lived in this
+     browser's localStorage and nowhere else. Come back on another device,
+     or after the store was cleared, and you were the default golfer again.
+     The server takes it without a room now; see player:look. */
+  Net.setLook(lookDraft);
 
   /* The monogram field must not be re-rendered out from under a player who
      is still typing in it — the caret would jump to the end of the value on
@@ -718,6 +728,15 @@ function autoClub() {
   if (clubManual || !G.T) return;
   const b = ballOf(G.myPid);
   const lie = G.T.surfaceAt(b.x, b.z);
+  /* On Pro and above the club is YOUR decision. The putter is still handed
+     to you on the green, because walking onto a green and being given a 4
+     iron is not a test of judgement, it is a missing feature. */
+  if (!AIDS().club && lie.id !== 'green') {
+    swing.clubKey = clubKey;
+    swing.setLie(lie.id);
+    HUD.setClub(CLUB_BY_KEY[clubKey], lie.id, carryMult(CLUB_BY_KEY[clubKey]), bagEnds());
+    return;
+  }
   /* Club for the shot the game is actually setting up, not for the straight
      line to the flag. On a dogleg those are different distances and picking
      by the flag hands you a driver for a 110 m lay-up. */
@@ -747,6 +766,37 @@ function stepClub(dir) {
 /* ===================================================================== */
 /*  AIM PREVIEW                                                           */
 /* ===================================================================== */
+/* The aids the current mode allows. Read through a function rather than
+   captured once, because the mode can change from the settings pane mid-
+   round and every draw site must see the new answer on the next frame. */
+const AIDS = () => aidsFor(G.profile?.difficulty || DEFAULT_DIFFICULTY);
+
+/* Push the mode into the two places that cannot ask for it themselves.
+   The swing meter is loaded by the physics tests as well as the browser, so
+   it takes its forgiveness by injection rather than importing a preference;
+   see setForgiveness in swing.js. */
+/* Named rather than inline, so the re-render after a pick passes the SAME
+   handler. The picker only wires its listener once, so a re-render with a
+   different callback would quietly keep the old one — which works, and
+   works for a reason nobody reading it would guess. */
+function pickDifficulty(id) {
+  Net.setDifficulty(id);
+  // paint it immediately; the server's 'profile' reply confirms it
+  if (G.profile) G.profile.difficulty = id;
+  applyDifficulty();
+  HUD.renderDifficulty(id, pickDifficulty);
+  HUD.toast(`${id[0].toUpperCase() + id.slice(1)} — saved.`, 'good', 1600);
+}
+
+function applyDifficulty() {
+  const a = AIDS();
+  setForgiveness(a.forgive);
+  setMarkBand(a.power !== 'blind');
+  if (!a.trace) hideShotCard();
+  previewKey = '';                       // the line may be drawn differently now
+  refreshAimPreview(true);
+}
+
 let previewKey = '';
 function refreshAimPreview(force) {
   if (!canSwing() || !G.T) { scene.setAimLine(null); scene.setSlopeRead(null); scene.setGreenRead(false); previewKey = ''; return; }
@@ -795,7 +845,43 @@ function refreshAimPreview(force) {
   }
   const last = path[path.length - 1];
   if (last) pts.push(new THREE.Vector3(last.x, G.T.heightAt(last.x, last.z) + 0.07, last.z));
-  scene.setAimLine(pts, isPutt);       // putts get the wide, bright read band
+  /* HOW MUCH OF THAT LINE YOU ARE ALLOWED TO SEE. The simulation runs
+     either way — it is what the caddie mark and the club suggestion are
+     built from — but a mode decides how much of it is drawn.
+
+       full     the whole flight and the roll-out
+       partial  the flight to where it lands, and no run-out
+       aim      a short pointer, so you know which way you are facing
+       none     nothing
+
+     Gated here rather than at the call sites so a mode can never half-apply:
+     one place decides, and the read band, the colour and the slope arrows
+     below all key off the same answer. */
+  const aid = AIDS();
+  const seeLine = isPutt ? aid.putt !== 'none' : aid.line !== 'none';
+  let shown = pts;
+  if (!seeLine) shown = null;
+  else if (aid.line === 'partial' && !isPutt) {
+    // cut it at the landing point: you get the carry, not the run-out
+    const landAt = sim.events.findIndex(e => e.type === 'land');
+    if (landAt >= 0) {
+      const lp = sim.events[landAt];
+      let cut = pts.length;
+      for (let i = 0; i < pts.length; i++) {
+        if (Math.hypot(pts[i].x - lp.x, pts[i].z - lp.z) < 1.5) { cut = i + 1; break; }
+      }
+      shown = pts.slice(0, Math.max(2, cut));
+    }
+  } else if (aid.line === 'aim' && !isPutt) {
+    // a pointer, not a prediction: 25 m down the line you are actually on
+    const f = { x: Math.sin(swing.aim), z: Math.cos(swing.aim) };
+    shown = [
+      new THREE.Vector3(b.x, G.T.heightAt(b.x, b.z) + 0.07, b.z),
+      new THREE.Vector3(b.x + f.x * 25, G.T.heightAt(b.x + f.x * 25, b.z + f.z * 25) + 0.07,
+                        b.z + f.z * 25)
+    ];
+  }
+  scene.setAimLine(shown, isPutt);     // putts get the wide, bright read band
   G.lastPreviewEnd = last ? { x: last.x, z: last.z } : null;
 
   // Putt difficulty, read off the simulation itself: how far the borrow
@@ -811,9 +897,19 @@ function refreshAimPreview(force) {
     }
     const hard = bend > 0.9 || toPinD > 12;
     const risky = bend > 0.3 || toPinD > 6;
-    scene.setAimLineColor(hard ? 0xff7a5c : risky ? 0xffd76b : 0x8fe07a);
-    scene.setSlopeRead(b.x, b.z, G.T);
-    scene.setGreenRead((myCrew?.roller || 0) >= 1 || (myGear?.putter || 0) >= 1);
+    /* The borrow drawn on the green is the single biggest aid in the game —
+       it turns reading a putt from a skill into a lookup. `full` gets it,
+       `arrow` gets the direction without the amount, and above that you
+       read it yourself. */
+    scene.setAimLineColor(aid.putt === 'full' ? (hard ? 0xff7a5c : risky ? 0xffd76b : 0x8fe07a)
+                                             : 0xffffff);
+    if (aid.putt === 'full') {
+      scene.setSlopeRead(b.x, b.z, G.T);
+      scene.setGreenRead((myCrew?.roller || 0) >= 1 || (myGear?.putter || 0) >= 1);
+    } else {
+      scene.setSlopeRead(null);
+      scene.setGreenRead(false);
+    }
   } else {
     scene.setAimLineColor(0xffffff);
     scene.setSlopeRead(null);
@@ -1161,7 +1257,9 @@ function beginShot(msg) {
   G.anim = {
     seq: msg.seq, pid: msg.pid, sim, srv: msg.result,
     done: false, doneAt: 0, hold: 0, eventIdx: 0,
-    launchDir: msg.shot.aim
+    launchDir: msg.shot.aim,
+    // what the swing actually did, for the post-shot card
+    faceDeg: msg.shot.faceDeg || 0, attackDeg: msg.shot.attackDeg || 0
   };
   G.balls[msg.pid] = { x: sim.p.x, y: sim.p.y, z: sim.p.z };
   // the golfer swings on every screen, timed so the ball leaves at the hit
@@ -1222,6 +1320,18 @@ function stepAnim(dt, now) {
       a.doneAt = now;
       a.hold = res.reason === 'holed' ? 1900 : (res.reason === 'water' || res.reason === 'ob') ? 1500 : 900;
       announce(a);
+      /* The analysis, for YOUR shots only. A card about somebody else's
+         swing is a card about a swing you cannot change, and it would cover
+         the course four times a hole in a four-ball. */
+      if (a.pid === G.myPid && AIDS().trace) {
+        showShot(a.sim, {
+          clubKey: a.sim.club?.key, aim: a.launchDir,
+          faceDeg: a.faceDeg, attackDeg: a.attackDeg,
+          dist: HUD.dist, unit: HUD.unit(),
+          surface: G.T?.surfaceAt(a.sim.p.x, a.sim.p.z)?.name || null,
+          holed: res.reason === 'holed'
+        });
+      }
     }
     return;
   }
@@ -2394,6 +2504,18 @@ Net.on('emote', d => {
 Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
+  applyDifficulty();
+  /* THE SERVER'S COPY WINS on the first profile of a session. localStorage is
+     a cache in front of it, not the record — so a browser that has never
+     seen this player (new device, cleared store, private window) gets their
+     golfer back instead of the default one. Only on the FIRST profile: after
+     that the local draft is what the player is actively editing, and letting
+     a later broadcast overwrite it would undo their changes mid-click. */
+  if (!before && prof.look && !localStorage.getItem(LOOK_KEY)) {
+    lookDraft = normaliseLook(prof.look, 0, undefined, prof.level ?? 1);
+    saveLook(lookDraft);
+    refreshMenuAvatar();
+  }
   renderClubhouse();
   // the front page carries the level and the rating, and the wardrobe's
   // earned rows depend on the level, so both are redrawn when it lands
@@ -2462,7 +2584,26 @@ function route() {
   if ((r.state === 'results' || r.state === 'holeover') && !G.course) {
     G.screen = 'load'; HUD.show('load'); return;
   }
-  if (r.state === 'results') { G.screen = 'results'; HUD.show('results'); HUD.renderResults(r, G.myPid, G.course); return; }
+  if (r.state === 'results') {
+    G.screen = 'results';
+    HUD.show('results');
+    HUD.renderResults(r, G.myPid, G.course);
+    /* How it compared. Computed from the same card the table above is drawn
+       from, so the two can never disagree about what you shot. */
+    const meRow = r.players.find(p => p.pid === G.myPid && !p.spectator);
+    if (meRow) {
+      const tot = meRow.scores.reduce((a, v) => a + (v ?? 0), 0);
+      const others = r.players
+        .filter(p => !p.spectator && p.pid !== G.myPid)
+        .map(p => ({ name: p.name, total: p.scores.reduce((a, v) => a + (v ?? 0), 0) }));
+      Net.h2h(rows => {
+        const by = new Map(rows.map(x => [x.name, x]));
+        HUD.renderResultCompare(tot, G.course.par, G.profile, G.course.id,
+          others.map(o => ({ ...o, record: by.get(o.name) || null })));
+      });
+    }
+    return;
+  }
   if (r.state === 'holeover') {
     // Do not drop the black summary over a celebration that is still running.
     // The server holds the hole open for 20 s on its own timer, so a couple of
@@ -2496,7 +2637,7 @@ function drawLookPicker() {
     saveLook(lookDraft);
     refreshMenuAvatar();             // the golfer on the tee changes NOW
     showGolferCloseUp();             // ...and you are close enough to see it
-    if (G.joined) Net.setLook(lookDraft);
+    Net.setLook(lookDraft);   // the wardrobe is outside any room — see line ~611
   }, G.profile?.level ?? 1);
 }
 drawLookSafe = drawLookPicker;
@@ -2510,6 +2651,10 @@ const loadLook = () => {
 
 /** The clubhouse: career, pro shop and the bag, all outside any room. */
 function renderClubhouse() {
+  /* The mode picker. Rendered here with everything else on the screen, so
+     it cannot fall out of step with the profile the server just sent. */
+  HUD.renderDifficulty(G.profile?.difficulty || DEFAULT_DIFFICULTY, pickDifficulty);
+
   const prof = G.profile;
   HUD.renderCareer(prof);
   /* The record board. Asked for rather than pushed: it is global data that
@@ -2783,14 +2928,25 @@ document.getElementById('btnCreate').addEventListener('click', () => {
   }, pickedFormat);
 });
 /* Joining by code, from the box or from the online panel. */
-function joinByCode(code) {
+/**
+ * @param toWatch  the player pressed Watch rather than Join. The request is
+ *   identical — the server decides whether a joiner is a spectator, and it
+ *   already does that correctly — so this only changes what we SAY. Sending
+ *   a "spectate" flag would be a second source of truth about a decision
+ *   the server has to make anyway.
+ */
+function joinByCode(code, toWatch = false) {
   HUD.homeError('');
   Net.join(code, nameValue(), res => {
     if (!res.ok) return HUD.homeError(res.error);
     G.joined = true; G.myPid = res.pid; G.room = res.state;
     stampRoomUrl(res.code);
     route();
-    if (res.spectator) HUD.toast("Round in progress — you're in at the next hole.", 'warn', 3400);
+    if (res.spectator) {
+      HUD.toast(toWatch
+        ? "Watching — you're in at the next hole."
+        : "Round in progress — you're in at the next hole.", toWatch ? 'good' : 'warn', 3400);
+    }
   });
 }
 
@@ -3057,7 +3213,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     drawLookPicker();
     refreshMenuAvatar();
     showGolferCloseUp(6);
-    if (G.joined) Net.setLook(lookDraft);
+    Net.setLook(lookDraft);   // the wardrobe is outside any room — see line ~611
   });
 
   // The title screen is the course itself — unless this visit is an invite
@@ -3099,6 +3255,67 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     const board = document.getElementById('board');
     board?.classList.toggle('open');
   });
+
+  /* ---- the HUD gets out of the way -------------------------------------
+     A golf game is a game about looking at a landscape, and the landscape
+     was permanently framed by six panels. This fades the chrome — the
+     panels, not the controls — when nothing has happened for a few seconds,
+     and brings it straight back on any input.
+
+     WHAT NEVER FADES: the swing meter and the club, because they are what
+     you are using; and nothing fades at all while a shot is in the air or
+     it would vanish at the exact moment somebody is watching it. */
+  let idleTimer = 0;
+  const IDLE_MS = 4200;
+  const wake = () => {
+    document.body.classList.remove('hudfade');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      if (G.screen === 'game' && !G.anim && !radialOpen() && !HUD.emotesOpen()) {
+        document.body.classList.add('hudfade');
+      }
+    }, IDLE_MS);
+  };
+  for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel']) {
+    window.addEventListener(ev, wake, { passive: true });
+  }
+  wake();
+
+  /* ---- the radial ------------------------------------------------------
+     Everything that is not hitting the ball, on one gesture. Bound as a
+     HOLD, so More still opens the scorecard on a tap — the wheel is added
+     to that button rather than taking it over.
+
+     This is what lets the phone layout stop drawing a labelled button per
+     action: the actions are all still there, they are just not all on
+     screen at once. */
+  const RADIAL_ACTIONS = () => {
+    const seated = mode() === 'drive' || mode() === 'ride';
+    return [
+      { id: 'emote', icon: '😄', name: 'Emote' },
+      { id: 'chat',  icon: '💬', name: 'Say something' },
+      { id: 'toBall', icon: '🏃', name: seated ? 'Get out first' : 'Jog to my ball',
+        locked: seated, sub: 'not from the cart' },
+      { id: 'cart',  icon: '🛺', name: seated ? 'Get out' : 'Get in the cart' },
+      { id: 'hail',  icon: '📣', name: 'Hail a cart' },
+      { id: 'map',   icon: '🗺️', name: 'Hole map' },
+      { id: 'view',  icon: '🎥', name: 'Change view' },
+      { id: 'card',  icon: '📋', name: 'Scorecard' }
+    ];
+  };
+  bindRadial(document.getElementById('tbMore'), RADIAL_ACTIONS, (id, item) => {
+    if (!id) { if (item) HUD.toast(`${item.name} — ${item.sub || 'not now'}`, 'warn', 1500); return; }
+    if (id === 'emote') {
+      HUD.renderEmotes(G.profile?.level ?? 1, e => { Net.emote(e); HUD.showEmotes(false); });
+      HUD.showEmotes(true);
+    } else if (id === 'chat') document.body.classList.add('saying');
+    else if (id === 'toBall') jogToMyBall();
+    else if (id === 'cart') toggleCart();
+    else if (id === 'hail') hailRide();
+    else if (id === 'map') toggleMap();
+    else if (id === 'view') toggleView();
+    else if (id === 'card') document.getElementById('board')?.classList.toggle('open');
+  });
   /* The scorecard header is a tap target in its own right, so the card can
      be closed by the thing that opened it. */
   document.querySelector('#board .board-head')?.addEventListener('click', e => {
@@ -3128,7 +3345,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   HUD.el.wdRandom.addEventListener('click', () => {
     lookDraft = normaliseLook(randomLook(), 0, undefined, G.profile?.level ?? 1);
     saveLook(lookDraft); refreshMenuAvatar();
-    if (G.joined) Net.setLook(lookDraft);
+    Net.setLook(lookDraft);   // the wardrobe is outside any room — see line ~611
     drawWardrobe();
   });
 
@@ -3215,7 +3432,11 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     if (res?.state) myFriendCode = res.state.code || myFriendCode;
     HUD.renderFriends(res?.state, res?.people);
   };
-  const loadFriends = () => Net.friends('state', {}, drawFriends);
+  const loadFriends = () => {
+    Net.friends('state', {}, drawFriends);
+    // the feed rides on the same panel opening, so it costs no extra poll
+    Net.feed(items => HUD.renderFeed(items));
+  };
   loadFriendsSafe = loadFriends;
   /* Pushed, not polled. Somebody accepting your request while you are
      looking at the panel should appear in it — and a poll fast enough to

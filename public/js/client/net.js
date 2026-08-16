@@ -254,6 +254,15 @@ Net.boards = (courseId, cb) => {
   ask('world:boards', { course: courseId }, res => cb(res.error ? empty : res));
 };
 
+/** What your friends have been up to. */
+Net.feed = cb => ask('feed:list', {}, res => cb?.(res?.items || []));
+
+/** Your record against everybody you have finished a round with. */
+Net.h2h = cb => ask('h2h:list', {}, res => cb?.(res?.rows || []));
+
+/** Change how much the game reads for you. Server confirms via 'profile'. */
+Net.setDifficulty = id => Net.socket?.emit('player:prefs', { difficulty: id });
+
 /** Who is online right now.  Polled from the menu; never while playing. */
 Net.presence = cb => {
   if (!Net.socket) return cb([]);

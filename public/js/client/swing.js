@@ -111,7 +111,22 @@ export const PURE_BAND = {
      bunker shot feels like its own skill. */
   rough: 0.13, deep: 0.11, waste: 0.11, sand: 0.13, path: 0.22
 };
-export const pureBand = id => PURE_BAND[id] ?? PURE_BASE;
+/* The difficulty multiplier on that band. Set from outside rather than
+   imported, because swing.js is loaded by the server's physics tests as
+   well as by the browser, and the mode is a client-side preference — a
+   module that reached out for it would drag the whole profile in with it.
+
+   Defaults to 1, so nothing that does not set it changes behaviour. */
+let forgiveness = 1;
+export const setForgiveness = f =>
+  { forgiveness = Number.isFinite(f) && f > 0 ? f : 1; };
+
+/* Clamped, and the ceiling matters: at 1.3 the fairway band is a third of
+   the bar, which is forgiving. Left unbounded, a mode could hand out a
+   band you cannot miss, and the swing meter would stop being a thing you
+   do at all. */
+export const pureBand = id =>
+  Math.min(0.42, (PURE_BAND[id] ?? PURE_BASE) * forgiveness);
 
 export class SwingController {
   constructor() {
@@ -296,10 +311,17 @@ export class SwingController {
       calmTempo: barTempo(this.lie, 0.25),
       fastTempo: barTempo(this.lie, 1),
       lie: this.lie,
-      band: pureBand(this.lie)
+      band: pureBand(this.lie),
+      /* Whether the meter DRAWS that band. It still exists and still
+         forgives — the mode hides the target, it does not remove it, so a
+         blind swing is a test of feel rather than a coin flip. */
+      showBand: markBand
     };
   }
 }
+
+let markBand = true;
+export const setMarkBand = on => { markBand = on !== false; };
 
 function wrap(a) {
   while (a > Math.PI) a -= Math.PI * 2;

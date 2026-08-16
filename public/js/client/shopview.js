@@ -321,6 +321,37 @@ function buildBall(hex = '#f6f9f4') {
   return g;
 }
 
+/* -------------------------------------------------------------- caddie ---
+   A caddie is a PERSON, and the shop was previewing one as a gold crate.
+   You spend real coins levelling these up and the only thing on the
+   turntable was a box, which tells you nothing and looks like a placeholder
+   that shipped — because it was one.
+
+   Deliberately simple, and deliberately not the full Avatar rig: this is a
+   260-pixel canvas and importing the golfer here would drag a skeleton, an
+   IK solver and a wardrobe into a preview of a bag carrier. */
+function buildCaddie(hex = '#e8c15a') {
+  const g = new THREE.Group();
+  const skin = M('#c9a07a'), kit = M(hex, 0.3), dark = M('#26302a');
+  g.add(blob(skin, 0.30, 0.34, 0.30, 0, 0.62, 0));            // head
+  g.add(box(M('#1c2420'), 0.34, 0.10, 0.34, 0, 0.78, 0));     // cap
+  g.add(box(M('#1c2420'), 0.34, 0.04, 0.20, 0, 0.74, -0.20)); // and its peak
+  g.add(box(kit, 0.44, 0.46, 0.26, 0, 0.20, 0));              // torso
+  g.add(box(skin, 0.11, 0.40, 0.11, -0.27, 0.18, 0));         // arms
+  g.add(box(skin, 0.11, 0.40, 0.11, 0.27, 0.18, 0));
+  g.add(box(dark, 0.16, 0.42, 0.16, -0.11, -0.24, 0));        // legs
+  g.add(box(dark, 0.16, 0.42, 0.16, 0.11, -0.24, 0));
+
+  /* The bag on their back, which is the whole job. Three club heads poking
+     out of the top, because a bag with nothing in it is a holdall. */
+  g.add(rod(M('#1f2a24'), 0.15, 0.17, 0.60, 0, 0.26, 0.22));
+  for (let i = -1; i <= 1; i++) {
+    g.add(rod(M('#c9ccd2', 0.6), 0.014, 0.014, 0.26, i * 0.07, 0.66, 0.22));
+    g.add(box(M('#8a8f96', 0.5), 0.07, 0.05, 0.04, i * 0.07, 0.80, 0.22));
+  }
+  return g;
+}
+
 /** A generic crate, for anything with no model of its own. */
 function buildGeneric(hex = '#6fce8a') {
   const g = new THREE.Group();
@@ -356,6 +387,7 @@ export function showItem(canvas, what) {
   if (what?.kind === 'club') obj = buildClub(what.key || 'DR', what.tier || 0, what.skin || 'stock');
   else if (what?.kind === 'decal') obj = buildDecal(what.key);
   else if (what?.kind === 'ball') obj = buildBall(what.hex);
+  else if (what?.kind === 'caddie') obj = buildCaddie(what.hex);
   else obj = buildGeneric(what?.hex);
   r.stage.add(obj);
 
