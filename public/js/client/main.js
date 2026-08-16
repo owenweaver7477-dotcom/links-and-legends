@@ -548,8 +548,27 @@ function wdCourse(i) {
   const bio = biomeFor(id);
   HUD.el.wdCourseName.textContent = bio.name;
   HUD.el.wdCourseWhere.textContent = bio.region || '';
+  refreshCourseLegend();
   HUD.el.wdDots.innerHTML = COURSE_ORDER
     .map((_, k) => `<i class="wd-dot${k === wd.idx ? ' on' : ''}"></i>`).join('');
+}
+
+/**
+ * Name the course on the front page's "Choose a course" legend.
+ *
+ * It was hard-coded to "Claude National" in the markup and nothing ever
+ * wrote to it — the element was even registered in the HUD's lookup table,
+ * which made it look wired. So it read Claude National whatever you picked,
+ * and it was wrong before you picked anything at all: the roster is ordered
+ * by difficulty now, so COURSE_ORDER[0] is Ashcombe Park.
+ *
+ * Called from every place `pickedCourse` moves. Uses `courseMeta` rather
+ * than the biome, so an imported real course shows its own name rather than
+ * the name of the biome it borrows its look from.
+ */
+function refreshCourseLegend() {
+  const meta = courseMeta(pickedCourse);
+  if (HUD.el.lpCourseName && meta) HUD.el.lpCourseName.textContent = meta.name;
 }
 
 function openWardrobe() {
@@ -3165,6 +3184,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
           pickedCourse = c.id;
           try { localStorage.setItem('lg_course', c.id); } catch { /* ignore */ }
           drawCourses();
+          refreshCourseLegend();
 
   /* ---- data credits ----------------------------------------------------
      An imported course is built from OpenStreetMap data, which is ODbL and
@@ -3189,6 +3209,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     }
   };
   drawCourses();
+  refreshCourseLegend();   // the legend must be right on the first paint too
 
   /* The format picker. Hosting only — a scramble needs four to eight people
      and offering it on the solo button would be an invitation to a game that
