@@ -245,7 +245,19 @@ function claimLock() {
 export async function openStore(rowsInto) {
   claimLock();
   const url = process.env.DATABASE_URL;
-  if (url) {
+  if (url && !/^postgres(ql)?:\/\//.test(url)) {
+    /* A connection string, not one piece of one. The mistake this catches is
+       pasting just the PASSWORD into DATABASE_URL — which is an easy thing to
+       do when the dashboard shows you the password on its own screen, and
+       which otherwise surfaces as a driver error about an invalid port
+       thirty lines into a log nobody is reading. */
+    console.error('  store: DATABASE_URL is not a connection string.');
+    console.error(`         It is set to "${url.slice(0, 12)}…", which looks like`);
+    console.error('         a password or a fragment rather than a whole URL.');
+    console.error('         It must start postgresql:// and look like this:');
+    console.error('           postgresql://USER:PASSWORD@HOST:5432/postgres');
+    console.error('         Supabase: Connect → Session pooler → copy the URI.');
+  } else if (url) {
     try {
       impl = pgStore(url);
       const rows = await impl.load();
@@ -324,7 +336,10 @@ let blobPool = null;
 
 async function blobPg() {
   const url = process.env.DATABASE_URL;
-  if (!url) return null;
+  /* Same guard as openStore. Without it a malformed value still reached the
+     driver here and produced `getaddrinfo ENOTFOUND base` — an error naming
+     a host nobody typed, from a code path the reader was not thinking about. */
+  if (!url || !/^postgres(ql)?:\/\//.test(url)) return null;
   if (blobPool) return blobPool;
   const { default: pkg } = await import('pg');
   blobPool = new pkg.Pool({
