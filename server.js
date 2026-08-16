@@ -1159,8 +1159,30 @@ io.on('connection', socket => {
   /** Your own kit: ball colour and the fourteen clubs you carry. */
   socket.on('player:prefs', (d) => {
     const color = d?.color, bag = d?.bag;
-    const ref = sockets.get(socket.id); if (!ref) return;
-    const room = rooms.get(ref.code); if (!room) return;
+    const ref = sockets.get(socket.id);
+    /* IDENTITY FIRST, ROOM SECOND — the same fault `player:look` had, in the
+       handler right next to it. This bailed out when the sender was not in a
+       room, and the difficulty picker lives in the CLUBHOUSE, which is
+       outside every room. So choosing Tournament sent a message the server
+       dropped, and the only reason it appeared to work is that the client
+       applies the aids locally: the picker highlighted, the aim line went
+       away, and the server still had you on Standard. Which meant the coin
+       multiplier and the records gate — the two things the mode is supposed
+       to change about the game's arithmetic — never moved, and the whole
+       choice reset the next time you opened the page. */
+    const pid = ref?.pid || socket.data.pid;
+    if (!pid) return;
+
+    if (typeof d?.difficulty === 'string') {
+      const set = setDifficulty(pid, d.difficulty);
+      socket.emit('profile', publicProfile(pid));
+      // the room player carries it too, when there is one
+      const inRoom = ref && rooms.get(ref.code)?.players.find(x => x.pid === pid);
+      if (inRoom) inRoom.difficulty = set;
+    }
+
+    const room = ref ? rooms.get(ref.code) : null;
+    if (!room) return;                       // colour and bag need a room
     const p = room.players.find(x => x.pid === ref.pid); if (!p) return;
 
     const before = p.color + '|' + JSON.stringify(p.bag);
@@ -1178,13 +1200,7 @@ io.on('connection', socket => {
       }
     }
     if (Array.isArray(bag)) { p.bag = normaliseBag(bag); setBag(ref.pid, p.bag); }
-    /* The mode is a profile setting, not a room one — see difficulty.js for
-       why. Stored and echoed back so the client's own picker is confirmed by
-       the server rather than trusted, the same as every other choice. */
-    if (typeof d?.difficulty === 'string') {
-      p.difficulty = setDifficulty(ref.pid, d.difficulty);
-      socket.emit('profile', publicProfile(ref.pid));
-    }
+
     // only broadcast a real change, and coalesce bursts (see castSoon)
     if (before === p.color + '|' + JSON.stringify(p.bag)) return;
     castSoon(room, p);

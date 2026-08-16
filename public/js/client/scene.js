@@ -2090,6 +2090,101 @@ export class GolfScene {
       }
     }
 
+    /* ── THE TREELINE ─────────────────────────────────────────────────
+       The gap this fills is the one you actually see. The hole has its own
+       trees, the horizon has its landforms, and between them was bare
+       ground running to the fog — several hundred metres of nothing, on
+       every hole of every course. Landforms alone do not fix it: a distant
+       hill reads as far away precisely because there is stuff in front of
+       it, and with nothing in front the whole scene flattens.
+
+       ONE INSTANCED MESH FOR THE LOT, and the geometry is a six-sided cone
+       with a stump. At three hundred metres a tree is a dark shape with a
+       silhouette; modelling it properly would cost a hundred times as much
+       to draw exactly the same handful of pixels. The hole's own trees stay
+       fully modelled — this only ever starts beyond the out-of-bounds line,
+       so nothing you can hit is a cone.
+
+       Density comes off the biome, so Cape Wrathe's headland stays bare and
+       Claude National's parkland closes in. Deterministic from the hole
+       seed like everything else out here, so every player in a room sees
+       the same wood. */
+    const density = bio.treeDensity ?? 0.4;
+    /* `> 0.01`, not `> 0.02`: Iceland's 0.02 landed exactly on the old
+       boundary and got nothing, which is the bare horizon this exists to
+       fix arriving by rounding. A biome with any trees at all gets some. */
+    if (density > 0.01 && (this.q?.scenery ?? 1) >= 0.4) {
+      const N = Math.round(340 * Math.min(1, density * 1.35));
+      const trunkGeo = new THREE.CylinderGeometry(0.9, 1.4, 6, 5);
+      trunkGeo.translate(0, 3, 0);
+      const canopyGeo = new THREE.ConeGeometry(1, 1, 6, 1);
+      canopyGeo.translate(0, 0.5, 0);
+
+      const P = bio.palette;
+      const canopyMat = new THREE.MeshLambertMaterial({ flatShading: true });
+      canopyMat.color.setRGB(1, 1, 1);          // per-instance colour multiplies
+      const trunkMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(P.trunk) });
+
+      const canopy = new THREE.InstancedMesh(canopyGeo, canopyMat, N);
+      const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, N);
+      canopy.frustumCulled = false;             // it rings the player
+      trunks.frustumCulled = false;
+
+      const m4 = new THREE.Matrix4();
+      const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+      const q0 = new THREE.Quaternion();
+      const col = new THREE.Color();
+      /* Two greens off the biome's own palette, so a wood on the volcanic
+         course is not the same colour as one on the meadow. */
+      const shades = [P.rough, P.deep, P.fairway];
+
+      let n = 0;
+      for (let i = 0; i < N; i++) {
+        const a = rnd() * Math.PI * 2;
+        /* Starts outside the out-of-bounds box and runs to just short of
+           the landforms. Squared distribution so more of them land near the
+           front, where the band actually has to read as a wood rather than
+           as a sprinkling. */
+        const t = Math.sqrt(rnd());
+        const dist = rim * (1.12 + t * (spec.near - 1.05));
+        const x = cx + Math.sin(a) * dist, z = cz + Math.cos(a) * dist;
+
+        // never inside the playable box, whatever the maths above says
+        if (x > hole.ob.minX - 20 && x < hole.ob.maxX + 20 &&
+            z > hole.ob.minZ - 20 && z < hole.ob.maxZ + 20) continue;
+
+        const h = 9 + rnd() * 13;
+        const y = baseY + (T?.heightAt ? 0 : 0);
+        pos.set(x, y, z);
+        scl.set(h * 0.44, h * 0.72, h * 0.44);
+        m4.compose(pos.clone().setY(y + h * 0.42), q0, scl);
+        canopy.setMatrixAt(n, m4);
+        const c = shades[(rnd() * shades.length) | 0];
+        col.set(c);
+        /* Pushed toward the fog with distance so the far edge of the wood
+           dissolves instead of ending in a hard line of dark green. */
+        const fade = Math.min(1, (dist / rim - 1.1) / 2.2);
+        col.lerp(new THREE.Color(P.fog || '#cadcea'), fade * 0.55);
+        if (SEASON_TINT) {
+          col.r = Math.min(1, col.r * SEASON_TINT[0]);
+          col.g = Math.min(1, col.g * SEASON_TINT[1]);
+          col.b = Math.min(1, col.b * SEASON_TINT[2]);
+        }
+        canopy.setColorAt(n, col);
+
+        scl.set(h * 0.09, h * 0.10, h * 0.09);
+        m4.compose(pos.clone().setY(y), q0, scl);
+        trunks.setMatrixAt(n, m4);
+        n++;
+      }
+      canopy.count = n;
+      trunks.count = n;
+      canopy.instanceMatrix.needsUpdate = true;
+      trunks.instanceMatrix.needsUpdate = true;
+      if (canopy.instanceColor) canopy.instanceColor.needsUpdate = true;
+      if (n) { g.add(trunks); g.add(canopy); }
+    }
+
     /* A sea, where there should be one. A flat plane far out and slightly
        below the land, so it reads as water meeting the horizon rather than
        as a blue field — the fog does the rest of the work. */
