@@ -982,7 +982,8 @@ input[type=text] { font-size: 16px; padding: 12px 14px; }
 .collapse:hover { background: rgba(255,255,255,.16); }
 .panel.collapsed .collapse { transform: rotate(-90deg); }
 .panel.collapsed #boardRows,
-.panel.collapsed #rosterList { display: none; }
+.panel.collapsed #rosterList,
+.panel.collapsed #minic { display: none; }
 .panel.collapsed { padding-bottom: 8px; }
 
 /* 3: the speedometer was eating the corner of the screen */
@@ -3021,53 +3022,46 @@ body.playing .walkbar {
    being deleted — a new player still sees them. */
 body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 
-/* ═════════════════════════════ EVERYTHING ALONG THE BOTTOM ═══════════
-   The panels were pinned to the four corners of the screen, which is where
-   HUDs go by habit rather than by reason. On a golf hole it is the wrong
-   habit: the thing you are looking at is a long way off and slightly above
-   the horizon, so the top of the screen is where the GOLF is, and the top
-   corners are the worst place to park a map.
+/* ═══════════════════════════ THE REFERENCE PANELS, TOP ═══════════════
+   Tried these along the bottom and it was worse: they collided with the
+   coin counter and the Leave button, the map grew into a quarter of the
+   screen, and the two right-hand panels sat in the corner the swing
+   controls need. The corners were right after all — the problem was never
+   WHERE they were, it was that all three were open all the time.
 
-   The bottom is dead space — you are standing on it. So the reference
-   panels move down there: the hole map, the scorecard, and who is on the
-   course. The middle and the top are left for the shot.
-
-   Applied from 641px up, which is laptops and tablets. Phones already have
-   their own answer from the mobile pass — the scorecard is a pill, the map
-   is hidden and the roster is gone — and that answer is better on a 375px
-   screen than this one would be. */
+   So they go back up, and every one of them folds. The map tucks under the
+   hole card in the top left, where it reads as part of the same thought;
+   the roster and the scorecard stack down the right. Folded, each is a
+   title bar about the height of a line of text, and the state is
+   remembered, so somebody who wants a clean screen gets one permanently. */
 @media (min-width: 641px) {
-  body.playing .minimap,
-  body.playing .board,
-  body.playing .roster {
-    top: auto;
-    bottom: 92px;
+  /* under the hole card, sharing its left edge */
+  body.playing .minimap {
+    top: 104px; left: 14px; bottom: auto; right: auto;
+    padding: 7px 9px 8px;
   }
+  body.playing .minimap canvas { width: 124px; margin-top: 5px; }
+  body.playing .minimap .board-head { margin-bottom: 0; }
+  body.playing .minimap.collapsed { padding-bottom: 7px; }
 
-  /* the hole map, bottom left */
-  body.playing .minimap { left: 14px; }
-  body.playing .minimap canvas { width: 116px; }
-
-  /* who is on the course, to the left of the scorecard. The class is
-     `.roster`; the ELEMENT is `#rosterPanel`, and targeting the id's spelling
-     as a class matched nothing at all — the panel simply stayed where it
-     was, which looked like the rule not applying rather than like a typo. */
-  body.playing .roster { right: 218px; left: auto; min-width: 0; }
-
-  /* the scorecard, bottom right */
-  body.playing .board { right: 14px; min-width: 190px; }
-
-  /* Nothing along the bottom may sit under the swing controls, and the
-     swing controls are the one thing that must never be covered. 92px
-     clears them; the walk line lives below that at 6px. */
-  body.playing .playbar { z-index: 8; }
+  /* the two lists down the right, roster above the card it summarises */
+  body.playing .roster { top: 14px; right: 14px; bottom: auto; left: auto; }
+  body.playing .board  { right: 14px; bottom: auto; left: auto; }
 }
 
-/* A laptop in a short window — 13-inch, browser chrome, dock — has less
-   vertical room than a tablet, and three panels plus the swing bar plus the
-   hole card will not all fit. The roster is the one to lose: it repeats
-   what the scorecard already says. */
-@media (min-width: 641px) and (max-height: 760px) {
-  body.playing .roster { display: none; }
-  body.playing .minimap canvas { width: 96px; }
+/* The scorecard sits under the roster, so its offset depends on whether the
+   roster is folded. Two fixed numbers rather than measuring: a title bar is
+   a known height, and a layout that reads the DOM to place itself is a
+   layout that fights the browser every frame. */
+@media (min-width: 641px) {
+  body.playing .board { top: 150px; }
+  body.playing:has(.roster.collapsed) .board { top: 76px; }
+  body.playing:has(.roster[hidden]) .board { top: 14px; }
+}
+
+/* A short window — a 13-inch laptop with browser chrome and a dock — cannot
+   take the hole card, the map and two stacked panels down one side. The map
+   folds itself away rather than overlapping, and the player can open it. */
+@media (min-width: 641px) and (max-height: 700px) {
+  body.playing .minimap canvas { width: 100px; }
 }

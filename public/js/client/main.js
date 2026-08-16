@@ -482,11 +482,64 @@ function openLegend(target) {
    picture of a golfer who is not you standing somewhere the game does not
    go; every outfit you approve here is approved on the ground you will
    actually wear it on. */
-const wd = { t: 0, idx: 0, auto: true, hold: 0 };
+const wd = { t: 0, idx: 0, auto: true, hold: 0,
+             /* Turned by hand. `spin` is the player's own offset on top of
+                the automatic turntable, `lift` raises or lowers the eye, and
+                `dragging` stops the turntable while they are holding it —
+                a figure that keeps rotating under your finger is one you
+                cannot line up. */
+             spin: 0, lift: 0, dragging: false, zoom: 1 };
+
+/**
+ * Drag the golfer round in the wardrobe.
+ *
+ * The turntable shows every side eventually, which is right for browsing and
+ * useless the moment somebody wants to look at ONE thing — a decal on a
+ * sleeve, how a hat sits. Waiting eleven seconds for the back of a shoe to
+ * come round again is exactly the friction the turntable was meant to
+ * remove, moved somewhere else.
+ *
+ * Horizontal drag turns, vertical drag raises the eye, wheel moves closer.
+ * Bound to the whole screen rather than a canvas because the golfer is drawn
+ * into the main scene behind the panels, so there is no element over them to
+ * hang it on — and the panels stop the events themselves, so a drag that
+ * starts on a shelf still scrolls the shelf.
+ */
+function bindWardrobeDrag() {
+  let last = null;
+  const onDown = e => {
+    if (G.screen !== 'wardrobe') return;
+    if (e.target.closest('.wd-right, .wd-cats, .wd-fits, button, input, select')) return;
+    last = { x: e.clientX, y: e.clientY };
+    wd.dragging = true;
+    wd.auto = false;                 // stop cycling courses while they work
+  };
+  const onMove = e => {
+    if (!last || G.screen !== 'wardrobe') return;
+    wd.spin -= (e.clientX - last.x) * 0.011;
+    wd.lift = Math.max(-0.5, Math.min(1.5, wd.lift + (e.clientY - last.y) * 0.006));
+    last = { x: e.clientX, y: e.clientY };
+    e.preventDefault();
+  };
+  const onUp = () => { last = null; wd.dragging = false; };
+
+  window.addEventListener('pointerdown', onDown);
+  window.addEventListener('pointermove', onMove, { passive: false });
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onUp);
+  window.addEventListener('wheel', e => {
+    if (G.screen !== 'wardrobe') return;
+    wd.zoom = Math.max(0.62, Math.min(1.7, wd.zoom + Math.sign(e.deltaY) * 0.08));
+  }, { passive: true });
+}
 const WD_DWELL = 3.0;              // seconds a course holds before the next
 
 function wardrobeFrame(dt) {
-  wd.t += dt;
+  /* The turntable clock does not run while the player is holding the
+     golfer. Advancing it regardless and merely ignoring it in the angle
+     would make letting go SNAP to wherever the clock had reached, which is
+     the opposite of picking up where you left off. */
+  if (!wd.dragging) wd.t += dt;
   if (wd.auto && G.screen === 'wardrobe') {
     wd.hold += dt;
     if (wd.hold >= WD_DWELL) { wd.hold = 0; wdCourse(wd.idx + 1); }
@@ -510,19 +563,22 @@ function wardrobeFrame(dt) {
      at zero opens on the back of their head — the one angle where none of
      what you just chose is visible. */
   const aim = Math.atan2(G.hole.pin.x - tee.x, G.hole.pin.z - tee.z);
-  const a = aim + wd.t * 0.22;
+  /* The turntable stops while they are holding it, and their own offset is
+     kept afterwards — let go and it carries on from where you left it
+     rather than snapping back to wherever the clock had got to. */
+  const a = aim + wd.t * 0.22 + wd.spin;
   /* Back off on a narrow screen. three.js's fov is VERTICAL, so a phone held
      upright does not automatically show more of a standing figure — it shows
      the same height in a narrower window, and the outfit shelf and the stats
      bar then eat into it from both ends. Widening the orbit is what puts the
      whole golfer between them. */
   const narrow = Math.min(1, Math.max(0, (1.1 - scene.camera.aspect) / 0.7));
-  const r = 3.4 + narrow * 1.9;
-  scene.camera.position.set(cx + Math.sin(a) * r, gy + 1.34, cz + Math.cos(a) * r);
+  const r = (3.4 + narrow * 1.9) * wd.zoom;
+  scene.camera.position.set(cx + Math.sin(a) * r, gy + 1.34 + wd.lift, cz + Math.cos(a) * r);
   /* Aimed BELOW the golfer's middle so they sit high in frame: the stats bar
      owns the bottom fifth of the screen, and a centred golfer has their
      shoes behind it — which are a slot you can put a decal on. */
-  scene.camera.lookAt(cx, gy + 0.80 + narrow * 0.1, cz);
+  scene.camera.lookAt(cx, gy + 0.80 + narrow * 0.1 + wd.lift * 0.55, cz);
   /* Re-place the ball every frame, exactly as menuFrame does. It is drawn
      oversized and grows with camera distance so it stays followable at 200
      metres — which means a ball last positioned while the camera was 168 m
@@ -2841,7 +2897,8 @@ window.addEventListener('touchstart', function once() {
    away next hole too, not every hole. */
 for (const [btnId, panelId, key] of [
   ['boardCollapse', 'board', 'lg_fold_board'],
-  ['rosterCollapse', 'rosterPanel', 'lg_fold_roster']
+  ['rosterCollapse', 'rosterPanel', 'lg_fold_roster'],
+  ['mapCollapse', 'miniPanel', 'lg_fold_map']
 ]) {
   const btn = document.getElementById(btnId);
   const panel = document.getElementById(panelId);
@@ -3208,6 +3265,8 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       row.appendChild(group);
     }
   };
+  bindWardrobeDrag();      // defined above and, until this line, never called
+
   drawCourses();
   refreshCourseLegend();   // the legend must be right on the first paint too
 

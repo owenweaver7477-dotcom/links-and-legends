@@ -68,7 +68,13 @@
   </div>
 
   <!-- the hole at a glance: always on, so you can see what to avoid -->
-  <div class="panel minimap" id="miniPanel"><canvas id="minic"></canvas></div>
+  <div class="panel minimap" id="miniPanel">
+    <div class="board-head">
+      <button class="collapse" id="mapCollapse" title="Collapse the map" aria-expanded="true">▾</button>
+      <h4>Hole map</h4>
+    </div>
+    <canvas id="minic"></canvas>
+  </div>
 
   <!-- distance + lie -->
   <div class="panel dist" id="distPanel">
