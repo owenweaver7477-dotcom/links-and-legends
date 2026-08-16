@@ -250,7 +250,12 @@ export const weatherText = w =>
   `${w.icon} ${w.conditionName} · ${clockText(w.hour)} · ${w.seasonName.toLowerCase()}`;
 
 /** What the weather is doing to your ball, for the pre-shot panel. */
-export function weatherEffects(w) {
+/**
+ * @param windMs  the wind the player is ACTUALLY getting, in m/s. Optional,
+ *   because this is called from a couple of places and a missing value must
+ *   not change what the older ones show.
+ */
+export function weatherEffects(w, windMs = null) {
   const out = [];
   const pct = v => Math.round((v - 1) * 1000) / 10;
   if (Math.abs(w.carry - 1) > 0.002) {
@@ -261,7 +266,18 @@ export function weatherEffects(w) {
     out.push({ label: 'Roll', value: `${pct(w.roll) > 0 ? '+' : ''}${pct(w.roll)}%`,
                good: w.roll > 1 });
   }
-  if (w.windMul > 1.2) out.push({ label: 'Wind', value: 'strong', good: false });
+  /* `windMul` is a MULTIPLIER on the round's wind, not the wind. Showing
+     the chip on the multiplier alone meant a Blowing day on a still course
+     announced "Wind strong" next to a rose reading 0 mph and "calm" — the
+     panel contradicting itself in the space of two centimetres, which is
+     exactly the sort of thing that makes a player stop believing any of it.
+
+     1.7 times nothing is nothing. So the chip needs the resulting wind to
+     be worth mentioning as well: about 5 m/s, which is where it starts
+     costing a club. */
+  if (w.windMul > 1.2 && (windMs == null || windMs >= 5)) {
+    out.push({ label: 'Wind', value: 'strong', good: false });
+  }
   if (w.vis < 0.5) out.push({ label: 'Visibility', value: 'poor', good: false });
   if (w.grip < 1) out.push({ label: 'Greens', value: 'slow', good: false });
   return out;

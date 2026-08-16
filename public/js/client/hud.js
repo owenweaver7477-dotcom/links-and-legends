@@ -172,6 +172,7 @@ let windDetail = 'exact';
 HUD.setWindDetail = mode => { windDetail = mode === 'rough' ? 'rough' : 'exact'; };
 
 HUD.setWind = (wind, viewHeading) => {
+  HUD._lastWindMs = wind.speed;
   const mph = wind.speed * 2.23694;
   /* On Pro and above you get the arrow and a word for it. The arrow stays,
      because a wind you cannot see the DIRECTION of is not a harder read, it
@@ -2165,7 +2166,11 @@ HUD.setWeather = w => {
   if (!el.wWeather) return;
   if (!w) { el.wWeather.hidden = true; return; }
   el.wWeather.hidden = false;
-  const fx = weatherEffects(w);
+  /* The wind the player is actually getting, so the chip cannot promise a
+     gale next to a rose reading calm — see weatherEffects. Remembered from
+     the last setWind, because the weather panel and the wind rose are drawn
+     from two different calls. */
+  const fx = weatherEffects(w, HUD._lastWindMs ?? null);
   el.wWeather.innerHTML =
     `<span class="wcond">${w.icon} ${w.conditionName}</span>` +
     `<span class="wclock">${clockText(w.hour)} · ${w.seasonName.toLowerCase()}</span>` +
