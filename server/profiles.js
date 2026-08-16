@@ -27,6 +27,8 @@ const profiles = new Map();
 /** Bring the store up. Async now — the database has to connect. */
 export async function loadProfiles() {
   await openStore(profiles);
+  const fixed = repairBests();
+  if (fixed) console.log(`  repaired ${fixed} impossible best-round score${fixed === 1 ? '' : 's'}`);
 }
 
 /* Every mutation funnels through here, which is what lets the store write
@@ -320,9 +322,19 @@ export function settleRound(pid, courseId, holeScores, earn = 1) {
   const full = holeScores.length >= 9;
   const firstClear = courseId && !(p.cleared || []).includes(courseId) && full;
   const rc = roundCoins(holeScores, firstClear);
+  /* THE BONUS, NOT THE TOTAL. `rc.total` includes `rc.holes`, which were
+     already paid into the balance hole by hole as they were played — so
+     scaling the total and then subtracting the unscaled holes applies the
+     multiplier to money the player has had for twenty minutes.
+
+     On a bogey nine that made Casual credit 689 instead of 1300: a 47% cut
+     advertised as 20%. Tournament went the other way, paying 176% instead
+     of 75%. Every mode's number on the picker was wrong, in both
+     directions, and the comment right here claimed it was doing this. */
   const rate = Number.isFinite(earn) && earn > 0 ? earn : 1;
+  const bonus = rc.total - rc.holes;
   if (rate !== 1) {
-    rc.total = Math.round(rc.total * rate);
+    rc.total = rc.holes + Math.round(bonus * rate);
     rc.earnRate = rate;
   }
   p.coins += rc.total - rc.holes;                  // holes already paid live
@@ -351,11 +363,59 @@ export function settleRound(pid, courseId, holeScores, earn = 1) {
   return rc;
 }
 
+/* A full round. Nine here rather than imported from the server's
+   HOLES_PER_COURSE because this module is loaded by tests that never stand a
+   room up, and a profile rule should not depend on the room code. */
+const HOLES_FOR_BEST = 9;
+
+/**
+ * Repair `best` values written by the partial-round bug.
+ *
+ * Until this was fixed, a round's score was compared against the par of the
+ * WHOLE course even when only a few holes had been played, so anybody who
+ * joined late or dropped out was recorded at something like −24. Because
+ * `best` only ever moves down, that number is permanent: it can never be
+ * beaten, and it sits on the career screen and the boards forever.
+ *
+ * The repair uses the only evidence available — the stored history, which
+ * records how many holes each round had. A `best` that no complete round in
+ * that history supports is discarded rather than adjusted, because there is
+ * no honest way to work out what it should have been. Cleared to null, it
+ * reads as "—" and re-establishes itself on the next full round.
+ *
+ * Deliberately conservative: a best that IS supported by a complete round is
+ * never touched, and a profile whose history has been rotated away keeps
+ * whatever it has rather than losing a legitimate record to a guess.
+ */
+export function repairBests(map = profiles) {
+  let fixed = 0;
+  for (const [, p] of map) {
+    if (p.best == null) continue;
+    const full = (p.history || [])
+      .map(e => (typeof e === 'number' ? null : e))
+      .filter(e => e && (e.h ?? 0) >= HOLES_FOR_BEST && Number.isFinite(e.rel));
+    if (!full.length) continue;                   // no evidence either way
+    const supported = Math.min(...full.map(e => e.rel));
+    /* Only when the stored best is BETTER than anything a complete round
+       ever produced — that is the signature of the bug, and a legitimate
+       best is always equal to or worse than the best complete round on
+       record. */
+    if (p.best < supported) { p.best = supported; fixed++; }
+  }
+  return fixed;
+}
+
 export function recordRound(pid, relToPar, holesPlayed, card = null) {
   if (!holesPlayed) return;
   const p = getProfile(pid);
   p.rounds++;
-  if (p.best === null || relToPar < p.best) p.best = relToPar;
+  /* A BEST ROUND HAS TO BE A ROUND. Three holes played at one under is not
+     a better round than nine at level, and letting a partial card set this
+     is how the number becomes unbeatable — `best` only ever moves down, so
+     one bad entry is permanent. */
+  if (holesPlayed >= HOLES_FOR_BEST && (p.best === null || relToPar < p.best)) {
+    p.best = relToPar;
+  }
   /* History used to be a bare number per round, which is all the rating
      needed. A handicap needs more: the differential is (score − rating) ×
      113 ÷ slope, so the entry has to remember WHICH course and what it was
@@ -673,6 +733,25 @@ export function setDifficulty(pid, id) {
   p.difficulty = normaliseDifficulty(id);
   saveSoon();
   return p.difficulty;
+}
+
+/**
+ * Stamp "seen now" and report how long they had been away.
+ *
+ * Lives here rather than in server.js because it WRITES to a profile, and a
+ * mutation outside this module does not go through saveSoon — the field
+ * would sit in memory and never reach the disk, so every restart would
+ * forget it and the greeting would misfire.
+ *
+ * Returns the gap in ms, or 0 for somebody who has never been seen.
+ */
+export function markSeen(pid) {
+  const p = getProfile(pid);
+  const last = p.lastSeen || 0;
+  const now = Date.now();
+  p.lastSeen = now;
+  saveSoon();
+  return last ? now - last : 0;
 }
 
 export const difficultyOf = pid =>

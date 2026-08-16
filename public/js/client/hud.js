@@ -2408,8 +2408,17 @@ HUD.renderResultCompare = (myTotal, par, prof, courseId, opponents) => {
   }
   const form = prof.byCourse?.[courseId];
   if (form && form.n > 0) {
+    /* `rel` is ALREADY relative to par, so the old `rel - par` subtracted it
+       twice and the "better than usual" highlight was decided by a number
+       roughly seventy strokes out — it was green on essentially every round
+       at par-72 courses.
+
+       `form.vs` is measured against the course RATING rather than par, so
+       this is still not quite like for like; on these courses the two sit
+       within a stroke of each other, and comparing the two honest baselines
+       beats comparing one of them to nonsense. */
     bits.push({ lbl: 'Here, usually', val: (form.vs > 0 ? '+' : '') + form.vs.toFixed(1),
-                note: `${form.n} round${form.n === 1 ? '' : 's'}`, good: rel - par < form.vs });
+                note: `${form.n} round${form.n === 1 ? '' : 's'}`, good: rel < form.vs });
   }
   if (prof.index != null) bits.push({ lbl: 'Handicap', val: prof.index.toFixed(1), note: '', good: null });
 

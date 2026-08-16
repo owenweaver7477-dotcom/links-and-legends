@@ -209,7 +209,7 @@ import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allo
 import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound, setDifficulty, difficultyOf,
-         setLook, setBallColor, setBag, kitOf } from './server/profiles.js';
+         setLook, setBallColor, setBag, kitOf, markSeen } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
 import { loadRecords, recordsFor, allRecords, submitRound,
@@ -716,6 +716,21 @@ function dropIfNeverPlayed(room, p) {
   }
 }
 
+/* Long enough that coming back is news, short enough that it is not an
+   obituary. Somebody who plays every evening never triggers it. */
+const AWAY_MS = 3 * 24 * 60 * 60 * 1000;
+
+function greetReturner(pid) {
+  const away = markSeen(pid);
+  /* Only for players who have actually played — a feed entry saying a
+     brand-new account is "back" is a feed entry about nothing. */
+  if (away <= AWAY_MS || (getProfile(pid).rounds || 0) < 1) return;
+  const days = Math.round(away / 86400000);
+  Activity.push(pid, 'joined',
+    days >= 14 ? `came back after ${Math.round(days / 7)} weeks`
+               : `came back after ${days} days`);
+}
+
 /** "two under", "level", "five over" — the way a golfer says a score. */
 function relName(rel) {
   if (rel === 0) return 'level par';
@@ -779,7 +794,23 @@ function nextHole(room) {
          object — and it has to be the course as it is right now, since a
          rating derived from the geometry moves when the generator does. */
       const cr = courseRatings(room.courseId);
-      const prof = recordRound(p.pid, total - parTotal, played,
+      /* PAR OVER THE HOLES ACTUALLY PLAYED, not the whole course.
+         `total` counts only holes with a score — an unplayed hole reads as
+         0 — while this was subtracting the par of all nine. So anybody who
+         joined late, dropped out, or was still a spectator for the front
+         nine was recorded as monstrously under par: three holes in 12 came
+         out as 12 − 36 = −24.
+
+         That single number then poisoned everything downstream. It became
+         their `best`, which is what the profile screen shows and what the
+         boards rank on; and the rating target is driven by the mean per
+         hole, so −24 over three holes read as eight under a hole and
+         clamped the rating to its ceiling. A player who had never finished
+         a round could sit at 95 with a best of −23, which is exactly what
+         the career screen was showing. */
+      const playedPar = p.scores.reduce((a, v, i) => a + (v == null ? 0 : pars[i]), 0);
+      const relToPar = total - playedPar;
+      const prof = recordRound(p.pid, relToPar, played,
         played >= 9 ? { courseId: room.courseId, gross: total, rating: cr.rating, slope: cr.slope } : null);
       /* The record board only ever sees rounds THIS server simulated, and
          only complete ones — see records.js for why both matter. */
@@ -831,7 +862,7 @@ function nextHole(room) {
          it knows both what happened and what it beat. Everything here is
          past tense and nameless — the reader's view puts the name on, so
          one entry reads correctly as "You" and as "Sam". */
-      const rel = total - parTotal;
+      const rel = relToPar;
       if (beat.round) {
         Activity.push(p.pid, 'record', `set the course record at ${course(room).name} — ${total}`);
       } else if (prof && prof.best === rel && played >= 9) {
@@ -1241,6 +1272,12 @@ io.on('connection', socket => {
     if (d?.restore) {
       try { seedProfile(pid, d.restore); } catch { /* malformed: ignore */ }
     }
+    /* "Sam is back after a fortnight" — the one entry in the feed that is
+       about somebody arriving rather than about a score, and the reason to
+       say hello rather than just to notice they are online. It was in the
+       kinds table from the start and nothing ever pushed it, which made the
+       table a list of what the feed COULD say rather than what it does. */
+    greetReturner(pid);
     socket.emit('profile', publicProfile(pid));
   });
 

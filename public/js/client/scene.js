@@ -112,6 +112,9 @@ function faceUp(geo) {
   return geo;
 }
 
+const TRACE_LIVE_OPACITY = 0.45;
+const TRACE_HELD_OPACITY = 0.18;
+
 export class GolfScene {
   constructor(canvas) {
     this.canvas = canvas;
@@ -1436,10 +1439,14 @@ export class GolfScene {
   }
 
   _buildTrace() {
+    /* Named together deliberately: the held line only reads as history if it
+       is clearly fainter than the live one, which is a relationship between
+       two numbers and not a property of either. */
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(1200 * 3), 3));
     geo.setDrawRange(0, 0);
-    const mat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 });
+    const mat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true,
+                                             opacity: TRACE_LIVE_OPACITY });
     const l = new THREE.Line(geo, mat);
     l.frustumCulled = false;
     return l;
@@ -1706,10 +1713,13 @@ export class GolfScene {
 
   setTrace(path, upTo) {
     const l = this.traceLine;
-    /* Back to full brightness: the previous shot's line may have been left
-       dimmed by holdTrace, and a live tracer drawn at 42% would look like a
-       rendering fault rather than like the shot that is happening now. */
-    if (l.material && l.material.opacity !== 1) l.material.opacity = 1;
+    /* Back to the LIVE opacity, which is 0.45 and not 1. Restoring to full
+       brightness quietly changed how every shot in the game looked — the
+       tracer was designed translucent, and "reset it to opaque" is not a
+       reset, it is a different decision made by accident. */
+    if (l.material && l.material.opacity !== TRACE_LIVE_OPACITY) {
+      l.material.opacity = TRACE_LIVE_OPACITY;
+    }
     if (!path || path.length < 2) { l.geometry.setDrawRange(0, 0); return; }
     const arr = l.geometry.attributes.position.array;
     const n = Math.min(upTo == null ? path.length : upTo, 1200);
@@ -1733,7 +1743,12 @@ export class GolfScene {
    */
   holdTrace() {
     const m = this.traceLine.material;
-    if (m) { m.transparent = true; m.opacity = 0.42; }
+    if (!m) return;
+    /* 0.18, not 0.42. The live tracer is already drawn at 0.45 — see
+       _buildTrace — so "dimmed to 0.42" was indistinguishable from it, and
+       the held line looked exactly like a live one that had stopped
+       updating. It has to be clearly fainter to read as history. */
+    m.opacity = TRACE_HELD_OPACITY;
   }
 
   /* ------------------------------------------------------------ balls --- */

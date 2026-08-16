@@ -86,3 +86,58 @@ test('a null look is allowed, and means "the default golfer"', () => {
   assert.equal(kitOf(PID).look, null);
   assert.equal(publicProfile(PID).look, null);
 });
+
+/* ═══════════════════════════════════ WHAT A DIFFICULTY ACTUALLY PAYS ═══
+   The multiplier was applied to `rc.total`, which INCLUDES the per-hole
+   coins already banked as the round was played. Scaling that and then
+   subtracting the unscaled holes applies the rate to money the player had
+   twenty minutes ago: on a bogey nine, Casual credited 689 against a base
+   of 1300 — a 47% cut sold on the picker as 20% — and Tournament paid 176%
+   where it promised 75%.
+
+   Every number on the difficulty picker was wrong, in both directions, and
+   nothing about the screen looked broken. Asserted against the ADVERTISED
+   rate, so the picker and the payout cannot drift apart again. */
+import { settleRound } from '../server/profiles.js';
+import { DIFFICULTIES, earnRate } from '../public/js/shared/difficulty.js';
+
+/** Coins actually credited at the end of one round on a given rate. */
+function credited(pid, rate) {
+  const p = getProfile(pid);
+  const before = p.coins;
+  const holes = Array.from({ length: 9 }, () => ({ strokes: 5, par: 4 }));
+  settleRound(pid, null, holes, rate);
+  return getProfile(pid).coins - before;
+}
+
+test('a difficulty pays exactly what its card claims', () => {
+  const base = credited('earn-base', 1);
+  assert.ok(base > 0, 'a finished round should pay something');
+  for (const d of DIFFICULTIES) {
+    const got = credited('earn-' + d.id, d.earn);
+    const want = Math.round(base * d.earn);
+    /* Within a coin, for rounding. Anything wider would let the old bug —
+       which was out by a factor of two — slip straight back through. */
+    assert.ok(Math.abs(got - want) <= 1,
+      `${d.name} pays ${got}, its card promises ${want} (${d.earn}x of ${base})`);
+  }
+});
+
+test('the multiplier never turns a finished round into a loss', () => {
+  /* The failure mode of scaling the total: with enough banked hole coins
+     relative to the bonus, `scaled total − unscaled holes` goes negative
+     and the balance DROPS when you finish a round. */
+  for (const d of DIFFICULTIES) {
+    assert.ok(credited('loss-' + d.id, d.earn) > 0,
+      `${d.name} took coins away for completing a round`);
+  }
+});
+
+test('an unknown rate falls back to paying normally', () => {
+  const base = credited('earn-fallback-a', 1);
+  for (const bad of [0, -3, NaN, undefined, null]) {
+    const got = credited('earn-fallback-' + String(bad), bad);
+    assert.equal(got, base, `a rate of ${String(bad)} changed the payout`);
+  }
+  assert.equal(earnRate('nonsense'), 1, 'an invented mode should earn normally');
+});

@@ -1332,7 +1332,9 @@ function stepAnim(dt, now) {
           clubKey: a.sim.club?.key, aim: a.launchDir,
           faceDeg: a.faceDeg, attackDeg: a.attackDeg,
           dist: HUD.dist, unit: HUD.unit(),
-          surface: G.T?.surfaceAt(a.sim.p.x, a.sim.p.z)?.name || null,
+          // `label`, not `name` — surfaces have no `name`, so the lie tag on
+          // the card was undefined on every shot and simply never rendered
+          surface: G.T?.surfaceAt(a.sim.p.x, a.sim.p.z)?.label || null,
           holed: res.reason === 'holed'
         });
       }
@@ -2611,11 +2613,15 @@ function route() {
       const tot = meRow.scores.reduce((a, v) => a + (v ?? 0), 0);
       const others = r.players
         .filter(p => !p.spectator && p.pid !== G.myPid)
-        .map(p => ({ name: p.name, total: p.scores.reduce((a, v) => a + (v ?? 0), 0) }));
+        .map(p => ({ pid: p.pid, name: p.name,
+                     total: p.scores.reduce((a, v) => a + (v ?? 0), 0) }));
       Net.h2h(rows => {
-        const by = new Map(rows.map(x => [x.name, x]));
+        /* Keyed by pid. Names are not unique, they can be changed between
+           rounds, and two players called Sam in one room would have shown
+           each other's record. */
+        const by = new Map(rows.map(x => [x.pid, x]));
         HUD.renderResultCompare(tot, G.course.par, G.profile, G.course.id,
-          others.map(o => ({ ...o, record: by.get(o.name) || null })));
+          others.map(o => ({ ...o, record: by.get(o.pid) || null })));
       });
     }
     return;
@@ -3328,7 +3334,13 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   stage.addEventListener('contextmenu', e => {
     if (G.screen === 'game') e.preventDefault();   // the hold opens the wheel
   });
-  bindRadial(stage, RADIAL_ACTIONS, (id, item) => radialPick(id, item),
+  /* ONLY DURING A ROUND. Every action on the wheel is a thing you do on a
+     golf course, and binding it to the whole stage meant right-holding in
+     the clubhouse or on the landing page opened a menu offering to put you
+     in a cart. An empty list is refused by openRadial, so this is also what
+     stops it appearing there at all. */
+  bindRadial(stage, () => (G.screen === 'game' ? RADIAL_ACTIONS() : []),
+             (id, item) => radialPick(id, item),
              { holdMs: 220, buttons: [1, 2] });
   bindRadial(document.getElementById('tbMore'), RADIAL_ACTIONS, (id, item) => {
     radialPick(id, item);
