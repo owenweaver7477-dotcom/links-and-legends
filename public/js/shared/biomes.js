@@ -7,6 +7,8 @@
    entry rather than writing new code.
    ========================================================================= */
 
+import { realCourseIds, realCourse } from './realcourses.js';
+
 export const BIOMES = {
   /* ---------------------------------------------------------- PARKLAND --- */
   parkland: {
@@ -492,13 +494,25 @@ export const BIOMES = {
    question "how much harder is this for an ordinary golfer than for a very
    good one", it is computed from the real geometry in handicap.js, and it
    is the number the handicap system already uses. */
-export const COURSE_ORDER = [
+const GENERATED_ORDER = [
   'meadow',                                   //  97 — the beginners' course
   'veld', 'volcanic', 'desert', 'sandbelt',   // 110-114
   'alpine', 'links', 'parkland', 'tropical',  // 120-125
   'heath', 'fjord',                           // 128-133
   'headland'                                  // 147 — the championship test
 ];
+
+/* Real, imported courses join the roster automatically. They are ids like
+   any other from here on — nothing downstream knows or cares that one was
+   surveyed rather than generated — so adding one is a matter of importing
+   it, not of editing this list.
+
+   Appended rather than sorted in: the difficulty order above is asserted by
+   a test over the GENERATED courses, whose ratings are deterministic. A real
+   course's rating depends on data that arrives with it, and blocking an
+   import on where it lands in a list would be the tail wagging the dog. The
+   picker sorts what it shows, which is where the ordering actually matters. */
+export const COURSE_ORDER = [...GENERATED_ORDER, ...realCourseIds()];
 
 /* ---------------------------------------------------------------- crowns ---
    How wide a tree's canopy is, as a fraction of its height. ONE number per
@@ -571,19 +585,43 @@ export const REGIONS = [
     blurb: 'High open veld — thin air, long carries, and nothing to stop the wind' }
 ];
 
+/**
+ * The biome a course id draws its LOOK from.
+ *
+ * A generated course is its own biome. An imported one borrows a biome for
+ * the palette, the trees and the sky, and supplies everything else itself —
+ * so `BIOMES[id]` is undefined for it, and every lookup that went straight
+ * through that silently dropped the course. That is how an imported course
+ * generated fine, rated fine, and could not be chosen by anybody.
+ */
+export const biomeFor = id => BIOMES[id] || BIOMES[realCourse(id)?.biome] || null;
+
+/**
+ * What the picker shows for a course: the biome's look, with the real
+ * course's own name, region and blurb over the top where it has them.
+ */
+export function courseMeta(id) {
+  const bio = biomeFor(id);
+  if (!bio) return null;
+  const real = realCourse(id);
+  return real
+    ? { ...bio, id, name: real.name, region: real.region, blurb: real.blurb, real: true }
+    : { ...bio, id };
+}
+
 /** Courses grouped by region, in REGIONS order, with empty regions dropped. */
 export function coursesByRegion() {
   return REGIONS.map(r => ({
     ...r,
     courses: COURSE_ORDER
-      .filter(id => BIOMES[id]?.continent === r.id)
-      .map(id => ({ id, ...BIOMES[id] }))
+      .filter(id => biomeFor(id)?.continent === r.id)
+      .map(courseMeta)
   })).filter(r => r.courses.length > 0);
 }
 
 /** Which region a course belongs to, or null if it has not been placed. */
 export const regionOf = id =>
-  REGIONS.find(r => r.id === BIOMES[id]?.continent) || null;
+  REGIONS.find(r => r.id === biomeFor(id)?.continent) || null;
 
 /* Ball colours — eight distinct, all readable against grass. */
 export const BALL_COLORS = [

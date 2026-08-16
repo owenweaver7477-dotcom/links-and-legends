@@ -38,7 +38,7 @@ import { allCourses, getCourse, defaultAim, aimPlan } from '../shared/coursegen.
 import { ratingsFor } from '../shared/handicap.js';
 import { FORMATS, formatById, isScramble, TEAM_NAMES } from '../shared/scramble.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
-import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf, REGIONS } from '../shared/biomes.js';
+import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf, REGIONS, biomeFor, courseMeta } from '../shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
@@ -132,11 +132,11 @@ function ensureHole(courseId, holeIndex) {
   }
   clearMenuBackdrop();               // a real round owns the scene from here
   HUD.show('load');
-  HUD.loading('Shaping ' + (BIOMES[courseId]?.name || 'the course') + '…');
+  HUD.loading('Shaping ' + (courseMeta(courseId)?.name || 'the course') + '…');
 
   G.course = getCourse(courseId);
   G.hole = G.course.holes[holeIndex];
-  G.bio = BIOMES[courseId];
+  G.bio = biomeFor(courseId);
   G.T = terrainFor(G.hole, G.bio);
   scene.loadHole(G.hole, G.T, G.bio);
   carts.clear();               // you do not drive last hole's cart to this tee
@@ -227,7 +227,7 @@ function menuBackdrop() {
   const courseId = pickedCourse;
   G.course = getCourse(courseId);
   G.hole = G.course.holes[0];
-  G.bio = BIOMES[courseId];
+  G.bio = biomeFor(courseId);
   G.T = terrainFor(G.hole, G.bio);
   scene.loadHole(G.hole, G.T, G.bio);
   G.loadedKey = courseId + ':0';
@@ -545,7 +545,7 @@ function wdCourse(i) {
   pickedCourse = id;
   menu.key = null;                 // force menuBackdrop to rebuild
   menuBackdrop();
-  const bio = BIOMES[id];
+  const bio = biomeFor(id);
   HUD.el.wdCourseName.textContent = bio.name;
   HUD.el.wdCourseWhere.textContent = bio.region || '';
   HUD.el.wdDots.innerHTML = COURSE_ORDER
@@ -3130,6 +3130,19 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
           pickedCourse = c.id;
           try { localStorage.setItem('lg_course', c.id); } catch { /* ignore */ }
           drawCourses();
+
+  /* ---- data credits ----------------------------------------------------
+     An imported course is built from OpenStreetMap data, which is ODbL and
+     requires attribution wherever the derived work is shown. Collected from
+     the courses actually on the roster rather than hard-coded, so it says
+     nothing on an install with no imports and cannot go stale on one that
+     has them. */
+  const attribs = [...new Set(COURSES.map(c => c.attribution).filter(Boolean))];
+  const attribEl = document.getElementById('lpAttrib');
+  if (attribEl && attribs.length) {
+    attribEl.hidden = false;
+    attribEl.textContent = 'Course data ' + attribs.join(' · ');
+  }
           clearMenuBackdrop();     // drop the old tee...
           G.loadedKey = null;
           menuBackdrop();          // ...and stand on the new one
@@ -3564,7 +3577,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
   /* ---- the ranking boards --------------------------------------------- */
   HUD.bindBoards();
-  const courseNames = COURSE_ORDER.map(id => ({ id, name: BIOMES[id].name }));
+  const courseNames = COURSE_ORDER.map(id => ({ id, name: courseMeta(id).name }));
   const loadBoards = (courseId) => {
     Net.boards(courseId || HUD.rkCourse || pickedCourse, data => {
       HUD.renderRankMe(G.profile, data.me,

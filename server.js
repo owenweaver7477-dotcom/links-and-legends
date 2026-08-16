@@ -77,7 +77,7 @@ function liveOf(pid) {
     if (ref.pid !== pid) continue;
     const room = ref.code ? rooms.get(ref.code) : null;
     if (!room) return { where: 'In the menu', room: null, joinable: false };
-    const c = BIOMES[room.courseId];
+    const c = biomeFor(room.courseId);
     return {
       where: room.state === 'lobby'
         ? `Waiting in a lobby${c ? ' at ' + c.name : ''}`
@@ -193,7 +193,8 @@ const courseRatings = id => {
   return _ratings.get(id);
 };
 import { terrainFor } from './public/js/shared/terrain.js';
-import { BIOMES, COURSE_ORDER, BALL_COLORS, MAX_PLAYERS, HOLES_PER_COURSE } from './public/js/shared/biomes.js';
+import { BIOMES, COURSE_ORDER, BALL_COLORS, MAX_PLAYERS, HOLES_PER_COURSE,
+         biomeFor, courseMeta } from './public/js/shared/biomes.js';
 import { ShotSim, calibrateCarries } from './public/js/shared/ballistics.js';
 import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs.js';
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
@@ -522,7 +523,7 @@ function createRoom(code, courseId, format) {
 
 const course = room => getCourse(room.courseId);
 const hole = room => course(room).holes[clamp(room.holeIndex, 0, HOLES_PER_COURSE - 1)];
-const biome = room => BIOMES[room.courseId];
+const biome = room => biomeFor(room.courseId);
 const terrain = room => terrainFor(hole(room), biome(room));
 const active = room => room.players.filter(p => !p.spectator);
 const teeOf = room => (hole(room).tees || {})[room.teeSet] || hole(room).tee;
@@ -1645,7 +1646,7 @@ io.on('connection', socket => {
         id: `${room.code}:${pid}:${Date.now()}`,
         from: pid, fromName: nameOf(pid),
         room: room.code, courseId: room.courseId,
-        courseName: BIOMES[room.courseId]?.name || room.courseId,
+        courseName: courseMeta(room.courseId)?.name || room.courseId,
         format: room.format || 'stroke',
         seats: `${room.players.length}/${MAX_PLAYERS}`,
         note, at: Date.now(), expires: Date.now() + INVITE_TTL_MS
@@ -1706,7 +1707,7 @@ io.on('connection', socket => {
     for (const room of rooms.values()) {
       const live = room.players.filter(p => p.connected);
       if (!live.length) continue;
-      const bio = BIOMES[room.courseId];
+      const bio = biomeFor(room.courseId);
       const f = formatById(room.format);
       // A room mid-round can still be joined — you watch until the next hole
       // — so it is listed, marked, and sorted below the ones about to start.
@@ -1749,7 +1750,7 @@ io.on('connection', socket => {
     for (const room of rooms.values()) {
       if (room.state !== 'lobby') continue;
       if (room.format !== wantFormat) continue;
-      const bio = BIOMES[room.courseId];
+      const bio = biomeFor(room.courseId);
       if (wantRegion !== 'any' && bio?.continent !== wantRegion) continue;
       const f = formatById(room.format);
       const cap = f.teams ? f.teams * f.per : MAX_PLAYERS;
@@ -1764,7 +1765,7 @@ io.on('connection', socket => {
        on the one button that exists to avoid dead ends. */
     const pool = wantRegion === 'any'
       ? COURSE_ORDER
-      : COURSE_ORDER.filter(id => BIOMES[id]?.continent === wantRegion);
+      : COURSE_ORDER.filter(id => biomeFor(id)?.continent === wantRegion);
     const courseId = pool[Math.floor(Math.random() * pool.length)] || COURSE_ORDER[0];
     ack({ ok: true, courseId, format: wantFormat, create: true });
   });

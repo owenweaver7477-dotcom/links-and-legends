@@ -25,8 +25,14 @@ import test from 'node:test';
 import { allCourses, getCourse } from '../public/js/shared/coursegen.js';
 import { ratingsFor } from '../public/js/shared/handicap.js';
 import { COURSE_ORDER, REGIONS, BIOMES, coursesByRegion } from '../public/js/shared/biomes.js';
+import { isRealCourse } from '../public/js/shared/realcourses.js';
 
-const rated = COURSE_ORDER.map(id => {
+/* The GENERATED courses only. A real imported course's rating depends on
+   data that arrives with it, so it cannot be asserted here — realcourses.mjs
+   checks those. */
+const GENERATED = COURSE_ORDER.filter(id => !isRealCourse(id));
+
+const rated = GENERATED.map(id => {
   const c = getCourse(id);
   return { id, name: c.name, ...ratingsFor(c) };
 });
@@ -84,7 +90,7 @@ test('every course belongs to a region that exists', () => {
      the length of one commit because 'africa' was a new continent and the
      region list had never needed it. */
   const known = new Set(REGIONS.map(r => r.id));
-  for (const id of COURSE_ORDER) {
+  for (const id of GENERATED) {
     const bio = BIOMES[id];
     assert.ok(known.has(bio.continent),
       `${bio.name} is in '${bio.continent}', which is not a region — it will not appear in the picker`);
@@ -94,9 +100,15 @@ test('every course belongs to a region that exists', () => {
     `the picker shows ${shown.length} of ${COURSE_ORDER.length} courses`);
 });
 
-test('each region lists its courses easiest first', () => {
+test('each region lists its generated courses easiest first', () => {
+  /* Generated only. A real imported course is appended to the roster and
+     its rating depends on data that arrives with it — asserting where it
+     lands would make importing a course able to fail the build, which is
+     the tail wagging the dog. The picker sorts what it shows. */
   for (const region of coursesByRegion()) {
-    const slopes = region.courses.map(c => ratingsFor(getCourse(c.id)).slope);
+    const slopes = region.courses
+      .filter(c => !isRealCourse(c.id))
+      .map(c => ratingsFor(getCourse(c.id)).slope);
     for (let i = 1; i < slopes.length; i++) {
       assert.ok(slopes[i] >= slopes[i - 1],
         `${region.name} lists slope ${slopes[i]} after ${slopes[i - 1]}`);
@@ -116,7 +128,7 @@ test('every course has a backdrop, so no hole plays against a bare horizon', asy
   const src = await readFile(new URL('../public/js/client/scene.js', import.meta.url), 'utf8');
   const block = src.slice(src.indexOf('export const BACKDROPS = {'));
   const table = block.slice(0, block.indexOf('\n};'));
-  for (const id of COURSE_ORDER) {
+  for (const id of GENERATED) {
     assert.ok(new RegExp(`\\b${id}\\s*:`).test(table),
       `${BIOMES[id].name} has no BACKDROPS entry — it will play against an empty skyline`);
   }
@@ -126,7 +138,7 @@ test('a coastal course actually gets a sea', () => {
   /* A links or headland course whose backdrop has no `sea` is a seaside
      course with no sea in it. Checked against the biome's own water kind,
      so the two cannot disagree. */
-  for (const id of COURSE_ORDER) {
+  for (const id of GENERATED) {
     if (BIOMES[id].waterKind !== 'ocean') continue;
     assert.ok(SEASIDE.includes(id),
       `${BIOMES[id].name} has ocean water but no sea on its backdrop`);

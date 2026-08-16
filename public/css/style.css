@@ -2979,3 +2979,7 @@ body.hudfade .windbox, body.hudfade .onlinenow {
    needs room for a name and a badge on one line */
 .cpbtn { position: relative; }
 .cpbtn small { display: block; }
+
+/* Data credits. Required by ODbL for any course built from OpenStreetMap
+   data, and hidden entirely when none of the roster came from there. */
+.lp-attrib { margin: 4px 0 0; font-size: 10px; color: #6c8a75; letter-spacing: .2px; }

@@ -12,6 +12,7 @@
 
 import { rngKit, hashSeed, clamp, lerp, toYards } from './rng.js';
 import { BIOMES, COURSE_ORDER, HOLES_PER_COURSE, crownOf } from './biomes.js';
+import { realCourse } from './realcourses.js';
 import { placeProps } from './props.js';
 
 /* Standard 9-hole par mix — two 3s, two 5s, five 4s = par 36. */
@@ -560,10 +561,21 @@ export function inEllipse(x, z, e, pad = 0) {
 
 /* --------------------------------------------------------------- a hole --- */
 
-function makeHole(courseId, bio, number, seed) {
+/**
+ * One hole.
+ *
+ * @param authored  real geometry for this hole, from an imported course —
+ *   `{ par, route: [[x,z]...], greenR?, bunkers?, waters?, fairwayWidth? }`
+ *   in metres, already in local coordinates. When present it REPLACES the
+ *   generated routing and hazards; everything else — terrain, trees, props,
+ *   elevation, the cup, out of bounds — is derived exactly as it is for a
+ *   generated hole, so an imported course plays by identical rules and needs
+ *   no second code path anywhere downstream.
+ */
+function makeHole(courseId, bio, number, seed, authored = null) {
   const rk = rngKit(seed);
   const parSet = PAR_SETS[hashSeed(courseId) % PAR_SETS.length];
-  const par = parSet[number - 1];
+  const par = authored?.par ?? parSet[number - 1];
   const [lmin, lmax] = LENGTH_BY_PAR[par];
   /* A course can be longer or shorter than the standard card. Hole length
      was a single global table, so every course on the roster played to the
@@ -574,16 +586,21 @@ function makeHole(courseId, bio, number, seed) {
   const ls = bio.lengthScale ?? 1;
   const lengthM = rk.f(lmin * ls, lmax * ls);
 
-  const { pts, shape } = buildRoute(rk, lengthM, par);
-  const dense = smoothRoute(pts, 3);
+  /* A real routing is already the shape it is: smoothed once to take the
+     corners off a hand-traced polyline, not three times like a generated
+     one, which would round a genuine dogleg into a curve. */
+  const gen = authored ? null : buildRoute(rk, lengthM, par);
+  const shape = authored ? (authored.shape || 'imported') : gen.shape;
+  const dense = authored ? smoothRoute(authored.route, 1) : smoothRoute(gen.pts, 3);
   const { cum, total } = routeMetrics(dense);
 
-  const fairwayWidth = rk.f(bio.fairwayWidth[0], bio.fairwayWidth[1]);
+  const fairwayWidth = authored?.fairwayWidth
+    ?? rk.f(bio.fairwayWidth[0], bio.fairwayWidth[1]);
   /* The edge wobble only ever cuts inward (see edgeScale), so a green built
      to the biome's radius comes out about 6% smaller in area than the number
      says. Sized back up, or every green in the game quietly got harder to
      hit and harder to putt on. */
-  const greenR = rk.f(bio.greenSize[0], bio.greenSize[1]) * 1.06;
+  const greenR = (authored?.greenR ?? rk.f(bio.greenSize[0], bio.greenSize[1])) * 1.06;
 
   const end = dense[dense.length - 1];
   const endT = routeTangent(dense, cum, total);
@@ -603,10 +620,23 @@ function makeHole(courseId, bio, number, seed) {
   const pinA = rk.f(0, Math.PI * 2), pinD = greenR * rk.f(0, 0.5);
   const pin = { x: green.x + Math.cos(pinA) * pinD, z: green.z + Math.sin(pinA) * pinD };
 
-  const bunkers = placeBunkers(rk, bio, dense, cum, total, green, par);
-  const cross = placeCrossBunker(rk, bio, dense, cum, total, green, par, fairwayWidth);
-  if (cross) bunkers.push(cross);
-  const waters = placeWaters(rk, bio, dense, cum, total, green, tee, par);
+  /* Imported hazards are the real ones and are used exactly as surveyed —
+     including a hole with none, which is why this checks for the ARRAY
+     rather than for it being non-empty. A real course with no bunker on its
+     third is not a course that wants two invented. */
+  let bunkers, waters;
+  if (authored?.bunkers) {
+    bunkers = authored.bunkers.map(b => ({ wob: [0.12, 1.1, 0.07, 4.2], depth: 1.0, ...b }));
+  } else {
+    bunkers = placeBunkers(rk, bio, dense, cum, total, green, par);
+    const cross = placeCrossBunker(rk, bio, dense, cum, total, green, par, fairwayWidth);
+    if (cross) bunkers.push(cross);
+  }
+  if (authored?.waters) {
+    waters = authored.waters.map(w => ({ kind: bio.waterKind, depth: 2.2, rot: 0, ...w }));
+  } else {
+    waters = placeWaters(rk, bio, dense, cum, total, green, tee, par);
+  }
   const mounds = placeMounds(rk, bio, dense, cum, total, green, par, fairwayWidth);
   const sentinels = placeSentinels(rk, bio, dense, cum, total, green, par, fairwayWidth);
 
@@ -916,18 +946,34 @@ export function makeRouteDistanceFn(hole) {
 /* -------------------------------------------------------------- courses --- */
 
 export function buildCourse(courseId) {
-  const bio = BIOMES[courseId];
+  /* A REAL COURSE borrows a biome for its look — the palette, the trees, the
+     sky — and supplies its own routing. So the lookup is: is this an
+     imported course, and if so which biome does it dress itself in. */
+  const real = realCourse(courseId);
+  const bio = real ? BIOMES[real.biome] : BIOMES[courseId];
   if (!bio) throw new Error('Unknown course: ' + courseId);
+
   const holes = [];
   for (let n = 1; n <= HOLES_PER_COURSE; n++) {
-    holes.push(makeHole(courseId, bio, n, hashSeed(courseId, n, 0x9e37)));
+    holes.push(makeHole(courseId, bio, n, hashSeed(courseId, n, 0x9e37),
+                        real ? real.holes[n - 1] : null));
   }
   // hole 1 of the parkland course is the original hand-drawn map
   if (courseId === 'parkland') holes[0] = makeSignatureHole(bio);
 
   const par = holes.reduce((s, h) => s + h.par, 0);
   const yards = holes.reduce((s, h) => s + h.yards, 0);
-  return { id: courseId, name: bio.name, blurb: bio.blurb, region: bio.region, biome: bio, holes, par, yards };
+  return {
+    id: courseId,
+    name: real?.name ?? bio.name,
+    blurb: real?.blurb ?? bio.blurb,
+    region: real?.region ?? bio.region,
+    /* Carried through so the credits screen can show it. A course built
+       from OpenStreetMap data has to say so wherever it appears. */
+    attribution: real?.attribution ?? null,
+    real: !!real,
+    biome: bio, holes, par, yards
+  };
 }
 
 let _cache = null;
