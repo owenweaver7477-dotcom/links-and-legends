@@ -336,7 +336,7 @@ export const BIOMES = {
      new player can hit it, find it, and hit it again. */
   meadow: {
     id: 'meadow',
-    name: 'Willowbank',
+    name: 'Ashcombe Park',
     lengthScale: 0.90,          // shorter holes as well as wider ones
     blurb: 'A municipal meadow. Wide, flat and friendly — the place to learn.',
     region: 'Shropshire, England',
@@ -376,7 +376,7 @@ export const BIOMES = {
      stuff you are standing in. */
   heath: {
     id: 'heath',
-    name: 'Farnleigh Heath',
+    name: 'Blackthorn Heath',
     blurb: 'Heather and gorse over sand. You can see the green from anywhere in it.',
     region: 'Surrey, England',
     continent: 'europe',
@@ -412,7 +412,7 @@ export const BIOMES = {
      way of it. Africa, which the roster did not have at all. */
   veld: {
     id: 'veld',
-    name: 'Kopjesrand',
+    name: 'Wildeveld',
     blurb: 'High open veld. Thin air, long carries, and wind with nothing to break it.',
     region: 'Free State, South Africa',
     continent: 'africa',
@@ -451,7 +451,7 @@ export const BIOMES = {
      cannot finish. */
   headland: {
     id: 'headland',
-    name: 'Cape Wrathe',
+    name: 'Dunmara Head',
     lengthScale: 1.06,          // a championship card, off the very back
     blurb: 'Championship headland. Cliffs, ocean, tiny greens and a wind that never drops.',
     region: 'Co. Clare, Ireland',

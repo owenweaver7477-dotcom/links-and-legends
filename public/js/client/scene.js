@@ -2044,11 +2044,32 @@ export class GolfScene {
       if (tilt) m.rotation.z = (rnd() - 0.5) * tilt;
       return m;
     };
+    /* A CLIFF, not a cube. This was a BoxGeometry — six flat faces, right
+       angles, sitting on the skyline of the two seaside courses looking
+       exactly like what it was. A sea cliff is a wedge: wider at the water
+       than at the top, tilted, and layered in strata that catch the light
+       differently. Three tapered slices with a little lean does that for
+       about the same number of triangles a box costs. */
     const slab = (x, z, w, h, d, colour) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(colour));
-      m.position.set(x, baseY + h * 0.5, z);
-      m.rotation.y = rnd() * Math.PI * 2;
-      return m;
+      const g = new THREE.Group();
+      const lean = (rnd() - 0.5) * 0.14;
+      const layers = 3;
+      for (let i = 0; i < layers; i++) {
+        const t0 = i / layers, t1 = (i + 1) / layers;
+        // narrows as it rises, so the profile is a wedge rather than a wall
+        const rl = (1 - t0 * 0.42), ru = (1 - t1 * 0.42);
+        const seg = new THREE.Mesh(
+          new THREE.CylinderGeometry(w * 0.5 * ru, w * 0.5 * rl, h / layers, 5, 1),
+          mat(i === layers - 1 ? colour
+              : spec.colours[(rnd() * spec.colours.length) | 0]));
+        seg.position.y = baseY + h * (t0 + t1) * 0.5;
+        seg.scale.z = d / w;                    // flatten it into a headland
+        seg.rotation.y = rnd() * Math.PI * 2;
+        g.add(seg);
+      }
+      g.position.set(x, 0, z);
+      g.rotation.z = lean;
+      return g;
     };
 
     for (let i = 0; i < spec.count; i++) {
@@ -2185,6 +2206,93 @@ export class GolfScene {
       if (n) { g.add(trunks); g.add(canopy); }
     }
 
+    /* ── SCRUB ────────────────────────────────────────────────────────
+       Bushes through the rough, between the fairway edge and the treeline.
+       The ground out there was bare grass with full-size trees standing on
+       it, which is the one thing a real course never looks like — there is
+       always a scale below the trees, and without it the trees read as
+       props on a lawn.
+
+       Kept OUT of play by the same rule the props follow: nothing within the
+       fairway corridor or near the green, so a bush is scenery and never a
+       lie nobody designed. Two squashed spheres each, instanced, biome
+       coloured. */
+    const scrubN = Math.round(260 * Math.min(1, (bio.treeDensity ?? 0.4) * 1.6));
+    if (scrubN > 8 && (this.q?.scenery ?? 1) >= 0.4) {
+      const P = bio.palette;
+      const bushGeo = new THREE.SphereGeometry(0.5, 7, 5);
+      const bushMat = new THREE.MeshLambertMaterial({ flatShading: true });
+      bushMat.color.setRGB(1, 1, 1);
+      const bush = new THREE.InstancedMesh(bushGeo, bushMat, scrubN * 2);
+      bush.frustumCulled = false;
+      const m4 = new THREE.Matrix4(), q0 = new THREE.Quaternion();
+      const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+      const col = new THREE.Color();
+      const shades = [P.rough, P.deep, P.fairway];
+      const corridor = (hole.fairwayWidth || 34) * 0.5 + 8;
+
+      let k = 0;
+      for (let i = 0; i < scrubN * 3 && k < scrubN * 2; i++) {
+        const x = b.minX + rnd() * (b.maxX - b.minX);
+        const z = b.minZ + rnd() * (b.maxZ - b.minZ);
+        // never in the corridor, never on the green
+        let near = Infinity;
+        for (const p of hole.route) near = Math.min(near, Math.hypot(p[0] - x, p[1] - z));
+        if (near < corridor) continue;
+        if (Math.hypot(x - hole.green.x, z - hole.green.z) < hole.green.r + 14) continue;
+        const y = T?.heightAt ? T.heightAt(x, z) : 0;
+        const sz = 0.7 + rnd() * 1.5;
+        col.set(shades[(rnd() * shades.length) | 0]);
+        col.offsetHSL(0, 0, (rnd() - 0.5) * 0.06);
+        if (SEASON_TINT) {
+          col.r = Math.min(1, col.r * SEASON_TINT[0]);
+          col.g = Math.min(1, col.g * SEASON_TINT[1]);
+          col.b = Math.min(1, col.b * SEASON_TINT[2]);
+        }
+        for (let j = 0; j < 2; j++) {
+          const ox = (rnd() - 0.5) * sz, oz = (rnd() - 0.5) * sz;
+          pos.set(x + ox, y + sz * 0.30, z + oz);
+          scl.set(sz * (1 + rnd() * 0.4), sz * (0.5 + rnd() * 0.3), sz * (1 + rnd() * 0.4));
+          m4.compose(pos, q0, scl);
+          bush.setMatrixAt(k, m4);
+          bush.setColorAt(k, col);
+          k++;
+          if (k >= scrubN * 2) break;
+        }
+      }
+      bush.count = k;
+      bush.instanceMatrix.needsUpdate = true;
+      if (bush.instanceColor) bush.instanceColor.needsUpdate = true;
+      if (k) g.add(bush);
+    }
+
+    /* ── BIRDS ────────────────────────────────────────────────────────
+       The one thing that separates a landscape from a photograph of one is
+       that something in it is moving on its own. Everything else out here —
+       trees, scrub, cliffs, the sea — is stationary by nature, so a course
+       with a perfect skyline and nothing alive in it still reads as a model.
+
+       Eight of them, circling wide and high on their own loops. Two
+       triangles each, no flapping animation: at that distance a bird is a
+       moving speck with a silhouette, and the wingbeat is implied by the
+       slight roll as it turns. Cheap enough to leave on everywhere. */
+    if ((this.q?.scenery ?? 1) >= 0.4) {
+      const flockGeo = new THREE.ConeGeometry(0.9, 3.2, 3);
+      flockGeo.rotateX(Math.PI / 2);
+      const flock = new THREE.InstancedMesh(
+        flockGeo, new THREE.MeshLambertMaterial({ color: 0x2f3a33, flatShading: true }), 8);
+      flock.frustumCulled = false;
+      flock.userData.birds = Array.from({ length: 8 }, () => ({
+        cx: cx + (rnd() - 0.5) * rim, cz: cz + (rnd() - 0.5) * rim,
+        r: rim * (0.35 + rnd() * 0.5),
+        y: 55 + rnd() * 70,
+        a: rnd() * Math.PI * 2,
+        sp: (rnd() < 0.5 ? -1 : 1) * (0.06 + rnd() * 0.07)
+      }));
+      g.add(flock);
+      this._flock = flock;
+    } else this._flock = null;
+
     /* A sea, where there should be one. A flat plane far out and slightly
        below the land, so it reads as water meeting the horizon rather than
        as a blue field — the fog does the rest of the work. */
@@ -2267,7 +2375,33 @@ export class GolfScene {
     if (this.fill) this.fill.color.copy(skyBot);
   }
 
+  /** Move the birds. One matrix each, eight of them — free. */
+  _tickFlock(dt) {
+    const f = this._flock;
+    if (!f) return;
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
+    const e = new THREE.Euler(), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+    const birds = f.userData.birds;
+    for (let i = 0; i < birds.length; i++) {
+      const b = birds[i];
+      b.a += b.sp * dt;
+      const x = b.cx + Math.cos(b.a) * b.r;
+      const z = b.cz + Math.sin(b.a) * b.r;
+      pos.set(x, b.y + Math.sin(b.a * 3) * 2.5, z);
+      /* Facing along the tangent of its own circle, banked into the turn —
+         which is the whole of what makes it read as flying rather than as
+         being dragged around a track. */
+      e.set(0, Math.atan2(-Math.sin(b.a) * b.sp, Math.cos(b.a) * b.sp) + Math.PI / 2,
+            b.sp > 0 ? -0.35 : 0.35);
+      q.setFromEuler(e);
+      m4.compose(pos, q, one);
+      f.setMatrixAt(i, m4);
+    }
+    f.instanceMatrix.needsUpdate = true;
+  }
+
   update(dt) {
+    this._tickFlock(dt);
     this.t += dt;
     // slide the shadow frustum along with the camera so the visible ground is
     // always the part that has shadows on it
