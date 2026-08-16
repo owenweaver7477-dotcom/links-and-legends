@@ -2134,6 +2134,37 @@ httpServer.listen(PORT, HOST, () => {
   console.log('');
 });
 
+/* ── staying awake ───────────────────────────────────────────────────────
+   A free instance spins down when no HTTP request has arrived for a while,
+   and takes about fifty seconds to come back. That is the single most
+   expensive thing about this deployment: the first person to arrive from a
+   portal after a quiet spell waits at a loading screen, and most of them
+   will not.
+
+   The usual fix is an external uptime service pinging the health endpoint.
+   This does the same thing without needing an account anywhere: Render
+   publishes the service's own public URL as RENDER_EXTERNAL_URL, so the
+   server can keep itself in traffic.
+
+   Deliberately conditional on that variable, so it does nothing at all on a
+   laptop, in a test, or on any host that does not set it — a server that
+   quietly makes network requests to itself in development is a confusing
+   thing to debug. And it is a HEAD of /healthz every fourteen minutes,
+   which is the cheapest request the app can serve and well inside the
+   fifteen-minute idle window.
+
+   To turn it off, unset KEEPALIVE (or set it to 0). */
+const keepAliveUrl = process.env.RENDER_EXTERNAL_URL || process.env.KEEPALIVE_URL;
+if (keepAliveUrl && process.env.KEEPALIVE !== '0') {
+  const ping = () => {
+    fetch(new URL('/healthz', keepAliveUrl), { method: 'HEAD' })
+      .catch(() => { /* a missed ping is not worth a log line every 14 min */ });
+  };
+  setInterval(ping, 14 * 60 * 1000).unref();
+  console.log(`  keep-alive: pinging ${keepAliveUrl}/healthz every 14 min`);
+  console.log('              (so the first player of the day does not wait for a cold start)');
+}
+
 /* ── shutting down without losing the last few seconds ──────────────────
    This used to be `httpServer.close(() => process.exit(0))`, which throws
    away every profile change still sitting in the store's 800 ms debounce.

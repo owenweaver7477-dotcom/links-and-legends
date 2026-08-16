@@ -2574,7 +2574,31 @@ Net.on('records', d => {
   }
 });
 Net.on('kicked', d => { G.joined = false; G.room = null; route(); HUD.homeError(d.reason || 'Disconnected.'); });
-Net.on('disconnect', () => HUD.toast('Lost the connection — reconnecting…', 'warn', 2200));
+/* ── a blip is not an outage ──────────────────────────────────────────────
+   Socket.IO reconnects on its own, and on a free-tier host it has to do so
+   fairly often — a dropped websocket that is back in two seconds is a fact
+   of the platform, not an event in the player's round. Announcing every one
+   of them turned an invisible reconnect into "the game keeps losing
+   connection", which is a far worse experience than the drop itself.
+
+   So the warning waits. If the socket is back before the timer fires the
+   player never learns it happened, which is the honest description of what
+   occurred. If it is still down after four seconds it is worth saying, and
+   then the message stays until it is fixed rather than flashing past. */
+let dropWarn = 0;
+Net.on('disconnect', () => {
+  clearTimeout(dropWarn);
+  dropWarn = setTimeout(() => {
+    G.warnedDrop = true;
+    HUD.toast('Connection lost — reconnecting…', 'warn', 6000);
+  }, 4000);
+});
+Net.on('connect', () => {
+  clearTimeout(dropWarn);
+  /* Only after a drop the player was actually told about, or every ordinary
+     first connect would announce itself as a recovery. */
+  if (G.warnedDrop) { HUD.toast('Back online.', 'good', 1600); G.warnedDrop = false; }
+});
 
 /* ===================================================================== */
 /*  ROUTING                                                               */
