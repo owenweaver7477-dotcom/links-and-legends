@@ -1978,7 +1978,22 @@ io.on('connection', socket => {
          client that could concede its own putts could concede them from the
          fringe. */
       const gim = difficultyById(difficultyOf(p.pid)).aids.gimme;
-      if (gim > 0 && result.lie === 'green') {
+      /* ONLY A PUTT CAN BE CONCEDED, and leaving that out was a genuinely
+         bad bug. Without `fromGreen` this fired on ANY shot that finished
+         within the gimme radius — so a tee shot on a par 3 that pulled up
+         two feet from the cup was "conceded", picked up a stroke, and ended
+         the hole. The player watched the ball stop short of the hole and
+         the game said it was in, for a 2.
+
+         Which also means a genuine hole in one was impossible to record on
+         any hole where the ball came to rest rather than dropping: the ace
+         became a 2, and a 2 on a par 3 is a birdie. Both of the things that
+         looked like separate faults were this one line.
+
+         A gimme is something the other players give you when it is your
+         turn to PUTT. It is never given on a shot from the tee, and the tap
+         you are being spared has to be a tap you were actually facing. */
+      if (gim > 0 && fromGreen && result.lie === 'green') {
         const cup = h.cup || h.pin;
         if (Math.hypot(result.x - cup.x, result.z - cup.z) <= gim) {
           p.strokes++;                       // the tap-in you were given
@@ -2020,7 +2035,16 @@ io.on('connection', socket => {
         /* Somebody on the side holed out: the hole is over for all of them,
            at the score of whoever got it in. The rest do not keep playing a
            ball that is already in the cup. */
-        if (result.holed) {
+        /* `conceded` counts as holed HERE, and leaving it out broke every
+           scramble. A given putt finishes that player without setting
+           `result.holed`, so the side took the else branch and gathered
+           onto a ball that was, for all practical purposes, already in the
+           cup — with one member marked finished and the rest still to play,
+           which is a state the turn order has no answer for.
+
+           A conceded putt IS the hole being over. The only difference from
+           holing out is that nobody had to tap it. */
+        if (result.holed || conceded) {
           finishTeam(room, p.team, p.strokes, room.holeIndex);
         } else {
           const ball = bestBall(room, p.team, h.pin);

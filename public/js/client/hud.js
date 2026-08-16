@@ -239,6 +239,11 @@ HUD.setClub = (club, lieId, mult = 1, ends = null) => {
 HUD.setAim = deg => { el.aimTxt.textContent = (deg > 0 ? '+' : '') + deg.toFixed(1) + '°'; };
 
 /* ------------------------------------------------------------------ meter */
+/* How much of the bar's half-width the sweep covers. Slightly under 50 so
+   the marker's own width stays inside the track — and used for BOTH the
+   marker and the band it has to stop in, which is the whole point of it
+   being a named number rather than two literals in two places. */
+const SWEEP_SCALE = 48;
 /** Where a perfectly-paced shot sits on the meter, or null if out of range. */
 HUD.setTargetPower = (p) => {
   const mk = document.getElementById('mMark');
@@ -277,11 +282,22 @@ HUD.setMeter = (m, enabled) => {
     const mark = m.showBand !== false;
     zone.hidden = !mark;
     if (mark) {
-      const pct = (1 - (m.band ?? 0.2)) * 50;
+      /* THE SAME SCALE THE MARKER USES. The zone was drawn across ±50% of
+         the bar while the marker travels across ±48% — it is inset so a
+         four-pixel dot stays inside the track — so the two disagreed by up
+         to four per cent of the width. The dot reached the painted edge of
+         the green slightly before the strike actually left the band, which
+         means a player stopping it just inside the green could be judged
+         to have missed.
+
+         Small, and precisely the kind of small that feels like the game
+         cheating. Both now measure the same way, so what is judged is what
+         is drawn. */
+      const pct = 50 - (m.band ?? 0.2) * SWEEP_SCALE;
       zone.style.cssText = `left:${pct}%;right:${pct}%`;
     }
   }
-  const dotPct = striking ? 50 + clamp(m.sweep, -1, 1) * 48
+  const dotPct = striking ? 50 + clamp(m.sweep, -1, 1) * SWEEP_SCALE
     : clamp(50 + m.face * 4.4, 2, 98);
   el.mFaceDot.style.left = `calc(${dotPct}% - 2px)`;
   el.mFaceDot.classList.toggle('sweeping', striking);
@@ -1149,7 +1165,7 @@ HUD.renderHoleOver = (room, myPid, course) => {
       <span class="sw" style="background:${r.p.color}"></span>
       <span class="nm">${escapeHtml(r.p.name)}${r.p.pid === myPid ? ' (you)' : ''}</span>
       <span class="st">${r.s}</span>
-      <span class="vp ${rel < 0 ? 'under' : rel > 0 ? 'over' : ''}">${scoreName(rel)}</span>`;
+      <span class="vp ${rel < 0 ? 'under' : rel > 0 ? 'over' : ''}">${scoreName(rel, r.s)}</span>`;
     el.hoTable.appendChild(div);
   });
   /* The record for THIS hole, under the card.  A number to beat is worth more
@@ -1175,7 +1191,17 @@ HUD.renderHoleOver = (room, myPid, course) => {
   el.hoNote.textContent = isHost ? 'or wait — it moves on by itself' : 'Waiting for the host…';
 };
 
-function scoreName(rel) {
+/**
+ * @param strokes  how many it took. Optional, and the reason this exists:
+ *   a hole in one is not a name on the par-relative scale, it is its OWN
+ *   thing. Called with only `rel` it announced an ace on a par 3 as "Eagle"
+ *   and on a par 4 as "Albatross" — technically the right words for the
+ *   score, and not what anybody says or wants to see when the ball goes in
+ *   from the tee. It is the rarest thing in the game and it was the one
+ *   moment the scoreboard would not name.
+ */
+function scoreName(rel, strokes = null) {
+  if (strokes === 1) return 'Hole in one';
   if (rel <= -3) return 'Albatross';
   if (rel === -2) return 'Eagle';
   if (rel === -1) return 'Birdie';

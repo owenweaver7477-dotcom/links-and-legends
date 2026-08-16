@@ -1449,7 +1449,7 @@ function announce(a) {
     const rel = r.strokes - h.par;
     fireReaction(a.pid, r.strokes, h.par, false);
     const tier = REACTION_TIER[reactionFor(r.strokes, h.par, false)] || 0;
-    HUD.flash(HUD.scoreName(rel), `${p?.name || ''} holed out in ${r.strokes}`,
+    HUD.flash(HUD.scoreName(rel, r.strokes), `${p?.name || ''} holed out in ${r.strokes}`,
       tier >= 3 ? '#ffd94a' : rel < 0 ? '#8fe07a' : '#fff', tier);
     HUD.toast(`⛳ ${p?.name} holed out in ${r.strokes}`, 'good', 3200);
   } else if (r.reason === 'water') {
@@ -1466,7 +1466,7 @@ function announce(a) {
        than the putt — it is a holed-out hole in everything but the tap. */
     const rel = r.strokes - G.hole.par;
     fireReaction(a.pid, r.strokes, G.hole.par, false);
-    HUD.flash(HUD.scoreName(rel), `${who} — that's good`,
+    HUD.flash(HUD.scoreName(rel, r.strokes), `${who} — that's good`,
       rel < 0 ? '#8fe07a' : '#fff', REACTION_TIER[reactionFor(r.strokes, G.hole.par, false)] || 0);
     HUD.toast(`⛳ ${who} — given, ${r.strokes}`, 'good', 2600);
   } else if (a.pid === G.myPid) {
