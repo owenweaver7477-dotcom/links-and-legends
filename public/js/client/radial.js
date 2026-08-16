@@ -138,12 +138,25 @@ export const radialOpen = () => open;
  *   left button is left alone for the swing. Touch reports button 0 for
  *   every contact, so a touch always arms regardless of this list.
  */
-export function bindRadial(el, listFn, cb, { holdMs = 180, buttons = null } = {}) {
+export function bindRadial(el, listFn, cb, { holdMs = 180, buttons = null,
+                                             mouseOnly = false } = {}) {
   if (!el) return;
   let timer = 0, startX = 0, startY = 0, armed = false;
 
   const down = e => {
     const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
+    /* NEVER ON TOUCH, for the binding that covers the course itself.
+       A backswing IS a press-and-hold-drag — that is the entire gesture —
+       so arming a 220 ms hold on the same surface meant that on any
+       touchscreen, starting a swing opened this menu instead and
+       `setPointerCapture` took the pointer away from the swing. The club
+       could not be taken back at all.
+
+       Touch already has its own way in: the More button on the touchpad,
+       which is bound separately and does not pass this flag. A phone loses
+       nothing; it just does not get a gesture that collides with the only
+       gesture that matters. */
+    if (touch && mouseOnly) return;
     if (!touch && buttons && !buttons.includes(e.button)) return;
     if (!touch && !buttons && e.button != null && e.button > 1) return;
     startX = e.clientX; startY = e.clientY;

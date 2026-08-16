@@ -3382,7 +3382,9 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      stops it appearing there at all. */
   bindRadial(stage, () => (G.screen === 'game' ? RADIAL_ACTIONS() : []),
              (id, item) => radialPick(id, item),
-             { holdMs: 220, buttons: [1, 2] });
+             /* Mouse only. On touch this surface is the swing — see the note
+                in bindRadial. The More button carries the wheel on a phone. */
+             { holdMs: 220, buttons: [1, 2], mouseOnly: true });
   bindRadial(document.getElementById('tbMore'), RADIAL_ACTIONS, (id, item) => {
     radialPick(id, item);
   });
