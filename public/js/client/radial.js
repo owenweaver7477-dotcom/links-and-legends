@@ -170,7 +170,24 @@ export function bindRadial(el, listFn, cb, { holdMs = 180, buttons = null,
       try { el.setPointerCapture?.(pointer); } catch { /* not captureable */ }
     }, holdMs);
   };
-  const move = e => { if (open) { moveRadial(e.clientX, e.clientY); e.preventDefault(); } };
+  /* A HOLD IS STATIONARY; A DRAG IS A DRAG. Without this, right-dragging to
+     look around the hole also armed the wheel, and 220 ms later it opened
+     in the middle of the camera move — so on a mouse you could not look
+     around at all without the menu appearing over the top of it.
+
+     Sixteen pixels of slop, because nobody holds a mouse perfectly still,
+     and cancelling on the first jitter would make the gesture feel broken
+     in the other direction. */
+  const CANCEL_AT = 16;
+  const move = e => {
+    if (armed && !open &&
+        Math.hypot(e.clientX - startX, e.clientY - startY) > CANCEL_AT) {
+      clearTimeout(timer);
+      armed = false;
+      return;
+    }
+    if (open) { moveRadial(e.clientX, e.clientY); e.preventDefault(); }
+  };
   const up = () => {
     clearTimeout(timer);
     armed = false;

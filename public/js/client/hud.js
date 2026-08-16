@@ -179,11 +179,42 @@ HUD.setWind = (wind, viewHeading) => {
      is the precision: judging "blustery" is a skill, subtracting 9 mph is
      arithmetic. */
   el.wSpeed.textContent = windDetail === 'rough' ? '' : Math.round(mph);
-  el.wDesc.textContent = BEAUFORT(wind.speed);
   el.wSpeed.parentElement?.classList.toggle('rough', windDetail === 'rough');
-  // show the wind relative to the way the player is facing
+
+  /* MIRRORED, and it had been all along. The arrow is rotated by
+     `wind.dir - viewHeading`, and SVG rotates CLOCKWISE for a positive
+     angle — but in this coordinate frame (forward = sin h, cos h) the
+     player's right is reached by DECREASING the heading. So a wind thirty
+     degrees to the player's left was drawn thirty degrees to their right,
+     on every crosswind, on every hole.
+
+     The aim readout already carries a comment about needing exactly this
+     negation for exactly this reason; the wind rose never got it. Anybody
+     who trusted the arrow and aimed off it was aiming into the wind twice.
+
+     Negated here rather than at the call site so there is one place that
+     knows, next to the reason. */
   const rel = wind.dir - (viewHeading || 0);
-  el.wArrow.setAttribute('transform', `rotate(${(rel * 180 / Math.PI).toFixed(1)} 30 30)`);
+  el.wArrow.setAttribute('transform', `rotate(${(-rel * 180 / Math.PI).toFixed(1)} 30 30)`);
+
+  /* AND SAY IT IN WORDS. An arrow answers "which way" and leaves "so what"
+     to the player; a crosswind that costs you nothing and a headwind that
+     costs two clubs look identical on a compass rose. The component along
+     the shot is the number that actually matters, so it is the one written
+     down. */
+  const along = Math.cos(rel);                    // +1 behind you, -1 into you
+  const across = Math.sin(rel);
+  const strength = wind.speed;
+  let word;
+  if (strength < 1) word = 'calm';
+  else if (Math.abs(along) > 0.55) word = along > 0 ? 'helping' : 'into you';
+  /* Verified against the simulation rather than reasoned about, because the
+     sign conventions in this frame have caught me twice already: a wind at
+     rel=+90° moves the ball 39 m LEFT, and a wind that pushes the ball left
+     is one blowing right-to-left. Golfers name a crosswind by where it comes
+     FROM, which is the opposite end from where it is going. */
+  else word = across > 0 ? 'right to left' : 'left to right';
+  el.wDesc.textContent = strength < 1 ? 'calm' : `${BEAUFORT(wind.speed)} · ${word}`;
 };
 
 /* ------------------------------------------------------------------- club */

@@ -2983,3 +2983,40 @@ body.hudfade .windbox, body.hudfade .onlinenow {
 /* Data credits. Required by ODbL for any course built from OpenStreetMap
    data, and hidden entirely when none of the roster came from there. */
 .lp-attrib { margin: 4px 0 0; font-size: 10px; color: #6c8a75; letter-spacing: .2px; }
+
+/* ══════════════════════════════ ONE BAR, AT THE BOTTOM ════════════════
+   The screenshot had three overlapping things along the bottom edge: a
+   solid hint bar reading "Walk to your ball — 55 m away" with eight key
+   caps after it, a SECOND ghosted copy of nearly the same key list beneath
+   it, and a strip of canned chat phrases above them both. Between them they
+   covered the bottom third of the fairway with text nobody reads twice.
+
+   A key list is onboarding. It earns its space for one round and then costs
+   space forever, and there is a Controls tab in the clubhouse that lists all
+   of it properly. So: the permanent list goes, the duplicate goes, the chat
+   strip goes, and what remains is one line at the very bottom that only
+   appears when it has something to say. */
+
+/* the second, ghosted key list — pure duplication of the walkbar */
+body.playing .hintbar { display: none !important; }
+
+/* the canned phrases: still one tap away on the radial and the Say button,
+   just no longer parked across the hole */
+body.playing .phrasebar { display: none; }
+body.playing.saying .phrasebar { display: flex; }
+
+/* what is left, at the very bottom and only when it is saying something */
+body.playing .walkbar {
+  bottom: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  border-radius: 10px;
+  max-width: min(92vw, 640px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The key caps inside it are the onboarding half. The distance is the half
+   that matters on every hole, so the caps fade out of the way rather than
+   being deleted — a new player still sees them. */
+body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }

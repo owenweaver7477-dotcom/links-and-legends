@@ -409,7 +409,22 @@ export class ShotSim {
     const cup = this.hole.cup;
     const dcup = this.ignoreCup ? Infinity : Math.hypot(p.x - cup.x, p.z - cup.z);
     sp = Math.hypot(v.x, v.z);
-    const capture = HOLE_CAPTURE_SPEED * (1 + (this.cfx?.cupBonus || 0));
+    /* HOW CENTRED IT IS, not just how fast. The capture test used one speed
+       for the whole hole, so a putt dead through the middle and one clipping
+       the very edge were treated identically — and since anything over the
+       threshold rolls straight across, a well-struck putt on a true line
+       could sit on 1.6 m/s and simply refuse to drop. That reads as the hole
+       not working, because in real golf a ball through the middle at that
+       pace falls in.
+
+       A real cup takes a centred ball at a noticeably higher speed than an
+       edge one: the centred ball has the whole diameter to fall through,
+       the edge one only catches the lip. So the threshold now runs from the
+       base speed at the rim up to 1.7x through the middle. An edge-clipper
+       is exactly as hard as it was. */
+    const base = HOLE_CAPTURE_SPEED * (1 + (this.cfx?.cupBonus || 0));
+    const centred = Math.max(0, 1 - dcup / Math.max(1e-6, cup.r));
+    const capture = base * (1 + 0.7 * centred * centred);
     if (dcup <= cup.r + RADIUS * 0.5 && sp <= capture) {
       this.events.push({ type: 'holed', x: cup.x, y: p.y, z: cup.z });
       return this._finish({ reason: 'holed', holed: true, penalty: 0, x: cup.x, z: cup.z, lie: 'green' });
