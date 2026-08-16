@@ -56,9 +56,29 @@ let timer = null;
    backend simply never used it. */
 const jsonCache = new Map();      // pid -> its serialised form
 
+/* Whether a row is worth keeping. Set by profiles.js at open time, because
+   the store must not need to know what a profile IS — only whether the owner
+   says this one matters.
+
+   The reason it exists: on a games portal, most visitors load the page,
+   look, and leave. Every one of them gets a profile the moment their client
+   says hello, and a file store rewrites EVERY row on every save. Twenty
+   thousand of those is 23 MB written after every hole anybody anywhere
+   plays, on a debounce, to a free-tier disk. That is the same event-loop
+   starvation that once produced "everything has gone really slow and
+   sometimes I can't even hit my ball", arriving by success rather than by
+   a bug.
+
+   A profile with no progress in it is exactly reproducible from the
+   defaults, so dropping it loses nothing: somebody who comes back gets an
+   identical blank one. */
+let shouldPersist = null;
+export const setPersistFilter = fn => { shouldPersist = typeof fn === 'function' ? fn : null; };
+
 function serialise(rows) {
   const parts = [];
   for (const [pid, p] of rows) {
+    if (shouldPersist && !shouldPersist(p)) continue;
     let j = jsonCache.get(pid);
     if (j === undefined) {
       j = JSON.stringify(p);
@@ -134,7 +154,15 @@ function pgStore(url) {
       /* Only what changed, in one statement. Rewriting every profile on every
          flush would turn a nine-hole round into thousands of pointless
          writes. */
-      const pids = [...changed];
+      /* The same filter the file store uses, for the same reason — a
+         database does not care about the write cost the way a whole-file
+         rewrite does, but a table with a row per drive-by visitor is still
+         a table nobody wants to page through. */
+      const pids = [...changed].filter(pid => {
+        const row = rows.get(pid);
+        return row && (!shouldPersist || shouldPersist(row));
+      });
+      if (!pids.length) return;
       const values = pids.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2}::jsonb, now())`).join(',');
       const params = [];
       for (const pid of pids) params.push(pid, JSON.stringify(rows.get(pid) ?? {}));

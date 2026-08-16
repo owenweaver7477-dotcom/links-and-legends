@@ -12,7 +12,8 @@
    ========================================================================= */
 
 import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp } from '../public/js/shared/economy.js';
-import { openStore, touch, saveSoon as storeSaveSoon, flushNow as flushStore } from './store.js';
+import { openStore, touch, saveSoon as storeSaveSoon, flushNow as flushStore,
+         setPersistFilter } from './store.js';
 import { handicapIndex, differential, ratingTier } from '../public/js/shared/handicap.js';
 import { normaliseSkin } from '../public/js/shared/clubskins.js';
 import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js';
@@ -40,6 +41,12 @@ export async function flushProfiles() {
 }
 
 export async function loadProfiles() {
+  /* Only profiles with something in them reach the disk. `untouched` is the
+     `worthSaving` — see the note on it for why that is a wider test than
+     `untouched`. A profile nothing has happened to is indistinguishable from
+     a fresh one, so not writing it loses nothing and keeps the store the
+     size of the actual playerbase rather than of the visitor count. */
+  setPersistFilter(worthSaving);
   await openStore(profiles);
   const fixed = repairBests();
   if (fixed) console.log(`  repaired ${fixed} impossible best-round score${fixed === 1 ? '' : 's'}`);
@@ -130,6 +137,40 @@ function untouched(p) {
   if (p.gear && Object.values(p.gear).some(v => (v || 0) > 0)) return false;
   if (p.crew && Object.values(p.crew).some(v => (v || 0) > 0)) return false;
   return (p.coins || 0) <= STARTING_COINS;      // the welcome purse only
+}
+
+/**
+ * Is there anything here a player would miss?
+ *
+ * Broader than `untouched`, and it has to be. `untouched` asks "is there
+ * PROGRESS to protect" — rounds, coins, gear — which is the right question
+ * for deciding whether a cloud backup may overwrite a profile. It is the
+ * wrong question for deciding what reaches the disk, because it says nothing
+ * about the choices a player makes before they have played a single hole:
+ * dressing their golfer, picking a ball colour, setting a difficulty,
+ * building a bag.
+ *
+ * Using `untouched` here dropped exactly those. Somebody who opened the
+ * wardrobe, spent five minutes on their outfit and closed the tab would have
+ * come back to the default golfer — "the appearance goes back to default"
+ * for the third time, reintroduced by an optimisation. A test caught it.
+ *
+ * `lastSeen` deliberately does NOT count: it is stamped for every visitor
+ * the moment their client says hello, so counting it would keep everything
+ * and the filter would do nothing at all.
+ */
+export function worthSaving(p) {
+  if (!p) return false;
+  if (!untouched(p)) return true;                  // any real progress
+  if (p.look || p.bag || p.ballColor) return true; // any deliberate choice
+  if (p.difficulty && p.difficulty !== 'standard') return true;
+  if (p.clubSkin && p.clubSkin !== 'stock') return true;
+  if (p.best != null) return true;
+  if (p.h2h && Object.keys(p.h2h).length) return true;
+  if (Array.isArray(p.history) && p.history.length) return true;
+  if (Array.isArray(p.cleared) && p.cleared.length) return true;
+  if (p.stars && Object.keys(p.stars).length) return true;
+  return false;
 }
 
 export function seedProfile(pid, snap) {

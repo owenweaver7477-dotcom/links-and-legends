@@ -141,3 +141,78 @@ test('an unknown rate falls back to paying normally', () => {
   }
   assert.equal(earnRate('nonsense'), 1, 'an invented mode should earn normally');
 });
+
+/* ══════════════════════════ WHAT REACHES THE DISK, AND WHAT DOES NOT ═══
+   On a games portal most visitors load the page, look, and leave. Every one
+   of them gets a profile the moment their client says hello, and the file
+   store rewrites EVERY row on every save — twenty thousand of those is
+   23 MB written after every hole anybody anywhere plays. That is the same
+   event-loop starvation behind "everything has gone really slow and
+   sometimes I can't even hit my ball", arriving through success instead of
+   through a bug.
+
+   So blank profiles are not written. The danger in that is obvious in
+   hindsight and was not obvious while writing it: "blank" must mean blank to
+   the PLAYER, not blank to the progression system. Somebody who opens the
+   wardrobe, spends five minutes on an outfit and closes the tab has played
+   no holes, earned no coins and bought no gear — and would have come back to
+   the default golfer. The first version of the filter did exactly that. */
+
+import { worthSaving } from '../server/profiles.js';
+
+/* Asserted on the PREDICATE rather than by writing to disk. Opening the real
+   store here would claim the writer lock on the shared test directory, which
+   the suite's own server already holds — the lock is right to refuse, and
+   fighting it would mean weakening it for a test.
+
+   The disk round-trip is covered where it belongs, in persistence.mjs, which
+   stands up its own server in its own directory and checks an outfit survives
+   a session. */
+const blank = () => ({ rounds: 0, holes: 0, xp: 0, coins: 900,
+                       gear: {}, crew: {}, clubTier: 0, refine: 0 });
+
+test('a profile nobody has done anything with is not written', () => {
+  assert.equal(worthSaving(blank()), false, 'an untouched profile would reach the disk');
+});
+
+test('merely having visited does not count', () => {
+  /* `lastSeen` is stamped for every visitor the moment they connect. If it
+     counted, the filter would keep everything and do nothing at all — a
+     failure that looks exactly like success. */
+  assert.equal(worthSaving({ ...blank(), lastSeen: Date.now() }), false,
+    'a bare visit was treated as progress');
+});
+
+test('an outfit alone is enough to be worth saving', () => {
+  /* The near-miss. Somebody who opens the wardrobe, spends five minutes on
+     an outfit and closes the tab has played no holes, earned no coins and
+     bought no gear — and the first version of this filter dropped them. */
+  assert.equal(worthSaving({ ...blank(), look: normaliseLook({ shirt: '#5c8a4a' }) }), true,
+    'a player who dressed their golfer but never played would lose their outfit');
+});
+
+test('every other deliberate choice counts too', () => {
+  const cases = {
+    bag: { bag: normaliseBag(['DR', 'I7']) },
+    'ball colour': { ballColor: '#ffd76b' },
+    difficulty: { difficulty: 'tournament' },
+    'club finish': { clubSkin: 'brushed' },
+    'a best round': { best: 4 },
+    'a cleared course': { cleared: ['parkland'] },
+    'a head-to-head': { h2h: { someone: { w: 1, l: 0, d: 0 } } }
+  };
+  for (const [what, patch] of Object.entries(cases)) {
+    assert.equal(worthSaving({ ...blank(), ...patch }), true,
+      `${what} would be dropped on the way to the disk`);
+  }
+});
+
+test('a played hole counts, obviously', () => {
+  assert.equal(worthSaving({ ...blank(), holes: 1, strokes: 5 }), true);
+});
+
+test('the default difficulty is not a choice', () => {
+  /* Standard is what everybody starts on, so storing it says nothing. */
+  assert.equal(worthSaving({ ...blank(), difficulty: 'standard' }), false);
+  assert.equal(worthSaving({ ...blank(), clubSkin: 'stock' }), false);
+});

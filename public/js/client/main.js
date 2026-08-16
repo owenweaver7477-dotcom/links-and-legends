@@ -2530,7 +2530,14 @@ Net.on('profile', prof => {
      golfer back instead of the default one. Only on the FIRST profile: after
      that the local draft is what the player is actively editing, and letting
      a later broadcast overwrite it would undo their changes mid-click. */
-  if (!before && prof.look && !localStorage.getItem(LOOK_KEY)) {
+  /* `hasLocalLook`, not a bare localStorage read. Reading storage THROWS in
+     a sandboxed iframe and in Safari's private mode, and this sits inside
+     the profile handler — so on a portal that blocks storage the throw would
+     take out the clubhouse render, the difficulty picker and the look
+     restore in one go, on the first message the server sends. Every other
+     storage access in this file is already wrapped; this one was added later
+     and was not. */
+  if (!before && prof.look && !hasLocalLook()) {
     lookDraft = normaliseLook(prof.look, 0, undefined, prof.level ?? 1);
     saveLook(lookDraft);
     refreshMenuAvatar();
@@ -2666,6 +2673,10 @@ function drawLookPicker() {
 drawLookSafe = drawLookPicker;
 
 const LOOK_KEY = 'golf.look';
+/** Is there a look cached in this browser? False when storage is unavailable. */
+const hasLocalLook = () => {
+  try { return !!localStorage.getItem(LOOK_KEY); } catch { return false; }
+};
 const saveLook = look => { try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch { /* private mode */ } };
 const loadLook = () => {
   try { return normaliseLook(JSON.parse(localStorage.getItem(LOOK_KEY) || 'null')); }
