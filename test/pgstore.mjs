@@ -101,3 +101,61 @@ test('the table the store creates matches the columns it writes', async () => {
      every managed provider refuses the connection. */
   assert.match(src, /rejectUnauthorized: false/, 'TLS would be rejected by most hosts');
 });
+
+test('the Supabase setup SQL matches the schema the server creates', async () => {
+  /* Two places now describe the same two tables: store.js, which creates
+     them on first connect, and tools/supabase-setup.sql, which somebody
+     pastes into a dashboard beforehand. If those drift, the paste wins —
+     the server's CREATE TABLE IF NOT EXISTS finds a table already there and
+     silently accepts whatever shape it has, so a stale setup file becomes a
+     wrong schema that nothing complains about until a write fails.
+
+     Checked by column, not by string equality: the files are formatted
+     differently on purpose and should stay free to be. */
+  const { readFile } = await import('node:fs/promises');
+  const store = await readFile(new URL('../server/store.js', import.meta.url), 'utf8');
+  const setup = await readFile(new URL('../tools/supabase-setup.sql', import.meta.url), 'utf8');
+
+  const columns = (sql, table) => {
+    const at = sql.toLowerCase().indexOf(table.toLowerCase());
+    assert.ok(at >= 0, `${table} is not defined here at all`);
+    /* To the `)` that CLOSES the definition, not the first one in it —
+       `default now()` has a paren of its own and slicing at that dropped the
+       final column, so the test reported a mismatch that was its own. */
+    const body = sql.slice(at, sql.indexOf(')\n', at) + 1 || sql.indexOf(');', at) + 1);
+    return body.toLowerCase().replace(/\s+/g, ' ');
+  };
+
+  for (const [table, want] of [
+    ['profiles', ['pid text primary key', 'data jsonb not null', 'updated_at timestamptz not null default now()']],
+    ['blobs',    ['key text primary key', 'data jsonb not null', 'updated_at timestamptz not null default now()']]
+  ]) {
+    const inStore = columns(store, `CREATE TABLE IF NOT EXISTS ${table}`);
+    const inSetup = columns(setup, `create table if not exists public.${table}`);
+    for (const col of want) {
+      assert.ok(inStore.includes(col), `store.js ${table} is missing: ${col}`);
+      assert.ok(inSetup.includes(col), `supabase-setup.sql ${table} is missing: ${col}`);
+    }
+  }
+});
+
+test('the setup SQL turns row level security on and grants nothing', async () => {
+  /* The absence of a policy IS the policy: RLS on with no CREATE POLICY
+     blocks the anon and authenticated roles the REST API uses, while
+     leaving the owning role the server connects as untouched. A stray
+     CREATE POLICY here would quietly reopen the tables to the public API. */
+  const { readFile } = await import('node:fs/promises');
+  const setup = await readFile(new URL('../tools/supabase-setup.sql', import.meta.url), 'utf8');
+  const sql = setup.replace(/--[^\n]*/g, '');           // strip comments first
+
+  for (const table of ['profiles', 'blobs']) {
+    assert.match(sql, new RegExp(`alter table public\\.${table}\\s+enable row level security`, 'i'),
+      `RLS is not enabled on ${table}`);
+  }
+  assert.doesNotMatch(sql, /create policy/i,
+    'a policy would reopen the tables to the public API');
+  assert.doesNotMatch(sql, /force row level security/i,
+    'FORCE would apply RLS to the owner too — that is the game server, and it would lose access');
+  assert.doesNotMatch(sql, /drop table|truncate|delete from/i,
+    'the setup file must be safe to run on a live database');
+});
