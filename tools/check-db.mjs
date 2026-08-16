@@ -70,6 +70,29 @@ if (!parsed.password) {
       'Supabase shows it as [YOUR-PASSWORD]; paste the real one in its place.');
 }
 
+/* CHARACTERS THE URL SWALLOWS. A password is part of a URL, so anything
+   with special meaning in one has to be percent-encoded — and this is the
+   failure that wastes the most time, because the two parsers involved
+   disagree quietly. `new URL()` splits userinfo at the LAST `@`, so a
+   password containing one still yields the right host and looks perfectly
+   healthy here; node-postgres does its own parsing and need not agree. The
+   result is a checker that passes and a server that cannot log in.
+
+   So this reads the raw string rather than the parsed one. */
+const rawUserinfo = url.slice(url.indexOf('://') + 3, url.lastIndexOf('@'));
+const rawPassword = rawUserinfo.slice(rawUserinfo.indexOf(':') + 1);
+const RISKY = ['@', '/', '?', '#', '[', ']', ' '];
+const found = RISKY.filter(c => rawPassword.includes(c));
+if (found.length) {
+  const enc = c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
+  die(`The password contains ${found.map(c => c === ' ' ? 'a space' : `"${c}"`).join(' and ')}, which a URL treats specially.`,
+      'Percent-encode it, or the driver may read the string differently:',
+      ...found.map(c => `    ${c === ' ' ? 'space' : c}  becomes  ${enc(c)}`),
+      '',
+      'Easiest fix: reset the password under Settings → Database and let',
+      'Supabase generate one, which will be safe to paste as-is.');
+}
+
 /* The direct host is IPv6-only on Supabase, and most hosts — Render
    included — only have IPv4. It resolves, it looks right, and it times out. */
 const direct = /^db\..*\.supabase\.co$/.test(parsed.hostname);
