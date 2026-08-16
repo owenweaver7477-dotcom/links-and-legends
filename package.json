@@ -16,7 +16,8 @@
     "test:cart": "GOLF_DATA_DIR=.test-data node test/cart.mjs",
     "verify:bundle": "node tools/verify-bundle.mjs",
     "test:portal": "GOLF_DATA_DIR=.test-data node --test test/portal.test.mjs",
-    "migrate:db": "node tools/migrate-db.mjs"
+    "migrate:db": "node tools/migrate-db.mjs",
+    "check:db": "node tools/check-db.mjs"
   },
   "engines": {
     "node": ">=18"
