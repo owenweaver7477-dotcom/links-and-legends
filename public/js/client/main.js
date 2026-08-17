@@ -217,14 +217,27 @@ try { const f = localStorage.getItem('lg_format');
       if (f && FORMATS.some(x => x.id === f)) pickedFormat = f; } catch { /* private mode */ }
 
 function menuBackdrop() {
-  if (G.joined || menu.key) return;
+  /* THE ROOM'S COURSE, NOT YOURS. This returned the moment `G.joined` went
+     true, which meant two things went wrong at once.
+
+     Joining a room by link never built a backdrop at all — `menu.key` stayed
+     null, the frame loop's menu branch needs it, and the lobby sat in front
+     of an empty scene. And a player who HAD been on the landing page kept
+     looking at whichever course they had picked for themselves, while the
+     host had chosen a different one, so the preview was actively wrong.
+
+     A lobby is still a menu: it should show the hole everybody is about to
+     play. Only a live round owns the scene outright. */
+  const inLobby = G.joined && G.room?.state === 'lobby';
+  if (G.joined && !inLobby) return;            // mid-round: the round owns it
+  const courseId = inLobby ? (G.room.courseId || pickedCourse) : pickedCourse;
+  if (menu.key === courseId) return;           // already showing exactly this
   // the actor group survives hole changes on purpose, so avatars from a round
   // just left have to be shown out — or they loiter on the title screen
   for (const [pid, av] of G.avatars) {
     scene.actorGroup.remove(av.root); av.dispose();
     G.avatars.delete(pid); G.remote.delete(pid);
   }
-  const courseId = pickedCourse;
   G.course = getCourse(courseId);
   G.hole = G.course.holes[0];
   G.bio = biomeFor(courseId);
@@ -2699,6 +2712,12 @@ function route() {
   if (r.state === 'lobby') {
     G.screen = 'lobby';
     HUD.show('lobby');
+    /* Show the hole everybody is about to play. Called on every state, and
+       cheap when nothing changed — menuBackdrop returns immediately if the
+       course it would build is the one already up, which is what makes it
+       safe to call from a handler that fires whenever anybody in the room
+       so much as changes their ball colour. */
+    menuBackdrop();
     renderLobbyAll(r);
     return;
   }
@@ -2800,8 +2819,15 @@ function renderClubhouse() {
   HUD.renderBinds();
   Net.ranking(d => HUD.renderWorld(d, G.myPid));
   HUD.renderShop(prof, item => Net.buy(item));
+  /* The room player FIRST, then the saved profile, then the default set.
+     The middle step was missing, and the clubhouse is opened from the front
+     page where there is no room — so `me()` was null and the bag screen
+     showed fourteen default clubs however carefully you had built it. Which
+     also meant opening the clubhouse and closing it overwrote the saved bag
+     with the default, because the draft it echoes back is what it drew. */
   bagDraft = me()?.bag?.length ? me().bag.slice()
-    : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true }));
+    : (prof?.bag?.length ? prof.bag.slice()
+      : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true })));
   HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, G.profile?.clubSkin || 'stock');
   HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
     if (res?.error) return HUD.toast(res.error, 'warn', 3000);
@@ -2837,7 +2863,9 @@ function renderLobbyAll(r) {
     Object.fromEntries(COURSES.map(c => [c.id, ratingsFor(c)])));
   HUD.renderTees(course.holes[0], r.teeSet || 'back', isHost, t => Net.pickTees(t));
   HUD.renderColours(r, G.myPid, hex => Net.prefs({ color: hex }), G.profile?.rating || 0);
-  bagDraft = me()?.bag?.length ? me().bag.slice() : normaliseBag(DEFAULT_BAG, { pad: true });
+  bagDraft = me()?.bag?.length ? me().bag.slice()
+    : (G.profile?.bag?.length ? G.profile.bag.slice()
+      : normaliseBag(DEFAULT_BAG, { pad: true }));
   // the room owns the round; the golfer came with us, so push what we already
   // chose on the front page rather than reading it back off the server
   if (lookDraft) Net.setLook(lookDraft);

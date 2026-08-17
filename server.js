@@ -1196,8 +1196,26 @@ io.on('connection', socket => {
       if (inRoom) inRoom.difficulty = set;
     }
 
+    /* THE BAG IS A PROFILE SETTING, not a room one — and it is edited in
+       the clubhouse, which is outside every room. So this dropped it for
+       exactly the same reason it dropped the difficulty and the look before
+       it: three separate settings, three separate reports of "it doesn't
+       save", one shared assumption that a preference only exists inside a
+       game.
+
+       Only the ball COLOUR genuinely needs a room, because it is the one
+       choice another player can take off you — two identical balls on one
+       hole is confusing, so it is first come first served. */
+    if (Array.isArray(bag)) {
+      const clean = normaliseBag(bag);
+      setBag(pid, clean);
+      socket.emit('profile', publicProfile(pid));
+      const inRoom = ref && rooms.get(ref.code)?.players.find(x => x.pid === pid);
+      if (inRoom) inRoom.bag = clean;
+    }
+
     const room = ref ? rooms.get(ref.code) : null;
-    if (!room) return;                       // colour and bag need a room
+    if (!room) return;                       // the colour needs a room
     const p = room.players.find(x => x.pid === ref.pid); if (!p) return;
 
     const before = p.color + '|' + JSON.stringify(p.bag);
@@ -1214,7 +1232,7 @@ io.on('connection', socket => {
       }
       }
     }
-    if (Array.isArray(bag)) { p.bag = normaliseBag(bag); setBag(ref.pid, p.bag); }
+
 
     // only broadcast a real change, and coalesce bursts (see castSoon)
     if (before === p.color + '|' + JSON.stringify(p.bag)) return;
@@ -1993,7 +2011,14 @@ io.on('connection', socket => {
          A gimme is something the other players give you when it is your
          turn to PUTT. It is never given on a shot from the tee, and the tap
          you are being spared has to be a tap you were actually facing. */
-      if (gim > 0 && fromGreen && result.lie === 'green') {
+      /* NEVER IN A SCRAMBLE. A side plays one ball, so "your turn to putt"
+         is not a thing that happens to an individual — conceding one
+         player's putt would end the hole for the whole side on a ball the
+         others had not agreed to, and the scramble gather is built around
+         everybody playing the same shot count. In a format where the team
+         shares the ball, the team holes it out. */
+      const scramble = isScramble(room.format);
+      if (gim > 0 && !scramble && fromGreen && result.lie === 'green') {
         const cup = h.cup || h.pin;
         if (Math.hypot(result.x - cup.x, result.z - cup.z) <= gim) {
           p.strokes++;                       // the tap-in you were given

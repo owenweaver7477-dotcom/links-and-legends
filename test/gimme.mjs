@@ -33,9 +33,19 @@ const block = src.slice(src.indexOf('const gim = difficultyById'),
 
 test('a concession requires the shot to have come from the green', () => {
   /* `fromGreen` is the flag that says this stroke was a putt. Without it in
-     the condition, a tee shot that stops near the cup is conceded. */
-  assert.match(block, /if \(gim > 0 && fromGreen && result\.lie === 'green'\)/,
-    'the gimme does not check that the stroke was a putt');
+     the condition, a tee shot that stops near the cup is conceded. Matched
+     loosely on the two facts rather than on the whole line, so adding a
+     further condition does not fail this for the wrong reason. */
+  assert.match(block, /gim > 0/, 'the gimme range is not checked');
+  assert.match(block, /fromGreen/, 'the gimme does not check that the stroke was a putt');
+  assert.match(block, /result\.lie === 'green'/, 'the gimme does not check where it stopped');
+});
+
+test('nothing is conceded in a scramble', () => {
+  /* A side plays one ball, so "your turn to putt" is not something that
+     happens to an individual — conceding one player's putt would end the
+     hole for the whole side on a ball the others never agreed to. */
+  assert.match(block, /!scramble/, 'a scramble can still concede a putt');
 });
 
 test('a concession still costs the stroke', () => {
