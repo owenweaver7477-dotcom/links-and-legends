@@ -2403,14 +2403,44 @@ function drawMini(now) {
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2 * dpr; ctx.stroke();
   }
 
-  // everyone's ball, mine ringed
+  /* BALLS AND GOLFERS ARE DIFFERENT PLACES, and the map only ever drew the
+     ball. After a shot your golfer stays where they played from — that is
+     deliberate, it is how you decide whether to walk, wait or take the cart
+     — so the one marker on the map was your BALL two hundred metres away
+     while you stood on the tee wondering why the map said you were down
+     there. It was not wrong about the ball; it was silent about you.
+
+     The golfer is drawn as a hollow ring so the two never read as the same
+     kind of thing, and only when they are far enough apart to be worth
+     distinguishing: standing over the ball, one marker is the honest
+     picture and two would be clutter. */
   if (G.room) for (const p of G.room.players) {
     if (p.spectator) continue;
     const bl = G.balls[p.pid] || p;
+    const mine = p.pid === G.myPid;
+
+    const gx = p.ax ?? bl.x, gz = p.az ?? bl.z;
+    if (Math.hypot(gx - bl.x, gz - bl.z) > 6) {
+      ctx.beginPath();
+      ctx.arc(x2(gx), z2(gz), (mine ? 3.4 : 2.6) * dpr, 0, Math.PI * 2);
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = (mine ? 2 : 1.4) * dpr;
+      ctx.stroke();
+      /* A hairline from the golfer to their ball: it says "that one is
+         yours" without needing a legend, and shows the walk at a glance. */
+      if (mine) {
+        ctx.beginPath();
+        ctx.moveTo(x2(gx), z2(gz));
+        ctx.lineTo(x2(bl.x), z2(bl.z));
+        ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+        ctx.lineWidth = dpr; ctx.stroke();
+      }
+    }
+
     ctx.beginPath();
-    ctx.arc(x2(bl.x), z2(bl.z), (p.pid === G.myPid ? 3.2 : 2.4) * dpr, 0, Math.PI * 2);
+    ctx.arc(x2(bl.x), z2(bl.z), (mine ? 3.2 : 2.4) * dpr, 0, Math.PI * 2);
     ctx.fillStyle = p.color; ctx.fill();
-    if (p.pid === G.myPid) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3 * dpr; ctx.stroke(); }
+    if (mine) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.3 * dpr; ctx.stroke(); }
   }
 
   // the pin

@@ -1562,8 +1562,10 @@ HUD.renderRewards = (prof) => {
        <div class="lv-xp"><b>${xp.toLocaleString()}</b><em>XP</em></div>
      </div>
      <div class="lv-track" id="lvTrack">
-       <div class="lv-rail"><i style="width:${pct}%"></i></div>
-       <div class="lv-nodes">${nodes}</div>
+       <div class="lv-inner">
+         <div class="lv-rail"><i id="lvFill" style="width:${pct}%"></i></div>
+         <div class="lv-nodes">${nodes}</div>
+       </div>
      </div>
      <div class="lv-preview" id="lvPreview"></div>
      <p class="tiny">Levels buy identity, never distance — nothing on this
@@ -1580,6 +1582,24 @@ HUD.renderRewards = (prof) => {
     const track = document.getElementById('lvTrack');
     const here = track?.querySelector('.lv-node.here') || track?.querySelector('.lv-node:not(.got)');
     if (track && here) track.scrollLeft = here.offsetLeft - track.clientWidth / 2 + here.offsetWidth / 2;
+
+    /* FILL TO THE NODE, not to a percentage of the level range.
+       `level / maxAt` describes progress through the LEVELS; the rail has to
+       describe progress along the TRACK, and the two are not the same
+       picture because the nodes are evenly spaced while the levels they mark
+       are not — the gaps widen from every two levels early on to fourteen
+       later. So the line stopped somewhere between two nodes for no reason a
+       player could see.
+
+       Measured off the node that is actually current, so the line ends under
+       the dot it is talking about whatever the spacing does. */
+    const fill = document.getElementById('lvFill');
+    const inner = track?.querySelector('.lv-inner');
+    if (fill && inner && here) {
+      const w = inner.scrollWidth || inner.clientWidth;
+      const centre = here.offsetLeft + here.offsetWidth / 2;
+      fill.style.width = Math.max(0, Math.min(100, (centre / w) * 100)) + '%';
+    }
   });
   HUD.showLevelPreview(level, level);
 };

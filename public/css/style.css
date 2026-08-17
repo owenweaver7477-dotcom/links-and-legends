@@ -2250,9 +2250,18 @@ body.side-open .lp-play-fixed { opacity: .5; }
   scrollbar-width: thin; scroll-behavior: smooth; }
 .lv-track::-webkit-scrollbar { height: 7px; }
 .lv-track::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius: 4px; }
-/* the rail runs behind the nodes and fills to where you are */
-.lv-rail { position: absolute; left: 0; right: 0; top: 34px; height: 3px;
-  background: rgba(255,255,255,.10); border-radius: 2px; min-width: 100%; }
+/* THE RAIL HAS TO LIVE IN THE NODES' COORDINATE SPACE. It was absolutely
+   positioned against `.lv-track`, which is the SCROLL CONTAINER — so
+   left:0/right:0 sized it to the visible window, about seven hundred
+   pixels, while the nodes stretch to several thousand. The line was
+   therefore a short bar pinned to the viewport that did not move when you
+   scrolled and could never line up with anything.
+
+   `.lv-inner` is as wide as the nodes are, so the rail spans the whole
+   track and scrolls with it. */
+.lv-inner { position: relative; width: max-content; min-width: 100%; }
+.lv-rail { position: absolute; left: 12px; right: 12px; top: 34px; height: 3px;
+  background: rgba(255,255,255,.10); border-radius: 2px; }
 .lv-rail i { display: block; height: 100%; border-radius: 2px;
   background: linear-gradient(90deg, #6fce8a, #7fb6dd, #a98cd8, #e8c15a, #dfe6ec); }
 .lv-nodes { position: relative; display: flex; gap: 26px; padding: 0 12px; width: max-content; }
