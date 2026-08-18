@@ -1,0 +1,131 @@
+<!doctype html><meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0b1710}
+  .wrap{position:relative;width:100vw;height:100vh;overflow:hidden;
+        font-family:'Avenir Next','Helvetica Neue',system-ui,sans-serif}
+  svg{position:absolute;inset:0;width:100%;height:100%}
+  .title{position:absolute;color:#fff;text-shadow:0 6px 30px rgba(0,0,0,.75)}
+  .title h1{font-weight:800;letter-spacing:-.03em;line-height:.92}
+  .title h1 em{font-style:normal;color:#8fe0a4}
+  .kick{display:inline-block;background:#6fce8a;color:#0b1710;font-weight:800;
+        letter-spacing:.14em;text-transform:uppercase;border-radius:99px}
+  .sub{color:#cfeddb;font-weight:600;opacity:.94}
+  .chips{display:flex;gap:.5em;flex-wrap:wrap}
+  .chip{background:rgba(6,20,13,.62);border:1px solid rgba(255,255,255,.16);
+        color:#dff3e6;border-radius:99px;font-weight:700;backdrop-filter:blur(6px)}
+</style>
+<div class="wrap" id="w"></div>
+<script>
+const P = new URLSearchParams(location.search);
+const W = +P.get('w') || 1920, H = +P.get('h') || 1080;
+const mode = P.get('mode') || 'land';
+document.documentElement.style.width = W+'px';
+document.documentElement.style.height = H+'px';
+
+/* A deterministic little RNG so the ridgelines are the same every render. */
+let s = 20260817;
+const rnd = () => (s = (s*1664525+1013904223)>>>0) / 4294967296;
+
+/* Low-poly ridge bands, the same trick the game's backdrop uses: each band
+   is a jagged polyline filled to the bottom, paler and hazier with depth. */
+function ridge(y, amp, fill, seg){
+  let d = `M0 ${H} L0 ${y}`;
+  for (let x=0; x<=W; x+=seg) d += ` L${x} ${(y + (rnd()-0.5)*amp).toFixed(1)}`;
+  return `<path d="${d} L${W} ${H} Z" fill="${fill}"/>`;
+}
+
+/* The fairway: a tapering ribbon running to a vanishing point, which is what
+   makes a flat drawing read as a hole you are standing on. */
+function fairway(vx, vy, nearY, halfNear, halfFar, fill){
+  return `<path d="M${vx-halfFar} ${vy} L${vx+halfFar} ${vy}
+           L${vx+halfNear} ${nearY} L${vx-halfNear} ${nearY} Z" fill="${fill}"/>`;
+}
+
+const land = mode==='land', sq = mode==='sq';
+/* Composed per shape rather than by one formula. A 16:9 wants the title
+   beside the hole; a 2:3 wants it above, with the hole filling the depth
+   below it — and the shot has to travel through the empty part of the frame
+   in both, or the tracer crosses the words. */
+const vy = H*(land?0.46:sq?0.40:0.30);         // horizon
+const vx = W*(land?0.62:sq?0.56:0.58);
+const GREEN_T = land?0.10 : sq?0.30 : 0.34;    // how far down the turf the green sits
+const BALL = land ? {x:0.115, y:0.955, cx:0.34, cy:0.30}
+           : sq   ? {x:0.16,  y:0.92,  cx:0.28, cy:0.44}
+           :        {x:0.24,  y:0.90,  cx:0.30, cy:0.50};
+
+let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#5d97c4"/><stop offset="55%" stop-color="#9dc6dd"/>
+    <stop offset="100%" stop-color="#d6e7ea"/></linearGradient>
+  <linearGradient id="turf" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#4d8f4a"/><stop offset="100%" stop-color="#2f6b39"/></linearGradient>
+  <linearGradient id="vig" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="rgba(4,14,9,.72)"/><stop offset="42%" stop-color="rgba(4,14,9,0)"/>
+    <stop offset="100%" stop-color="rgba(4,14,9,.82)"/></linearGradient>
+  <radialGradient id="sun" cx="78%" cy="12%" r="42%">
+    <stop offset="0%" stop-color="rgba(255,246,214,.85)"/>
+    <stop offset="100%" stop-color="rgba(255,246,214,0)"/></radialGradient>
+</defs>
+<rect width="${W}" height="${H}" fill="url(#sky)"/>
+<rect width="${W}" height="${H}" fill="url(#sun)"/>`;
+
+// distant ranges, back to front
+svg += ridge(vy-H*0.10, H*0.055, '#7d9fb0', W/9);
+svg += ridge(vy-H*0.055, H*0.045, '#5f8a78', W/11);
+svg += ridge(vy-H*0.012, H*0.03,  '#3f6f52', W/14);
+
+// the ground, then the hole running to the horizon
+svg += `<rect x="0" y="${vy}" width="${W}" height="${H-vy}" fill="url(#turf)"/>`;
+svg += fairway(vx, vy, H, W*0.012, W*0.62, '#61a552');
+svg += fairway(vx, vy, H, W*0.008, W*0.44, '#6cb35a');
+
+// mown stripes, converging with the fairway
+for (let i=0;i<7;i++){
+  const t=i/7, y0=vy+(H-vy)*t*t, y1=vy+(H-vy)*((t+0.5/7)**2);
+  if (i%2) svg += `<path d="M0 ${y0} L${W} ${y0} L${W} ${y1} L0 ${y1} Z" fill="rgba(255,255,255,.045)"/>`;
+}
+
+// bunkers and the green complex
+const gy = vy+(H-vy)*GREEN_T;
+const gr = W*(land?0.085:0.155);
+svg += `<ellipse cx="${vx-gr*1.15}" cy="${gy+H*0.030}" rx="${gr*0.62}" ry="${H*0.022}" fill="#e3cf9c"/>`;
+svg += `<ellipse cx="${vx+gr*0.95}" cy="${gy-H*0.006}" rx="${gr*0.45}" ry="${H*0.016}" fill="#e3cf9c"/>`;
+svg += `<ellipse cx="${vx}" cy="${gy}" rx="${gr}" ry="${H*(land?0.036:0.040)}" fill="#7ec95e"/>`;
+
+// the flag
+const fx=vx+W*0.004, fy=gy-H*0.006, fh=H*(land?0.085:0.075);
+svg += `<rect x="${fx-2}" y="${fy-fh}" width="4" height="${fh}" fill="#f4f7f4"/>
+        <path d="M${fx+2} ${fy-fh} L${fx+W*(land?0.030:0.055)} ${fy-fh*0.82} L${fx+2} ${fy-fh*0.64} Z" fill="#e0483c"/>`;
+
+/* THE TRACER. The one element that says this is a game about a ball in the
+   air rather than a picture of a lawn — a shot on its way to that flag. */
+const bx=W*BALL.x, by=H*BALL.y, cx1=W*BALL.cx, cy1=H*BALL.cy;
+svg += `<path d="M${bx} ${by} Q ${cx1} ${cy1} ${fx} ${fy-fh*0.55}"
+          fill="none" stroke="rgba(255,255,255,.94)" stroke-width="${Math.max(3,W*0.0030)}"
+          stroke-linecap="round" stroke-dasharray="${W*0.013} ${W*0.011}"/>`;
+svg += `<circle cx="${bx}" cy="${by}" r="${Math.max(7,W*0.0072)}" fill="#fff"/>`;
+svg += `<circle cx="${bx}" cy="${by}" r="${Math.max(14,W*0.016)}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="2"/>`;
+
+svg += `<rect width="${W}" height="${H}" fill="url(#vig)"/></svg>`;
+
+const big = land ? W*0.072 : sq ? W*0.105 : W*0.115;
+const pos = land
+  ? `left:${W*0.055}px; top:${H*0.26}px; width:${W*0.42}px;`
+  : `left:${W*0.075}px; top:${H*(sq?0.045:0.055)}px; width:${W*0.86}px;`;
+
+document.getElementById('w').innerHTML = svg + `
+  <div class="title" style="${pos}">
+    <span class="kick" style="font-size:${big*0.20}px;padding:${big*0.10}px ${big*0.26}px;
+      margin-bottom:${big*0.26}px">⛳ Free · No sign-up</span>
+    <h1 style="font-size:${big}px;margin-top:${big*0.16}px">Links<br><em>&amp; Legends</em></h1>
+    <p class="sub" style="font-size:${big*0.20}px;margin-top:${big*0.22}px;line-height:1.35">
+      Real golf, ninety seconds in.<br>Twelve courses. Eight players. One ball each.</p>
+    <div class="chips" style="margin-top:${big*0.30}px;font-size:${big*0.148}px">
+      <span class="chip" style="padding:${big*0.10}px ${big*0.22}px">12 courses</span>
+      <span class="chip" style="padding:${big*0.10}px ${big*0.22}px">Online multiplayer</span>
+      <span class="chip" style="padding:${big*0.10}px ${big*0.22}px">Real handicaps</span>
+    </div>
+  </div>`;
+</script>
