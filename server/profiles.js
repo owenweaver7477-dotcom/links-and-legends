@@ -22,6 +22,38 @@ import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js
    moment a player opens it rather than after several rounds. */
 export const STARTING_COINS = 900;
 
+/**
+ * The shape a profile is in. Bump this — and add a branch to migrateProfile
+ * — the day a change actually needs one: renaming a field, restructuring
+ * `crew`, splitting coins into coins-and-gems, whatever it turns out to be.
+ * Every profile on disk today predates this existing at all, which is
+ * exactly what version 1 means: the shape as it stood before anyone had to
+ * think about shape changes. Doing this NOW, while there is nothing to
+ * migrate, costs two functions and a field. Doing it after the first real
+ * shape change ships costs finding out which profiles are which shape from
+ * their contents alone, on a live store, with players in it.
+ */
+export const PROFILE_SCHEMA_VERSION = 1;
+
+/**
+ * Bring a loaded profile up to PROFILE_SCHEMA_VERSION. Idempotent — safe to
+ * call on a profile that is already current — so every entry point that
+ * hands a profile to the rest of the server can call it without first
+ * working out whether it needs to.
+ *
+ * Runs as a CHAIN, not a single jump to the top: `if (v < 2)` then
+ * `if (v < 3)`, each block leaving the profile in a state the NEXT block can
+ * assume, so a profile that has not been loaded since version 1 still
+ * arrives at the current shape in order rather than needing every future
+ * migration to also handle jumping straight from 1.
+ */
+export function migrateProfile(p) {
+  if (!p) return p;
+  if (p.schemaVersion == null) p.schemaVersion = 1;   // predates the field
+  // if (p.schemaVersion < 2) { ...; p.schemaVersion = 2; }
+  return p;
+}
+
 
 const profiles = new Map();
 
@@ -48,6 +80,17 @@ export async function loadProfiles() {
      size of the actual playerbase rather than of the visitor count. */
   setPersistFilter(worthSaving);
   await openStore(profiles);
+  /* Every profile that was already on disk predates PROFILE_SCHEMA_VERSION
+     existing at all, so this is where the whole store gets stamped at boot
+     rather than one profile at a time as each player happens to log back
+     in. A future migration that actually transforms data belongs in
+     migrateProfile, not here — this loop just makes sure it runs. */
+  let migrated = 0;
+  for (const p of profiles.values()) {
+    if (p.schemaVersion !== PROFILE_SCHEMA_VERSION) migrated++;
+    migrateProfile(p);
+  }
+  if (migrated) console.log(`  migrated ${migrated} profile${migrated === 1 ? '' : 's'} to schema v${PROFILE_SCHEMA_VERSION}`);
   const fixed = repairBests();
   if (fixed) console.log(`  repaired ${fixed} impossible best-round score${fixed === 1 ? '' : 's'}`);
 }
@@ -68,6 +111,7 @@ export function getProfile(pid) {
   let p = profiles.get(pid);
   if (!p) {
     p = {
+      schemaVersion: PROFILE_SCHEMA_VERSION,
       rounds: 0, holes: 0, strokes: 0, putts: 0,
       fairways: 0, fairwayChances: 0, gir: 0,
       birdies: 0, eagles: 0, aces: 0,

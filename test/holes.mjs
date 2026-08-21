@@ -49,6 +49,23 @@ test('at most one dramatic green per course', () => {
   }
 });
 
+test('every pin sits inside its own green', () => {
+  /* The pin has no stored Y — scene.js samples terrain height at (pin.x,
+     pin.z) fresh every time it builds the cup, flagstick and flag, so
+     there is no cached height to drift out of sync with the ground (the
+     "hole floats or sinks" failure mode a hand-authored Y would risk).
+     What CAN still go wrong is pin.x/z itself landing outside the green
+     polygon — off the putting surface entirely — which would sample
+     fringe or rough height instead and put the cup at a plausible-looking
+     but wrong elevation. Same inEllipse check the game itself uses to
+     decide what a ball is standing on (terrain.js), so this can't drift
+     out of sync with what "on the green" actually means either. */
+  for (const { course, hole } of HOLES) {
+    assert.ok(inEllipse(hole.pin.x, hole.pin.z, hole.green),
+      `${course.name} h${hole.number} pin is off its own green`);
+  }
+});
+
 test('the ground actually does something', () => {
   /* The complaint that started this was that holes were flat and generic.
      A hole is allowed to be gentle, but the SET is not allowed to be. */
