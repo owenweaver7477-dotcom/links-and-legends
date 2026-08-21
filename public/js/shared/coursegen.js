@@ -625,7 +625,7 @@ export function inEllipse(x, z, e, pad = 0) {
  *   generated hole, so an imported course plays by identical rules and needs
  *   no second code path anywhere downstream.
  */
-function makeHole(courseId, bio, number, seed, authored = null) {
+function makeHole(courseId, bio, number, seed, authored = null, courseState = null) {
   const rk = rngKit(seed);
   const parSet = PAR_SETS[hashSeed(courseId) % PAR_SETS.length];
   const par = authored?.par ?? parSet[number - 1];
@@ -720,6 +720,9 @@ function makeHole(courseId, bio, number, seed, authored = null) {
   const mounds = placeMounds(rk, bio, dense, cum, total, green, par, fairwayWidth);
   const sentinels = placeSentinels(rk, bio, dense, cum, total, green, par, fairwayWidth);
 
+  const elevProfile = buildElevProfile(rk, bio, total, par, !!courseState?.dramaticGreenUsed);
+  if (courseState && DRAMATIC_GREEN.has(elevProfile.kind)) courseState.dramaticGreenUsed = true;
+
   const hole = {
     courseId, number, par, shape,
     lengthM: total,
@@ -736,7 +739,7 @@ function makeHole(courseId, bio, number, seed, authored = null) {
     trees: [],
     // terrain shaping
     terrainSeed: (seed ^ 0x5f3a7c1) >>> 0,
-    elevProfile: buildElevProfile(rk, bio, total, par),
+    elevProfile,
     greenTilt: { ax: rk.gauss() * 0.028, az: rk.gauss() * 0.028 },
     maxStrokes: par + 6
   };
@@ -807,16 +810,30 @@ const ELEV_KINDS = [
   ['rolling', 3]           // no set piece, just genuinely uneven ground
 ];
 
-function buildElevProfile(rk, bio, total, par) {
+/* uphill_green and punchbowl are the two archetypes that move the GREEN
+   itself, not just the ground on the way to it — a green perched on a
+   mound or sitting in a bowl rather than merely a hole with a hill on it
+   somewhere. Rolled independently per hole, together they landed on about
+   a quarter of all holes, which meant most 9-hole courses had two or three
+   — reported back as "craters and massive hills," not as terrain variety.
+   Capped here at one per course: once a course has used its one, both are
+   dropped from the pool and the rest of ELEV_KINDS reweights over what's
+   left, same as it would if they had never been in the list. */
+const DRAMATIC_GREEN = new Set(['uphill_green', 'punchbowl']);
+
+function buildElevProfile(rk, bio, total, par, dramaticGreenUsed) {
   const bias = bio.slopeBias || 1;
   /* Flat courses get flat holes. A links course pretending to be a mountain
      course is worse than either, so relief scales the whole archetype rather
      than being ignored. */
   const scale = clamp(((bio.relief || 7) / 9) * bias, 0.45, 1.6);
 
-  const sum = ELEV_KINDS.reduce((a, k) => a + k[1], 0);
-  let roll = rk.f(0, sum), kind = ELEV_KINDS[0][0];
-  for (const [name, w] of ELEV_KINDS) { roll -= w; if (roll <= 0) { kind = name; break; } }
+  const pool = dramaticGreenUsed
+    ? ELEV_KINDS.filter(([name]) => !DRAMATIC_GREEN.has(name))
+    : ELEV_KINDS;
+  const sum = pool.reduce((a, k) => a + k[1], 0);
+  let roll = rk.f(0, sum), kind = pool[0][0];
+  for (const [name, w] of pool) { roll -= w; if (roll <= 0) { kind = name; break; } }
 
   const p = {
     kind, total,
@@ -867,6 +884,14 @@ function buildElevProfile(rk, bio, total, par) {
      across the launch window of its short second. */
   const lenK = clamp(total / 380, 0.42, 1.15);
   p.teeDrop *= lenK; p.greenLift *= lenK; p.midBump *= lenK; p.shelf *= lenK;
+  /* A short hole on a low-relief biome could stack the low end of teeDrop's
+     own range with the low end of both scale and lenK — 9 * 0.45 * 0.42 is
+     under 2m, which is not an elevated tee, it is a tee. This was always
+     possible; it took the archetype landing on the right unlucky combination
+     of course and hole to actually roll it. Floored rather than narrowing
+     the range above, so short holes still get real variety and only the
+     one degenerate corner of it is closed off. */
+  if (kind === 'tee_box') p.teeDrop = Math.max(p.teeDrop, 5);
   return p;
 }
 
@@ -1018,9 +1043,12 @@ export function buildCourse(courseId) {
   if (!bio) throw new Error('Unknown course: ' + courseId);
 
   const holes = [];
+  // shared across every hole on this course, so the second uphill_green or
+  // punchbowl in a row gets rerolled into something else instead of standing
+  const courseState = { dramaticGreenUsed: false };
   for (let n = 1; n <= HOLES_PER_COURSE; n++) {
     holes.push(makeHole(courseId, bio, n, hashSeed(courseId, n, 0x9e37),
-                        real ? real.holes[n - 1] : null));
+                        real ? real.holes[n - 1] : null, courseState));
   }
   // hole 1 of the parkland course is the original hand-drawn map
   if (courseId === 'parkland') holes[0] = makeSignatureHole(bio);

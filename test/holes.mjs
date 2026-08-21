@@ -38,6 +38,17 @@ test('the holes are not all the same hole', () => {
   }
 });
 
+test('at most one dramatic green per course', () => {
+  // uphill_green and punchbowl move the green itself, not just the ground
+  // on the way to it. Rolled with no course-level limit, a 9-hole course
+  // could get two or three — reported back as "craters and massive hills."
+  const DRAMATIC = new Set(['uphill_green', 'punchbowl']);
+  for (const c of allCourses()) {
+    const n = c.holes.filter(h => !h.signature && DRAMATIC.has(h.elevProfile.kind)).length;
+    assert.ok(n <= 1, `${c.name} has ${n} dramatic greens (uphill_green/punchbowl)`);
+  }
+});
+
 test('the ground actually does something', () => {
   /* The complaint that started this was that holes were flat and generic.
      A hole is allowed to be gentle, but the SET is not allowed to be. */
