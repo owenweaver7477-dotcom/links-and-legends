@@ -30,7 +30,7 @@ for (const id of [
   'btnClubhouse', 'btnShopBack', 'homeCoins',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
-  'btnPrivacy', 'optPrivate',
+  'btnPrivacy', 'optPrivate', 'btnDrop',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
   'wArrow', 'wSpeed', 'wDesc', 'wWeather',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
@@ -1100,6 +1100,11 @@ HUD.setCart = c => {
 HUD.setWalkPrompt = (text) => {
   el.walkbar.classList.toggle('show', !!text);
   if (text) el.walkText.textContent = text;
+};
+
+/** The "Take a drop" safety valve — see updateWalkPrompt in main.js. */
+HUD.showDropButton = (show) => {
+  if (el.btnDrop) el.btnDrop.hidden = !show;
 };
 
 /** The link to send someone.  Honours a tunnel or a deployed host as-is. */

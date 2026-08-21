@@ -265,7 +265,7 @@ const run = async () => {
   const nr = await rpc(nA, 'room:create', { name: 'Null', pid: 'null_a' });
   const nCode = nr?.code;
   for (const evt of ['room:course', 'room:tees', 'room:privacy', 'player:prefs', 'player:look',
-                     'shop:buy', 'player:move', 'game:swing', 'cart:hail']) {
+                     'shop:buy', 'player:move', 'game:swing', 'cart:hail', 'player:drop']) {
     nA.emit(evt, null);
     nA.emit(evt, undefined);
     nA.emit(evt, 'string');
@@ -415,7 +415,8 @@ const run = async () => {
   const pA = mk('pA'); await wait(200);
   const EVENTS = ['room:create', 'room:join', 'room:course', 'room:tees', 'room:privacy',
                   'player:prefs', 'player:move', 'player:look', 'cart:hail', 'shop:buy',
-                  'game:start', 'game:swing', 'game:next', 'game:again', 'room:lobby'];
+                  'game:start', 'game:swing', 'game:next', 'game:again', 'room:lobby',
+                  'player:drop'];
   const JUNK = [null, undefined, 0, '', 'x', [], {}, true, NaN,
                 { a: { b: { c: 1 } } }, { item: '__proto__' }, { pid: null }, { code: null }];
   for (const e of EVENTS) for (const j of JUNK) { try { pA.emit(e, j); } catch { /* ignore */ } }

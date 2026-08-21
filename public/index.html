@@ -141,6 +141,13 @@
     <kbd>W A S D</kbd><kbd>Shift</kbd> run <kbd>hold-drag</kbd> or <kbd>Shift</kbd>+move look <kbd>F</kbd> teleport to ball <kbd>C</kbd> cart <kbd>B</kbd> melee <kbd>N</kbd> switch <kbd>T</kbd> emote <kbd>Enter</kbd> chat <kbd>V</kbd> view
   </div>
 
+  <!-- the safety valve: shown only after several seconds of not being able
+       to reach a swing at all, on either the tee, an unreachable lie, or
+       whatever bug is behind it that day. Free of penalty. -->
+  <button class="dropbtn" id="btnDrop" type="button" hidden>
+    <b>Stuck?</b><span>Take a free drop</span>
+  </button>
+
   <!-- turn banner -->
   <div class="turnbar" id="turnbar"><span class="tb-dot" id="tbDot"></span><span id="tbText">—</span></div>
 

@@ -48,6 +48,53 @@ function coeffs(v, omega) {
   return { Cl, Cd };
 }
 
+/** Standing on a trunk, the way ShotSim's own _insideTree checks a flight path. */
+export function insideTree(hole, x, z) {
+  const trees = hole.trees;
+  for (let i = 0; i < trees.length; i++) {
+    const t = trees[i];
+    const trunkR = (t.species === 'gorse' ? t.r * 0.85 : Math.max(0.16, t.r * 0.14)) + RADIUS;
+    const dx = x - t.x, dz = z - t.z;
+    if (dx * dx + dz * dz <= trunkR * trunkR) return true;
+  }
+  return false;
+}
+
+/** Dry ground, not out of bounds, not standing in a trunk. */
+export function dryPlayable(T, hole, x, z) {
+  const s = T.surfaceAt(x, z);
+  if (s.id === 'water' || s.id === 'ob') return false;
+  return !insideTree(hole, x, z);
+}
+
+/**
+ * The nearest playable ground to (x, z), searching outward in rings.
+ *
+ * Shares its shape with the water-relief search in ShotSim._penalty (rings
+ * of 24 points, growing by 2m) rather than a fresh algorithm, because
+ * "find dry ground near a point" is the same problem whether the ball
+ * arrived by flying into a hazard or by resting somewhere the game itself
+ * cannot make sense of. Used for the "Take a drop" safety valve — a ball
+ * the player cannot reach or swing at, for whatever reason, over whatever
+ * bug is or is not still live. Free of penalty: this is an escape hatch,
+ * not a rule.
+ *
+ * @returns {x,z} — the input point itself if it is somehow already fine,
+ *   or the input point unchanged if nothing within maxRadius qualifies
+ *   (so a caller always gets a number back, never null).
+ */
+export function findPlayableDrop(T, hole, x, z, maxRadius = 80) {
+  if (dryPlayable(T, hole, x, z)) return { x, z };
+  for (let r = 2; r <= maxRadius; r += 2) {
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      const cx = x + Math.cos(a) * r, cz = z + Math.sin(a) * r;
+      if (dryPlayable(T, hole, cx, cz)) return { x: cx, z: cz };
+    }
+  }
+  return { x, z };
+}
+
 /* =========================================================================
    ShotSim
    ========================================================================= */
@@ -537,9 +584,7 @@ export class ShotSim {
   }
 
   _dryPlayable(x, z) {
-    const s = this.T.surfaceAt(x, z);
-    if (s.id === 'water' || s.id === 'ob') return false;
-    return !this._insideTree(x, z);
+    return dryPlayable(this.T, this.hole, x, z);
   }
 
   /** Room to swing: no water within a couple of club lengths. */
@@ -653,14 +698,7 @@ export class ShotSim {
   }
 
   _insideTree(x, z) {
-    const trees = this.hole.trees;
-    for (let i = 0; i < trees.length; i++) {
-      const t = trees[i];
-      const trunkR = (t.species === 'gorse' ? t.r * 0.85 : Math.max(0.16, t.r * 0.14)) + RADIUS;
-      const dx = x - t.x, dz = z - t.z;
-      if (dx * dx + dz * dz <= trunkR * trunkR) return true;
-    }
-    return false;
+    return insideTree(this.hole, x, z);
   }
 
   _pushOutOfTrees(x, z) {
