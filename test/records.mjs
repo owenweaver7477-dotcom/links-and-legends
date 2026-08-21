@@ -185,6 +185,60 @@ test('presence says who is online and what they are doing', async () => {
   a.disconnect(); b.disconnect();
 });
 
+test('a private room is unlisted but still joinable by code', async () => {
+  const a = await connect(), stranger = await connect();
+  const me = 'priv-' + Math.random().toString(36).slice(2);
+  const r = await ask(a, 'room:create',
+    { name: 'Priv', pid: me, courseId: 'parkland', privacy: 'private' });
+  assert.ok(r.ok);
+  assert.equal(r.state.privacy, 'private', 'the creator sees their own room as private');
+  await wait(300);
+
+  const open = await ask(stranger, 'rooms:open', null);
+  assert.ok(!open.rooms.some(x => x.code === r.code), 'a private room appeared in Open rounds');
+
+  const presence = await ask(stranger, 'presence:who', null);
+  assert.ok(!presence.online.some(o => o.pid === me), 'a private host appeared in presence');
+
+  const quick = await ask(stranger, 'rooms:quick', { format: 'stroke', region: 'any' });
+  assert.notEqual(quick?.code, r.code, 'quick match auto-joined a private room');
+
+  // unlisted is not the same as unreachable — the whole point is that the
+  // link the host shares still works
+  const joined = await ask(stranger, 'room:join',
+    { code: r.code, name: 'Stranger', pid: 'strangep-' + Math.random().toString(36).slice(2) });
+  assert.ok(joined.ok, 'the invite link stopped working once the room went private');
+
+  a.disconnect(); stranger.disconnect();
+});
+
+test('only the host can change a room\'s privacy, and only in the lobby', async () => {
+  const host = await connect(), guest = await connect();
+  const hostPid = 'ph-' + Math.random().toString(36).slice(2);
+  let state = null;
+  host.on('room:state', s => { state = s; });
+  const r = await ask(host, 'room:create', { name: 'H', pid: hostPid, courseId: 'parkland' });
+  assert.equal(r.state.privacy, 'public', 'public is the default, unchanged from before this existed');
+  await ask(guest, 'room:join', { code: r.code, name: 'G', pid: 'pg-' + Math.random().toString(36).slice(2) });
+  await wait(300);
+
+  guest.emit('room:privacy', { privacy: 'private' });
+  await wait(300);
+  assert.equal(state.privacy, 'public', 'a non-host flipped the room private');
+
+  host.emit('room:privacy', { privacy: 'private' });
+  await wait(300);
+  assert.equal(state.privacy, 'private', 'the host could not make their own room private');
+
+  host.emit('game:start');
+  await wait(600);
+  host.emit('room:privacy', { privacy: 'public' });
+  await wait(300);
+  assert.equal(state.privacy, 'private', 'privacy changed mid-round, after the lobby closed');
+
+  host.disconnect(); guest.disconnect();
+});
+
 test('a player who drops leaves presence', async () => {
   const a = await connect();
   const me = 'gone-' + Math.random().toString(36).slice(2);

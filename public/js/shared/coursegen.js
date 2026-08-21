@@ -238,7 +238,7 @@ function placeBunkers(rk, bio, dense, cum, total, green, par) {
   return bunkers;
 }
 
-function placeWaters(rk, bio, dense, cum, total, green, tee, par) {
+function placeWaters(rk, bio, dense, cum, total, green, tee, par, ob) {
   const waters = [];
   if (!rk.bool(bio.waterChance)) return waters;
 
@@ -255,6 +255,28 @@ function placeWaters(rk, bio, dense, cum, total, green, tee, par) {
     return true;
   };
 
+  /* The OB check happens AFTER fits(), and shrinks rather than rejects. A
+     candidate this far out is usually only barely over the line — dropping
+     the whole hazard for that would quietly de-fang whichever hole rolled
+     it (and, in aggregate, soften every course's slope rating below what it
+     should be), when shrinking it to the room actually available fixes the
+     same bug without losing the hazard. Shrinking never moves the centre,
+     so a candidate that already cleared the green/tee check above can only
+     move further from them, never closer — see clipWatersToBounds for the
+     full argument. Only a candidate that would shrink to a token puddle is
+     dropped outright. */
+  const clampToOb = (w) => {
+    if (!ob) return w;
+    const roomX = Math.min(w.x - ob.minX, ob.maxX - w.x);
+    const roomZ = Math.min(w.z - ob.minZ, ob.maxZ - w.z);
+    const c = Math.abs(Math.cos(w.rot || 0)), s = Math.abs(Math.sin(w.rot || 0));
+    const hx = w.rx * c + w.rz * s, hz = w.rx * s + w.rz * c;
+    if (hx <= roomX && hz <= roomZ) return w;
+    const scale = Math.min(roomX / hx, roomZ / hz);
+    if (scale < 0.35) return null;             // not worth keeping as water
+    return { ...w, rx: w.rx * scale, rz: w.rz * scale };
+  };
+
   if (guardsGreen) {
     const a = rk.f(0, Math.PI * 2);
     const rx = rk.f(16, 32), rz = rk.f(12, 26);
@@ -264,7 +286,7 @@ function placeWaters(rk, bio, dense, cum, total, green, tee, par) {
       z: green.z + Math.sin(a) * d,
       rx, rz, rot: rk.f(0, Math.PI), kind, depth: 2.4
     };
-    if (fits(w)) waters.push(w);
+    if (fits(w)) { const c = clampToOb(w); if (c) waters.push(c); }
   }
   if (par !== 3 && rk.bool(0.65)) {
     const s = total * rk.f(0.3, 0.72);
@@ -278,7 +300,38 @@ function placeWaters(rk, bio, dense, cum, total, green, tee, par) {
       z: p[1] + (t[0]) * off,
       rx, rz, rot: rk.f(0, Math.PI), kind, depth: 2.4
     };
-    if (fits(w)) waters.push(w);
+    if (fits(w)) { const c = clampToOb(w); if (c) waters.push(c); }
+  }
+  return waters;
+}
+
+/* Water is classified above every other surface a ball can be on, so if a
+   hazard's footprint reaches past the hole's own out-of-bounds line, a
+   player standing on dry fairway just inside that line can be sitting
+   inside an invisible water volume with no water anywhere near what they
+   can see — which reads as "can't hit off some surfaces" (or the pond just
+   visibly hangs off the edge of the world). Runs on both generated and
+   hand-authored water, since the same invariant has to hold either way.
+
+   SHRINKS ONLY, NEVER MOVES THE CENTRE. placeWaters() already rejects any
+   candidate that lands too close to the green or tee at its ORIGINAL size;
+   shrinking after that only increases the hazard's distance from them, so
+   it can never turn a legal placement into water-on-the-green. Repositioning
+   the centre instead — the first version of this did — can push a hazard
+   the placement check had already kept clear of the green right back onto
+   it, which is a worse bug than the one being fixed. */
+function clipWatersToBounds(waters, ob) {
+  for (const w of waters) {
+    // room available on THIS hazard's own centre before either OB edge —
+    // not the bounds' centre, which the hazard is rarely anywhere near
+    const roomX = Math.min(w.x - ob.minX, ob.maxX - w.x);
+    const roomZ = Math.min(w.z - ob.minZ, ob.maxZ - w.z);
+    const c = Math.abs(Math.cos(w.rot || 0)), s = Math.abs(Math.sin(w.rot || 0));
+    const hx = w.rx * c + w.rz * s, hz = w.rx * s + w.rz * c;
+    if (hx > roomX || hz > roomZ) {
+      const scale = Math.max(0.15, Math.min(roomX / hx, roomZ / hz, 1));
+      w.rx *= scale; w.rz *= scale;
+    }
   }
   return waters;
 }
@@ -594,6 +647,26 @@ function makeHole(courseId, bio, number, seed, authored = null) {
   const dense = authored ? smoothRoute(authored.route, 1) : smoothRoute(gen.pts, 3);
   const { cum, total } = routeMetrics(dense);
 
+  // bounds: everything the hole occupies plus a margin of scenery. Computed
+  // here, before anything gets placed inside them, so placement itself can
+  // reject a candidate that would cross the line rather than needing to be
+  // corrected afterward — the bounds depend only on the route, never on
+  // what ends up placed within it.
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const p of dense) {
+    minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+    minZ = Math.min(minZ, p[1]); maxZ = Math.max(maxZ, p[1]);
+  }
+  const margin = 78;
+  const bounds = { minX: minX - margin, maxX: maxX + margin, minZ: minZ - margin, maxZ: maxZ + margin };
+
+  // out of bounds sits a little inside the scenery margin
+  const obInset = 26;
+  const ob = {
+    minX: bounds.minX + obInset, maxX: bounds.maxX - obInset,
+    minZ: bounds.minZ + obInset, maxZ: bounds.maxZ - obInset
+  };
+
   const fairwayWidth = authored?.fairwayWidth
     ?? rk.f(bio.fairwayWidth[0], bio.fairwayWidth[1]);
   /* The edge wobble only ever cuts inward (see edgeScale), so a green built
@@ -634,27 +707,18 @@ function makeHole(courseId, bio, number, seed, authored = null) {
   }
   if (authored?.waters) {
     waters = authored.waters.map(w => ({ kind: bio.waterKind, depth: 2.2, rot: 0, ...w }));
+    // Authored water is surveyed data, not a candidate placeWaters can
+    // reject — a real course doesn't get a pond removed because the
+    // generator's OB margin is tight around it. Shrinking is the only safe
+    // correction available here (see clipWatersToBounds for why it never
+    // repositions), which is why authored water still needs this pass even
+    // though generated water no longer does.
+    clipWatersToBounds(waters, ob);
   } else {
-    waters = placeWaters(rk, bio, dense, cum, total, green, tee, par);
+    waters = placeWaters(rk, bio, dense, cum, total, green, tee, par, ob);
   }
   const mounds = placeMounds(rk, bio, dense, cum, total, green, par, fairwayWidth);
   const sentinels = placeSentinels(rk, bio, dense, cum, total, green, par, fairwayWidth);
-
-  // bounds: everything the hole occupies plus a margin of scenery
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (const p of dense) {
-    minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
-    minZ = Math.min(minZ, p[1]); maxZ = Math.max(maxZ, p[1]);
-  }
-  const margin = 78;
-  const bounds = { minX: minX - margin, maxX: maxX + margin, minZ: minZ - margin, maxZ: maxZ + margin };
-
-  // out of bounds sits a little inside the scenery margin
-  const obInset = 26;
-  const ob = {
-    minX: bounds.minX + obInset, maxX: bounds.maxX - obInset,
-    minZ: bounds.minZ + obInset, maxZ: bounds.maxZ - obInset
-  };
 
   const hole = {
     courseId, number, par, shape,
@@ -666,7 +730,7 @@ function makeHole(courseId, bio, number, seed, authored = null) {
     roughWidth: bio.roughWidth,
     tee, tees, teeYards: teeYardage(tees, total),
     green, pin,
-    cup: { x: pin.x, z: pin.z, r: 0.108 },     // a real hole is 108 mm across
+    cup: { x: pin.x, z: pin.z, r: 0.054 },     // a real hole is 108mm ACROSS — half that is the radius
     bunkers, waters, mounds,
     bounds, ob,
     trees: [],
@@ -1036,6 +1100,7 @@ function makeSignatureHole(bio) {
   const margin = 78;
   const bounds = { minX: minX - margin, maxX: maxX + margin, minZ: minZ - margin, maxZ: maxZ + margin };
   const ob = { minX: bounds.minX + 26, maxX: bounds.maxX - 26, minZ: bounds.minZ + 26, maxZ: bounds.maxZ - 26 };
+  clipWatersToBounds(waters, ob);
 
   const hole = {
     courseId: 'parkland', number: 1, par: 5,
@@ -1046,7 +1111,7 @@ function makeSignatureHole(bio) {
     roughWidth: bio.roughWidth,
     tee, tees, teeYards: teeYardage(tees, total),
     green, pin,
-    cup: { x: pin.x, z: pin.z, r: 0.108 },
+    cup: { x: pin.x, z: pin.z, r: 0.054 },     // 108mm across, radius is half that
     bunkers, waters,
     /* The signature hole is the hand-drawn map and stays that way — no
        generated shaping goes in it. It keeps the field so nothing downstream

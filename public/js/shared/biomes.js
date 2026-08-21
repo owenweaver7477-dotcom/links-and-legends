@@ -495,11 +495,11 @@ export const BIOMES = {
    good one", it is computed from the real geometry in handicap.js, and it
    is the number the handicap system already uses. */
 const GENERATED_ORDER = [
-  'meadow',                                   //  97 — the beginners' course
-  'veld', 'volcanic', 'desert', 'sandbelt',   // 110-114
-  'alpine', 'links', 'parkland', 'tropical',  // 120-125
-  'heath', 'fjord',                           // 128-133
-  'headland'                                  // 147 — the championship test
+  'meadow',                                     //  97 — the beginners' course
+  'volcanic', 'veld', 'desert', 'sandbelt',     // 109-114
+  'alpine', 'parkland', 'links', 'tropical',    // 118-124
+  'heath', 'fjord',                             // 128-131
+  'headland'                                    // 139 — the championship test
 ];
 
 /* Real, imported courses join the roster automatically. They are ids like

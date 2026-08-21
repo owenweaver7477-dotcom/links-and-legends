@@ -315,6 +315,36 @@ test('the furniture is never in play', () => {
   assert.deepEqual(bad.slice(0, 6), [], `${bad.length} props are in play`);
 });
 
+test('water stays inside the out-of-bounds line', () => {
+  /* Water is classified above every other surface, so a hazard whose
+     footprint crosses the hole's own OB line leaves a strip of "dry-looking"
+     ground that is actually unplayable water underneath — which is exactly
+     what a "can't hit off some surfaces" report looks like. Checks the
+     rotated ellipse's own AABB against ob, not just its centre, since a
+     centred-but-oversized pond is just as broken. */
+  const bad = [];
+  for (const { course, hole } of HOLES) {
+    for (const w of hole.waters) {
+      const c = Math.abs(Math.cos(w.rot || 0)), s = Math.abs(Math.sin(w.rot || 0));
+      const hx = w.rx * c + w.rz * s, hz = w.rx * s + w.rz * c;
+      if (w.x - hx < hole.ob.minX || w.x + hx > hole.ob.maxX ||
+          w.z - hz < hole.ob.minZ || w.z + hz > hole.ob.maxZ) {
+        bad.push(`${course.name} h${hole.number} water reaches past the OB line`);
+      }
+    }
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('the cup plays at regulation width', () => {
+  // 108mm is the real hole's DIAMETER — half that is the radius this game
+  // actually uses to decide whether a putt drops.
+  for (const { course, hole } of HOLES) {
+    assert.ok(Math.abs(hole.cup.r - 0.054) < 1e-6,
+      `${course.name} h${hole.number} cup radius is ${hole.cup.r}, not 0.054`);
+  }
+});
+
 test('a hole is dressed, not decorated at random', () => {
   /* Two ways this goes wrong and both are visible from the tee: nothing at
      all, or a housing estate. Every hole gets its tee furniture and a marker

@@ -3113,12 +3113,20 @@ document.getElementById('btnPlay')?.addEventListener('click', startRoundNow);
 
 document.getElementById('btnCreate').addEventListener('click', () => {
   HUD.homeError('');
+  const privacy = HUD.el.optPrivate?.checked ? 'private' : 'public';
   Net.create(nameValue(), pickedCourse, res => {
     if (!res.ok) return HUD.homeError(res.error);
     G.joined = true; G.myPid = res.pid; G.room = res.state;
     stampRoomUrl(res.code);
     route();
-  }, pickedFormat);
+  }, pickedFormat, privacy);
+});
+/* Host-only in practice — the server checks too, and a non-host clicking
+   this (it shows as non-interactive for them, see .privacypill:not(.host))
+   would just get ignored server-side. */
+document.getElementById('btnPrivacy')?.addEventListener('click', () => {
+  if (!G.room || G.room.hostPid !== G.myPid) return;
+  Net.setPrivacy(G.room.privacy === 'private' ? 'public' : 'private');
 });
 /* Joining by code, from the box or from the online panel. */
 /**

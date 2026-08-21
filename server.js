@@ -513,7 +513,7 @@ const cleanName = raw => (String(raw ?? '')
   .replace(/\s+/g, ' ').trim().slice(0, 14) || 'Golfer');
 const cleanPid = raw => String(raw ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
 
-function createRoom(code, courseId, format) {
+function createRoom(code, courseId, format, privacy) {
   const room = {
     code,
     hostPid: null,
@@ -530,7 +530,13 @@ function createRoom(code, courseId, format) {
     seed: hashSeed(code, 7, 31),
     wind: { dir: 0, speed: 0 },
     summaryTimer: null,
-    emptySince: Date.now()
+    emptySince: Date.now(),
+    /* Public is the default because it always has been — every room already
+       showed up in "Open rounds" and the online panel before this field
+       existed, and defaulting the other way would quietly un-list every
+       room a host didn't touch a new checkbox for. Private only ever
+       happens because the host asked for it. */
+    privacy: privacy === 'private' ? 'private' : 'public'
   };
   rooms.set(code, room);
   return room;
@@ -922,6 +928,7 @@ function snapshot(room) {
     teeSet: room.teeSet,
     holeIndex: room.holeIndex,
     state: room.state,
+    privacy: room.privacy || 'public',
     turnPid: room.turnPid,
     wind: room.wind,
     /* Sent rather than re-derived on the client. The client COULD compute
@@ -1086,7 +1093,7 @@ io.on('connection', socket => {
       return reply({ ok: false, error: 'The course is completely full right now — try again in a minute.' });
     }
     unbind();
-    const room = createRoom(makeCode(), data?.courseId, data?.format);
+    const room = createRoom(makeCode(), data?.courseId, data?.format, data?.privacy);
     rollWind(room);
     const p = addPlayer(room, pid, cleanName(data?.name), false);
     assignTeams(room);
@@ -1168,6 +1175,21 @@ io.on('connection', socket => {
     room.teeSet = teeSet;
     const t = teeOf(room);
     for (const p of room.players) { p.x = t.x; p.z = t.z; }
+    broadcastState(room);
+  });
+
+  /* Host-only, lobby-only — same pattern as room:course and room:tees.
+     Mid-round is deliberately not allowed: flipping visibility on a room
+     other people are already mid-round in is a different, harder problem
+     (who does it affect, does a spectator who already found it get bounced)
+     and the lobby is where every host actually wants this decision made. */
+  socket.on('room:privacy', (d) => {
+    const privacy = d?.privacy === 'private' ? 'private' : 'public';
+    const ref = sockets.get(socket.id); if (!ref) return;
+    const room = rooms.get(ref.code); if (!room) return;
+    if (ref.pid !== room.hostPid || room.state !== 'lobby') return;
+    if (room.privacy === privacy) return;
+    room.privacy = privacy;
     broadcastState(room);
   });
 
@@ -1754,6 +1776,7 @@ io.on('connection', socket => {
     if (typeof ack !== 'function') return;
     const out = [];
     for (const room of rooms.values()) {
+      if (room.privacy === 'private') continue;   // invite link only — never listed
       const live = room.players.filter(p => p.connected);
       if (!live.length) continue;
       const bio = biomeFor(room.courseId);
@@ -1798,6 +1821,7 @@ io.on('connection', socket => {
     let best = null;
     for (const room of rooms.values()) {
       if (room.state !== 'lobby') continue;
+      if (room.privacy === 'private') continue;    // never auto-join a private lobby
       if (room.format !== wantFormat) continue;
       const bio = biomeFor(room.courseId);
       if (wantRegion !== 'any' && bio?.continent !== wantRegion) continue;
@@ -1823,6 +1847,7 @@ io.on('connection', socket => {
     if (typeof ack !== 'function') return;
     const out = [];
     for (const room of rooms.values()) {
+      if (room.privacy === 'private') continue;   // a private host isn't found this way either
       const h = room.state === 'playing' || room.state === 'holeover'
         ? course(room)?.holes?.[room.holeIndex] : null;
       for (const p of room.players) {

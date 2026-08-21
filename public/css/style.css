@@ -801,6 +801,13 @@ h1 em { font-style: normal; color: #7ed492; }
 .ih-share .linkrow input { flex: 1; min-width: 0; font-size: 12px; }
 .ih-share .linkrow .btn { white-space: nowrap; font-weight: 700; }
 .ih-share .linkrow .btn.copied { background: linear-gradient(180deg,#3a8a52,#2e6b41); }
+.privacypill { margin-top: 8px; display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06); color: #a9c2ae; font-size: 11px; font-weight: 700;
+  letter-spacing: .3px; cursor: pointer; }
+.privacypill:not(.host) { cursor: default; }
+.privacypill.private { background: rgba(230,180,60,.16); border-color: rgba(230,180,60,.35); color: #e6c058; }
+.privacypill.host:hover { background: rgba(255,255,255,.11); }
 @media (max-width: 640px) { .invitehero { grid-template-columns: 1fr; gap: 14px; } }
 
 /* ------------------------------------------------------------ sections */

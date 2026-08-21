@@ -163,9 +163,9 @@ function ask(event, payload, cb, ms = 8000) {
 }
 Net.ask = ask;
 
-Net.create = (name, courseId, cb, format) => {
+Net.create = (name, courseId, cb, format, privacy) => {
   Net.lastName = name;
-  ask('room:create', { name, courseId, format, pid: Net.pid }, res => {
+  ask('room:create', { name, courseId, format, privacy, pid: Net.pid }, res => {
     if (res?.ok) Net.code = res.code;
     cb(res);
   });
@@ -181,6 +181,7 @@ Net.join = (code, name, cb) => {
 
 Net.pickCourse = courseId => Net.socket?.emit('room:course', { courseId });
 Net.pickTees = teeSet => Net.socket?.emit('room:tees', { teeSet });
+Net.setPrivacy = privacy => Net.socket?.emit('room:privacy', { privacy });
 Net.prefs = p => Net.socket?.emit('player:prefs', p);
 Net.setLook = look => Net.socket?.emit('player:look', { look });
 Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, rot, moving, cart });

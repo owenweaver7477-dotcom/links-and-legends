@@ -30,6 +30,7 @@ for (const id of [
   'btnClubhouse', 'btnShopBack', 'homeCoins',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
+  'btnPrivacy', 'optPrivate',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
   'wArrow', 'wSpeed', 'wDesc', 'wWeather',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
@@ -1132,6 +1133,17 @@ HUD.renderLobby = (room, myPid) => {
     el.lobbyPlayers.appendChild(seat);
   }
   const isHost = room.hostPid === myPid;
+  if (el.btnPrivacy) {
+    const priv = room.privacy === 'private';
+    el.btnPrivacy.hidden = false;
+    el.btnPrivacy.classList.toggle('private', priv);
+    el.btnPrivacy.classList.toggle('host', isHost);
+    el.btnPrivacy.textContent = priv ? '🔒 Private' : '🌍 Public';
+    el.btnPrivacy.title = isHost
+      ? (priv ? 'Only people with the link can join — click to make public'
+              : 'Anyone can find and join from Open rounds — click to make private')
+      : (priv ? 'Invite-link only' : 'Listed for anyone to join');
+  }
   const n = room.players.filter(p => p.connected).length;
   el.btnStart.disabled = !isHost || n < 1;
   el.btnStart.textContent = n === 1 ? 'Start (solo practice)' : 'Start round';
