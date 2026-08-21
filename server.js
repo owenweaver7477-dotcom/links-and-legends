@@ -467,6 +467,11 @@ app.get('*', (req, res) => {
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const EMPTY_ROOM_TTL = 20 * 60 * 1000;
 const HOLE_SUMMARY_MS = 20000;
+// how long a turn can sit with nothing at all happening before it is taken
+// away — see the AFK sweep near the bottom of the file. Overridable so a
+// test can see it happen in seconds rather than waiting three real minutes.
+const AFK_MS = Number(process.env.GOLF_AFK_MS) || 3 * 60 * 1000;
+const AFK_SWEEP_MS = Number(process.env.GOLF_AFK_SWEEP_MS) || 20000;
 
 /* A published game is a public one, and every visitor who presses Play Now
    creates a room.  The reaper collects idle ones after 20 minutes, but that
@@ -594,7 +599,8 @@ function addPlayer(room, pid, name, spectator) {
     scores: new Array(HOLES_PER_COURSE).fill(null),
     strokes: 0, penalties: 0, finished: false,
     x: t.x, z: t.z, lie: 'tee',
-    connected: true, spectator: !!spectator, socketId: null
+    connected: true, spectator: !!spectator, socketId: null,
+    lastActiveAt: Date.now()
   };
   room.players.push(p);
   if (!room.hostPid) room.hostPid = pid;
@@ -651,6 +657,7 @@ function pickNextToPlay(room, teeOff = false) {
     const totals = p => p.scores.reduce((s, v) => s + (v ?? 0), 0);
     eligible.sort((a, b) => totals(a) - totals(b) || room.players.indexOf(a) - room.players.indexOf(b));
     room.turnPid = eligible[0].pid;
+    eligible[0].lastActiveAt = Date.now();
     return;
   }
   /* In a SCRAMBLE nobody plays twice until their side is level.
@@ -679,6 +686,9 @@ function pickNextToPlay(room, teeOff = false) {
     if (d > bestD) { bestD = d; best = p; }
   }
   room.turnPid = best.pid;
+  // the AFK sweep measures from the moment a turn actually starts, not
+  // from whatever they last did while waiting for everyone else
+  best.lastActiveAt = Date.now();
 }
 
 /**
@@ -1049,6 +1059,18 @@ io.on('connection', socket => {
      handler that needed it most. */
   socket.use(([event], next) => {
     if (overRate(socket, event)) return;   // dropped, deliberately silently
+    /* Any message at all is evidence of a present human — chat, an emote,
+       just moving the camera around while waiting your turn. Stamped here
+       rather than in each handler for the same reason the rate limit is:
+       one guard everything passes through beats one added by hand to
+       every place that might need it. See the AFK sweep below for what
+       actually reads this. */
+    const ref = sockets.get(socket.id);
+    if (ref) {
+      const room = rooms.get(ref.code);
+      const p = room?.players.find(x => x.pid === ref.pid);
+      if (p) p.lastActiveAt = Date.now();
+    }
     next();
   });
 
@@ -2228,6 +2250,43 @@ setInterval(() => {
     }
   }
 }, 60000).unref();
+
+/**
+ * AFK sweep. A connected player who is simply quiet costs nobody anything
+ * — most of a round is watching somebody else play. The actual failure
+ * mode is a player whose TURN it is going silent, because that stalls
+ * every other player in the room with them. So this only ever acts on
+ * whoever currently holds the turn, checked against the clock that
+ * pickNextToPlay resets the moment a turn actually starts.
+ *
+ * Acts by handing them the spectator flag rather than disconnecting them
+ * — the same flag a mid-round joiner gets, and `startHole` already
+ * promotes any CONNECTED spectator back to play at the next hole with no
+ * further code needed here. A quiet three minutes costs the rest of this
+ * hole, not the round.
+ *
+ * Skipped entirely below two eligible players: the whole point is
+ * unblocking somebody ELSE, which does not apply to a solo round — and
+ * spectating the only active player would stall the hole with nobody
+ * left whose turn could ever end it.
+ */
+setInterval(() => {
+  const now = Date.now();
+  for (const room of rooms.values()) {
+    if (room.state !== 'playing' || !room.turnPid) continue;
+    const eligible = active(room).filter(p => !p.finished && p.connected);
+    if (eligible.length < 2) continue;
+    const p = room.players.find(x => x.pid === room.turnPid);
+    if (!p || p.spectator || !p.connected || p.finished) continue;
+    if (now - (p.lastActiveAt || 0) < AFK_MS) continue;
+
+    p.spectator = true;
+    toast(room, `${p.name} was away too long and is sitting out this hole.`, 'warn');
+    if (everyoneDone(room)) finishHole(room);
+    else pickNextToPlay(room);
+    broadcastState(room);
+  }
+}, AFK_SWEEP_MS).unref();
 
 /* ---------------------------------------------------------------------- boot */
 httpServer.listen(PORT, HOST, () => {
