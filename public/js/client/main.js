@@ -8,7 +8,7 @@ import { Avatar } from './avatar.js';
 import { Walker } from './walker.js';
 import { CartManager } from './carts.js';
 import { reactionFor, REACTION_TIER } from './celebrations.js';
-import { BOARD_RADIUS, KMH, TOP_SPEED_KMH } from '../shared/cart.js';
+import { BOARD_RADIUS, KMH, TOP_SPEED_KMH, MAX_BOOST } from '../shared/cart.js';
 import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
@@ -42,8 +42,7 @@ import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf, REGIONS, biomeFor, cou
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
-import { normaliseLook, randomLook, SHOT_RADIUS, EYE_HEIGHT, SPRINT_SPEED,
-         ballDashSpeed } from '../shared/avatars.js';
+import { normaliseLook, randomLook, SHOT_RADIUS, EYE_HEIGHT, SPRINT_SPEED } from '../shared/avatars.js';
 
 const canvas = document.getElementById('gl');
 
@@ -1446,9 +1445,9 @@ function stepAnim(dt, now) {
     pumpQueue();
     refreshTurnUi();
     if (myTurn()) { clubManual = false; autoClub(); aimAtPin(); rig.reset(); G.view = 'third'; }
-    // Your golfer stays where they played from.  Deliberately NO auto-jog
-    // after the ball: whether to walk up now, wait for the others to hit, or
-    // fetch the cart is the player's call — F jogs you there whenever.
+    // Your golfer stays where they played from.  Deliberately NO auto-warp
+    // after the ball: whether to head up now, wait for the others to hit, or
+    // fetch the cart is the player's call — F teleports you there whenever.
   }
 }
 
@@ -1804,7 +1803,10 @@ function toggleCart() {
   const why = carts.board(G.T, G.hole, walker.x, walker.z, walker.heading, G.room.players);
   if (why === 'nowhere') return HUD.toast('No room for a cart here.', 'warn');
   if (why) return;
-  if (carts.body) carts.body.boost = Math.min(1.6,
+  // Capped at MAX_BOOST — the same ceiling cart.js derives TOP_SPEED_KMH
+  // from — rather than a second hand-typed number that could quietly fall
+  // out of sync with it and silently cap a maxed-out cart short.
+  if (carts.body) carts.body.boost = Math.min(MAX_BOOST,
     ((G.profile?.gear?.cart || 0) >= 1 ? 1.12 : 1) * cartBoost(G.profile?.crew));
   walker.cancelAuto();
   rig.handOff(carts.body ? carts.body.heading : walker.heading);
@@ -1930,7 +1932,7 @@ function cancelShot() {
   swing.enabled = false;
   HUD.showPlaybar(false);
   HUD.setMeter(swing.meter(), false);
-  HUD.toast('Stepped away — walk back in (F) when you are ready.', 'info', 2200);
+  HUD.toast('Stepped away — press F when you are ready to go back.', 'info', 2200);
   return true;
 }
 
@@ -2101,7 +2103,7 @@ window.addEventListener('keydown', ev => {
   if (a === 'hail') hailRide();
   if (a === 'toBall') {
     if (seated) HUD.toast('Get out of the cart first.', 'warn', 1600);
-    else jogToMyBall();
+    else teleportToMyBall();
   }
   // Enter opens the box; the box itself handles send and close (see above).
   if (a === 'chat' && G.screen === 'game') { HUD.showChat(true); return; }
@@ -2183,17 +2185,31 @@ function toggleView() {
   HUD.toast(G.view === 'first' ? 'First person' : 'Third person', 'info', 1200);
 }
 
-/** Jog over to your own ball (F).  Any WASD input takes back control. */
-function jogToMyBall() {
+/**
+ * Teleport straight to your own ball (F).
+ *
+ * Used to be a fast walk, scaled so any distance took about the same few
+ * seconds — still a wait to sit through for no reason on a 200 m drive with
+ * nothing to do. It is a convenience action, not a skill test, so it is now
+ * instant: same address stance and pin-facing heading you would have walked
+ * into, minus the walk. `rig.snap()` matches how the scramble gather handles
+ * the same kind of jump — cut the camera with you rather than let it lerp
+ * across the whole hole to catch up.
+ *
+ * Blocked while a shot is in the air (`G.anim`): your own ball's reported
+ * position is wherever it currently is mid-flight, and warping onto a ball
+ * that has not landed yet is exactly the bug this guard exists to prevent.
+ */
+function teleportToMyBall() {
   if (!G.room || G.room.state !== 'playing') return;
+  if (G.anim) return;
   if (me()?.finished) { HUD.toast('Holed out — wander where you like.', 'info', 1600); return; }
   const b = ballOf(G.myPid);
   if (walker.nearBall(b)) { HUD.toast('You are already at your ball.', 'info', 1200); return; }
-  const spot = addressSpot(b, swing.aim);
-  // Scaled to the distance, so the walk is short whether the ball is thirty
-  // metres away or two hundred — see ballDashSpeed.
-  const d = Math.hypot(spot.x - walker.x, spot.z - walker.z);
-  walker.goTo(spot.x, spot.z, ballDashSpeed(d));
+  const aimAt = Math.atan2(G.hole.pin.x - b.x, G.hole.pin.z - b.z);
+  const spot = addressSpot(b, aimAt);
+  walker.reset(spot.x, spot.z, aimAt);
+  rig.snap();
 }
 
 function toggleMap() {
@@ -3011,7 +3027,7 @@ document.getElementById('btnCancelShot')?.addEventListener('click', ev => {
 });
 
 for (const [id, fn] of [
-  ['tbBall', () => { if (carts.inCart) HUD.toast('Get out of the cart first.', 'warn', 1600); else jogToMyBall(); }],
+  ['tbBall', () => { if (carts.inCart) HUD.toast('Get out of the cart first.', 'warn', 1600); else teleportToMyBall(); }],
   ['tbCart', () => toggleCart()],
   ['tbView', () => toggleView()],
   ['tbMap',  () => toggleMap()]
@@ -3527,7 +3543,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     return [
       { id: 'emote', icon: '😄', name: 'Emote' },
       { id: 'chat',  icon: '💬', name: 'Say something' },
-      { id: 'toBall', icon: '🏃', name: seated ? 'Get out first' : 'Jog to my ball',
+      { id: 'toBall', icon: '✨', name: seated ? 'Get out first' : 'Teleport to my ball',
         locked: seated, sub: 'not from the cart' },
       { id: 'cart',  icon: '🛺', name: seated ? 'Get out' : 'Get in the cart' },
       { id: 'hail',  icon: '📣', name: 'Hail a cart' },
@@ -3565,7 +3581,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       HUD.renderEmotes(G.profile?.level ?? 1, e => { Net.emote(e); HUD.showEmotes(false); });
       HUD.showEmotes(true);
     } else if (id === 'chat') document.body.classList.add('saying');
-    else if (id === 'toBall') jogToMyBall();
+    else if (id === 'toBall') teleportToMyBall();
     else if (id === 'cart') toggleCart();
     else if (id === 'hail') hailRide();
     else if (id === 'map') toggleMap();

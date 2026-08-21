@@ -508,7 +508,7 @@ head('the caddie crew — hired stats that actually do things');
   // Pitstop tops up a cart that is already usable rather than unlocking one:
   // the stock cart does the full base speed, so the cap here is deliberate.
   ok('Pitstop at Legend tops the cart up by the capped amount',
-     Math.abs(cartBoost({ pitstop: 10 }) - 1.22) < 1e-9,
+     Math.abs(cartBoost({ pitstop: 10 }) - 1.55) < 1e-9,
      'x' + cartBoost({ pitstop: 10 }).toFixed(3));
   // the till
   const broke = crewPurchase('caddie:ace', { coins: 100, crew: { ...NO_CREW } });
@@ -818,7 +818,7 @@ head('overswing — power past 1.0 must actually reach the simulation');
 }
 
 /* ============================================== the boosted cart is honest */
-head('boost — the shop’s +6% per level must be real speed, not a clamp');
+head('boost — Pitstop’s +5.5% per level must be real speed, not a clamp');
 {
   const T = flat();
   const stock = new CartBody(0, 0, 0);
@@ -826,8 +826,8 @@ head('boost — the shop’s +6% per level must be real speed, not a clamp');
   const tuned = new CartBody(0, 0, 0);
   tuned.boost = MAX_BOOST;                // Pitstop 10 + the cart tune, capped
   drive(T, tuned, GO, 40);
-  // The headline number: a fully upgraded cart peaks at 35 km/h, which is what
-  // a tuned golf cart actually does.  Everything below it is a real gain.
+  // The headline number: a fully upgraded cart peaks around 55 km/h.
+  // Everything below it is a real gain, not a step toward a hidden clamp.
   const kmh = tuned.speed * 3.6;
   ok('a fully upgraded cart peaks at the advertised top speed',
      Math.abs(kmh - TOP_SPEED_KMH) < 1.2, `${kmh.toFixed(1)} km/h vs ${TOP_SPEED_KMH}`);

@@ -1,25 +1,27 @@
 /* =========================================================================
    walker.js — walking your golfer around the hole
    -------------------------------------------------------------------------
-   WASD/arrows move relative to the camera, Shift sprints, F jogs you to your
-   ball.  Movement is delta-time based so a frame-rate dip slows nothing down,
-   and collision is resolved against the same tree list and hazard geometry the
-   ball physics uses — you cannot walk through a trunk or out into a lake.
+   WASD/arrows move relative to the camera, Shift sprints. F (main.js,
+   teleportToMyBall) warps you straight to your ball rather than routing
+   through here at all — see that function for why. Movement is delta-time
+   based so a frame-rate dip slows nothing down, and collision is resolved
+   against the same tree list and hazard geometry the ball physics uses —
+   you cannot walk through a trunk or out into a lake.
    ========================================================================= */
 
 import { keysFor } from './binds.js';
 import { PROP_KINDS } from '../shared/props.js';
 
-/* The four that count as "taking over" from an auto-walk. */
+/* The four that count as "taking over" from an auto-walk. goTo()/this.auto
+   below have no caller right now — F used to be an auto-walk to the ball and
+   now teleports instead — but the mechanism is generic (walk to a point,
+   under your own speed, cancellable by taking the stick back) rather than
+   ball-specific, so it stays as available plumbing. */
 const WALK_ACTIONS = ['walkFwd', 'walkBack', 'walkLeft', 'walkRight'];
 
 import { WALK_SPEED, SPRINT_SPEED, SHOT_RADIUS } from '../shared/avatars.js';
 import { clamp } from '../shared/rng.js';
 
-/* Jogging to your ball is a JOG.  This used to scale its speed so that any
-   distance was covered in four seconds — 200 m at 50 m/s — which is the single
-   biggest reason the course felt miniature.  Walk out to a drive now and it
-   takes the time a walk takes, which is exactly why the cart is parked there. */
 const BODY_RADIUS = 0.34;
 
 export class Walker {

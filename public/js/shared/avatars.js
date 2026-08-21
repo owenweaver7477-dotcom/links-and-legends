@@ -289,27 +289,5 @@ export const SHOT_RADIUS = 4.0;          // metres.  1.5 was too tight to walk
 export const WALK_SPEED = 3.1;           // m/s — a purposeful walk
 export const SPRINT_SPEED = 8.4;         // m/s — a real sprint, holding Shift
 
-/* F — "get me to my ball".  This is a convenience action, not a skill test:
-   nobody wants to watch their golfer cover 200 metres at jogging pace with
-   nothing to do, and it used to run at SPRINT_SPEED, which made a good drive
-   a twenty-four second wait.
-
-   Scaled by DISTANCE rather than run at a flat speed, so the trip takes about
-   the same short time whether the ball is thirty metres away or two hundred.
-   A flat speed can't do that — fast enough for a long drive is a teleport
-   across a chip. Floored at the sprint so it is never slower than running
-   yourself, capped so it stays a run rather than a blur. The walk cycle
-   already flattens its stride above 10 m/s, so it still reads as sprinting. */
-export const BALL_DASH_SECONDS = 3.0;    // the trip we aim for, at any distance
-export const BALL_DASH_MAX = 26;         // m/s ceiling — 94 km/h.  Past about
-                                         // this the golfer stops reading as a
-                                         // sprinting person and starts looking
-                                         // fired from a cannon; this is the
-                                         // one number to raise if the walk
-                                         // still feels long.
-
-/** How fast to cover `dist` metres when the player presses F. */
-export const ballDashSpeed = dist =>
-  Math.max(SPRINT_SPEED, Math.min(BALL_DASH_MAX, dist / BALL_DASH_SECONDS));
 export const AVATAR_HEIGHT = 1.78;       // metres, head to heel
 export const EYE_HEIGHT = 1.62;

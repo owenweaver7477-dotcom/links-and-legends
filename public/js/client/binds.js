@@ -30,7 +30,7 @@ export const ACTIONS = [
   { id: 'walkLeft',  group: 'Moving',   name: 'Walk left',       keys: ['a', 'arrowleft'] },
   { id: 'walkRight', group: 'Moving',   name: 'Walk right',      keys: ['d', 'arrowright'] },
   { id: 'run',       group: 'Moving',   name: 'Run',             keys: ['shift'] },
-  { id: 'toBall',    group: 'Moving',   name: 'Jog to your ball', keys: ['f'] },
+  { id: 'toBall',    group: 'Moving',   name: 'Teleport to your ball', keys: ['f'] },
   { id: 'cart',      group: 'Moving',   name: 'Get in / out of the cart', keys: ['c'] },
   { id: 'hail',      group: 'Moving',   name: 'Offer a lift',    keys: ['g'] },
 

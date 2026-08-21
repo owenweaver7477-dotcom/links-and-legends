@@ -46,8 +46,11 @@ export const CADDIES = {
   pitstop: {
     name: 'Pitstop', emoji: '🏁', stat: 'Cart speed',
     blurb: 'Pit-crew energy. Revs the cart engine for fun.',
-    // the card must promise what the cap actually delivers (see cartBoost)
-    line: lvl => `+${(lvl * 2.2).toFixed(0)}% cart speed`
+    // the card must promise what the cap actually delivers (see cartBoost).
+    // Was 2.2%/level — hiring a level-1 Pitstop bought about 0.7 km/h,
+    // which nobody could feel. Raised so the FIRST level is worth having,
+    // not just the tenth.
+    line: lvl => `+${(lvl * 5.5).toFixed(0)}% cart speed`
   },
   lucky: {
     name: 'Lucky', emoji: '🍀', stat: 'Ball behaviour',
@@ -192,9 +195,10 @@ export function crewEffect(crew, clubTier = null, refine = 0, ctx = {}) {
 
 /** Cart speed never touches the shot sim — the cart reads this directly. */
 export const cartBoost = crew =>
-  // capped to match MAX_BOOST in cart.js: the stock cart is already a usable
-  // 24 km/h, so Pitstop tops it up rather than unlocking it
-  1 + Math.min(0.22, (crew?.pitstop || 0) * 0.022);
+  // Capped so a maxed Pitstop, stacked with gear.js's cart_tune (+12%),
+  // lands exactly on MAX_BOOST in cart.js — that file explains why the two
+  // numbers are 1.55 and 1.12 rather than something rounder.
+  1 + Math.min(0.55, (crew?.pitstop || 0) * 0.055);
 
 /* ----------------------------------------------------------- the till ---- */
 /**

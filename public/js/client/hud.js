@@ -1432,7 +1432,7 @@ HUD.renderRooms = (rooms, onJoin) => {
  * The controls panel: every action, its keys, and a click-then-press rebind.
  *
  * Deliberately not a modal. A player rebinding controls is comparing several
- * of them against each other — "if run is here, jog-to-ball wants to be
+ * of them against each other — "if run is here, teleport-to-ball wants to be
  * there" — and a dialog that shows one action at a time makes that
  * impossible. The whole scheme is on screen and you edit it in place.
  */

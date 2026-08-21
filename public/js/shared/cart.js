@@ -34,15 +34,20 @@ export const SEATS = {
 
 /* --------------------------------------------------------------- motion
    BASE_SPEED_KMH is the number to change, and it is what a cart with nothing
-   bought actually does.  It was derived the wrong way round before: 24 was
-   the FULLY UPGRADED top, which left a stock cart at 15 km/h — most players
-   own no upgrades, so most players got the slowest cart in the game.  Now 24
-   is the floor everyone gets, and the shop takes it to 31 rather than being
-   the price of admission to a usable speed. */
+   bought actually does — everyone gets this whether or not they have ever
+   opened the shop, so it has to be usable on its own, not just a floor
+   under the "real" speed the upgrades unlock.
+
+   MAX_BOOST is derived, not chosen: it is the actual ceiling the two
+   upgrade paths can reach TOGETHER — gear.js's cart_tune (a flat +12%,
+   bought once) and crew.js's Pitstop perk (levelled, see cartBoost) — so it
+   can never quietly drift out of sync with what a maxed-out cart really
+   does the way a hand-typed number could. Raising the ceiling means raising
+   one of those two, not this line. */
 export const KMH = 3.6;                        // m/s -> km/h, used all over the HUD
 export const BASE_SPEED_KMH = 32;              // stock, on a flat fairway
-export const MAX_BOOST = 1.3;                  // cart tune x Pitstop at Legend
-export const TOP_SPEED_KMH = BASE_SPEED_KMH * MAX_BOOST;   // 41.6 fully upgraded
+export const MAX_BOOST = 1.12 * 1.55;          // cart tune (+12%) x Pitstop at Legend (+55%)
+export const TOP_SPEED_KMH = BASE_SPEED_KMH * MAX_BOOST;   // ~55.6 fully upgraded
 export const MAX_FWD = BASE_SPEED_KMH / KMH;   // 8.89 m/s stock
 export const MAX_REV = 1.8;       // reverse is a crawl, as it should be
 export const A_DRIVE = 3.9;       // m/s² at full pull — see the heavy-start ramp below
@@ -72,11 +77,18 @@ export const SLOPE_EPS = 1.15;      // ~0.7 × wheelbase: don't fight bumps
 export const MAX_STEER = 0.62;      // rad ≈ 35.5°, 2.29 m turning radius at rest
 export const STEER_RATE = 2.4;      // rad/s toward the input
 export const STEER_RETURN = 3.6;    // rad/s back to centre when released
-export const A_LAT_MAX = 6.2;       // m/s² — this alone decides cart vs go-kart.
-                                    // Raised with the top speed: at 24 km/h a
-                                    // 5.0 limit cornered tidily, but the same
-                                    // grip at 32 turns every bend into a slide
-                                    // and the cart stops answering the wheel.
+export const A_LAT_MAX = 7.7;       // m/s² — this alone decides cart vs go-kart.
+                                    // Steering is grip-limited at speed
+                                    // (maxTan below, a_lat = v²tanδ/L), so a
+                                    // faster top speed shrinks the wheel's
+                                    // actual authority unless this rises too
+                                    // — it did, the same 24% it did the last
+                                    // time top speed rose by about a third
+                                    // (24->32 km/h took 5.0 to 6.2; 41.6->55.6
+                                    // takes 6.2 to 7.7). Matching the ratio
+                                    // rather than reaching for a round number
+                                    // keeps "answers the wheel at full boost"
+                                    // roughly as true as it was before.
 
 /* ------------------------------------------------------------- collision */
 export const HIT_RATE = { tree: 9.0, bank: 5.5, fence: 4.0 };

@@ -2,7 +2,8 @@
    radial.js — one gesture instead of one button per thing
    -------------------------------------------------------------------------
    Everything you can do that is not hitting the ball lives on a different
-   key: E for emotes, B for a shove, C for the cart, T for chat, F to jog up.
+   key: E for emotes, B for a shove, C for the cart, T for chat, F to warp
+   to your ball.
    That is fine once you know it and it is invisible until you do, which is
    why the touchpad on a phone grew to a labelled grid of buttons covering
    the bottom of the screen — the only way to make the actions discoverable
