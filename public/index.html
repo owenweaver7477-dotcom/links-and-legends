@@ -102,6 +102,7 @@
       <button class="collapse" id="boardCollapse" title="Collapse the scorecard" aria-expanded="true">▾</button>
       <h4>Scorecard</h4>
       <button class="roomtag" id="boardRoom" title="Copy the invite link">—</button>
+      <button class="fbtag" id="btnFeedbackMid" title="Report a bug or an idea">💬</button>
     </div>
     <div id="boardRows"></div>
   </div>
@@ -514,6 +515,7 @@
       <button class="hktab" data-bd="records" role="tab">Course records</button>
       <button class="hktab" data-bd="world" role="tab">World rating</button>
       <button class="hktab" data-bd="h2h" role="tab">Head to head</button>
+      <button class="hktab" data-bd="feedback" role="tab">Feedback</button>
     </div>
     <div class="bd-body">
 <div class="section bdpane" data-pane="ranks">
@@ -546,6 +548,20 @@
     <div class="section bdpane" data-pane="h2h" hidden>
       <h4 class="lbl nojs-only">Head to head</h4>
       <div id="h2hBox"></div>
+    </div>
+
+    <!-- ANONYMOUS FEEDBACK. No name, no account link — only a salted hash
+         kept for rate limiting, which is said here in one line so nobody
+         has to take that on faith. -->
+    <div class="section bdpane" data-pane="feedback" hidden>
+      <h4 class="lbl nojs-only">Feedback</h4>
+      <p class="tiny">Anonymous — nothing here is linked to your name or your career. Bugs, ideas, anything.</p>
+      <button class="btn primary" id="btnFeedbackNew">Send feedback</button>
+      <div class="fbtabs">
+        <button class="fbsort on" data-fbsort="new">Newest</button>
+        <button class="fbsort" data-fbsort="votes">Most voted</button>
+      </div>
+      <div id="feedbackBoard"></div>
     </div>
 
     <!-- RANKINGS. Five ladders, because one ladder has a top ten that never
@@ -739,6 +755,45 @@
 
 <div class="screen loading" id="screenLoad" hidden>
   <div class="loadbox"><div class="spinner"></div><p id="loadMsg">Shaping the terrain…</p></div>
+</div>
+
+<!-- ANONYMOUS FEEDBACK — the form. Reachable from the Leaderboards screen
+     (main menu) and the mid-round scorecard, since a bug does not wait for
+     a lobby to end. -->
+<div class="modal" id="modalFeedback" hidden>
+  <div class="modal-card">
+    <h3>Send feedback</h3>
+    <p class="tiny">Anonymous. Nothing here is linked to your name, your career, or which room you are in.</p>
+    <div class="fbcats" id="fbCats">
+      <button class="fbcat on" data-cat="bug">Bug</button>
+      <button class="fbcat" data-cat="performance">Performance</button>
+      <button class="fbcat" data-cat="course">A course</button>
+      <button class="fbcat" data-cat="suggestion">Idea</button>
+      <button class="fbcat" data-cat="other">Other</button>
+    </div>
+    <textarea id="fbBody" maxlength="500" placeholder="What happened, or what would make this better?"></textarea>
+    <p class="tiny" id="fbCourseNote"></p>
+    <p class="err tiny" id="fbErr"></p>
+    <div class="modal-actions">
+      <button class="btn" id="btnFeedbackCancel">Cancel</button>
+      <button class="btn primary" id="btnFeedbackSend">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT A PLAYER — same anonymous backend as feedback, a different
+     category, and never shown on the public board. -->
+<div class="modal" id="modalReport" hidden>
+  <div class="modal-card">
+    <h3>Report <span id="reportTarget">this player</span></h3>
+    <p class="tiny">Anonymous, and never linked back to you. This does not remove them — it is read, not enforced automatically.</p>
+    <textarea id="reportBody" maxlength="500" placeholder="What happened?"></textarea>
+    <p class="err tiny" id="reportErr"></p>
+    <div class="modal-actions">
+      <button class="btn" id="btnReportCancel">Cancel</button>
+      <button class="btn primary" id="btnReportSend">Send report</button>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="js/client/main.js"></script>

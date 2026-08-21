@@ -31,6 +31,9 @@ for (const id of [
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
   'btnPrivacy', 'optPrivate', 'btnDrop',
+  'btnFeedbackMid', 'btnFeedbackNew', 'modalFeedback', 'fbCats', 'fbBody',
+  'fbCourseNote', 'fbErr', 'btnFeedbackCancel', 'btnFeedbackSend', 'feedbackBoard',
+  'modalReport', 'reportTarget', 'reportBody', 'reportErr', 'btnReportCancel', 'btnReportSend',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
   'wArrow', 'wSpeed', 'wDesc', 'wWeather',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
@@ -410,6 +413,13 @@ HUD.renderBoard = (room, myPid, course) => {
     tot.textContent = p.spectator ? 'watch' : relLabel(rel);
 
     row.append(sw, nm, st, tot);
+    if (p.pid !== myPid) {
+      const rep = document.createElement('button');
+      rep.type = 'button'; rep.className = 'preport'; rep.title = `Report ${p.name}`;
+      rep.textContent = '🚩';
+      rep.dataset.reportPid = p.pid; rep.dataset.reportName = p.name;
+      row.appendChild(rep);
+    }
     el.boardRows.appendChild(row);
   }
 };
@@ -2429,6 +2439,50 @@ HUD.bindBoardsScreen = () => {
     const b = e.target.closest('.hktab');
     if (b) HUD.showBoardTab(b.dataset.bd);
   });
+};
+
+/* ---------------------------------------------------------- feedback --- */
+const FB_CAT_NAME = { bug: 'Bug', performance: 'Performance', course: 'Course',
+  suggestion: 'Idea', other: 'Other' };
+const relTime = at => {
+  const s = Math.max(1, Math.round((Date.now() - at) / 1000));
+  if (s < 90) return 'just now';
+  const m = Math.round(s / 60); if (m < 90) return `${m}m ago`;
+  const h = Math.round(m / 60); if (h < 36) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+};
+
+/**
+ * The public board. `onVote` is called with an id and re-renders on
+ * success — the vote count is the one thing here worth showing change
+ * instantly rather than waiting on the next full refetch.
+ */
+HUD.renderFeedback = (items, onVote, voted) => {
+  const box = el.feedbackBoard || document.getElementById('feedbackBoard');
+  if (!box) return;
+  if (!items || !items.length) {
+    box.innerHTML = '<p class="tiny">Nothing here yet — the first thing anyone sends becomes the first row.</p>';
+    return;
+  }
+  box.innerHTML = '';
+  for (const it of items) {
+    const row = document.createElement('div');
+    row.className = 'fbrow';
+    const head = document.createElement('div'); head.className = 'fbrow-head';
+    const cat = document.createElement('span'); cat.className = 'fbcat-tag'; cat.textContent = FB_CAT_NAME[it.category] || it.category;
+    const status = document.createElement('span'); status.className = 'fbstatus' + (it.status === 'done' ? ' done' : '');
+    status.textContent = it.status;
+    const when = document.createElement('span'); when.className = 'tiny'; when.textContent = relTime(it.at);
+    const vote = document.createElement('button');
+    vote.type = 'button'; vote.className = 'fbvote' + (voted?.has(it.id) ? ' voted' : '');
+    vote.textContent = `▲ ${it.votes}`;
+    vote.disabled = !!voted?.has(it.id);
+    vote.addEventListener('click', () => onVote?.(it.id));
+    head.append(cat, status, when, vote);
+    const body = document.createElement('div'); body.className = 'fbrow-body'; body.textContent = it.body;
+    row.append(head, body);
+    box.appendChild(row);
+  }
 };
 
 /* The turntable beside the shop list. `kind` decides which model is built —

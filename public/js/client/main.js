@@ -3814,6 +3814,97 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   HUD.onBoards = loadBoards;
   HUD.onWorldTab = () => Net.ranking(d => HUD.renderWorld(d, G.myPid));
 
+  /* -------------------------------------------------------- feedback --- */
+  /* GPU renderer string is the one field here that needs actual work to
+     get: WEBGL_debug_renderer_info is only sometimes exposed, and reading
+     it directly rather than through some perf-overlay indirection means
+     this keeps working even from the Leaderboards screen, with no course
+     ever loaded and no renderer overlay running. */
+  function gpuString() {
+    try {
+      const gl = scene.renderer.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    } catch { return undefined; }
+  }
+  const sessionStart = performance.now();
+  function gatherContext() {
+    return {
+      gpu: gpuString(),
+      resolution: `${innerWidth}x${innerHeight}@${(devicePixelRatio || 1).toFixed(1)}x`,
+      orientation: innerWidth >= innerHeight ? 'landscape' : 'portrait',
+      ua: navigator.userAgent,
+      preset: HUD.quality,
+      sessionLen: Math.round((performance.now() - sessionStart) / 1000)
+    };
+  }
+
+  let fbSort = 'new';
+  const fbVoted = new Set();
+  const refreshFeedback = () => Net.listFeedback(fbSort, items => HUD.renderFeedback(items, id => {
+    Net.voteFeedback(id, res => { if (res?.ok) { fbVoted.add(id); refreshFeedback(); } });
+  }, fbVoted));
+  HUD.onFeedbackTab = refreshFeedback;
+  document.querySelectorAll('.fbsort').forEach(b => b.addEventListener('click', () => {
+    fbSort = b.dataset.fbsort;
+    document.querySelectorAll('.fbsort').forEach(x => x.classList.toggle('on', x === b));
+    refreshFeedback();
+  }));
+
+  function openFeedback() {
+    HUD.el.fbErr.textContent = '';
+    HUD.el.fbBody.value = '';
+    document.querySelectorAll('#fbCats .fbcat').forEach((b, i) => b.classList.toggle('on', i === 0));
+    const inRound = G.room && G.hole;
+    HUD.el.fbCourseNote.textContent = inRound
+      ? `Will include: ${G.course?.name || G.room.courseId}, hole ${G.room.holeIndex + 1}`
+      : '';
+    HUD.el.modalFeedback.hidden = false;
+  }
+  document.getElementById('btnFeedbackNew')?.addEventListener('click', openFeedback);
+  document.getElementById('btnFeedbackMid')?.addEventListener('click', openFeedback);
+  document.getElementById('btnFeedbackCancel')?.addEventListener('click', () => { HUD.el.modalFeedback.hidden = true; });
+  document.getElementById('fbCats')?.addEventListener('click', e => {
+    const b = e.target.closest('.fbcat'); if (!b) return;
+    document.querySelectorAll('#fbCats .fbcat').forEach(x => x.classList.toggle('on', x === b));
+  });
+  document.getElementById('btnFeedbackSend')?.addEventListener('click', () => {
+    const category = document.querySelector('#fbCats .fbcat.on')?.dataset.cat || 'other';
+    const body = HUD.el.fbBody.value.trim();
+    const inRound = G.room && G.hole;
+    Net.submitFeedback({
+      category, body,
+      courseId: inRound ? G.room.courseId : null,
+      hole: inRound ? G.room.holeIndex + 1 : null,
+      context: gatherContext()
+    }, res => {
+      if (!res?.ok) { HUD.el.fbErr.textContent = res?.error || 'Could not send that — try again.'; return; }
+      HUD.el.modalFeedback.hidden = true;
+      HUD.toast('Sent — thank you.', 'good', 2200);
+      if (HUD.bdTab === 'feedback') refreshFeedback();
+    });
+  });
+
+  /* ---------------------------------------------------------- reports --- */
+  let reportPid = null;
+  document.getElementById('boardRows')?.addEventListener('click', e => {
+    const b = e.target.closest('.preport'); if (!b) return;
+    reportPid = b.dataset.reportPid;
+    HUD.el.reportErr.textContent = '';
+    HUD.el.reportBody.value = '';
+    HUD.el.reportTarget.textContent = b.dataset.reportName || 'this player';
+    HUD.el.modalReport.hidden = false;
+  });
+  document.getElementById('btnReportCancel')?.addEventListener('click', () => { HUD.el.modalReport.hidden = true; });
+  document.getElementById('btnReportSend')?.addEventListener('click', () => {
+    if (!reportPid) return;
+    Net.reportPlayer(reportPid, HUD.el.reportBody.value.trim(), gatherContext(), res => {
+      if (!res?.ok) { HUD.el.reportErr.textContent = res?.error || 'Could not send that — try again.'; return; }
+      HUD.el.modalReport.hidden = true;
+      HUD.toast('Report sent.', 'good', 2000);
+    });
+  });
+
   document.getElementById('btnBindsReset')?.addEventListener('click', () => {
     resetBinds();
     HUD.renderBinds();

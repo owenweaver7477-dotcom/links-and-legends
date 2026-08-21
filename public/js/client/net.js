@@ -185,6 +185,13 @@ Net.pickTees = teeSet => Net.socket?.emit('room:tees', { teeSet });
 Net.setPrivacy = privacy => Net.socket?.emit('room:privacy', { privacy });
 /** The "Take a drop" safety valve — free of penalty. See server.js's handler. */
 Net.takeDrop = () => Net.socket?.emit('player:drop');
+
+/* ---------------------------------------------------------- feedback --- */
+Net.submitFeedback = (data, cb) => ask('feedback:submit', data, res => cb?.(res));
+Net.listFeedback = (sort, cb) => ask('feedback:list', { sort }, res => cb?.(res?.items || []));
+Net.voteFeedback = (id, cb) => ask('feedback:vote', { id }, res => cb?.(res));
+Net.reportPlayer = (targetPid, reason, context, cb) =>
+  ask('player:report', { targetPid, reason, context }, res => cb?.(res));
 Net.prefs = p => Net.socket?.emit('player:prefs', p);
 Net.setLook = look => Net.socket?.emit('player:look', { look });
 Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, rot, moving, cart });

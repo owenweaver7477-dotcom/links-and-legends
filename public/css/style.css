@@ -3110,3 +3110,54 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 @media (min-width: 641px) and (max-height: 700px) {
   body.playing .minimap canvas { width: 100px; }
 }
+
+/* ───────────────────────────────────────────────── feedback and reports */
+.fbtag { margin-left: auto; background: none; border: none; font-size: 15px;
+  cursor: pointer; opacity: .75; padding: 2px 4px; }
+.fbtag:hover { opacity: 1; }
+.preport { background: none; border: none; font-size: 11px; cursor: pointer;
+  opacity: 0; padding: 2px 3px; margin-left: 2px; transition: opacity .12s; }
+.prow:hover .preport { opacity: .55; }
+.preport:hover { opacity: 1 !important; }
+
+.modal { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center;
+  justify-content: center; padding: 22px; background: rgba(4,9,7,.72);
+  backdrop-filter: blur(6px); }
+.modal[hidden] { display: none; }
+.modal-card { width: min(440px, 100%); background: rgba(12,21,17,.96);
+  border: 1px solid rgba(255,255,255,.12); border-radius: 18px; padding: 22px;
+  box-shadow: 0 24px 70px rgba(0,0,0,.65); }
+.modal-card h3 { font-size: 17px; margin-bottom: 4px; }
+.modal-card textarea { width: 100%; min-height: 110px; margin-top: 12px; padding: 11px 13px;
+  font: inherit; font-size: 13.5px; color: #eaf4ec; background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.14); border-radius: 12px; resize: vertical; }
+.modal-card textarea:focus { border-color: #4fb767; background: rgba(255,255,255,.08); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+.fbcats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.fbcat { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+  color: #cfe4d3; border-radius: 999px; padding: 6px 13px; font: inherit; font-size: 12px;
+  font-weight: 600; cursor: pointer; }
+.fbcat.on { background: rgba(143,224,122,.18); border-color: rgba(143,224,122,.5); color: #cdf5c0; }
+
+.fbtabs { display: flex; gap: 6px; margin: 14px 0 8px; }
+.fbsort { background: none; border: 1px solid rgba(255,255,255,.14); color: #9fb6a4;
+  border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 11.5px; cursor: pointer; }
+.fbsort.on { background: rgba(255,255,255,.08); color: #eaf3ea; }
+
+.fbrow { display: flex; flex-direction: column; gap: 4px; padding: 11px 13px;
+  border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+  margin-bottom: 7px; }
+.fbrow-head { display: flex; align-items: center; gap: 8px; }
+.fbcat-tag { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px;
+  color: #9fb6a4; background: rgba(255,255,255,.07); border-radius: 999px; padding: 2px 8px; }
+.fbstatus { font-size: 9.5px; font-weight: 800; text-transform: uppercase; color: #e6c058;
+  background: rgba(230,180,60,.14); border: 1px solid rgba(230,180,60,.3); border-radius: 999px;
+  padding: 2px 7px; }
+.fbstatus.done { color: #8fe07a; background: rgba(143,224,122,.14); border-color: rgba(143,224,122,.35); }
+.fbrow-body { font-size: 13px; color: #dcefe0; line-height: 1.4; }
+.fbvote { margin-left: auto; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+  color: #cfe4d3; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 11.5px;
+  cursor: pointer; white-space: nowrap; }
+.fbvote:hover { background: rgba(255,255,255,.1); }
+.fbvote.voted { color: #8fe07a; border-color: rgba(143,224,122,.4); }

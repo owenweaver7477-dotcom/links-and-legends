@@ -217,6 +217,7 @@ import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './
 import * as Activity from './server/activity.js';
 import { loadRecords, recordsFor, allRecords, submitRound,
          offerRecords, restoreOpen, badgesFor } from './server/records.js';
+import { loadFeedback, submitFeedback, submitReport, listFeedback, voteFeedback } from './server/feedback.js';
 /* Shared, not server-only: the client needs the same format table to draw
    the picker and the same team colours to draw the card, and two copies of a
    list like that drift within a week. */
@@ -249,6 +250,7 @@ calibrateCarries();
    rather than fired and forgotten. */
 await loadProfiles();
 await loadRecords();
+await loadFeedback();
 await loadFriends();
 await loadNames();
 /* Say it out loud when the board cannot survive a deploy. Without a database
@@ -1929,6 +1931,40 @@ io.on('connection', socket => {
       try { offerRecords(pid, d.mine); } catch (e) { console.error('  records: offer failed —', e.message); }
     }
     if (typeof ack === 'function') ack({ records: allRecords() });
+  });
+
+  /* Reachable from the clubhouse, outside any room — same reasoning as
+     records:all: a bug or an idea does not wait for a lobby to exist. */
+  socket.on('feedback:submit', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a moment.' });
+    reply(submitFeedback(pid, d?.category, d?.body, d?.courseId, d?.hole, d?.context));
+  });
+
+  socket.on('feedback:list', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    ack({ items: listFeedback({ sort: d?.sort === 'votes' ? 'votes' : 'new' }) });
+  });
+
+  socket.on('feedback:vote', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = socket.data.pid;
+    if (!pid) return reply({ ok: false });
+    reply(voteFeedback(pid, d?.id));
+  });
+
+  /* The target's NAME is looked up from the room rather than trusted from
+     the reporter's client — the one thing worse than an unmoderated report
+     board would be one where the label on it could be forged too. */
+  socket.on('player:report', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a moment.' });
+    const ref = sockets.get(socket.id);
+    const room = ref && rooms.get(ref.code);
+    const target = room?.players.find(p => p.pid === d?.targetPid);
+    reply(submitReport(pid, d?.targetPid, target?.name, d?.reason, ref?.code, d?.context));
   });
 
   socket.on('cart:hail', () => {
