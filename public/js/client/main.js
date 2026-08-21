@@ -2803,7 +2803,8 @@ function route() {
     // The server holds the hole open for 20 s on its own timer, so a couple of
     // seconds here costs nothing and is purely local.
     if (celebrating() || G.anim) { G.screen = 'game'; HUD.show(null); return; }
-    G.screen = 'holeover'; HUD.show('holeover'); HUD.renderHoleOver(r, G.myPid, G.course); return;
+    G.screen = 'holeover'; HUD.show('holeover');
+    HUD.renderHoleOver(r, G.myPid, G.course, G.profile?.difficulty || DEFAULT_DIFFICULTY); return;
   }
   G.screen = 'game';
   HUD.show(null);

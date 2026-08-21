@@ -843,13 +843,23 @@ function nextHole(room) {
          board that mixes the two is a board nobody trusts. Casual plays the
          same golf course — it just cannot write to the record book. */
       const beat = allowsRecords(mode)
-        ? submitRound(room.courseId, p.name, p.pid, holeScores)
+        ? submitRound(room.courseId, mode, p.name, p.pid, holeScores)
         : { round: null, holes: [] };
       if (beat.round || beat.holes.length) {
+        /* Beating your own difficulty's board is not always beating THE
+           course record — a Standard round can retake the Standard board
+           while Tournament still holds a lower total overall. Checked
+           here, once, rather than guessed at from `beat` alone, so the
+           toast never claims a bigger achievement than actually happened. */
+        const cr = beat.round ? recordsFor(room.courseId).courseRecord : null;
+        const isCourseRecord = cr && cr.round.pid === p.pid && cr.round.total === total;
+        const diffName = difficultyById(mode).name;
         io.to(room.code).emit('toast', {
           msg: beat.round
-            ? `🏆 ${p.name} set the course record — ${total} at ${course(room).name}`
-            : `🏆 ${p.name} set a new best on hole ${beat.holes[0] + 1}`,
+            ? (isCourseRecord
+                ? `🏆 ${p.name} set the course record — ${total} at ${course(room).name} (${diffName})`
+                : `🥈 ${p.name} set the ${diffName} record — ${total} at ${course(room).name}`)
+            : `🏆 ${p.name} set a new best on hole ${beat.holes[0] + 1} (${diffName})`,
           kind: 'good'
         });
         /* The board is one board for everybody, so a new record has to reach
@@ -861,9 +871,11 @@ function nextHole(room) {
         io.emit('records:beat', {
           courseId: room.courseId,
           course: course(room).name,
+          difficulty: mode,
           name: p.name,
           pid: p.pid,
           round: beat.round ? { total, par: parTotal } : null,
+          courseRecord: isCourseRecord,
           holes: beat.holes,
           all: allRecords()
         });

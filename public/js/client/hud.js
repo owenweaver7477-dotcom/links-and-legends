@@ -1160,7 +1160,7 @@ HUD.renderLobby = (room, myPid) => {
 };
 
 /* ------------------------------------------------------- hole-over screen */
-HUD.renderHoleOver = (room, myPid, course) => {
+HUD.renderHoleOver = (room, myPid, course, myDifficulty) => {
   const h = course.holes[room.holeIndex];
   el.hoTitle.textContent = `Hole ${h.number} — ${h.name}`;
   el.hoSub.textContent = `Par ${h.par} · ${h.yards} yds`;
@@ -1182,18 +1182,32 @@ HUD.renderHoleOver = (room, myPid, course) => {
   });
   /* The record for THIS hole, under the card.  A number to beat is worth more
      on the hole you have just played than buried in a menu — and if the player
-     has just taken it, say so here rather than letting a toast carry it. */
-  const rec = room.records?.holes?.[room.holeIndex];
+     has just taken it, say so here rather than letting a toast carry it.
+
+     THIS WAS LABELLED "Course record" and showing a HOLE score — a
+     leftover from before the round record and the hole records were two
+     different things worth telling apart. Fixed alongside difficulty
+     separation rather than as its own change, since both are about a
+     record meaning exactly what its label claims.
+
+     room.records is per-difficulty now (see server/records.js): a
+     Standard player is shown the Standard hole record, not one blended
+     from every difficulty. Casual cannot set one, so it is shown the
+     Standard board instead — the closest thing to "the number everyone
+     else is actually chasing" a Casual player has any use for. */
+  const diffId = (myDifficulty && myDifficulty !== 'casual') ? myDifficulty : 'standard';
+  const rec = room.records?.[diffId]?.holes?.[room.holeIndex];
+  const diffName = difficultyById(diffId).name;
   const mine = rows.find(r => r.p.pid === myPid);
   const holder = document.createElement('div');
   holder.className = 'ho-record';
   if (rec) {
     const isMe = rec.pid === myPid && mine && mine.s === rec.strokes;
     holder.innerHTML = isMe
-      ? `<b>🏆 Course record</b><span>${rec.strokes} — that is yours</span>`
-      : `<b>Course record</b><span>${rec.strokes} by ${escapeHtml(rec.name)}</span>`;
+      ? `<b>🏅 ${diffName} hole record</b><span>${rec.strokes} — that is yours</span>`
+      : `<b>${diffName} hole record</b><span>${rec.strokes} by ${escapeHtml(rec.name)}</span>`;
   } else {
-    holder.innerHTML = '<b>Course record</b><span>nobody has set one yet</span>';
+    holder.innerHTML = `<b>${diffName} hole record</b><span>nobody has set one yet</span>`;
   }
   el.hoTable.appendChild(holder);
 
@@ -1659,8 +1673,18 @@ HUD.bindLevelTrack = () => {
  * The course record board.  Every course is listed whether or not it has a
  * record yet, because an empty row reads as an invitation and a missing row
  * reads as a course that does not exist.
+ *
+ * DIFFICULTY-SEPARATED (see server/records.js). The headline row is the
+ * COURSE RECORD — the single best round anyone has carded there on any
+ * eligible difficulty, always labelled with which one — and expanding a
+ * course shows the three difficulty boards underneath it as their own
+ * sections, each with its own round record and its own nine hole records.
+ * A Standard score and a Tournament score never appear as if they were
+ * competing for the same line.
  */
-HUD.recOpen = null;              // which course's hole board is expanded
+HUD.recOpen = null;              // which course's difficulty boards are expanded
+const RECORD_DIFF_IDS = DIFFICULTIES.filter(d => d.records).map(d => d.id);
+
 HUD.renderRecords = (courses, records, myPid) => {
   const box = el.recordBox;
   if (!box) return;
@@ -1669,9 +1693,8 @@ HUD.renderRecords = (courses, records, myPid) => {
   wrap.className = 'recboard';
   for (const c of courses) {
     const entry = records?.[c.id] || null;
-    // the board is either the old {round} shape or the full {round, holes}
-    const r = entry && entry.round !== undefined ? entry.round : entry;
-    const holes = entry && entry.holes ? entry.holes : null;
+    const cr = entry?.courseRecord || null;          // { difficulty, round } | null
+    const r = cr?.round || null;
     const open = HUD.recOpen === c.id;
 
     const row = document.createElement('button');
@@ -1681,22 +1704,38 @@ HUD.renderRecords = (courses, records, myPid) => {
     const rel = r ? r.total - r.par : 0;
     row.innerHTML =
       `<span class="rc-course">${escapeHtml(c.name)}</span>` +
+      (r ? `<span class="rc-diff">${escapeHtml(difficultyById(cr.difficulty).name)}</span>` : '') +
       `<span class="rc-score">${r ? r.total + (rel === 0 ? ' (E)' : rel > 0 ? ` (+${rel})` : ` (${rel})`) : '—'}</span>` +
       `<span class="rc-who">${r ? escapeHtml(r.pid === myPid ? 'you' : r.name) : 'unclaimed'}</span>` +
       `<span class="rc-caret">${open ? '▾' : '▸'}</span>`;
-    /* Clicking a course opens its hole-by-hole board. The best score on each
-       individual hole is the part of this board an ordinary player can
-       realistically get their name on — the full-round record belongs to
-       whoever is best at the whole game, but anybody can hole a 2. */
+    /* Clicking a course opens its per-difficulty boards. The hole records are
+       the part of this an ordinary player can realistically get their name
+       on — the round record belongs to whoever is best at the whole game on
+       that difficulty, but anybody can hole a 2. */
     row.addEventListener('click', () => {
       HUD.recOpen = open ? null : c.id;
       HUD.renderRecords(courses, records, myPid);
     });
     wrap.appendChild(row);
 
-    if (open) {
+    if (open) for (const diffId of RECORD_DIFF_IDS) {
+      const d = entry?.[diffId] || { round: null, holes: [] };
+      const dr = d.round;
+      const isCourseRecord = cr && cr.difficulty === diffId;
+
+      const head = document.createElement('div');
+      head.className = 'recdiff-head' + (dr && dr.pid === myPid ? ' mine' : '');
+      const drRel = dr ? dr.total - dr.par : 0;
+      head.innerHTML =
+        `<span class="rd-badge">${isCourseRecord ? '👑' : dr ? '🏅' : ''}</span>` +
+        `<span class="rd-name">${escapeHtml(difficultyById(diffId).name)}</span>` +
+        `<span class="rd-score">${dr ? dr.total + (drRel === 0 ? ' (E)' : drRel > 0 ? ` (+${drRel})` : ` (${drRel})`) : '—'}</span>` +
+        `<span class="rd-who">${dr ? escapeHtml(dr.pid === myPid ? 'you' : dr.name) : 'unclaimed'}</span>`;
+      wrap.appendChild(head);
+
       const panel = document.createElement('div');
       panel.className = 'recholes';
+      const holes = d.holes;
       if (!holes || !holes.some(Boolean)) {
         panel.innerHTML = '<span class="tiny">No hole records here yet — ' +
           'finish a round and every one of them is yours to take.</span>';
@@ -1863,7 +1902,7 @@ import {
 import { decalTexture } from './decals.js';
 import { showItem as showShopItem } from './shopview.js';
 import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress } from '../shared/clubskins.js';
-import { DIFFICULTIES } from '../shared/difficulty.js';
+import { DIFFICULTIES, difficultyById } from '../shared/difficulty.js';
 import { weatherEffects, clockText } from '../shared/weather.js';
 
 /** Set by main.js. Receives a partial look. */

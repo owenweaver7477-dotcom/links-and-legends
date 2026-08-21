@@ -1,14 +1,18 @@
 /* =========================================================================
    records.mjs — a board is only worth having if it cannot be gamed
    -------------------------------------------------------------------------
-   Two rules do all the work, and both are easy to lose in a refactor:
+   Three rules do all the work, and all three are easy to lose in a
+   refactor:
 
      1. only a round the SERVER simulated can set a record
      2. only a COMPLETE round can set one
+     3. only rounds on the SAME difficulty compete with each other
 
-   Without the second, the cheapest exploit in the game is to tee off, hole a
-   fluke 2, quit, and own that hole forever. Every assertion here is aimed at
-   one of those two.
+   Without rule 2, the cheapest exploit in the game is to tee off, hole a
+   fluke 2, quit, and own that hole forever. Without rule 3, a Casual-mode
+   score with the aim line drawn and the putt read for you sits on the same
+   board as a Tournament round played blind — which is a board that means
+   nothing, because the "record" is really "whoever picked the easiest mode."
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,11 +24,11 @@ const NINE = n => card(new Array(9).fill(n));
 
 test('a complete round sets the round and hole records', () => {
   _reset();
-  const beat = submitRound('parkland', 'Ann', 'a1', NINE(4), 1000);
+  const beat = submitRound('parkland', 'standard', 'Ann', 'a1', NINE(4), 1000);
   assert.equal(beat.round, true);
   assert.equal(beat.holes.length, 9, 'every hole was previously unclaimed');
 
-  const r = recordsFor('parkland');
+  const r = recordsFor('parkland', 'standard');
   assert.equal(r.round.total, 36);
   assert.equal(r.round.name, 'Ann');
   assert.equal(r.holes.length, 9);
@@ -34,48 +38,48 @@ test('a complete round sets the round and hole records', () => {
 test('a partial round sets nothing at all', () => {
   _reset();
   // the exploit: tee off, hole a fluke 2, walk away
-  const beat = submitRound('parkland', 'Cheat', 'c1', card([2]), 1000);
+  const beat = submitRound('parkland', 'standard', 'Cheat', 'c1', card([2]), 1000);
   assert.equal(beat.round, false);
   assert.equal(beat.holes.length, 0);
-  const r = recordsFor('parkland');
+  const r = recordsFor('parkland', 'standard');
   assert.equal(r.round, null, 'a one-hole round took the course record');
   assert.equal(r.holes[0], null, 'a one-hole round took a hole record');
 
   // eight holes is still not a round
-  assert.equal(submitRound('parkland', 'Cheat', 'c1', card(new Array(8).fill(2))).round, false);
+  assert.equal(submitRound('parkland', 'standard', 'Cheat', 'c1', card(new Array(8).fill(2))).round, false);
 });
 
 test('a better round takes the record; a worse one does not', () => {
   _reset();
-  submitRound('parkland', 'Ann', 'a1', NINE(4), 1000);
-  assert.equal(submitRound('parkland', 'Ben', 'b1', NINE(5), 2000).round, false,
+  submitRound('parkland', 'standard', 'Ann', 'a1', NINE(4), 1000);
+  assert.equal(submitRound('parkland', 'standard', 'Ben', 'b1', NINE(5), 2000).round, false,
     'a worse round took the record');
-  assert.equal(recordsFor('parkland').round.name, 'Ann');
+  assert.equal(recordsFor('parkland', 'standard').round.name, 'Ann');
 
-  assert.equal(submitRound('parkland', 'Cara', 'c2', NINE(3), 3000).round, true);
-  assert.equal(recordsFor('parkland').round.name, 'Cara');
-  assert.equal(recordsFor('parkland').round.total, 27);
+  assert.equal(submitRound('parkland', 'standard', 'Cara', 'c2', NINE(3), 3000).round, true);
+  assert.equal(recordsFor('parkland', 'standard').round.name, 'Cara');
+  assert.equal(recordsFor('parkland', 'standard').round.total, 27);
 });
 
 test('a tie does not take the record — first there keeps it', () => {
   _reset();
-  submitRound('parkland', 'Ann', 'a1', NINE(4), 1000);
-  const beat = submitRound('parkland', 'Ben', 'b1', NINE(4), 2000);
+  submitRound('parkland', 'standard', 'Ann', 'a1', NINE(4), 1000);
+  const beat = submitRound('parkland', 'standard', 'Ben', 'b1', NINE(4), 2000);
   assert.equal(beat.round, false, 'an equal score took the round record');
   assert.equal(beat.holes.length, 0, 'equal scores took hole records');
-  assert.equal(recordsFor('parkland').round.name, 'Ann');
+  assert.equal(recordsFor('parkland', 'standard').round.name, 'Ann');
 });
 
 test('hole records are tracked per hole, not just overall', () => {
   _reset();
-  submitRound('parkland', 'Ann', 'a1', NINE(4), 1000);
+  submitRound('parkland', 'standard', 'Ann', 'a1', NINE(4), 1000);
   // a WORSE round overall, but a 2 on the third hole
   const mixed = [5, 5, 2, 5, 5, 5, 5, 5, 5];
-  const beat = submitRound('parkland', 'Ben', 'b1', card(mixed), 2000);
+  const beat = submitRound('parkland', 'standard', 'Ben', 'b1', card(mixed), 2000);
   assert.equal(beat.round, false, 'the worse total must not take the round record');
   assert.deepEqual(beat.holes, [2], 'but the 2 on the third hole is a record');
 
-  const r = recordsFor('parkland');
+  const r = recordsFor('parkland', 'standard');
   assert.equal(r.round.name, 'Ann');
   assert.equal(r.holes[2].name, 'Ben');
   assert.equal(r.holes[2].strokes, 2);
@@ -84,25 +88,26 @@ test('hole records are tracked per hole, not just overall', () => {
 
 test('courses keep separate boards', () => {
   _reset();
-  submitRound('parkland', 'Ann', 'a1', NINE(3), 1000);
-  submitRound('links', 'Ben', 'b1', NINE(5), 1000);
-  assert.equal(recordsFor('parkland').round.name, 'Ann');
-  assert.equal(recordsFor('links').round.name, 'Ben');
-  /* allRecords now hands back the WHOLE board per course — the round record
-     and the nine hole records — because the hole records are the ones an
-     ordinary player can realistically get their name on, and the clubhouse
-     needs them to show anything worth chasing. */
+  submitRound('parkland', 'standard', 'Ann', 'a1', NINE(3), 1000);
+  submitRound('links', 'standard', 'Ben', 'b1', NINE(5), 1000);
+  assert.equal(recordsFor('parkland', 'standard').round.name, 'Ann');
+  assert.equal(recordsFor('links', 'standard').round.name, 'Ben');
+  /* allRecords hands back the WHOLE board per course — every difficulty's
+     round record and nine hole records, plus the derived course record —
+     because the hole records are the ones an ordinary player can
+     realistically get their name on, and the clubhouse needs them to show
+     anything worth chasing. */
   const all = allRecords();
-  assert.equal(all.parkland.round.total, 27);
-  assert.equal(all.links.round.total, 45);
-  assert.equal(all.parkland.holes.length, 9);
-  assert.equal(all.parkland.holes[0].name, 'Ann');
-  assert.equal(all.links.holes[8].strokes, 5);
+  assert.equal(all.parkland.standard.round.total, 27);
+  assert.equal(all.links.standard.round.total, 45);
+  assert.equal(all.parkland.standard.holes.length, 9);
+  assert.equal(all.parkland.standard.holes[0].name, 'Ann');
+  assert.equal(all.links.standard.holes[8].strokes, 5);
 });
 
 test('a course nobody has played reads as unclaimed, not as broken', () => {
   _reset();
-  const r = recordsFor('never-played');
+  const r = recordsFor('never-played', 'standard');
   assert.equal(r.round, null);
   assert.equal(r.holes.length, 9);
   assert.ok(r.holes.every(h => h === null));
@@ -112,18 +117,62 @@ test('a course nobody has played reads as unclaimed, not as broken', () => {
 test('malformed submissions are refused rather than stored', () => {
   _reset();
   const junk = [
-    [null, 'x', 'p', NINE(4)],
-    ['parkland', 'x', 'p', null],
-    ['parkland', 'x', 'p', 'nonsense'],
-    ['parkland', 'x', 'p', card([0, 4, 4, 4, 4, 4, 4, 4, 4])],
-    ['parkland', 'x', 'p', [{ strokes: 4 }, ...card(new Array(8).fill(4))]],
-    ['parkland', 'x', 'p', new Array(9).fill(null)]
+    [null, 'standard', 'x', 'p', NINE(4)],
+    ['parkland', 'standard', 'x', 'p', null],
+    ['parkland', 'standard', 'x', 'p', 'nonsense'],
+    ['parkland', 'standard', 'x', 'p', card([0, 4, 4, 4, 4, 4, 4, 4, 4])],
+    ['parkland', 'standard', 'x', 'p', [{ strokes: 4 }, ...card(new Array(8).fill(4))]],
+    ['parkland', 'standard', 'x', 'p', new Array(9).fill(null)],
+    // not a records-eligible difficulty at all — the gate a caller is
+    // supposed to check before ever reaching here
+    ['parkland', 'casual', 'x', 'p', NINE(4)],
+    ['parkland', 'made-up-mode', 'x', 'p', NINE(4)],
+    ['parkland', undefined, 'x', 'p', NINE(4)]
   ];
   for (const args of junk) {
     const beat = submitRound(...args);
-    assert.equal(beat.round, false, `accepted ${JSON.stringify(args[3])?.slice(0, 40)}`);
+    assert.equal(beat.round, false, `accepted ${JSON.stringify(args[4])?.slice(0, 40)}`);
   }
-  assert.equal(recordsFor('parkland').round, null, 'junk reached the board');
+  assert.equal(recordsFor('parkland', 'standard').round, null, 'junk reached the board');
+});
+
+test('difficulties keep separate boards — an easy score never beats a hard one', () => {
+  _reset();
+  // Tournament: the hard mode, played first, with the worse score
+  submitRound('parkland', 'tournament', 'Tour', 't1', NINE(5), 1000);
+  // Standard: an easier mode, a much better score
+  submitRound('parkland', 'standard', 'Easy', 'e1', NINE(3), 2000);
+
+  // neither board touched the other
+  assert.equal(recordsFor('parkland', 'tournament').round.name, 'Tour');
+  assert.equal(recordsFor('parkland', 'tournament').round.total, 45);
+  assert.equal(recordsFor('parkland', 'standard').round.name, 'Easy');
+  assert.equal(recordsFor('parkland', 'standard').round.total, 27);
+
+  // the derived course record is still the numerically best round overall —
+  // "the best anyone has ever carded here", whichever difficulty that was
+  const all = recordsFor('parkland');
+  assert.equal(all.courseRecord.difficulty, 'standard');
+  assert.equal(all.courseRecord.round.name, 'Easy');
+});
+
+test('a tied total between difficulties credits the harder one as the course record', () => {
+  _reset();
+  submitRound('parkland', 'standard', 'Easy', 'e1', NINE(4), 1000);
+  submitRound('parkland', 'tournament', 'Tour', 't1', NINE(4), 2000);
+  const cr = recordsFor('parkland').courseRecord;
+  assert.equal(cr.round.total, 36);
+  assert.equal(cr.difficulty, 'tournament',
+    'the same score with less help drawn on screen should win the tie');
+});
+
+test('hole records also stay on their own difficulty', () => {
+  _reset();
+  submitRound('parkland', 'standard', 'Easy', 'e1', card([2, 4, 4, 4, 4, 4, 4, 4, 4]), 1000);
+  submitRound('parkland', 'tournament', 'Tour', 't1', NINE(3), 2000);
+  // the standard 2 on hole 1 must not appear on the tournament board or vice versa
+  assert.equal(recordsFor('parkland', 'standard').holes[0].strokes, 2);
+  assert.equal(recordsFor('parkland', 'tournament').holes[0].strokes, 3);
 });
 
 /* ------------------------------------------------------- over the wire --- */
@@ -158,7 +207,12 @@ test('the room state carries the board for the course being played', async () =>
   await wait(400);
   assert.ok(state, 'no room state arrived');
   assert.ok(state.records, 'the hole card cannot show a record it was never sent');
-  assert.ok(Array.isArray(state.records.holes));
+  // no difficulty argument: every record-eligible board, plus the derived
+  // course record — the shape a client picks its own difficulty's slice from
+  assert.ok(Array.isArray(state.records.standard?.holes));
+  assert.ok(Array.isArray(state.records.pro?.holes));
+  assert.ok(Array.isArray(state.records.tournament?.holes));
+  assert.equal(state.records.courseRecord, null, 'a fresh course has no record yet');
   s.disconnect();
 });
 
