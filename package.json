@@ -15,6 +15,7 @@
     "share": "node share.mjs",
     "test:cart": "GOLF_DATA_DIR=.test-data node test/cart.mjs",
     "verify:bundle": "node tools/verify-bundle.mjs",
+    "build:portal": "node tools/build-portal.mjs",
     "test:portal": "GOLF_DATA_DIR=.test-data node --test test/portal.test.mjs",
     "migrate:db": "node tools/migrate-db.mjs",
     "check:db": "node tools/check-db.mjs"

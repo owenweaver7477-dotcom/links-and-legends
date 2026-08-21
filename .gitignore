@@ -8,3 +8,4 @@ data/records.json
 # the seed is deliberately COMMITTED — see loadBlob in server/store.js
 !data/*.seed.json
 .test-data/
+dist/
