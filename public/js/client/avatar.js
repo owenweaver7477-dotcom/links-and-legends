@@ -190,9 +190,22 @@ export class Avatar {
       const joint = new THREE.Group();
       joint.position.set(0, -half, 0);
       joint.add(part(mat, w * 0.94, half, w * 0.94, 0, -half / 2, 0));
-      if (endMat) joint.add(part(endMat, w * 1.05, endLen, w * 1.5, 0, -half - endLen / 2, 0.02));
+      /* The end (foot or hand) hangs off its own pivot at the bottom of the
+         shin/forearm rather than being fixed to the knee/elbow directly.
+         A shoe that is rigidly bolted to the shin cannot roll through a
+         step — it stays a flat plank from heel-strike to toe-off, which is
+         exactly the kind of thing that reads as a figure skating rather than
+         walking. On legs this is driven below (see walkKnees' ankle curve
+         and footPlant's slope tilt); on arms it is left at rest, so the club
+         — parented straight onto armR, not onto this pivot — lands exactly
+         where it always did. */
+      const end = new THREE.Group();
+      end.position.set(0, -half, 0);
+      if (endMat) end.add(part(endMat, w * 1.05, endLen, w * 1.5, 0, -endLen / 2, 0.02));
+      joint.add(end);
       g.add(joint);
       g.joint = joint;                                    // the knee or elbow
+      g.end = end;                                         // the ankle or wrist
       return g;
     };
     /* Mind the sign — this is why the golfer was left-handed.
@@ -215,6 +228,7 @@ export class Avatar {
     this.legL = limb(this.mats.trousers, lw, ll, lx, H * 0.47, this.mats.shoe, H * 0.05);
     this.legR = limb(this.mats.trousers, lw, ll, -lx, H * 0.47, this.mats.shoe, H * 0.05);
     this.kneeL = this.legL.joint; this.kneeR = this.legR.joint;
+    this.ankleL = this.legL.end; this.ankleR = this.legR.end;
     // the rest position of the knee group, which the foot IK offsets FROM
     this._legHalf = ll / 2;
     this.body.add(this.armL, this.armR, this.legL, this.legR);
@@ -777,6 +791,13 @@ export class Avatar {
     P.bodyRx = 0;
     P.bodyRz = s * swing * 0.056;        // 0.035 rad of sway at a full stride
     P.yaw = 0;
+    /* Shoulders counter-rotate against the hips through the stride — the
+       same twist/counter-twist the swing already uses (see _apply), just
+       small enough here to read as a walk rather than a golf turn. Without
+       it the whole body pivots as one rigid slab from the waist up, which
+       is the single most robotic thing about a walk cycle: a person's
+       chest and hips are almost never square to each other while moving. */
+    P.twist = s * swing * 0.10;
     P.headRx = 0; P.headRy = 0; P.hatY = 0; P.hatRx = 0;
 
     /* --------------------------------------------------------- the swing */
@@ -959,6 +980,11 @@ export class Avatar {
     this.kneeR.rotation.x = Math.max(0, (P.kneeR || 0) + L.kneeR);
     this.elbowL.rotation.x = Math.min(0, (P.elbowL || 0) + L.elbowL);
     this.elbowR.rotation.x = Math.min(0, (P.elbowR || 0) + L.elbowR);
+    /* The ankle — unlike the knee, it genuinely bends both ways (toe up
+       swinging through, toe down pushing off), so it is not one-way
+       clamped the way the knee and elbow are. */
+    this.ankleL.rotation.x = (P.ankleL || 0) + L.ankleL;
+    this.ankleR.rotation.x = (P.ankleR || 0) + L.ankleR;
     /* Foot placement, from the terrain under each shoe. `footL/R` lifts the
        ankle and `footLx/Rx` tilts it to the slope — without both, a golfer
        standing across a hill has one foot buried and the other in the air. */

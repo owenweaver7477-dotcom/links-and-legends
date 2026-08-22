@@ -46,7 +46,7 @@ const TAU = Math.PI * 2;
 export const LAYER_KEYS = [
   'bodyY', 'bodyRx', 'bodyRz', 'twist', 'headRx', 'headRy', 'headRz',
   'armLx', 'armRx', 'armLz', 'armRz', 'legLz', 'legRz',
-  'kneeL', 'kneeR', 'elbowL', 'elbowR', 'footL', 'footR', 'breath'
+  'kneeL', 'kneeR', 'elbowL', 'elbowR', 'ankleL', 'ankleR', 'footL', 'footR', 'breath'
 ];
 export function blankLayer(L = {}) {
   for (let i = 0; i < LAYER_KEYS.length; i++) L[LAYER_KEYS[i]] = 0;
@@ -250,6 +250,14 @@ export function walkKnees(L, life, speed) {
   L.kneeR += Math.max(0, sw) * 0.62 * Math.min(1, speed / 2);
   L.elbowL -= Math.max(0, sw) * 0.30 * Math.min(1, speed / 2);
   L.elbowR -= Math.max(0, -sw) * 0.30 * Math.min(1, speed / 2);
+  /* The ankle rolls through the step rather than staying a rigid plank on
+     the shin: toe lifts clear of the ground while the leg swings through,
+     then points down through push-off just before the next heel-strike.
+     Same phase as the knee it sits below, so the two read as one motion
+     rather than two independent wobbles. */
+  const m = Math.min(1, speed / 2);
+  L.ankleL += (Math.max(0, -sw) * 0.34 - Math.max(0, sw) * 0.20) * m;
+  L.ankleR += (Math.max(0, sw) * 0.34 - Math.max(0, -sw) * 0.20) * m;
   return L;
 }
 
