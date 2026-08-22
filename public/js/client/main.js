@@ -900,8 +900,16 @@ function refreshAimPreview(force) {
   G.lastAimPreview = now;
 
   const b = ballOf(G.myPid);
+  // Once the backswing is actually being dragged (or has been locked in and
+  // is waiting on the strike bar), the line has to show what THAT power
+  // does, not a full-power reference — a caddie who keeps pointing at the
+  // 100% shot while you visibly draw back to a 60% knockdown is just wrong.
+  // Only while still deciding (no drag started yet) does a full-power
+  // reference make sense, since nothing else has been chosen yet.
+  const dragging = swing.state === SWING.BACK || swing.state === SWING.ACCURACY;
   // a full simulation costs ~2 ms, so only redo it when the shot actually changed
-  const key = `${clubKey}|${swing.aim.toFixed(4)}|${b.x.toFixed(2)},${b.z.toFixed(2)}|${G.wind.dir.toFixed(2)},${G.wind.speed}`;
+  const key = `${clubKey}|${swing.aim.toFixed(4)}|${b.x.toFixed(2)},${b.z.toFixed(2)}|` +
+    `${G.wind.dir.toFixed(2)},${G.wind.speed}|${dragging ? swing.power.toFixed(3) : 'idle'}`;
   if (!force && key === previewKey) return;
   previewKey = key;
 
@@ -916,7 +924,7 @@ function refreshAimPreview(force) {
   const myKit = { crew: myCrew, clubTier: myTier, refine: myRefine };
   const previewPower = isPutt
     ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45, myGear, myKit) ?? 1)
-    : 1;
+    : (dragging ? Math.max(0.06, swing.power) : 1);
   // Roller (or the legacy milled putter) extends the read past the cup,
   // showing the run-out.  Without either, the line ends where the hole
   // would swallow the ball.
