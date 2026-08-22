@@ -422,6 +422,15 @@ html.touch .touchpad[hidden] { display: none !important; }
 #bagCount.over { color: #ffab9c; }
 
 /* ────────────────────────────────────────── live roster + name labels */
+/* "ON THE COURSE" — removed by request: a shot's own result is already
+   visible by looking at the ball, and the panel's own distance readout
+   duplicated the main HUD's "yds to pin" for no reason once you're free
+   to look. Hidden here rather than torn out of the DOM/JS: every rule
+   below that positions or sizes .roster is left alone (harmless — there
+   is nothing left to position), because the roster data itself still
+   drives turn order and other logic unrelated to whether this readout
+   is on screen. */
+.panel.roster { display: none !important; }
 .roster { top: 14px; right: 14px; padding: 9px 11px; min-width: 214px; }
 .board + .roster, .roster { top: 14px; }
 .rrow-live { display: grid; grid-template-columns: 11px 1fr auto 18px; align-items: center; gap: 8px;
