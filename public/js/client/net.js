@@ -26,6 +26,54 @@ function loadPid() {
 Net.on = (evt, fn) => { Net.h[evt] = fn; };
 const fire = (evt, d) => Net.h[evt]?.(d);
 
+/* ═══════════════════════════════════ CONNECTION HEALTH ═══════════════════
+   Socket.IO already gives every connection a heartbeat (pingInterval /
+   pingTimeout on the server) and a polling fallback for a proxy that
+   mangles the websocket upgrade — see §0.5 of the roadmap. What was
+   missing was VISIBILITY: a player on a filtered school network has no way
+   to tell a broken game apart from a dropped network, and neither did we
+   — not from a feedback report alone.
+
+   This just measures what is already happening and remembers it: transport
+   in use, round-trip time, and how often — and why — the socket has gone
+   down. Cheap and passive, and it turns "the game is laggy" into something
+   with a shape: 40ms on websocket is a different bug than 600ms on polling
+   after three reconnects. Read via Net.net; HUD listens on 'netquality'. */
+Net.net = { transport: null, rtt: null, disconnects: 0, reconnects: 0, reconnectAttempts: 0, lastDisconnectReason: null };
+const netFire = () => fire('netquality', Net.net);
+
+/* A fresh engine.io transport is created on every (re)connect, so this is
+   re-attached from the 'connect' handler rather than once — an 'upgrade'
+   listener on a stale engine object would never fire again after a drop. */
+function watchTransport() {
+  const eng = Net.socket?.io?.engine;
+  if (!eng) return;
+  Net.net.transport = eng.transport?.name || null;
+  netFire();
+  eng.on('upgrade', t => { Net.net.transport = t.name; netFire(); });
+}
+
+/* An application-level ping on top of the transport's own heartbeat. The
+   engine.io ping only proves the pipe is alive; this measures how it FEELS
+   — the number that actually explains "it works but it's choppy" — and it
+   rides the same rate-limit bucket as everything else at one call per 6s,
+   nowhere near the limit. */
+let pingTimer = null;
+function startPing() {
+  clearInterval(pingTimer);
+  pingTimer = setInterval(() => {
+    if (!Net.socket?.connected) return;
+    const t0 = Date.now();
+    let answered = false;
+    Net.socket.emit('net:ping', t0, () => {
+      answered = true;
+      Net.net.rtt = Date.now() - t0;
+      netFire();
+    });
+    setTimeout(() => { if (!answered && Net.socket?.connected) { Net.net.rtt = null; netFire(); } }, 4000);
+  }, 6000);
+}
+
 /* ────────────────────────────── where the server lives ──────────────────
    This build runs in two very different places.
 
@@ -94,13 +142,23 @@ Net.connect = async () => {
 
   Net.socket.on('connect', () => {
     fire('connect');
+    watchTransport();
+    startPing();
     if (Net.code && Net.lastName) {
       Net.socket?.emit('room:join', { code: Net.code, name: Net.lastName, pid: Net.pid }, res => {
         if (res?.ok) fire('state', res.state);
       });
     }
   });
-  Net.socket.on('disconnect', () => fire('disconnect'));
+  Net.socket.on('disconnect', reason => {
+    Net.net.disconnects++;
+    Net.net.lastDisconnectReason = reason;
+    Net.net.rtt = null;
+    netFire();
+    fire('disconnect');
+  });
+  Net.socket.io.on('reconnect_attempt', () => { Net.net.reconnectAttempts++; netFire(); });
+  Net.socket.io.on('reconnect', () => { Net.net.reconnects++; netFire(); });
   Net.socket.on('room:state', s => fire('state', s));
   Net.socket.on('players:pos', d => fire('pos', d));
   Net.socket.on('connect', () => Net.fetchProfile());

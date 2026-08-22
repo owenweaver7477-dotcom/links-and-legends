@@ -237,6 +237,14 @@
   <div class="mapwrap" id="mapwrap" hidden><canvas id="mapc"></canvas><div class="maphint">M to close</div></div>
 </div>
 
+<!-- Connection quality — outside #stage and every .screen so it reads the
+     same whether you're at the menu, in a lobby, or mid-round: a filtered
+     school network doesn't wait for a tee time. Three bars, a tooltip with
+     the real numbers, nothing else — see net.js's Net.net. -->
+<div class="netpill" id="netPill" title="Connection" hidden>
+  <span class="nb" data-n="1"></span><span class="nb" data-n="2"></span><span class="nb" data-n="3"></span>
+</div>
+
 <!-- ═══════════════════════════════ OVERLAYS ═════════════════════════════ -->
 
 <!-- THE LANDING PAGE — the first thing anybody sees.

@@ -90,7 +90,16 @@ function sanitiseContext(ctx) {
     orientation: s(ctx.orientation, 12),
     ua: s(ctx.ua, 200),
     preset: s(ctx.preset, 12),
-    sessionLen: n(ctx.sessionLen)
+    sessionLen: n(ctx.sessionLen),
+    // §0.5 — the netgraph read at the moment of the report: what transport
+    // was in use, the last measured RTT, and how many times this session's
+    // socket has dropped and come back. Turns "the game is laggy" into
+    // something with a shape.
+    transport: s(ctx.transport, 12),
+    rtt: n(ctx.rtt),
+    disconnects: n(ctx.disconnects),
+    reconnects: n(ctx.reconnects),
+    lastDisconnectReason: s(ctx.lastDisconnectReason, 40)
   };
 }
 

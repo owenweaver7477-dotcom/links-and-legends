@@ -2755,6 +2755,10 @@ Net.on('connect', () => {
      first connect would announce itself as a recovery. */
   if (G.warnedDrop) { HUD.toast('Back online.', 'good', 1600); G.warnedDrop = false; }
 });
+/* The three-bar read in the corner (§0.5) — same Net.net object gatherContext
+   sends with a feedback report, just rendered continuously instead of
+   snapshotted once. */
+Net.on('netquality', net => HUD.renderNetQuality(net));
 
 /* ===================================================================== */
 /*  ROUTING                                                               */
@@ -3835,7 +3839,15 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       orientation: innerWidth >= innerHeight ? 'landscape' : 'portrait',
       ua: navigator.userAgent,
       preset: HUD.quality,
-      sessionLen: Math.round((performance.now() - sessionStart) / 1000)
+      sessionLen: Math.round((performance.now() - sessionStart) / 1000),
+      // §0.5 — the netgraph stats the roadmap wants attached automatically,
+      // so "the game is laggy" arrives with a transport, an RTT, and a
+      // disconnect history instead of nothing to go on.
+      transport: Net.net?.transport,
+      rtt: Net.net?.rtt,
+      disconnects: Net.net?.disconnects,
+      reconnects: Net.net?.reconnects,
+      lastDisconnectReason: Net.net?.lastDisconnectReason
     };
   }
 

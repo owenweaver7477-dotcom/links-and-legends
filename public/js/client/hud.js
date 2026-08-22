@@ -42,7 +42,7 @@ for (const id of [
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
-  'coinHud', 'coinHudN',
+  'coinHud', 'coinHudN', 'netPill',
   'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
@@ -1115,6 +1115,39 @@ HUD.setWalkPrompt = (text) => {
 /** The "Take a drop" safety valve — see updateWalkPrompt in main.js. */
 HUD.showDropButton = (show) => {
   if (el.btnDrop) el.btnDrop.hidden = !show;
+};
+
+/**
+ * Connection quality — a glance, not a graph. `net` is Net.net (see
+ * net.js): { transport, rtt, disconnects, reconnects, reconnectAttempts,
+ * lastDisconnectReason }. Thresholds are generous on purpose — this is for
+ * telling a school-network problem apart from an actually broken game, not
+ * for grading a good connection down to fair for no reason.
+ */
+HUD.renderNetQuality = (net) => {
+  const pill = el.netPill;
+  if (!pill) return;
+  pill.hidden = false;
+  const reconnecting = (net.reconnectAttempts || 0) > (net.reconnects || 0);
+  let q, detail;
+  if (reconnecting) {
+    q = 'off';
+    detail = `Reconnecting… (${net.lastDisconnectReason || 'connection lost'})`;
+  } else if (net.rtt == null) {
+    q = 'off';
+    detail = 'Offline';
+  } else if (net.rtt <= 150 && net.transport === 'websocket') {
+    q = 'good';
+    detail = `${net.rtt}ms · ${net.transport}`;
+  } else if (net.rtt <= 400) {
+    q = 'fair';
+    detail = `${net.rtt}ms · ${net.transport}${net.transport === 'polling' ? ' (fallback)' : ''}`;
+  } else {
+    q = 'poor';
+    detail = `${net.rtt}ms · ${net.transport} — this is likely the network, not the game`;
+  }
+  pill.dataset.q = q;
+  pill.title = detail;
 };
 
 /** The link to send someone.  Honours a tunnel or a deployed host as-is. */

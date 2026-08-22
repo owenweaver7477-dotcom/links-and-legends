@@ -1056,6 +1056,17 @@ function overRate(socket, event) {
 }
 
 io.on('connection', socket => {
+  socket.data.connectedAt = Date.now();
+
+  /* An app-level echo on top of the engine.io heartbeat already configured
+     above (pingInterval/pingTimeout). That proves the pipe is alive; this
+     is what the client times to know how it FEELS — the number that turns
+     "the game is laggy" into "40ms on websocket" or "600ms on polling
+     after three reconnects", see §0.5. Trivial enough not to need its own
+     exemption from the rate limiter above: a ping every few seconds is a
+     rounding error against it. */
+  socket.on('net:ping', (t, ack) => { if (typeof ack === 'function') ack(t); });
+
   /* Applied to every handler at once rather than remembered at each one:
      a guard you have to add by hand is a guard somebody forgets on the
      handler that needed it most. */
@@ -2255,7 +2266,16 @@ io.on('connection', socket => {
     broadcastState(room);
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', reason => {
+    /* §0.5's diagnostic question is literally "does it fail immediately or
+       drop after working for a bit" — the duration answers that on sight,
+       and the reason string (Socket.IO's own: 'ping timeout', 'transport
+       close', 'transport error', 'io server disconnect', ...) tells apart
+       an idle-timeout proxy from a genuinely dead connection. Console
+       rather than a store: this is for reading server logs by hand while
+       chasing a specific complaint, not a metrics pipeline (that's §0.3). */
+    const heldFor = Date.now() - (socket.data.connectedAt || Date.now());
+    console.log(`  disconnect: ${reason} · held ${(heldFor / 1000).toFixed(1)}s · ${socket.id}`);
     const ref = sockets.get(socket.id);
     sockets.delete(socket.id);
     if (!ref) return;
