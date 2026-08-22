@@ -4100,11 +4100,17 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       // pure presentation, deciding nothing. onSettle only fires once the
       // strip has actually stopped, so the reveal never appears before the
       // spin does.
+      Sound.reelStart?.();
       HUD.playCaseReel(res, {
-        onTick: () => Sound.reelTick?.(),
+        onTick: strength => Sound.reelTick?.(strength),
         onSettle: () => {
+          const rarity = res.kind === 'item' ? res.rarity : 'gems';
+          // the thunk resolves the tension the ticks built, THEN the reveal
+          // card appears and the reward arpeggio plays over it — three
+          // beats, not one sound doing all the work
+          Sound.reelLand?.(rarity);
           HUD.revealCase(res);
-          Sound.reward?.(res.kind === 'item' ? res.rarity : 'gems');
+          Sound.reward?.(rarity);
         }
       });
     });

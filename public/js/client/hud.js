@@ -1407,7 +1407,7 @@ HUD.playCaseReel = (result, { onTick, onSettle } = {}) => {
       for (const c of track.children) {
         const r = c.getBoundingClientRect();
         if (pointerX >= r.left && pointerX < r.right) {
-          if (c !== last) { last = c; onTick(); }
+          if (c !== last) { last = c; onTick(Math.min(1, (now - start) / REEL_MS)); }
           break;
         }
       }

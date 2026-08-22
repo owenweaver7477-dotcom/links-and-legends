@@ -15,7 +15,7 @@ import { CLIPS, EMOTE_CLIPS, SHOVE_CLIPS, POSE_KEYS, blankPose } from './celebra
 import { CLUB_BY_KEY } from '../shared/clubs.js';
 import { FABRICS, GLOVES, WATCHES, CUTS, SHOE_TYPES, DECAL_SLOTS } from '../shared/wardrobe.js';
 import { makeLife, blankLayer, breathe, footPlant, walkKnees, swingLayers } from './anim.js';
-import { shirtMaterial, decalMaterial } from './decals.js';
+import { shirtMaterial, decalMaterial, decalHalo } from './decals.js';
 
 /* One unit box, reused by every part of every avatar.
    `userData.shared` is what stops GolfScene.dispose() from freeing these on
@@ -573,8 +573,26 @@ export class Avatar {
       m.scale.set(slot.size, slot.size, 1);
       m.position.set(...w.pos);
       m.rotation.set(...w.rot);
+      m.renderOrder = 1;
       parent.add(m);
       this.decalMeshes.push(m);
+
+      /* A glowing badge gets an actual light in the air around it, not just
+         a brighter surface — see decals.js's decalHalo for why the material
+         alone can't do this. Both this and the badge plane have depthWrite
+         off, so it is renderOrder alone that keeps the halo behind the
+         badge, not the z position (a fixed offset would need a different
+         sign per slot depending on which way that slot's plane faces). A
+         sprite always faces the camera, so no rotation is needed. */
+      const halo = decalHalo(id);
+      if (halo) {
+        const s = new THREE.Sprite(halo);
+        s.scale.set(slot.size * 2.2, slot.size * 2.2, 1);
+        s.position.set(...w.pos);
+        s.renderOrder = 0;
+        parent.add(s);
+        this.decalMeshes.push(s);
+      }
     }
   }
 

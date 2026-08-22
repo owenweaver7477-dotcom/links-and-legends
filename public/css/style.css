@@ -3377,4 +3377,18 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
   0%, 100% { text-shadow: 0 0 6px var(--rarity-color); }
   50% { text-shadow: 0 0 16px var(--rarity-color); }
 }
+/* The one-time impact, on the whole card, the instant a Legend or Mythic
+   reveal appears — not the infinite pulse above, which keeps going the
+   whole time the card is on screen. This fires once, so the "thump" lands
+   exactly with Sound.reelLand rather than becoming background motion. */
+.casecard:has(.case-reveal.legend), .casecard:has(.case-reveal.mythic) {
+  animation: caseImpact .4s cubic-bezier(.2,.9,.3,1) both;
+}
+@keyframes caseImpact {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.035); }
+  55% { transform: scale(0.985); }
+  100% { transform: scale(1); }
+}
+.casecard:has(.case-reveal.mythic) .case-burst { width: 320px; height: 320px; }
 .case-done { margin-top: 20px; padding: 11px 28px; font-size: 14px; font-weight: 700; }

@@ -331,9 +331,26 @@ const DRAW = {
     }
   },
 
-  /* ---- achievements: a star in a ring, and they glow ------------------- */
+  /* ---- achievements: a star in a ring, and they glow -------------------
+     The rarest category in the game — earned, never bought — so it is
+     the one place worth spending extra draw calls on. Radiating spokes
+     behind the ring read as "trophy" rather than "button" at a glance,
+     which matters here specifically: an ace badge is the whole reason
+     someone plays a round again. */
   earn(g, px, d) {
     const [a, b] = d.c;
+    // the rays, first, so the ring and star sit on top of them
+    g.save();
+    g.translate(px / 2, px / 2);
+    g.strokeStyle = b; g.globalAlpha = 0.55; g.lineWidth = px * 0.018;
+    for (let i = 0; i < 12; i++) {
+      const ang = (i / 12) * Math.PI * 2;
+      g.beginPath();
+      g.moveTo(Math.cos(ang) * px * 0.37, Math.sin(ang) * px * 0.37);
+      g.lineTo(Math.cos(ang) * px * 0.48, Math.sin(ang) * px * 0.48);
+      g.stroke();
+    }
+    g.restore();
     g.strokeStyle = a; g.lineWidth = px * 0.055;
     g.beginPath(); g.arc(px / 2, px / 2, px * 0.36, 0, Math.PI * 2); g.stroke();
     const gr = g.createRadialGradient(px / 2, px / 2, 0, px / 2, px / 2, px * 0.36);
@@ -350,6 +367,12 @@ const DRAW = {
       i ? g.lineTo(x, y) : g.moveTo(x, y);
     }
     g.closePath(); g.fill();
+    // a bright core so the star reads as lit, not just white-filled
+    const core = g.createRadialGradient(px / 2, px * 0.46, 0, px / 2, px * 0.46, px * 0.16);
+    core.addColorStop(0, 'rgba(255,255,255,0.95)');
+    core.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = core;
+    g.beginPath(); g.arc(px / 2, px / 2, px * 0.36, 0, Math.PI * 2); g.fill();
   },
 
   /* ---- seasonal --------------------------------------------------------- */
@@ -450,6 +473,24 @@ export function decalTexture(id, custom) {
     g.globalCompositeOperation = 'source-over';
   }
 
+  /* Every OTHER decal was flat colour with no light on it at all — correct
+     for "printed on the fabric" but with nothing behind it that reads as a
+     real badge rather than a sticker. A soft diagonal sheen, baked the same
+     `source-atop` way emboss already does, gives every decal a top-left
+     highlight and a bottom-right falloff without touching the artwork
+     underneath — the metal/holo finishes still get their own moving
+     specular from the material on top of this. */
+  if (d.finish !== 'emboss') {
+    g.globalCompositeOperation = 'source-atop';
+    const sheen = g.createLinearGradient(0, 0, DECAL_PX * 0.7, DECAL_PX * 0.9);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.22)');
+    sheen.addColorStop(0.45, 'rgba(255,255,255,0)');
+    sheen.addColorStop(1, 'rgba(0,0,0,0.16)');
+    g.fillStyle = sheen;
+    g.fillRect(0, 0, DECAL_PX, DECAL_PX);
+    g.globalCompositeOperation = 'source-over';
+  }
+
   const t = texFrom(c, { wrap: false });
   cache.set(key, t);
   return t;
@@ -500,7 +541,7 @@ export function decalMaterial(id, custom) {
       specular: new THREE.Color(d.finish === 'metal' ? 0xffffff : 0xbfa8ff),
       shininess: d.finish === 'metal' ? 92 : 58,
       emissive: new THREE.Color(d.glow ? d.c[0] : 0x000000),
-      emissiveIntensity: d.glow ? 0.30 : 0
+      emissiveIntensity: d.glow ? 0.30 + d.glow * 0.22 : 0
     });
     if (d.finish === 'holo') { m.userData.holo = true; holoMats.push(m); }
     // `shared` is the flag Avatar.dispose() and GolfScene.dispose() both
@@ -514,7 +555,7 @@ export function decalMaterial(id, custom) {
   const m = new THREE.MeshLambertMaterial({
     ...base,
     emissive: new THREE.Color(d.glow ? d.c[0] : 0x000000),
-    emissiveIntensity: d.glow ? 0.22 * d.glow : 0
+    emissiveIntensity: d.glow ? 0.16 + 0.22 * d.glow : 0
   });
   m.userData.shared = true;
   cache.set(mkey, m);
@@ -552,6 +593,45 @@ export function shirtMaterial(colour, patternId, colour2, sheen) {
   });
 }
 
+/* ============================================================= GLOW HALO ===
+   A glowing decal's material emits light, but a material alone only makes
+   ITS OWN surface brighter — it does not put light in the air around it,
+   which is the part that actually reads as "glowing" rather than "made of
+   a slightly luminous plastic". This is a second, additive-blended plane
+   behind the badge for exactly the handful of decals that earned it. */
+let _haloTex = null;
+function haloTexture() {
+  if (_haloTex) return _haloTex;
+  const S = 64, c = canvas(S);
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  gr.addColorStop(0, 'rgba(255,255,255,0.9)');
+  gr.addColorStop(0.5, 'rgba(255,255,255,0.28)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  _haloTex = new THREE.CanvasTexture(c);
+  _haloTex.userData.shared = true;
+  return _haloTex;
+}
+
+/** A halo material for this decal, or null if it does not glow. Cached the
+ *  same way decalMaterial is — one per distinct glowing decal, shared by
+ *  everyone wearing it. */
+export function decalHalo(id) {
+  const d = decalById(id);
+  if (!d?.glow) return null;
+  const mkey = `h:${id}`;
+  if (cache.has(mkey)) return cache.get(mkey);
+  const m = new THREE.SpriteMaterial({
+    map: haloTexture(), color: new THREE.Color(d.c[0]),
+    transparent: true, depthWrite: false, opacity: 0.55 * d.glow,
+    blending: THREE.AdditiveBlending
+  });
+  m.userData.shared = true;
+  cache.set(mkey, m);
+  return m;
+}
+
 /** Free every texture this module has handed out. */
 export function disposeDecalAssets() {
   for (const t of born) t.dispose();
@@ -559,6 +639,7 @@ export function disposeDecalAssets() {
   born.length = 0;
   cache.clear();
   holoMats.length = 0;
+  _haloTex?.dispose(); _haloTex = null;
 }
 
 /** Decals a level has earned, for the wardrobe's own listing. */

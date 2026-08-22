@@ -150,11 +150,27 @@ Sound.chestOpen = () => {
   noiseBurst({ dur: 0.09, freq: 900, q: 4, gain: 0.18, sweep: 250, delay: 0.12 });
 };
 
+/** The reel winding up — a rising whoosh right as the strip starts moving,
+    so the spin has a sound of its own before the first tick lands. */
+Sound.reelStart = () => {
+  noiseBurst({ dur: 0.5, freq: 260, q: 0.6, gain: 0.26, sweep: 950 });
+};
+
 /** The reel — one soft tick per chip crossing the pointer. Short and quiet
     on purpose: it fires dozens of times a second at the start of the spin,
     and a tick loud enough to notice on its own would be a drill by the
-    time the reel has slowed down. */
-Sound.reelTick = () => noiseBurst({ dur: 0.025, freq: 1500, q: 8, gain: 0.09 });
+    time the reel has slowed down.
+
+    `strength` is 0..1, how close the reel is to actually landing (the
+    caller already knows this — see HUD.playCaseReel's own elapsed-time
+    tracking) — ticks get very slightly higher and louder as it slows, the
+    same way a real wheel's clicks close in on each other and firm up right
+    before it stops, rather than every one of the sixty-odd ticks sounding
+    identical regardless of where the strip actually is. */
+Sound.reelTick = (strength = 0) => noiseBurst({
+  dur: 0.025 + strength * 0.02, freq: 1500 + strength * 900,
+  q: 8, gain: 0.09 + strength * 0.10
+});
 
 /** The reveal. Reuses the same rising-arpeggio idea as Sound.celebrate,
     just keyed by rarity instead of a hole-score tier — one extra, higher
@@ -163,6 +179,18 @@ Sound.reelTick = () => noiseBurst({ dur: 0.025, freq: 1500, q: 8, gain: 0.09 });
     Mythic goes one further again — it is the one pull in a thousand, and
     the sound has to say so before the player has even read the card. */
 const CASE_RARITY_TIER = { standard: 0, tour: 1, pro: 2, legend: 3, mythic: 4, gems: 0 };
+
+/** The thunk the strip lands with, a beat before Sound.reward's arpeggio —
+    the resolution of the tension the ticks built, scaled the same way: a
+    heavier, slightly deeper impact the rarer the pull, with a thin sparkle
+    riding on top of it for Legend and Mythic so the good ones do not just
+    land, they land AND shimmer. */
+Sound.reelLand = (rarity) => {
+  const tier = CASE_RARITY_TIER[rarity] ?? 0;
+  noiseBurst({ dur: 0.16, freq: 180 - tier * 12, q: 1.1, gain: 0.32 + tier * 0.05, sweep: -70 });
+  if (tier >= 3) noiseBurst({ dur: 0.32, freq: 1700, q: 3, gain: 0.14, sweep: 500 });
+};
+
 Sound.reward = (rarity) => {
   const tier = CASE_RARITY_TIER[rarity] ?? 0;
   ping(660, 0.18, 0.22);
