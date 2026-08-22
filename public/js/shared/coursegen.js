@@ -1290,7 +1290,21 @@ export function aimPlan(hole, x, z, reach = 200) {
     // ...unless the pin is genuinely the nearer thing, in which case go at it
     const d = Math.hypot(t[0] - x, t[1] - z);
     if (toPin > d * 0.85) return at(Math.atan2(t[0] - x, t[1] - z), d);
-    return at(straight, toPin);
+
+    /* Blend toward the pin rather than aiming dead square at the fairway
+       recovery point. Escaping the rough is still the point of this branch
+       — that's what stops a round turning into three straight punch-outs —
+       but on a sharp dogleg a pure recovery-point aim can point almost
+       away from the hole, which reads as the caddie ignoring the pin
+       entirely even though it's still the right shot. A modest pull keeps
+       the escape line while pointing it more toward where the hole
+       actually is. */
+    const PIN_PULL = 0.32;
+    const rx = (t[0] - x) / (d || 1), rz = (t[1] - z) / (d || 1);
+    const px = (hole.pin.x - x) / (toPin || 1), pz = (hole.pin.z - z) / (toPin || 1);
+    const bx = rx * (1 - PIN_PULL) + px * PIN_PULL;
+    const bz = rz * (1 - PIN_PULL) + pz * PIN_PULL;
+    return at(Math.atan2(bx, bz), d);
   }
 
   /* Walk forward and take the FURTHEST route point we can still reach in a
