@@ -15,6 +15,8 @@ import { clubSvg, caddieSvg, statSvg, finishName } from './clubart.js';
 import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
+import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
+import { RARITIES } from '../shared/cases.js';
 
 const $ = id => document.getElementById(id);
 const el = {};
@@ -35,6 +37,11 @@ for (const id of [
   'fbCourseNote', 'fbErr', 'btnFeedbackCancel', 'btnFeedbackSend', 'feedbackBoard',
   'modalReport', 'reportTarget', 'reportBody', 'reportErr', 'btnReportCancel', 'btnReportSend',
   'modalKick', 'kickTarget', 'kickNote', 'kickReason', 'kickErr', 'btnKickCancel', 'btnKickSend',
+  'lpRewardsBtn', 'lpRewardsSub', 'lpRewardsBadge',
+  'modalRewards', 'btnRewardsClose', 'rwStreakTxt', 'rwFreezes', 'rwGrid', 'btnRewardsClaim', 'rwErr',
+  'rwGems', 'rwCases', 'rwCasesS', 'btnRewardsOpenCase', 'btnRewardsBuyCase',
+  'modalCase', 'caseStage', 'caseBox', 'caseHint', 'caseReveal', 'caseBurst', 'caseItemArt',
+  'caseRarity', 'caseItemName', 'caseItemKind', 'btnCaseDone',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
   'wArrow', 'wSpeed', 'wDesc', 'wWeather',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
@@ -1166,6 +1173,89 @@ HUD.renderNetQuality = (net) => {
   }
   pill.dataset.q = q;
   pill.title = detail;
+};
+
+/* ------------------------------------------------------ daily rewards --- */
+HUD.showRewardsBadge = show => { if (el.lpRewardsBadge) el.lpRewardsBadge.hidden = !show; };
+
+/** The 14-day calendar, the streak line, and the gem/case wallet — all of
+    it derived from the profile, nothing kept in the DOM as its own state. */
+/* Named renderDailyLogin, not renderRewards — the Clubhouse's level/unlock
+   ladder already owns that name (see rTier below, much later in this
+   file) and silently overwrote this one for a while: no error, because
+   JS just lets the second definition win, only a click that opened an
+   empty modal. */
+HUD.renderDailyLogin = (profile) => {
+  const login = profile.login || { day: 0, cycle: 1, freezes: 0, lastClaimDate: null };
+  const today = utcDateKey();
+  const claimedToday = login.lastClaimDate === today;
+  const claimableDay = claimedToday ? null : ((login.day || 0) >= CYCLE_LENGTH ? 1 : (login.day || 0) + 1);
+
+  el.rwStreakTxt.textContent = `Day ${login.day || 0} of this cycle · Cycle ${login.cycle || 1}`;
+  const freezeCount = login.freezes || 0;
+  el.rwFreezes.textContent = freezeCount ? '🧊'.repeat(freezeCount) : 'no freezes held';
+  el.rwFreezes.title = `${freezeCount} streak freeze${freezeCount === 1 ? '' : 's'} — covers a missed day automatically, earned one every 7 days claimed`;
+
+  el.rwGrid.innerHTML = '';
+  for (let d = 1; d <= CYCLE_LENGTH; d++) {
+    const reward = rewardFor(d, login.cycle || 1);
+    const tile = document.createElement('div');
+    tile.className = 'rw-tile ' +
+      (d === claimableDay ? 'current' : d <= (login.day || 0) ? 'claimed' : 'locked');
+    if (reward.cases) tile.classList.add('milestone');
+    const icon = reward.cases ? '📦' : reward.gems ? '💎' : '🪙';
+    const amt = reward.cases
+      ? `${reward.cases}×${reward.gems ? ` +${reward.gems}💎` : ''}`
+      : reward.gems ? `+${reward.gems}` : `+${reward.coins}`;
+    tile.innerHTML = `<span class="rw-day">${d}</span><span class="rw-ico">${icon}</span><span class="rw-amt">${amt}</span>`;
+    el.rwGrid.appendChild(tile);
+  }
+
+  el.btnRewardsClaim.disabled = claimedToday;
+  el.btnRewardsClaim.textContent = claimedToday ? 'Come back tomorrow' : `Claim day ${claimableDay}`;
+  el.rwGems.textContent = (profile.gems || 0).toLocaleString();
+  el.rwCases.textContent = profile.cases || 0;
+  el.rwCasesS.textContent = profile.cases === 1 ? '' : 's';
+  el.btnRewardsOpenCase.disabled = !(profile.cases > 0);
+  el.btnRewardsBuyCase.disabled = (profile.gems || 0) < 100;
+};
+
+/* --------------------------------------------------------- case opening */
+const CASE_KIND_ICON = { decal: '🎨', trail: '💫', title: '🎖️', ball: '⚪' };
+
+/** Back to "tap to open", for the moment the modal is shown. */
+HUD.resetCaseModal = () => {
+  el.caseStage.hidden = false;
+  el.caseReveal.hidden = true;
+  el.btnCaseDone.hidden = true;
+  el.caseBox.className = 'case-box';
+  el.caseHint.textContent = 'Tap to open';
+};
+
+HUD.shakeCaseBox = () => { el.caseBox.classList.add('shaking'); };
+
+/** The payoff. `result` is exactly what Net.openCase's ack carries. */
+HUD.revealCase = (result) => {
+  el.caseStage.hidden = true;
+  el.caseReveal.hidden = false;
+  el.btnCaseDone.hidden = false;
+  const isItem = result.kind === 'item';
+  const rarity = isItem ? (RARITIES.find(r => r.id === result.rarity) || RARITIES[0]) : { name: 'Bonus', color: '#8fe07a' };
+  el.caseReveal.style.setProperty('--rarity-color', rarity.color);
+  el.caseRarity.textContent = rarity.name;
+  el.caseRarity.style.color = rarity.color;
+  if (isItem) {
+    el.caseItemArt.textContent = CASE_KIND_ICON[result.item.kind] || '🎁';
+    el.caseItemArt.style.color = result.item.color || rarity.color;
+    el.caseItemName.textContent = result.item.name;
+    el.caseItemKind.textContent = UNLOCK_KINDS[result.item.kind]?.name || result.item.kind;
+  } else {
+    el.caseItemArt.textContent = '💎';
+    el.caseItemArt.style.color = rarity.color;
+    el.caseItemName.textContent = `+${result.amount} gems`;
+    el.caseItemKind.textContent = 'you already own everything in that tier';
+  }
+  el.caseReveal.classList.toggle('legend', isItem && result.rarity === 'legend');
 };
 
 /** The link to send someone.  Honours a tunnel or a deployed host as-is. */

@@ -2701,6 +2701,14 @@ Net.on('emote', d => {
   if (av) av.play(d.id);
 });
 
+/* §7.1 — whether today's login reward is still sitting there unclaimed.
+   Module scope, not inside boot(): the profile handler right below (also
+   module scope) needs it on every push, not only from the click handler
+   that opens the panel. */
+const todaysClaimIsWaiting = prof =>
+  !!prof && prof.login?.lastClaimDate !== new Date().toISOString().slice(0, 10);
+const refreshRewardsBadge = () => HUD.showRewardsBadge(todaysClaimIsWaiting(G.profile));
+
 Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
@@ -2735,6 +2743,10 @@ Net.on('profile', prof => {
     HUD.toast(`🪙 +${prof.coins - before.coins} coins · rating ${prof.rating}`, 'good', 4200);
     trackCoins(prof.coins - before.coins, 'round_payout');
   }
+  refreshRewardsBadge();
+  // claiming or opening a case triggers this same push — keep an open
+  // rewards panel showing the balance it just changed, not a stale one
+  if (HUD.el.modalRewards && !HUD.el.modalRewards.hidden) HUD.renderDailyLogin(prof);
 });
 
 Net.on('toast', d => HUD.toast(d.msg, d.kind));
@@ -3983,6 +3995,57 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       HUD.toast(res.kicked ? 'Removed.' : `Vote cast — ${res.votes}/${res.needed}.`, 'good', 2200);
     });
   });
+
+  /* ------------------------------------------------------ daily rewards */
+  HUD.el.lpRewardsBtn?.addEventListener('click', () => {
+    if (!G.profile) { HUD.toast('Still connecting — try again in a second.', 'warn', 1800); return; }
+    HUD.renderDailyLogin(G.profile);
+    HUD.el.modalRewards.hidden = false;
+  });
+  HUD.el.btnRewardsClose?.addEventListener('click', () => { HUD.el.modalRewards.hidden = true; });
+  HUD.el.btnRewardsClaim?.addEventListener('click', () => {
+    HUD.el.rwErr.textContent = '';
+    Net.claimLogin(res => {
+      if (!res?.ok) { HUD.el.rwErr.textContent = res?.error || 'Could not claim right now.'; return; }
+      const r = res.reward || {};
+      const bits = [];
+      if (r.coins) bits.push(`🪙 +${r.coins}`);
+      if (r.gems) bits.push(`💎 +${r.gems}`);
+      if (r.cases) bits.push(`📦 +${r.cases}`);
+      HUD.toast(`Day ${res.day} claimed — ${bits.join('  ')}`, 'good', 3200);
+      if (res.usedFreeze) HUD.toast('A streak freeze covered yesterday.', 'info', 2600);
+      else if (res.reset) HUD.toast('The streak reset — back to day 1.', 'warn', 2600);
+    });
+  });
+  HUD.el.btnRewardsBuyCase?.addEventListener('click', () => {
+    Net.buyCase(res => {
+      if (!res?.ok) { HUD.el.rwErr.textContent = res?.error || 'Could not buy that.'; return; }
+      HUD.toast('Case bought.', 'good', 1800);
+    });
+  });
+  HUD.el.btnRewardsOpenCase?.addEventListener('click', () => {
+    HUD.el.modalRewards.hidden = true;
+    HUD.resetCaseModal();
+    HUD.el.modalCase.hidden = false;
+  });
+
+  /* -------------------------------------------------------- case opening */
+  let caseOpening = false;
+  HUD.el.caseBox?.addEventListener('click', () => {
+    if (caseOpening) return;
+    caseOpening = true;
+    HUD.shakeCaseBox();
+    Sound.chestOpen?.();
+    // the shake plays out before the ack usually even arrives — the
+    // network round trip IS the suspense here, not an artificial delay
+    Net.openCase(res => {
+      caseOpening = false;
+      if (!res?.ok) { HUD.toast(res?.error || 'Could not open that.', 'warn', 2000); HUD.el.modalCase.hidden = true; return; }
+      HUD.revealCase(res);
+      Sound.reward?.(res.kind === 'item' ? res.rarity : 'gems');
+    });
+  });
+  HUD.el.btnCaseDone?.addEventListener('click', () => { HUD.el.modalCase.hidden = true; });
 
   document.getElementById('btnBindsReset')?.addEventListener('click', () => {
     resetBinds();

@@ -298,6 +298,12 @@
         <span class="lp-txt"><b>Play now</b><small id="lpCourseSub">straight onto the first tee</small></span>
         <span class="lp-arrow" aria-hidden="true">→</span>
       </button>
+      <button class="lp-item" id="lpRewardsBtn">
+        <span class="lp-ico">🎁</span>
+        <span class="lp-txt"><b>Daily rewards</b><small id="lpRewardsSub">come back tomorrow for more</small></span>
+        <span class="lp-count claim" id="lpRewardsBadge" hidden>!</span>
+        <span class="lp-arrow" aria-hidden="true">→</span>
+      </button>
       <button class="lp-item" data-panel="friends">
         <span class="lp-ico">👥</span>
         <span class="lp-txt"><b>Friends &amp; players online</b><small id="lpFriendSub">join a round, or host one</small></span>
@@ -801,6 +807,49 @@
       <button class="btn" id="btnReportCancel">Cancel</button>
       <button class="btn primary" id="btnReportSend">Send report</button>
     </div>
+  </div>
+</div>
+
+<!-- DAILY REWARDS — a 14-day cycle, streak freezes, gems and cases. See
+     public/js/shared/loginrewards.js for the actual streak/date logic;
+     this just shows what it decided. -->
+<div class="modal" id="modalRewards" hidden>
+  <div class="modal-card rewardscard">
+    <div class="rw-head">
+      <h3>Daily rewards</h3>
+      <button class="btn mini" id="btnRewardsClose">✕</button>
+    </div>
+    <div class="rw-streak">
+      <span id="rwStreakTxt">Day 1</span>
+      <span class="rw-freezes" id="rwFreezes" title="Streak freezes — cover one missed day automatically"></span>
+    </div>
+    <div class="rw-grid" id="rwGrid"></div>
+    <button class="btn primary rw-claim" id="btnRewardsClaim">Claim</button>
+    <p class="err tiny" id="rwErr"></p>
+    <div class="rw-wallet">
+      <span class="rw-bal">💎 <b id="rwGems">0</b></span>
+      <span class="rw-bal" id="rwCasesWrap">📦 <b id="rwCases">0</b> case<span id="rwCasesS">s</span></span>
+      <button class="btn" id="btnRewardsOpenCase" disabled>Open a case</button>
+      <button class="btn" id="btnRewardsBuyCase">Buy a case — 100💎</button>
+    </div>
+  </div>
+</div>
+
+<!-- CASE OPENING — the payoff. Shake, crack, reveal, coloured by rarity. -->
+<div class="modal" id="modalCase" hidden>
+  <div class="modal-card casecard">
+    <div class="case-stage" id="caseStage">
+      <div class="case-box" id="caseBox">📦</div>
+      <p class="case-hint" id="caseHint">Tap to open</p>
+    </div>
+    <div class="case-reveal" id="caseReveal" hidden>
+      <div class="case-burst" id="caseBurst"></div>
+      <div class="case-item" id="caseItemArt"></div>
+      <p class="case-rarity" id="caseRarity">Standard</p>
+      <p class="case-name" id="caseItemName"></p>
+      <p class="case-kind" id="caseItemKind"></p>
+    </div>
+    <button class="btn primary case-done" id="btnCaseDone" hidden>Nice!</button>
   </div>
 </div>
 

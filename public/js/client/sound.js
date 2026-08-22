@@ -142,6 +142,31 @@ Sound.celebrate = tier => {
 
 Sound.crash = () => noiseBurst({ dur: 0.16, freq: 300, q: 0.6, gain: 0.5, sweep: -150 });
 
+/* -------------------------------------------------------------- §6 cases */
+/** The shake, right when the box is tapped — a short rattly burst rising
+    in pitch, so the anticipation has a sound before the reveal does. */
+Sound.chestOpen = () => {
+  noiseBurst({ dur: 0.09, freq: 900, q: 4, gain: 0.22, sweep: 250 });
+  noiseBurst({ dur: 0.09, freq: 900, q: 4, gain: 0.18, sweep: 250, delay: 0.12 });
+};
+
+/** The reveal. Reuses the same rising-arpeggio idea as Sound.celebrate,
+    just keyed by rarity instead of a hole-score tier — one extra, higher
+    note per tier up, and Legend gets a small shimmer on top so a big pull
+    is audibly different from a good one, not just differently coloured. */
+const CASE_RARITY_TIER = { standard: 0, tour: 1, pro: 2, legend: 3, gems: 0 };
+Sound.reward = (rarity) => {
+  const tier = CASE_RARITY_TIER[rarity] ?? 0;
+  ping(660, 0.18, 0.22);
+  if (tier >= 1) ping(880, 0.2, 0.22, 0.1);
+  if (tier >= 2) ping(1108, 0.22, 0.22, 0.2);
+  if (tier >= 3) {
+    ping(1318, 0.3, 0.25, 0.3);
+    ping(1760, 0.35, 0.16, 0.36);
+    ping(2217, 0.4, 0.1, 0.42);
+  }
+};
+
 /** The cart giving up: a low thump, then a long ragged tail. */
 Sound.explode = () => {
   noiseBurst({ dur: 0.5, freq: 110, q: 0.4, gain: 0.75, sweep: -70 });
