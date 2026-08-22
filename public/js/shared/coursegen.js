@@ -1312,10 +1312,30 @@ export function aimPlan(hole, x, z, reach = 200) {
   let best = Math.min(route.length - 1, near + 1);
 
   /* The corridor is no longer empty — sentinel trees stand in it on purpose
-     (see placeSentinels). Staying over short grass is therefore no longer
-     enough to call a line clear: the aim has to miss the trunk too, or the
-     game would once again default to pointing the player at a tree. */
-  const blockers = (hole.trees || []).filter(t => t.blocker);
+     (see placeSentinels), and any ordinary tree can end up near a ball that
+     is not on the fairway to begin with. Staying over short grass is
+     therefore no longer enough to call a line clear: the aim has to miss
+     every trunk it comes near, or the game points the player down a line
+     ballistics.js is about to deflect off — every tree collides, not only
+     the ones flagged `blocker`, and the suggested aim has to agree with
+     that or the drawn line (a real simulation, not a ruler — see
+     refreshAimPreview) shows a shot that dies three metres out for no
+     visible reason. Filtered against the ROUTE ahead, not just the ball's
+     position: a wooded hole can carry several hundred trees, and a circle
+     wide enough to cover every candidate line (up to `reach` out) still
+     catches most of a forest, which turned this from a handful of blocker
+     checks into hundreds of thousands of distance calls in the sample loop
+     below — measured at 4ms+ per call on Kakoda Forest, fifty times what it
+     cost before. A tree can only ever matter here if it sits near the
+     fairway band the walk is actually allowed to stray into, so that band
+     is the filter, not the ball's reach in every direction. */
+  const aheadEnd = Math.min(route.length - 1, near + maxAhead);
+  const nearbyTrees = (hole.trees || []).filter(t => {
+    for (let i = near; i <= aheadEnd; i++) {
+      if (Math.hypot(t.x - route[i][0], t.z - route[i][1]) <= CORRIDOR + t.r + 3) return true;
+    }
+    return false;
+  });
   /* WATER counts as something you may not be aimed into.
      Sentinel trees were already handled; lakes never were, on the assumption
      that a hazard sits beside a fairway rather than across it. Sometimes it
@@ -1338,7 +1358,7 @@ export function aimPlan(hole, x, z, reach = 200) {
       const lx = x + dx * t, lz = z + dz * t;
       const rx = route[near + j][0], rz = route[near + j][1];
       if (Math.hypot(lx - rx, lz - rz) > CORRIDOR) { clear = false; break; }
-      for (const b of blockers) {
+      for (const b of nearbyTrees) {
         if (Math.hypot(lx - b.x, lz - b.z) < b.r + 3) { clear = false; break; }
       }
       if (clear) {
