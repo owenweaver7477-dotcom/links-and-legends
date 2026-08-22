@@ -255,6 +255,11 @@ Net.reportPlayer = (targetPid, reason, context, cb) =>
    §8.1 in server.js — so the client never has to guess and be wrong. */
 Net.kickPlayer = (targetPid, reason, cb) =>
   ask('player:kick', { targetPid, reason }, res => cb?.(res));
+
+/* ------------------------------------------------------ login & cases --- */
+Net.claimLogin = cb => ask('login:claim', null, res => cb?.(res));
+Net.openCase = cb => ask('case:open', null, res => cb?.(res));
+Net.buyCase = cb => ask('case:buy', null, res => cb?.(res));
 Net.prefs = p => Net.socket?.emit('player:prefs', p);
 Net.setLook = look => Net.socket?.emit('player:look', { look });
 Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, rot, moving, cart });

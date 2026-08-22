@@ -212,7 +212,7 @@ import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound, setDifficulty, difficultyOf,
          setLook, setBallColor, setBag, kitOf, markSeen,
-         flushProfiles } from './server/profiles.js';
+         flushProfiles, claimLogin, openCase, buyCase } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
 import { loadRecords, recordsFor, allRecords, submitRound,
@@ -1433,9 +1433,10 @@ io.on('connection', socket => {
        has on record. Without this every decal, trail and title in the game
        is one hand-written socket message away from free, and a hundred
        levels of rewards mean nothing. */
-    const level = levelFromXp(getProfile(pid)?.xp || 0).level;
+    const prof = getProfile(pid);
+    const level = levelFromXp(prof?.xp || 0).level;
     const seat = p && room ? room.players.indexOf(p) : 0;
-    const next = looksEarnedAt(d?.look, seat, level);
+    const next = looksEarnedAt(d?.look, seat, level, prof?.caseUnlocks || []);
 
     // Not in a room: save it and stop. There is nobody to broadcast to.
     if (!p) { setLook(pid, next); return; }
@@ -2127,6 +2128,36 @@ io.on('connection', socket => {
     if (why) return socket.emit('toast', { msg: why, kind: 'warn' });
     socket.emit('toast', { msg: 'In the bag.', kind: 'good' });
     socket.emit('profile', publicProfile(pid));
+  });
+
+  /* §7.1/§6 — outside any room, same as the shop: the daily-rewards panel
+     and the case inventory both live in the clubhouse/front page, so
+     identity comes from the socket, never room membership. */
+  socket.on('login:claim', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = claimLogin(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('case:open', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = openCase(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('case:buy', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = buyCase(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
   });
 
   socket.on('game:start', () => {

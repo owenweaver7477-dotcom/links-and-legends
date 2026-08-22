@@ -17,6 +17,9 @@ import { openStore, touch, saveSoon as storeSaveSoon, flushNow as flushStore,
 import { handicapIndex, differential, ratingTier } from '../public/js/shared/handicap.js';
 import { normaliseSkin } from '../public/js/shared/clubskins.js';
 import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js';
+import { planClaim } from '../public/js/shared/loginrewards.js';
+import { rollCase, caseItemKey } from '../public/js/shared/cases.js';
+import { unlocksAt } from '../public/js/shared/unlocks.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
    moment a player opens it rather than after several rounds. */
@@ -33,7 +36,7 @@ export const STARTING_COINS = 900;
  * shape change ships costs finding out which profiles are which shape from
  * their contents alone, on a live store, with players in it.
  */
-export const PROFILE_SCHEMA_VERSION = 1;
+export const PROFILE_SCHEMA_VERSION = 2;
 
 /**
  * Bring a loaded profile up to PROFILE_SCHEMA_VERSION. Idempotent — safe to
@@ -50,7 +53,19 @@ export const PROFILE_SCHEMA_VERSION = 1;
 export function migrateProfile(p) {
   if (!p) return p;
   if (p.schemaVersion == null) p.schemaVersion = 1;   // predates the field
-  // if (p.schemaVersion < 2) { ...; p.schemaVersion = 2; }
+  if (p.schemaVersion < 2) {
+    // §7.1/§6 — gems, unopened cases, and what a case has already paid out.
+    // A fresh Map, not shared with the default in getProfile: every profile
+    // gets its OWN array here, never one closure-captured object mutated by
+    // every player at once — the classic "same object" bug hiding in a
+    // migration is exactly the kind of thing nobody notices until two
+    // players' inventories turn out to be one array.
+    p.gems = 0;
+    p.cases = 0;
+    p.caseUnlocks = [];
+    p.login = { day: 0, cycle: 1, freezes: 0, lastClaimDate: null };
+    p.schemaVersion = 2;
+  }
   return p;
 }
 
@@ -122,6 +137,8 @@ export function getProfile(pid) {
          worked at all.  This buys the first real upgrade immediately, which
          is the moment the whole progression makes sense. */
       coins: STARTING_COINS, rating: 20, xp: 0,
+      gems: 0, cases: 0, caseUnlocks: [],
+      login: { day: 0, cycle: 1, freezes: 0, lastClaimDate: null },
       gear: { ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 },
       crew: { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
       clubTier: 0, refine: 0, cleared: [],
@@ -180,6 +197,9 @@ function untouched(p) {
   if ((p.clubTier || 0) > 0 || (p.refine || 0) > 0) return false;
   if (p.gear && Object.values(p.gear).some(v => (v || 0) > 0)) return false;
   if (p.crew && Object.values(p.crew).some(v => (v || 0) > 0)) return false;
+  // a login streak, a case in the wallet, or gems from either one is a
+  // player who came back at least once — every bit as real as a round
+  if ((p.login?.day || 0) > 0 || (p.gems || 0) > 0 || (p.cases || 0) > 0 || (p.caseUnlocks || []).length > 0) return false;
   return (p.coins || 0) <= STARTING_COINS;      // the welcome purse only
 }
 
@@ -305,6 +325,8 @@ export function publicProfile(pid) {
   return {
     rounds: p.rounds, best: p.best, coins: p.coins, rating: Math.round(p.rating),
     xp: p.xp || 0, ...levelFromXp(p.xp || 0),
+    gems: p.gems || 0, cases: p.cases || 0, caseUnlocks: p.caseUnlocks || [],
+    login: p.login || { day: 0, cycle: 1, freezes: 0, lastClaimDate: null },
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
     crew: p.crew || { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
@@ -863,4 +885,54 @@ export function setClubSkin(pid, id) {
   p.clubSkin = ok;
   saveSoon();
   return ok;
+}
+
+/* §7.1 — the daily login cycle. All the actual date/streak logic is pure
+   and lives in loginrewards.js; this is the one place its result gets
+   applied to a real profile and written down. */
+export function claimLogin(pid) {
+  const p = getProfile(pid);
+  const result = planClaim(p.login || { day: 0, cycle: 1, freezes: 0, lastClaimDate: null });
+  if (!result.ok) return result;
+  p.login = result.nextState;
+  p.coins += result.reward.coins || 0;
+  p.gems = (p.gems || 0) + (result.reward.gems || 0);
+  p.cases = (p.cases || 0) + (result.reward.cases || 0);
+  if (result.comebackBonus) p.coins += result.comebackBonus.coins || 0;
+  saveSoon();
+  return result;
+}
+
+/* §6 — a case pulls from the SAME level-earned cosmetic table everybody
+   already has (see cases.js's header for why), so "owned" is the union of
+   what this profile's level has unlocked and what a previous case already
+   gave it — never trust a client's idea of either. */
+export function openCase(pid) {
+  const p = getProfile(pid);
+  if ((p.cases || 0) < 1) return { ok: false, error: 'No cases to open.' };
+  const level = levelFromXp(p.xp || 0).level;
+  const owned = new Set(unlocksAt(level).map(u => u.kind + ':' + u.id));
+  for (const id of (p.caseUnlocks || [])) owned.add(id);
+  const result = rollCase(owned);
+  p.cases -= 1;
+  if (result.kind === 'item') {
+    p.caseUnlocks = [...(p.caseUnlocks || []), caseItemKey(result.item)];
+  } else {
+    p.gems = (p.gems || 0) + result.amount;
+  }
+  saveSoon();
+  return { ok: true, ...result, casesLeft: p.cases };
+}
+
+/* Gems buy an extra case directly — the one thing gems can be spent on
+   right now, and the reason the trickle from login rewards is worth
+   saving up rather than sitting there as a number. */
+const CASE_GEM_COST = 100;
+export function buyCase(pid) {
+  const p = getProfile(pid);
+  if ((p.gems || 0) < CASE_GEM_COST) return { ok: false, error: `Not enough gems (need ${CASE_GEM_COST}).` };
+  p.gems -= CASE_GEM_COST;
+  p.cases = (p.cases || 0) + 1;
+  saveSoon();
+  return { ok: true, gems: p.gems, cases: p.cases };
 }

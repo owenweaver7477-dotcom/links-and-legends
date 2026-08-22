@@ -252,15 +252,22 @@ const UNLOCK_IDS = new Set(UNLOCKS.map(u => u.kind + ':' + u.id));
  * uses. Without it a hand-written socket message puts the level-100 trail on
  * a level-3 ball, and every cosmetic in the game becomes free. Everything
  * else about the look passes through untouched.
+ *
+ * @param {string[]} caseUnlocks  "kind:id" strings this profile won from a
+ *   case (see server/cases.js) — decal/trail/title/ball only, the same four
+ *   kinds this whole ownership check already covers, so a case pull needs
+ *   nothing new here beyond being unioned into the same known-ids set a
+ *   level unlock already goes through.
  */
-export const looksEarnedAt = (look, seedIndex, level) => {
+export const looksEarnedAt = (look, seedIndex, level, caseUnlocks = []) => {
   const l = { ...(look && typeof look === 'object' ? look : {}) };
   // headwear is a normal wardrobe slot with a level on two of its entries,
   // so it cannot ride the cosmetic path — it falls back rather than blanks
   const hat = HAT_STYLES.find(h => h.id === l.hat);
   if (hat?.at && (Number(level) || 1) < hat.at) l.hat = 'cap';
-  return normaliseLook(l, seedIndex,
-    new Set(unlocksAt(level).map(u => u.kind + ':' + u.id)), Number(level) || 1);
+  const known = new Set(unlocksAt(level).map(u => u.kind + ':' + u.id));
+  for (const id of caseUnlocks) known.add(id);
+  return normaliseLook(l, seedIndex, known, Number(level) || 1);
 };
 
 /** A complete random outfit, for the dice button. */
