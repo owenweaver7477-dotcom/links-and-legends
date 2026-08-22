@@ -42,6 +42,12 @@ const RARITY_BOUNDS = [
 export const RARITIES = RARITY_BOUNDS.map(({ id, name, color }) => ({ id, name, color }));
 const rarityFor = at => RARITY_BOUNDS.find(r => at <= r.max) || RARITY_BOUNDS[RARITY_BOUNDS.length - 1];
 
+/** The same level-derived tier, for anything gated by level rather than
+ *  drawn from a case — the wardrobe's own items use this so a rare
+ *  fabric or a deep-level outfit reads with the same colour language a
+ *  case pull does, instead of the two systems inventing their own. */
+export const rarityForLevel = at => rarityFor(Number(at) || 0);
+
 /** The full case pool, each entry tagged with the rarity its level implies. */
 export const CASE_POOL = UNLOCKS
   .filter(u => CASE_KINDS.has(u.kind))

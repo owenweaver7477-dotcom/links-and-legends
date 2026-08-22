@@ -330,6 +330,13 @@ Net.boards = (courseId, cb) => {
   ask('world:boards', { course: courseId }, res => cb(res.error ? empty : res));
 };
 
+/** The whole player base's level spread, for "X% of players own this" reads
+ *  on cosmetics — see server/profiles.js's levelHistogram(). */
+Net.levelStats = cb => {
+  const empty = { counts: new Array(101).fill(0), total: 0 };
+  ask('profiles:levels', {}, res => cb?.(res?.error ? empty : res));
+};
+
 /** What your friends have been up to. */
 Net.feed = cb => ask('feed:list', {}, res => cb?.(res?.items || []));
 

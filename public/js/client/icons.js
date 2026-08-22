@@ -102,6 +102,15 @@ const ICONS = {
     <path d="M12 2 14.9 8.6 22 9.3 16.6 14.1 18.2 21.1 12 17.4 5.8 21.1 7.4 14.1 2 9.3 9.1 8.6Z"
           fill="none" stroke="currentColor" stroke-width="1.3" opacity=".7"/>
   `,
+  dice: `
+    <rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity=".14"/>
+    <rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+    <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+    <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+    <circle cx="8" cy="16" r="1.5" fill="currentColor"/>
+    <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+  `,
   golfer: `
     <circle cx="9" cy="5" r="2.4" fill="currentColor"/>
     <path d="M9 7.5v6l-3 7M9 13.5l5 2M12 9l7-2" fill="none" stroke="currentColor"

@@ -16,7 +16,7 @@ import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
-import { RARITIES, CASE_POOL } from '../shared/cases.js';
+import { RARITIES, CASE_POOL, rarityForLevel } from '../shared/cases.js';
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
@@ -30,6 +30,7 @@ for (const id of [
   'screenWardrobe', 'wdCarousel', 'wdCourseName', 'wdCourseWhere', 'wdDots', 'wdPrev', 'wdNext',
   'wdAuto', 'wdCats', 'wdFits', 'wdRTabs', 'wdRBody', 'wdName', 'wdFit', 'wdStats',
   'wdRandom', 'wdCustom', 'wdDone',
+  'wdInfo', 'wdInfoName', 'wdInfoRarity', 'wdInfoEffect', 'wdInfoPct',
   'btnClubhouse', 'btnShopBack', 'homeCoins',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
@@ -2264,9 +2265,13 @@ const lock = (it, level) => !!(it.at && level < it.at);
 function optRow(title, list, current, level, kind) {
   const opts = list.map(it => {
     const L = lock(it, level);
+    // the rarity colour is the same language a case pull uses — a deep
+    // item should look like a deep item everywhere it shows up, not just
+    // in the one screen that happens to hand it out
+    const rc = it.at ? rarityForLevel(it.at).color : null;
     return `<button class="wd-opt${it.id === current ? ' on' : ''}${L ? ' locked' : ''}"
-      data-kind="${kind}" data-val="${it.id}"${L ? ' disabled' : ''}>${it.name}` +
-      (L ? `<span class="lv">Lv ${it.at}</span>` : '') + `</button>`;
+      data-kind="${kind}" data-val="${it.id}"${L ? ' disabled' : ''}${rc ? ` style="--rarity-color:${rc}"` : ''}>${it.name}` +
+      (L ? `<span class="lv" style="color:${rc}">Lv ${it.at}</span>` : '') + `</button>`;
   }).join('');
   return `<div class="wd-grp"><h5>${title}</h5><div class="wd-opts">${opts}</div></div>`;
 }
@@ -2326,8 +2331,9 @@ HUD.renderWardrobe = (look, level, name) => {
     .filter(o => o.cat === HUD.wdCat)
     .map(o => {
       const L = o.at > lv;
+      const rc = o.at ? rarityForLevel(o.at).color : null;
       return `<button class="wd-fit${o.id === look.outfit ? ' on' : ''}${L ? ' locked' : ''}"
-        data-fit="${o.id}"${L ? ' disabled' : ''}>
+        data-fit="${o.id}" data-at="${o.at || 0}"${L ? ' disabled' : ''}${rc ? ` style="--rarity-color:${rc}"` : ''}>
         <span class="wd-sw"><i style="background:${o.o.shirt}"></i><i style="background:${o.o.trousers}"></i></span>
         <span><b>${o.name}</b><small>${L ? `Unlocks at level ${o.at}` : (o.o.fabric || '') + (o.o.cut ? ' · ' + o.o.cut : '')}</small></span>
       </button>`;
@@ -2389,9 +2395,11 @@ HUD.renderDecalTab = (look, lv) => {
       <span class="lk">none</span></button>` +
     list.map(d => {
       const L = lock(d, lv);
+      const rc = d.at ? rarityForLevel(d.at).color : null;
       return `<button class="wd-decal${d.id === cur ? ' on' : ''}${L ? ' locked' : ''}"
-        data-decal="${d.id}" title="${d.name}${L ? ` — level ${d.at}` : ''}"${L ? ' disabled' : ''}>
-        ${L ? `<span class="lk">${icon('lock')}${d.at}</span>` : ''}</button>`;
+        data-decal="${d.id}" data-at="${d.at || 0}" title="${d.name}${L ? ` — level ${d.at}` : ''}"
+        ${L ? ' disabled' : ''}${rc ? ` style="--rarity-color:${rc}"` : ''}>
+        ${L ? `<span class="lk" style="color:${rc}">${icon('lock')}${d.at}</span>` : ''}</button>`;
     }).join('');
 
   el.wdRBody.innerHTML =
@@ -2434,11 +2442,98 @@ function customEditor(look) {
   </div></div>`;
 }
 
+/* ═══════════════════════════════════════════════ THE STATS CORNER ═══════
+   "What does this do, what does it look like, how rare is it" — the three
+   questions a wardrobe never answered before. The first is a real number
+   (outfitStats' own drive/acc/spin fields, read straight off whichever
+   item is under the pointer, not the whole look's total); the second is
+   just "look at the golfer standing right there" — there is no separate
+   preview to build, the 3D behind the panel already IS the answer; the
+   third is server-authoritative: HUD.levelHist is the population's level
+   spread (see Net.levelStats / server/profiles.js's levelHistogram), set
+   once by main.js, and an item's rarity is read off it, not invented. */
+HUD.levelHist = { counts: new Array(101).fill(0), total: 0 };
+
+const WD_KIND_LISTS = { pattern: PATTERNS, fabric: FABRICS, cut: CUTS, shoeType: SHOE_TYPES,
+                         glove: GLOVES, watch: WATCHES, sleeve: SLEEVES, neck: NECKWEAR };
+
+function wdPctOwning(at) {
+  const h = HUD.levelHist;
+  const lvl = Number(at) || 1;
+  if (!h || !h.total) return null;
+  let n = 0;
+  for (let i = lvl; i <= 100; i++) n += h.counts[i] || 0;
+  return (n / h.total) * 100;
+}
+
+/** The one line that answers "what does this actually do". */
+function wdEffectLine(it) {
+  const bits = [];
+  if (it.drive) bits.push(`Drive ${it.drive > 0 ? '+' : ''}${(it.drive * 100).toFixed(1)}%`);
+  if (it.acc) bits.push(`Accuracy ${it.acc > 0 ? '+' : ''}${(it.acc * 100).toFixed(1)}%`);
+  if (it.spin) bits.push(spinWord(it.spin));
+  if (it.weight != null && it.weight > 0) bits.push(`+${(it.weight * 2.4).toFixed(1)} style`);
+  return bits.length ? bits.join(' · ') : 'Cosmetic — no effect on your golf';
+}
+
+/** Resolve whatever the pointer is over back to {name, at, effect}, or null
+ *  for anything with nothing worth showing (a plain colour swatch). */
+function wdInfoFromTarget(t) {
+  if (t.dataset.kind) {
+    const list = WD_KIND_LISTS[t.dataset.kind];
+    const it = list && list.find(x => x.id === t.dataset.val);
+    return it ? { name: it.name, at: it.at || 0, effect: wdEffectLine(it) } : null;
+  }
+  if (t.dataset.fit) {
+    const o = OUTFITS.find(x => x.id === t.dataset.fit);
+    return o ? { name: o.name, at: o.at || 0, effect: 'A ready-made combination — cosmetic only' } : null;
+  }
+  if (t.hasAttribute('data-decal') && t.dataset.decal) {
+    const d = DECALS.find(x => x.id === t.dataset.decal);
+    return d ? { name: d.name, at: d.at || 0, effect: 'Cosmetic — no effect on your golf' } : null;
+  }
+  return null;
+}
+
+HUD.showWardrobeInfo = (name, at, effect) => {
+  if (!el.wdInfo) return;
+  el.wdInfo.hidden = false;
+  el.wdInfoName.textContent = name;
+  el.wdInfoEffect.textContent = effect;
+  const lvl = Number(at) || 0;
+  if (lvl > 0) {
+    const r = rarityForLevel(lvl);
+    el.wdInfo.style.setProperty('--rarity-color', r.color);
+    el.wdInfoRarity.textContent = r.name;
+    const pct = wdPctOwning(lvl);
+    el.wdInfoPct.textContent = pct == null ? `Unlocks at level ${lvl}`
+      : pct === 0 ? 'Nobody has reached this yet'
+      : `${pct < 0.1 ? '<0.1' : pct.toFixed(pct < 10 ? 1 : 0)}% of players own this`;
+  } else {
+    el.wdInfo.style.removeProperty('--rarity-color');
+    el.wdInfoRarity.textContent = '';
+    el.wdInfoPct.textContent = 'Available from the start';
+  }
+};
+HUD.hideWardrobeInfo = () => { if (el.wdInfo) el.wdInfo.hidden = true; };
+
 /** One delegated listener for the whole screen. */
 let wardrobeBound = false;
 HUD.bindWardrobe = () => {
   if (wardrobeBound) return;
   wardrobeBound = true;
+
+  const showInfo = e => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    const info = wdInfoFromTarget(t);
+    if (info) HUD.showWardrobeInfo(info.name, info.at, info.effect);
+  };
+  el.screenWardrobe.addEventListener('pointerover', showInfo);
+  el.screenWardrobe.addEventListener('focusin', showInfo);
+  el.screenWardrobe.addEventListener('pointerout', e => {
+    if (!e.relatedTarget || !el.screenWardrobe.contains(e.relatedTarget)) HUD.hideWardrobeInfo();
+  });
 
   el.screenWardrobe.addEventListener('click', e => {
     const t = e.target.closest('button');

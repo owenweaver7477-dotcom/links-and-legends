@@ -402,7 +402,7 @@
       <div class="lp-block">
         <div class="hk-head">
           <h5>Your character</h5>
-          <button class="btn mini" id="btnRandomLook" title="Surprise me">🎲</button>
+          <button class="btn mini" id="btnRandomLook" title="Surprise me"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity=".14"/><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="8" cy="16" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/></svg></button>
         </div>
         <div class="charcard" id="charCard"></div>
         <button class="btn wardrobe-btn" id="btnWardrobe">
@@ -472,17 +472,35 @@
     <div class="wd-rbody" id="wdRBody"></div>
   </div>
 
-  <!-- BOTTOM: who this is, what it does, and the way out -->
-  <div class="wd-base">
-    <div class="wd-id">
-      <b id="wdName">Your golfer</b>
-      <span id="wdFit">No outfit</span>
+  <!-- Bottom stack: the stats corner above the identity bar, in a flex
+       column so the corner's visibility never has to guess the identity
+       bar's height — it just takes its place in the stack when shown. -->
+  <div class="wd-bottom-stack">
+    <!-- The stats corner: whatever piece you're hovering right now — what
+         it does, where it sits, and how many players actually have it.
+         Hidden until something is hovered, so it never competes with the
+         golfer for attention when you're just browsing. -->
+    <div class="wd-info" id="wdInfo" hidden>
+      <div class="wd-info-head">
+        <b id="wdInfoName"></b>
+        <span class="wd-info-rarity" id="wdInfoRarity"></span>
+      </div>
+      <p class="wd-info-effect" id="wdInfoEffect"></p>
+      <p class="wd-info-pct" id="wdInfoPct"></p>
     </div>
-    <div class="wd-stats" id="wdStats"></div>
-    <div class="wd-acts">
-      <button class="btn" id="wdRandom" title="Surprise me">🎲</button>
-      <button class="btn" id="wdCustom">Customise</button>
-      <button class="btn primary" id="wdDone">Done</button>
+
+    <!-- who this is, what it does, and the way out -->
+    <div class="wd-base">
+      <div class="wd-id">
+        <b id="wdName">Your golfer</b>
+        <span id="wdFit">No outfit</span>
+      </div>
+      <div class="wd-stats" id="wdStats"></div>
+      <div class="wd-acts">
+        <button class="btn" id="wdRandom" title="Surprise me"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity=".14"/><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="8" cy="16" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/></svg></button>
+        <button class="btn" id="wdCustom">Customise</button>
+        <button class="btn primary" id="wdDone">Done</button>
+      </div>
     </div>
   </div>
 </div>

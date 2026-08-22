@@ -1934,9 +1934,11 @@ body.introing .lp-inner, body.introing .lp-veil { opacity: 0; transition: opacit
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   transition: transform .18s, border-color .18s, background .18s; }
 .wd-fit:hover { transform: translateX(4px); border-color: rgba(111,206,138,.44); background: rgba(16,32,24,.72); }
-.wd-fit.on { border-color: #6fce8a; background: rgba(38,96,58,.62); }
-.wd-fit.locked { opacity: .42; cursor: not-allowed; }
-.wd-fit.locked:hover { transform: none; border-color: rgba(255,255,255,.09); }
+.wd-fit.on { border-color: #6fce8a; background: rgba(38,96,58,.62);
+  box-shadow: 0 0 14px -2px var(--rarity-color, transparent); }
+.wd-fit.locked { opacity: .55; cursor: not-allowed;
+  border-color: color-mix(in srgb, var(--rarity-color, #ffffff) 40%, rgba(255,255,255,.09)); }
+.wd-fit.locked:hover { transform: none; }
 /* Two swatches of the outfit's own colours: it is the fastest way to know
    what a name like "Hickory era" actually looks like. */
 .wd-sw { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; overflow: hidden;
@@ -1957,10 +1959,15 @@ body.introing .lp-inner, body.introing .lp-veil { opacity: 0; transition: opacit
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); color: #cfe0d4;
   transition: background .16s, border-color .16s; }
 .wd-opt:hover { background: rgba(111,206,138,.16); }
-.wd-opt.on { background: rgba(111,206,138,.24); border-color: #6fce8a; color: #fff; }
-.wd-opt.locked { opacity: .38; cursor: not-allowed; }
+/* Equipping a piece that actually cost something to earn gets to look like
+   it — the same rarity glow a case pull gets, not just the plain green
+   "selected" ring every option in this row otherwise shares. Free pieces
+   have no --rarity-color set, so this is invisible on them. */
+.wd-opt.on { background: rgba(111,206,138,.24); border-color: #6fce8a; color: #fff;
+  box-shadow: 0 0 10px -2px var(--rarity-color, transparent); }
+.wd-opt.locked { opacity: .5; cursor: not-allowed; border-color: color-mix(in srgb, var(--rarity-color, #8fbf9c) 45%, transparent); }
 .wd-opt.locked:hover { background: rgba(255,255,255,.06); }
-.wd-opt .lv { font-size: 9px; color: #8fbf9c; margin-left: 3px; }
+.wd-opt .lv { font-size: 9px; font-weight: 700; margin-left: 3px; }
 
 /* colour swatches keep the shape of the ones on the home page */
 .wd-cols { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1980,17 +1987,36 @@ body.introing .lp-inner, body.introing .lp-veil { opacity: 0; transition: opacit
 .wd-decal { position: relative; aspect-ratio: 1; border-radius: 9px; cursor: pointer; padding: 0;
   background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); overflow: hidden; }
 .wd-decal canvas { width: 100%; height: 100%; display: block; }
-.wd-decal.on { border-color: #6fce8a; box-shadow: 0 0 0 1px #6fce8a inset; }
-.wd-decal.locked { opacity: .34; cursor: not-allowed; }
+.wd-decal.on { border-color: #6fce8a; box-shadow: 0 0 0 1px #6fce8a inset, 0 0 12px -2px var(--rarity-color, transparent); }
+.wd-decal.locked { opacity: .5; cursor: not-allowed;
+  border-color: color-mix(in srgb, var(--rarity-color, #ffffff) 40%, rgba(255,255,255,.09)); }
 .wd-decal .lk { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; }
 .wd-custom { display: flex; flex-direction: column; gap: 7px; }
 .wd-custom input[type=text] { width: 100%; padding: 6px 9px; border-radius: 8px; font: inherit;
   font-size: 12px; letter-spacing: 3px; text-transform: uppercase; text-align: center;
   background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.11); color: #eaf3ec; }
 
+/* ── the bottom stack: stats corner above the identity bar ───────────── */
+/* One flex column anchored to the bottom, so the corner's position never
+   has to guess the identity bar's height with a hardcoded offset — it was
+   tried, and the two overlapped the moment the identity bar grew past the
+   number that offset assumed. */
+.wd-bottom-stack { position: absolute; z-index: 4; left: 50%; bottom: 18px; transform: translateX(-50%);
+  width: min(560px, 44vw); display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.wd-info { width: 100%; padding: 11px 14px; border-radius: 13px;
+  background: rgba(9,18,14,.74); border: 1px solid var(--rarity-color, rgba(255,255,255,.14));
+  border-left-width: 3px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0,0,0,.4); animation: wdInfoIn .16s ease both; }
+@keyframes wdInfoIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.wd-info-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.wd-info-head b { font-size: 13.5px; }
+.wd-info-rarity { font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--rarity-color, #9fb0a6); }
+.wd-info-effect { margin: 4px 0 0; font-size: 11.5px; color: #cfe4d3; }
+.wd-info-pct { margin: 3px 0 0; font-size: 10.5px; color: #8fa694; }
+
 /* ── the base bar: name, stats, the way out ──────────────────────────── */
-.wd-base { position: absolute; z-index: 4; left: 50%; bottom: 18px; transform: translateX(-50%);
-  width: min(560px, 44vw); display: flex; flex-direction: column; gap: 10px;
+.wd-base { width: 100%; display: flex; flex-direction: column; gap: 10px;
   padding: 14px 16px; border-radius: 16px;
   background: rgba(9,18,14,.66); border: 1px solid rgba(255,255,255,.10);
   backdrop-filter: blur(11px); -webkit-backdrop-filter: blur(11px);
@@ -2024,7 +2050,8 @@ body.introing .lp-inner, body.introing .lp-veil { opacity: 0; transition: opacit
   .wd-panel { position: absolute; top: 62px; bottom: 214px; width: 46vw; padding: 10px 10px 12px; gap: 9px; }
   .wd-left { left: 0; }
   .wd-right { right: 0; }
-  .wd-base { width: calc(100% - 20px); bottom: 10px; padding: 11px 12px; }
+  .wd-bottom-stack { width: calc(100% - 20px); bottom: 10px; }
+  .wd-base { padding: 11px 12px; }
   .wd-id b { font-size: 20px; }
   .wd-stats { grid-template-columns: repeat(4, 1fr); gap: 5px; }
   .wd-stat { padding: 5px 6px; }

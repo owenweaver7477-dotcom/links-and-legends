@@ -697,6 +697,28 @@ export function levelRanking(limit = 100) {
   return rows.slice(0, limit).map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
+/**
+ * How many rankable profiles sit at each level, 1 through 100 — the whole
+ * player base compressed into a hundred integers. This is what a wardrobe
+ * item's "X% of players own this" reads off: an item unlocked at level N is
+ * owned by everyone at level N or above, so the percentage is
+ * `sum(counts[N..100]) / total`. Sent to the client wholesale rather than
+ * as a per-item lookup, since a hundred integers is cheaper than a request
+ * per cosmetic and the histogram barely changes between two people opening
+ * their wardrobe minutes apart.
+ */
+export function levelHistogram() {
+  const counts = new Array(101).fill(0);   // counts[0] unused; levels run 1-100
+  let total = 0;
+  for (const [pid, p] of profiles) {
+    if (!rankable(pid, p)) continue;
+    const lv = Math.min(100, Math.max(1, levelFromXp(p.xp || 0).level));
+    counts[lv]++;
+    total++;
+  }
+  return { counts, total };
+}
+
 /* ---- the two boards that reset -----------------------------------------
    A weekly and a seasonal ladder need a baseline: how much XP you had when
    the period started. Stored on the profile rather than computed from a log

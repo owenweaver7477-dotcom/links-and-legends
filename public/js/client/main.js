@@ -643,10 +643,22 @@ function refreshCourseLegend() {
   if (HUD.el.lpCourseName && meta) HUD.el.lpCourseName.textContent = meta.name;
 }
 
+/* The population's level spread, for the wardrobe's "X% of players own
+   this" line. Fetched once and cached module-wide rather than per item —
+   it barely moves between two people opening their wardrobe minutes
+   apart, and a hundred integers is cheap to just keep around. */
+let levelHistFetched = false;
+function ensureLevelHist() {
+  if (levelHistFetched) return;
+  levelHistFetched = true;
+  Net.levelStats(hist => { HUD.levelHist = hist; });
+}
+
 function openWardrobe() {
   G.screen = 'wardrobe';
   HUD.show('wardrobe');
   HUD.bindWardrobe();
+  ensureLevelHist();
   wd.t = 0; wd.hold = 0;
   wdCourse(COURSE_ORDER.indexOf(pickedCourse) >= 0 ? COURSE_ORDER.indexOf(pickedCourse) : 0);
   drawWardrobe();

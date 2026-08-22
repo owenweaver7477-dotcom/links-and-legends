@@ -204,7 +204,7 @@ import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile,
          worldRanking, worldPlace, handicapRanking, handicapPlace, levelRanking, rememberName,
          setClubSkin,
-         weeklyGainers, seasonBoard, courseBoard } from './server/profiles.js';
+         weeklyGainers, seasonBoard, courseBoard, levelHistogram } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
 import { EMOTES, meleeById } from './public/js/client/celebrations.js';
 import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allowChat, PHRASES, clean } from './server/chat.js';
@@ -1684,6 +1684,15 @@ io.on('connection', socket => {
       friendRows: pid ? friendBoardRows(pid) : [],
       me: pid ? { world: worldPlace(pid), handicap: handicapPlace(pid) } : null
     });
+  });
+
+  /* The wardrobe's "X% of players own this" read. Its own tiny handler
+     rather than folded into world:boards: the wardrobe can open straight
+     from the front page, before a player has ever touched leaderboards,
+     and world:boards' four full ladders are a lot to fetch for one
+     hundred-integer histogram. */
+  socket.on('profiles:levels', (d, ack) => {
+    if (typeof ack === 'function') ack(levelHistogram());
   });
 
   /* ═══════════════════════════════════════════════════ FRIENDS ═══════
