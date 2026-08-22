@@ -196,7 +196,7 @@ import { storeName } from './server/store.js';
 import { terrainFor } from './public/js/shared/terrain.js';
 import { BIOMES, COURSE_ORDER, BALL_COLORS, MAX_PLAYERS, HOLES_PER_COURSE,
          biomeFor, courseMeta } from './public/js/shared/biomes.js';
-import { ShotSim, calibrateCarries, findPlayableDrop } from './public/js/shared/ballistics.js';
+import { ShotSim, calibrateCarries } from './public/js/shared/ballistics.js';
 import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs.js';
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/avatars.js';
@@ -2333,44 +2333,6 @@ io.on('connection', socket => {
 
     if (everyoneDone(room)) finishHole(room);
     else pickNextToPlay(room);
-    broadcastState(room);
-  });
-
-  /**
-   * Take a drop — the safety valve, not a rule.
-   *
-   * Nothing in this engine currently marks a lie unplayable, which is
-   * exactly the problem: the one thing worse than a bug that makes a ball
-   * unreachable is a bug like that with no way out of it. Whatever the
-   * cause turns out to be for any given report, a player who can always
-   * get back to a swing will forgive it; one stuck on hole 6 with no
-   * button to press closes the tab.
-   *
-   * Free of penalty, deliberately — see the roadmap note this shipped
-   * against. Relocates the BALL only; the client snaps the avatar to it
-   * the same way F already does, so the player is not left stranded next
-   * to a ball that just moved.
-   */
-  const lastDropAt = new Map();     // pid -> timestamp, so this cannot be spammed
-  socket.on('player:drop', () => {
-    const ref = sockets.get(socket.id); if (!ref) return;
-    const room = rooms.get(ref.code); if (!room || room.state !== 'playing') return;
-    const p = room.players.find(x => x.pid === ref.pid);
-    if (!p || p.finished || p.spectator) return;
-    if (room.turnPid !== p.pid) return;
-    if (inCart(p)) return;
-    const now = Date.now();
-    if (now - (lastDropAt.get(p.pid) || 0) < 4000) return;   // one every 4s, at most
-    lastDropAt.set(p.pid, now);
-
-    const T = terrain(room), h = hole(room);
-    const spot = findPlayableDrop(T, h, p.x, p.z);
-    p.x = spot.x; p.z = spot.z; p.lie = T.surfaceAt(spot.x, spot.z).id;
-
-    room.seq++;
-    io.to(room.code).emit('player:dropped', { pid: p.pid, x: p.x, z: p.z, lie: p.lie });
-    toast(room, `${p.name} took a drop.`, 'info');
-    pickNextToPlay(room);
     broadcastState(room);
   });
 

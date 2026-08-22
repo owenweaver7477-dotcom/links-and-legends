@@ -32,7 +32,7 @@ for (const id of [
   'btnClubhouse', 'btnShopBack', 'homeCoins',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
-  'btnPrivacy', 'optPrivate', 'btnDrop',
+  'btnPrivacy', 'optPrivate',
   'btnFeedbackMid', 'btnFeedbackNew', 'modalFeedback', 'fbCats', 'fbBody',
   'fbCourseNote', 'fbErr', 'btnFeedbackCancel', 'btnFeedbackSend', 'feedbackBoard',
   'modalReport', 'reportTarget', 'reportBody', 'reportErr', 'btnReportCancel', 'btnReportSend',
@@ -1135,11 +1135,6 @@ HUD.setCart = c => {
 HUD.setWalkPrompt = (text) => {
   el.walkbar.classList.toggle('show', !!text);
   if (text) el.walkText.textContent = text;
-};
-
-/** The "Take a drop" safety valve — see updateWalkPrompt in main.js. */
-HUD.showDropButton = (show) => {
-  if (el.btnDrop) el.btnDrop.hidden = !show;
 };
 
 /**

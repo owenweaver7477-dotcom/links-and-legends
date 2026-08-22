@@ -454,20 +454,6 @@ html.touch .touchpad[hidden] { display: none !important; }
   border-radius: 4px; padding: 1px 5px; margin-left: 7px; font: inherit; font-size: 10.5px; }
 .walkbar #walkText { font-weight: 600; color: #ffd76b; }
 
-/* the "Take a drop" safety valve — only ever shown after several seconds
-   stuck, so it must read as help being offered, not as a normal control */
-.dropbtn { position: absolute; bottom: 168px; left: 50%; transform: translateX(-50%);
-  z-index: 7; display: flex; align-items: baseline; gap: 8px;
-  background: linear-gradient(180deg, #e6a83c, #c9862a); color: #241704;
-  border: 1px solid rgba(255,255,255,.35); border-radius: 999px;
-  padding: 9px 18px; font: inherit; cursor: pointer;
-  box-shadow: 0 10px 30px rgba(201,134,42,.4), 0 0 0 4px rgba(230,168,60,.14);
-  animation: dropbtn-in .25s ease-out; }
-.dropbtn b { font-size: 13px; font-weight: 800; }
-.dropbtn span { font-size: 12px; font-weight: 700; }
-.dropbtn:hover { filter: brightness(1.08); }
-@keyframes dropbtn-in { from { opacity: 0; transform: translateX(-50%) translateY(6px); } }
-
 /* appearance picker */
 /* The wardrobe.  Nine groups now rather than four, so it scrolls inside the
    panel instead of pushing the card off the screen, and the style groups get

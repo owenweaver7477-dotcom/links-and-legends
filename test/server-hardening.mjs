@@ -265,7 +265,7 @@ const run = async () => {
   const nr = await rpc(nA, 'room:create', { name: 'Null', pid: 'null_a' });
   const nCode = nr?.code;
   for (const evt of ['room:course', 'room:tees', 'room:privacy', 'player:prefs', 'player:look',
-                     'shop:buy', 'player:move', 'game:swing', 'cart:hail', 'player:drop',
+                     'shop:buy', 'player:move', 'game:swing', 'cart:hail',
                      'feedback:submit', 'feedback:list', 'feedback:vote', 'player:report', 'net:ping', 'player:kick', 'login:claim', 'case:open', 'case:buy']) {
     nA.emit(evt, null);
     nA.emit(evt, undefined);
@@ -417,7 +417,7 @@ const run = async () => {
   const EVENTS = ['room:create', 'room:join', 'room:course', 'room:tees', 'room:privacy',
                   'player:prefs', 'player:move', 'player:look', 'cart:hail', 'shop:buy',
                   'game:start', 'game:swing', 'game:next', 'game:again', 'room:lobby',
-                  'player:drop', 'feedback:submit', 'feedback:list', 'feedback:vote',
+                  'feedback:submit', 'feedback:list', 'feedback:vote',
                   'player:report', 'net:ping', 'player:kick', 'login:claim', 'case:open', 'case:buy'];
   const JUNK = [null, undefined, 0, '', 'x', [], {}, true, NaN,
                 { a: { b: { c: 1 } } }, { item: '__proto__' }, { pid: null }, { code: null }];

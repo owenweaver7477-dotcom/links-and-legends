@@ -1774,27 +1774,12 @@ function updateCamera(dt) {
   rig.update(dt, 1.0);
 }
 
-/* "Take a drop" — the safety valve, not a rule (see server.js's handler
-   for the fuller reasoning). Tracked here rather than as a one-off timer
-   because this function already runs every frame and already knows
-   exactly the condition that matters: your turn, not mid-animation, and
-   still not able to swing. Nothing currently blocks a swing once you are
-   AT your ball — so in practice this fires only when a player genuinely
-   cannot get there, which is exactly the case with no other way out. */
-const DROP_STUCK_MS = 5000;
-let stuckSince = null;
-
 /** The nudge that tells you what the game wants from you right now. */
 function updateWalkPrompt() {
   const t = turnPlayer();
   const seated = carts.inCart;
   const mine = G.screen === 'game' && G.room?.state === 'playing'
     && t && t.pid === G.myPid && !G.anim && !me()?.finished;
-
-  const stuck = mine && !seated && !atMyBall();
-  if (stuck) { if (stuckSince == null) stuckSince = Date.now(); }
-  else stuckSince = null;
-  HUD.showDropButton(stuck && Date.now() - stuckSince >= DROP_STUCK_MS);
 
   // The shot controls follow proximity AND the seat, not just whose turn it
   // is — walking away from your ball, or driving off in a cart, has to
@@ -2687,13 +2672,6 @@ Net.on('gather', d => {
   }
 });
 
-// The server also sends the room-wide "X took a drop" toast over the
-// ordinary toast channel — this only handles the part that is specific to
-// being the one who dropped: the ball already moved (room:state carries
-// it), so catch the golfer up to it the same way F does, rather than
-// leaving them to walk to a spot that was just proven unreachable.
-Net.on('dropped', d => { if (d.pid === G.myPid) teleportToMyBall(); });
-
 Net.on('chat', d => HUD.chatMessage(d, G.myPid));
 
 Net.on('emote', d => {
@@ -3237,10 +3215,6 @@ document.getElementById('btnCreate').addEventListener('click', () => {
 document.getElementById('btnPrivacy')?.addEventListener('click', () => {
   if (!G.room || G.room.hostPid !== G.myPid) return;
   Net.setPrivacy(G.room.privacy === 'private' ? 'public' : 'private');
-});
-document.getElementById('btnDrop')?.addEventListener('click', () => {
-  Net.takeDrop();
-  HUD.showDropButton(false);       // hide immediately; the server round-trip settles it
 });
 /* Joining by code, from the box or from the online panel. */
 /**

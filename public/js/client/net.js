@@ -178,7 +178,6 @@ Net.connect = async () => {
      everyone the moment it changes at all. */
   Net.socket.on('records:beat', d => fire('records', d));
   Net.socket.on('scramble:gather', d => fire('gather', d));
-  Net.socket.on('player:dropped', d => fire('dropped', d));
 };
 
 /* ═══════════════════════════════════════ EVERY ASK GETS AN ANSWER ═══════
@@ -241,8 +240,6 @@ Net.join = (code, name, cb) => {
 Net.pickCourse = courseId => Net.socket?.emit('room:course', { courseId });
 Net.pickTees = teeSet => Net.socket?.emit('room:tees', { teeSet });
 Net.setPrivacy = privacy => Net.socket?.emit('room:privacy', { privacy });
-/** The "Take a drop" safety valve — free of penalty. See server.js's handler. */
-Net.takeDrop = () => Net.socket?.emit('player:drop');
 
 /* ---------------------------------------------------------- feedback --- */
 Net.submitFeedback = (data, cb) => ask('feedback:submit', data, res => cb?.(res));
