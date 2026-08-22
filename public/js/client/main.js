@@ -1796,6 +1796,16 @@ function updateCamera(dt) {
   }
 
   if (G.room?.state === 'playing' && !me()?.finished) {
+    // Walking with first person toggled on but not yet over the ball (the
+    // addressing view above only covers iAmUp && atMyBall) used to fall
+    // through to here regardless of G.view — the avatar was hidden by
+    // updateAvatars() but the camera stayed exactly where third person left
+    // it, so first person did nothing but delete the player from the scene.
+    if (G.view === 'first') {
+      rig.walkFirst(G.T, walker, swing.aim);
+      rig.update(dt, 1.4);
+      return;
+    }
     rig.overShoulder(G.T, walker, swing.aim, iAmUp && atMyBall());
     rig.update(dt, 1.4);
     return;

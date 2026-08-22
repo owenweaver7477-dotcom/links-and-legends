@@ -148,6 +148,27 @@ export class CameraRig {
   }
 
   /**
+   * True eye-level first person while walking — the camera IS the golfer's
+   * own eyes, not a third-person chase cam with the avatar deleted out of
+   * it. (That was the actual bug: toggling first person hid the avatar via
+   * setVisible in main.js, but nothing ever told the CAMERA to move, so the
+   * view sat exactly where overShoulder left it, looking at empty air.)
+   *
+   * Yaw follows aimDir, exactly like overShoulder, and for the identical
+   * reason: movement is camera-relative, so binding this to the walker's
+   * own facing would feed the two into each other and curve every step.
+   */
+  walkFirst(terrain, walker, aimDir) {
+    const yaw = aimDir + this.orbit;
+    const ex = walker.x, ez = walker.z;
+    const eyeY = terrain.heightAt(ex, ez) + EYE;
+    this.tPos.set(ex, eyeY, ez);
+    const ahead = 20;
+    const lx = ex + Math.sin(yaw) * ahead, lz = ez + Math.cos(yaw) * ahead;
+    this.tLook.set(lx, eyeY + this.pitch * 10, lz);
+  }
+
+  /**
    * Behind a moving cart.  The yaw follows the CART's heading, which is safe
    * in a way it is not on foot: steering is heading-relative, so there is no
    * feedback loop for the camera to spiral into.  (Walking is camera-relative,
