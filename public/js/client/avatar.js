@@ -87,6 +87,17 @@ const part = (mat, w, h, d, x, y, z) => {
   return m;
 };
 
+/** A hex colour darkened (negative amount) or lightened (positive) by a
+ *  fraction — the cheap way to get a matching cuff or clasp shade for a
+ *  worn item without adding a second colour field to every wardrobe
+ *  entry that might one day want a trim detail. */
+const shadeHex = (hex, amount) => {
+  const c = new THREE.Color(hex);
+  if (amount < 0) c.multiplyScalar(1 + amount);
+  else c.lerp(new THREE.Color(0xffffff), amount);
+  return '#' + c.getHexString();
+};
+
 export class Avatar {
   /**
    * @param {object} look  {cap, shirt, skin, trousers} hex strings
@@ -420,6 +431,15 @@ export class Avatar {
       this.accessory.add(part(lens, 0.072, H * 0.020, 0.012, 0.052, H * 0.0705, 0.117));
       this.accessory.add(part(lens, 0.072, H * 0.020, 0.012, -0.052, H * 0.0705, 0.117));
       this.accessory.add(part(lens, 0.036, H * 0.005, 0.010, 0, H * 0.0705, 0.117));
+      /* Temple arms. A front-only lens pair with nothing running back to
+         the ear reads as safety goggles floated in front of a face, not
+         glasses — the arms are what a real pair actually hangs from, and
+         their absence was the single most "unfinished" thing on the
+         accessory list. One thin bar per side, running from each lens's
+         outer edge back along the head toward ear height. */
+      const armLen = H * 0.062, armY = H * 0.0705;
+      this.accessory.add(part(lens, 0.014, H * 0.010, armLen, 0.101, armY, 0.117 - armLen / 2 + H * 0.006));
+      this.accessory.add(part(lens, 0.014, H * 0.010, armLen, -0.101, armY, 0.117 - armLen / 2 + H * 0.006));
     }
   }
 
@@ -454,7 +474,14 @@ export class Avatar {
       const gm = mine(gl.hex);
       // over the lead hand: left for a right-handed swing
       this.armL.add(part(gm, 0.132, H * 0.070, 0.132, 0, -H * 0.300, 0));
-      if (gl.id === 'winter') this.armR.add(part(gm, 0.132, H * 0.070, 0.132, 0, -H * 0.300, 0));
+      // a cuff ring at the wrist, a shade darker — without it the glove was
+      // one flat colour merging straight into the bare forearm above it,
+      // so the whole hand read as a single undifferentiated block
+      this.armL.add(part(mine(shadeHex(gl.hex, -0.22)), 0.140, H * 0.014, 0.140, 0, -H * 0.268, 0));
+      if (gl.id === 'winter') {
+        this.armR.add(part(gm, 0.132, H * 0.070, 0.132, 0, -H * 0.300, 0));
+        this.armR.add(part(mine(shadeHex(gl.hex, -0.22)), 0.140, H * 0.014, 0.140, 0, -H * 0.268, 0));
+      }
     }
 
     /* ---- the watch, on the trail wrist so the glove does not cover it --- */
@@ -466,6 +493,9 @@ export class Avatar {
       // as a stripe painted on the arm
       this.armR.add(part(mine(wa.id === 'sport' ? '#4a9bd4' : '#f2f4f0'),
         0.052, H * 0.012, 0.030, 0, -H * 0.258, 0.056));
+      // the clasp — a small darker tab on the underside, the one detail
+      // that told a watch band apart from a plain painted-on bracelet
+      this.armR.add(part(mine(shadeHex(wa.hex, -0.35)), 0.026, H * 0.008, 0.020, 0, -H * 0.258, -0.058));
     }
 
     /* ---- arm sleeves ---------------------------------------------------- */
