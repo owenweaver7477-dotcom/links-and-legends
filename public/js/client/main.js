@@ -25,10 +25,13 @@ import { isAct, actionFor, keysFor, resetBinds } from './binds.js';
 import { Net } from './net.js';
 import { initCG, loadingStart, loadingStop, gameplayStart, gameplayStop,
          happytime, inviteLink, invitedRoom, storeGet, storeSet, CG } from './crazygames.js';
+import { funnel, trackReturn, trackPerf, trackHoleOutcome, trackCoins } from './telemetry.js';
 
 // The portal measures the download between here and the first gameplay
 // start, so this is the first thing the module does.
 loadingStart();
+funnel.pageLoad();
+trackReturn();
 import { Sound } from './sound.js';
 import { aidsFor, DEFAULT_DIFFICULTY } from '../shared/difficulty.js';
 import { showShot, hide as hideShotCard } from './shotcard.js';
@@ -1273,6 +1276,7 @@ function holdAim(el, dir) {
    shown alongside the average. */
 let _fpsAcc = 0, _fpsN = 0, _fpsAt = 0;
 let _slowRuns = 0, _autoDropped = false;
+let _lastFrameMs = null;
 const _frameHist = [];
 function measureFrame(now) {
   const dt = _fpsAt ? now - _fpsAt : 0;
@@ -1290,6 +1294,7 @@ function measureFrame(now) {
   if (_fpsN < 30) return;
   const ms = _fpsAcc / _fpsN;
   _fpsAcc = 0; _fpsN = 0;
+  _lastFrameMs = ms;   // read by telemetry's perf_sample — see trackPerf's call site
   if (HUD.perfVisible()) {
     const r = scene.renderer.info.render;
     let worst = 0;
@@ -2728,6 +2733,7 @@ Net.on('profile', prof => {
   // the post-round payout, announced once the results are up
   if (before && prof.coins > before.coins) {
     HUD.toast(`🪙 +${prof.coins - before.coins} coins · rating ${prof.rating}`, 'good', 4200);
+    trackCoins(prof.coins - before.coins, 'round_payout');
   }
 });
 
@@ -2780,17 +2786,37 @@ Net.on('connect', () => {
    snapshotted once. */
 Net.on('netquality', net => HUD.renderNetQuality(net));
 
+/* GPU renderer string is the one field here that needs actual work to get:
+   WEBGL_debug_renderer_info is only sometimes exposed, and reading it
+   directly rather than through some perf-overlay indirection means this
+   keeps working even from the Leaderboards screen, with no course ever
+   loaded and no renderer overlay running. Module scope rather than local to
+   boot(), so route()'s telemetry hook can reach it too. */
+function gpuString() {
+  try {
+    const gl = scene.renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+  } catch { return undefined; }
+}
+
 /* ===================================================================== */
 /*  ROUTING                                                               */
 /* ===================================================================== */
 function route() {
   const r = G.room;
+  const prevScreen = G.screen;   // §0.3's funnel fires on a TRANSITION into a
+                                  // screen, not on every re-route while sitting
+                                  // on one — route() runs on nearly every state
+                                  // change, including ones that never move you
+                                  // anywhere, like someone else's ball colour.
   // the touch pad belongs to a live round, never over a menu
   const inPlay = !!r && r.state === 'playing';
   HUD.showTouchPad(inPlay);
   /* The portal schedules its ads around these, so they have to mean actual
      play: not the title screen, not the clubhouse, not the hole summary. */
   if (inPlay) gameplayStart(); else gameplayStop();
+  if (inPlay && prevScreen !== 'game') funnel.tee(r.courseId);
   if (!G.joined || !r) {
     /* The landing page outranks the default route. Connecting to the server
        fires this, and without the guard the front door was replaced by the
@@ -2799,6 +2825,7 @@ function route() {
     if (G.screen === 'landing') { menuBackdrop(); return; }
     G.screen = 'landing'; HUD.show('landing');
     menuBackdrop();                  // back out of a room: the tee returns
+    if (prevScreen !== 'landing') funnel.menu();
     return;
   }
   if (r.state === 'lobby') {
@@ -2829,6 +2856,10 @@ function route() {
     const meRow = r.players.find(p => p.pid === G.myPid && !p.spectator);
     if (meRow) {
       const tot = meRow.scores.reduce((a, v) => a + (v ?? 0), 0);
+      if (prevScreen !== 'results') {
+        funnel.roundComplete(r.courseId, tot);
+        if (_lastFrameMs != null) trackPerf({ ms: _lastFrameMs, fps: 1000 / _lastFrameMs, gpu: gpuString(), quality: HUD.quality });
+      }
       const others = r.players
         .filter(p => !p.spectator && p.pid !== G.myPid)
         .map(p => ({ pid: p.pid, name: p.name,
@@ -2850,6 +2881,10 @@ function route() {
     // seconds here costs nothing and is purely local.
     if (celebrating() || G.anim) { G.screen = 'game'; HUD.show(null); return; }
     G.screen = 'holeover'; HUD.show('holeover');
+    if (prevScreen !== 'holeover') {
+      trackHoleOutcome(r.holeIndex + 1, true, r.courseId);
+      if (r.holeIndex === 0) funnel.hole1Complete(r.courseId);
+    }
     HUD.renderHoleOver(r, G.myPid, G.course, G.profile?.difficulty || DEFAULT_DIFFICULTY); return;
   }
   G.screen = 'game';
@@ -3839,18 +3874,6 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   HUD.onWorldTab = () => Net.ranking(d => HUD.renderWorld(d, G.myPid));
 
   /* -------------------------------------------------------- feedback --- */
-  /* GPU renderer string is the one field here that needs actual work to
-     get: WEBGL_debug_renderer_info is only sometimes exposed, and reading
-     it directly rather than through some perf-overlay indirection means
-     this keeps working even from the Leaderboards screen, with no course
-     ever loaded and no renderer overlay running. */
-  function gpuString() {
-    try {
-      const gl = scene.renderer.getContext();
-      const ext = gl.getExtension('WEBGL_debug_renderer_info');
-      return String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
-    } catch { return undefined; }
-  }
   const sessionStart = performance.now();
   function gatherContext() {
     return {
@@ -3972,6 +3995,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      An invite link is somebody being asked to join a specific game right
      now — sending them to a landing page first would be answering a knock
      at the door with a brochure. Everybody else gets the landing page. */
+  funnel.menu();   // the one funnel_menu that matters: a fresh session's first paint
   if (room) {
     HUD.show('landing');
   } else {
@@ -4091,11 +4115,13 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     HUD.homeError(wakeTries < 14 ? '' : msg);
     setTimeout(() => Net.connect(), Math.min(3000 + wakeTries * 1000, 10000));
   });
+  let firstConnect = true;
   Net.on('connect', () => {
     wakeTries = 0;
     HUD.homeError('');
     bootSay('Ready', 100);
     bootDone();
+    if (firstConnect) { firstConnect = false; funnel.assetsReady(); }
   });
   await Net.connect();
   watchPresence();
