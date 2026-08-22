@@ -196,7 +196,7 @@ import { storeName } from './server/store.js';
 import { terrainFor } from './public/js/shared/terrain.js';
 import { BIOMES, COURSE_ORDER, BALL_COLORS, MAX_PLAYERS, HOLES_PER_COURSE,
          biomeFor, courseMeta } from './public/js/shared/biomes.js';
-import { ShotSim, calibrateCarries } from './public/js/shared/ballistics.js';
+import { ShotSim, calibrateCarries, dryPlayable } from './public/js/shared/ballistics.js';
 import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs.js';
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/avatars.js';
@@ -2339,6 +2339,54 @@ io.on('connection', socket => {
         }
       }
     }
+
+    if (everyoneDone(room)) finishHole(room);
+    else pickNextToPlay(room);
+    broadcastState(room);
+  });
+
+  /* THE SAFETY VALVE. A stuck player — embedded in a prop, wedged on a lie
+     the terrain gen never meant to be reachable, or just lost in the rough
+     with no shot they trust — can stand there forever otherwise. One penalty
+     stroke, and the ball goes to the nearest dry, playable ground with room
+     to swing. Same `dryPlayable` search the water-hazard drop already uses
+     (ballistics.js), so "clear of trouble" means the same thing here as it
+     does mid-shot. */
+  socket.on('game:drop', () => {
+    const ref = sockets.get(socket.id); if (!ref) return;
+    const room = rooms.get(ref.code); if (!room || room.state !== 'playing') return;
+    const p = room.players.find(x => x.pid === ref.pid);
+    if (!p || p.finished || p.spectator) return;
+    if (room.turnPid !== p.pid) return socket.emit('toast', { msg: "It isn't your turn.", kind: 'warn' });
+    if (inCart(p)) return socket.emit('toast', { msg: 'Get out of the cart to play.', kind: 'warn' });
+
+    const h = hole(room);
+    const T = terrain(room);
+    const from = { x: p.x, z: p.z };
+    let drop = null;
+    outer:
+    for (let r = 2; r <= 60; r += 2) {
+      for (let k = 0; k < 24; k++) {
+        const a = (k / 24) * Math.PI * 2;
+        const cx = from.x + Math.cos(a) * r, cz = from.z + Math.sin(a) * r;
+        if (dryPlayable(T, h, cx, cz)) { drop = { x: cx, z: cz }; break outer; }
+      }
+    }
+    if (!drop) return socket.emit('toast', { msg: "Couldn't find safe ground nearby.", kind: 'warn' });
+
+    p.strokes += 1;
+    p.penalties += 1;
+    p.ax = p.x; p.az = p.z;
+    p.x = drop.x; p.z = drop.z; p.lie = T.surfaceAt(drop.x, drop.z).id;
+
+    if (p.strokes >= h.maxStrokes) { p.strokes = h.maxStrokes; p.finished = true; }
+    if (p.finished) p.scores[room.holeIndex] = p.strokes;
+
+    room.seq++;
+    io.to(room.code).emit('game:drop', {
+      seq: room.seq, pid: p.pid,
+      from, x: drop.x, z: drop.z, lie: p.lie, strokes: p.strokes
+    });
 
     if (everyoneDone(room)) finishHole(room);
     else pickNextToPlay(room);
