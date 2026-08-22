@@ -16,7 +16,7 @@ import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
-import { RARITIES } from '../shared/cases.js';
+import { RARITIES, CASE_POOL } from '../shared/cases.js';
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
@@ -41,7 +41,8 @@ for (const id of [
   'lpRewardsBtn', 'lpRewardsSub', 'lpRewardsBadge',
   'modalRewards', 'btnRewardsClose', 'rwStreakTxt', 'rwFreezes', 'rwGrid', 'btnRewardsClaim', 'rwErr',
   'rwGems', 'rwCases', 'rwCasesS', 'btnRewardsOpenCase', 'btnRewardsBuyCase',
-  'modalCase', 'caseStage', 'caseBox', 'caseHint', 'caseReveal', 'caseBurst', 'caseItemArt',
+  'modalCase', 'caseStage', 'caseBox', 'caseHint', 'caseReelWrap', 'caseReelTrack',
+  'caseReveal', 'caseBurst', 'caseItemArt',
   'caseRarity', 'caseItemName', 'caseItemKind', 'btnCaseDone',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
   'wArrow', 'wSpeed', 'wDesc', 'wWeather',
@@ -1245,17 +1246,119 @@ const CASE_KIND_ICON = { decal: 'decal', trail: 'trail', title: 'title', ball: '
 /** Back to "tap to open", for the moment the modal is shown. */
 HUD.resetCaseModal = () => {
   el.caseStage.hidden = false;
+  el.caseReelWrap.hidden = true;
   el.caseReveal.hidden = true;
   el.btnCaseDone.hidden = true;
   el.caseBox.className = 'case-box';
   el.caseHint.textContent = 'Tap to open';
+  el.caseReelWrap.closest('.casecard')?.classList.remove('reeling');
 };
 
 HUD.shakeCaseBox = () => { el.caseBox.classList.add('shaking'); };
 
+/* One chip's markup: an icon tinted and bordered to a colour, the way the
+   reveal card's own art already works (see CASE_KIND_ICON / icons.js's
+   currentColor set). Gems fill in as a plain gem on the "bonus" green — the
+   colour HUD.revealCase already uses for a gems-only result. */
+const GEMS_CHIP_COLOR = '#8fe07a';
+function reelChipHTML(kind, color) {
+  return `<div class="case-reel-chip" style="--chip-color:${color}">` +
+    `<span style="color:${color}">${icon(kind, { size: 34 })}</span></div>`;
+}
+function decoyChipHTML(rarityId) {
+  const pool = CASE_POOL.filter(it => it.rarity === rarityId);
+  const it = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+  const rarity = RARITIES.find(r => r.id === rarityId) || RARITIES[0];
+  const kind = it ? (CASE_KIND_ICON[it.kind] || 'gift') : 'gem';
+  return reelChipHTML(kind, it ? (it.color || rarity.color) : rarity.color);
+}
+
+const CHIP_W = 76, CHIP_GAP = 12, CHIP_STEP = CHIP_W + CHIP_GAP;   // must match .case-reel-chip in style.css
+const REEL_LEN = 34;
+const REEL_MS = 4200;
+
+/**
+ * Spin the reel to `result` (already server-committed — this never decides
+ * the outcome, only how long the player waits to see it, which is the
+ * whole point of doing this client-side at all). Everything before the
+ * final chip is a decoy sampled from the real case pool, weighted toward
+ * the result's own rarity for the last couple of slots so there's a
+ * near-miss right before it lands, the way every reel like this plays.
+ *
+ * `onTick(strength)` fires once per chip crossing the pointer, for a sound
+ * cue; `onSettle()` fires once the strip has actually stopped, and is when
+ * the caller should hand off to HUD.revealCase.
+ */
+HUD.playCaseReel = (result, { onTick, onSettle } = {}) => {
+  el.caseStage.hidden = true;
+  el.caseReelWrap.hidden = false;
+  el.caseReelWrap.closest('.casecard')?.classList.add('reeling');
+
+  const isItem = result.kind === 'item';
+  const rarity = isItem ? (RARITIES.find(r => r.id === result.rarity) || RARITIES[0])
+                         : { id: null, color: GEMS_CHIP_COLOR };
+  const targetIdx = REEL_LEN - 4 + Math.floor(Math.random() * 3);   // land near, not at, the very end
+
+  const chips = [];
+  for (let i = 0; i < REEL_LEN; i++) {
+    if (i === targetIdx) {
+      chips.push(isItem
+        ? reelChipHTML(CASE_KIND_ICON[result.item.kind] || 'gift', result.item.color || rarity.color)
+        : reelChipHTML('gem', GEMS_CHIP_COLOR));
+      continue;
+    }
+    // the two slots right before the landing spot lean toward the same
+    // rarity as the real result — a deliberate near-miss, not a coincidence
+    const nearMiss = isItem && i >= targetIdx - 2 && i < targetIdx && Math.random() < 0.7;
+    const rollRarity = nearMiss ? rarity.id
+      : RARITIES[Math.floor(Math.random() * RARITIES.length)].id;
+    chips.push(decoyChipHTML(rollRarity));
+  }
+  el.caseReelTrack.innerHTML = chips.join('');
+
+  const track = el.caseReelTrack;
+  track.style.transition = 'none';
+  track.style.transform = 'translateX(0px)';
+  void track.offsetWidth;   // force the reset above to apply before animating
+
+  const jitter = (Math.random() * 2 - 1) * (CHIP_W * 0.28);
+  const targetX = -(targetIdx * CHIP_STEP + CHIP_STEP / 2) + jitter;
+  track.style.transition = `transform ${REEL_MS}ms cubic-bezier(.1,.7,.1,1)`;
+  requestAnimationFrame(() => { track.style.transform = `translateX(${targetX}px)`; });
+
+  // Ticking: watch which chip is actually under the pointer each frame,
+  // rather than trying to predict it from the easing curve — that stays
+  // correct no matter how the transition is timed, CSS-driven or not.
+  if (onTick) {
+    const wrapRect = el.caseReelWrap.getBoundingClientRect();
+    const pointerX = wrapRect.left + wrapRect.width / 2;
+    let last = null;
+    const start = performance.now();
+    const watch = now => {
+      if (now - start > REEL_MS + 80) return;
+      for (const c of track.children) {
+        const r = c.getBoundingClientRect();
+        if (pointerX >= r.left && pointerX < r.right) {
+          if (c !== last) { last = c; onTick(); }
+          break;
+        }
+      }
+      requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+  }
+
+  let done = false;
+  const finish = () => { if (done) return; done = true; onSettle?.(); };
+  track.addEventListener('transitionend', finish, { once: true });
+  setTimeout(finish, REEL_MS + 250);   // a hidden tab throttles transitionend; never strand the player on the reel
+};
+
 /** The payoff. `result` is exactly what Net.openCase's ack carries. */
 HUD.revealCase = (result) => {
   el.caseStage.hidden = true;
+  el.caseReelWrap.hidden = true;
+  el.caseReelWrap.closest('.casecard')?.classList.remove('reeling');
   el.caseReveal.hidden = false;
   el.btnCaseDone.hidden = false;
   const isItem = result.kind === 'item';
@@ -1279,6 +1382,7 @@ HUD.revealCase = (result) => {
     el.caseItemKind.textContent = 'you already own everything in that tier';
   }
   el.caseReveal.classList.toggle('legend', isItem && result.rarity === 'legend');
+  el.caseReveal.classList.toggle('mythic', isItem && result.rarity === 'mythic');
 };
 
 /** The link to send someone.  Honours a tunnel or a deployed host as-is. */

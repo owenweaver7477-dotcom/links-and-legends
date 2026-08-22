@@ -43,18 +43,21 @@ test('owning the entire pool converts the case to gems instead of failing', () =
 });
 
 test('a thin tier falls through to a rarer one rather than handing out nothing', () => {
-  // own everything EXCEPT the legend tier — every standard/tour/pro roll
-  // must fall through to legend, never come back empty
-  const owned = new Set(CASE_POOL.filter(i => i.rarity !== 'legend').map(caseItemKey));
+  // own everything EXCEPT legend and mythic — every standard/tour/pro roll
+  // must fall through to one of those two, never come back empty. Mythic
+  // sits above legend now, so a roll that starts there must fall through
+  // no further than the two thinnest tiers, not all the way to gems.
+  const owned = new Set(CASE_POOL.filter(i => i.rarity !== 'legend' && i.rarity !== 'mythic').map(caseItemKey));
   for (let i = 0; i < 100; i++) {
     const r = rollCase(owned);
     assert.equal(r.ok, true);
-    if (r.kind === 'item') assert.equal(r.item.rarity, 'legend');
+    if (r.kind === 'item') assert.ok(r.item.rarity === 'legend' || r.item.rarity === 'mythic',
+      `expected legend or mythic, got ${r.item.rarity}`);
   }
 });
 
 test('rolls are weighted toward Standard over many trials, not uniform', () => {
-  const counts = { standard: 0, tour: 0, pro: 0, legend: 0, gems: 0 };
+  const counts = { standard: 0, tour: 0, pro: 0, legend: 0, mythic: 0, gems: 0 };
   const N = 4000;
   for (let i = 0; i < N; i++) {
     const r = rollCase(new Set());
@@ -63,6 +66,7 @@ test('rolls are weighted toward Standard over many trials, not uniform', () => {
   assert.ok(counts.standard > counts.tour, 'Standard should be pulled more than Tour');
   assert.ok(counts.tour > counts.pro, 'Tour should be pulled more than Pro');
   assert.ok(counts.pro > counts.legend, 'Pro should be pulled more than Legend');
+  assert.ok(counts.legend > counts.mythic, 'Legend should be pulled more than Mythic');
   // loose bound, not a strict statistical test — just catching a badly
   // broken weight table, not chasing five-nines confidence
   assert.ok(counts.standard / N > 0.55, `Standard came in at ${(counts.standard / N * 100).toFixed(1)}%, expected roughly 70%`);

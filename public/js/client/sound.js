@@ -150,11 +150,19 @@ Sound.chestOpen = () => {
   noiseBurst({ dur: 0.09, freq: 900, q: 4, gain: 0.18, sweep: 250, delay: 0.12 });
 };
 
+/** The reel — one soft tick per chip crossing the pointer. Short and quiet
+    on purpose: it fires dozens of times a second at the start of the spin,
+    and a tick loud enough to notice on its own would be a drill by the
+    time the reel has slowed down. */
+Sound.reelTick = () => noiseBurst({ dur: 0.025, freq: 1500, q: 8, gain: 0.09 });
+
 /** The reveal. Reuses the same rising-arpeggio idea as Sound.celebrate,
     just keyed by rarity instead of a hole-score tier — one extra, higher
     note per tier up, and Legend gets a small shimmer on top so a big pull
-    is audibly different from a good one, not just differently coloured. */
-const CASE_RARITY_TIER = { standard: 0, tour: 1, pro: 2, legend: 3, gems: 0 };
+    is audibly different from a good one, not just differently coloured.
+    Mythic goes one further again — it is the one pull in a thousand, and
+    the sound has to say so before the player has even read the card. */
+const CASE_RARITY_TIER = { standard: 0, tour: 1, pro: 2, legend: 3, mythic: 4, gems: 0 };
 Sound.reward = (rarity) => {
   const tier = CASE_RARITY_TIER[rarity] ?? 0;
   ping(660, 0.18, 0.22);
@@ -164,6 +172,10 @@ Sound.reward = (rarity) => {
     ping(1318, 0.3, 0.25, 0.3);
     ping(1760, 0.35, 0.16, 0.36);
     ping(2217, 0.4, 0.1, 0.42);
+  }
+  if (tier >= 4) {
+    ping(2637, 0.42, 0.14, 0.5);
+    ping(3136, 0.5, 0.1, 0.58);
   }
 };
 

@@ -26,11 +26,18 @@ import { UNLOCKS } from './unlocks.js';
 
 const CASE_KINDS = new Set(['decal', 'trail', 'title', 'ball']);
 
+/* Mythic carves off the top of what used to be Legend's whole back half
+   (86-100 -> 86-84... i.e. the last three items on the table: Prism,
+   Signature holo, Centurion) rather than inventing a fifth slice of
+   content nobody earns by levelling. Same rule as every other tier here:
+   how deep an item sits in the level table already says how rare it is,
+   Mythic just draws the cut line closer to the top. */
 const RARITY_BOUNDS = [
-  { id: 'standard', name: 'Standard', color: '#9fb0a6', weight: 70, max: 25 },
-  { id: 'tour',     name: 'Tour',     color: '#5ab8ff', weight: 22, max: 50 },
-  { id: 'pro',      name: 'Pro',      color: '#c77dff', weight: 7,  max: 75 },
-  { id: 'legend',   name: 'Legend',   color: '#ffd94a', weight: 1,  max: 100 }
+  { id: 'standard', name: 'Standard', color: '#9fb0a6', weight: 70,  max: 25 },
+  { id: 'tour',     name: 'Tour',     color: '#5ab8ff', weight: 22,  max: 50 },
+  { id: 'pro',      name: 'Pro',      color: '#c77dff', weight: 7,   max: 75 },
+  { id: 'legend',   name: 'Legend',   color: '#ffd94a', weight: 0.9, max: 84 },
+  { id: 'mythic',   name: 'Mythic',   color: '#ff3864', weight: 0.1, max: 100 }
 ];
 export const RARITIES = RARITY_BOUNDS.map(({ id, name, color }) => ({ id, name, color }));
 const rarityFor = at => RARITY_BOUNDS.find(r => at <= r.max) || RARITY_BOUNDS[RARITY_BOUNDS.length - 1];

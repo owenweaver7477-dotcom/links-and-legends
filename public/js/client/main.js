@@ -4074,8 +4074,17 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     Net.openCase(res => {
       caseOpening = false;
       if (!res?.ok) { HUD.toast(res?.error || 'Could not open that.', 'warn', 2000); HUD.el.modalCase.hidden = true; return; }
-      HUD.revealCase(res);
-      Sound.reward?.(res.kind === 'item' ? res.rarity : 'gems');
+      // The item is already committed server-side in `res` — the reel is
+      // pure presentation, deciding nothing. onSettle only fires once the
+      // strip has actually stopped, so the reveal never appears before the
+      // spin does.
+      HUD.playCaseReel(res, {
+        onTick: () => Sound.reelTick?.(),
+        onSettle: () => {
+          HUD.revealCase(res);
+          Sound.reward?.(res.kind === 'item' ? res.rarity : 'gems');
+        }
+      });
     });
   });
   HUD.el.btnCaseDone?.addEventListener('click', () => { HUD.el.modalCase.hidden = true; });
@@ -4268,5 +4277,6 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   window.__frame = frame;        // lets a headless harness drive frames itself
   window.__walker = walker;
   window.__carts = carts;
+  window.__HUD = HUD;
   window.__ready = true;
 })();
