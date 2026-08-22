@@ -1444,6 +1444,24 @@ body.playing .coinhud { display: block; }
   .board { display: none; }
   .playbar { bottom: 4px; padding: 5px; }
 }
+
+/* The touch pad and the hole-map thumbnail both want the left column, and at
+   this height there isn't room for both without landing on top of one
+   another — the pad's own 108px clearance (tuned for a two-row play bar
+   further down the screen) also sits UNDER the single-row bar this short,
+   same root cause as the max-width:560 bump above, just triggered by height
+   instead of width. The thumbnail is the one that gives: its job is done by
+   the Map button's full-screen overlay the instant a touch pad exists, so
+   there is nothing lost in dropping it, only a collision removed. */
+@media (max-height: 480px) and (pointer: coarse) {
+  .minimap { display: none; }
+  .touchpad { bottom: 132px; grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-height: 480px) {
+  html.touch .minimap { display: none; }
+  html.touch .touchpad { bottom: 132px; grid-template-columns: repeat(3, 1fr); }
+}
+
 /* what levelling has given you, and what is next */
 .lvlnext { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
   font-size: 10.5px; color: #8fa694; margin: -2px 0 8px; }
@@ -2183,6 +2201,14 @@ body.side-open .lp-play-fixed { opacity: .5; }
   .lp-inner { justify-content: flex-start; padding-bottom: 108px; }
 }
 @media (max-height: 620px) and (min-width: 701px) {
+  /* A landscape phone is wide, so the max-width:700px rules above never
+     fire — but it is just as short, and centering overflowed content here
+     clips its TOP against the scrollport with no way to scroll back to it
+     (flexbox centers the overflow on both sides, and scrollTop can't go
+     negative to reach the half that spills upward). Top-align instead, and
+     reuse the same pinned Play now the portrait layout already relies on. */
+  .lp-inner { justify-content: flex-start; padding-top: 14px; padding-bottom: 96px; gap: 10px; }
+  .lp-play-fixed { display: block; }
   .lp-item small { display: none; }
   .lp-who, .lp-foot { display: none; }
   .lp-title { font-size: 34px; }
