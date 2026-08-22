@@ -1366,6 +1366,58 @@ export class GolfScene {
   }
 
   /* -------------------------------------------------------------- pin --- */
+  /** A distinct flag design per hole: same hole always gets the same
+   *  flag (hashed from course id + hole number, not random), and
+   *  different holes almost always get a different one. Caches by
+   *  key so revisiting a hole (leaderboard replay, spectating) reuses
+   *  the texture instead of rebuilding a canvas every time. */
+  _flagTexture(number, courseId) {
+    const key = `${courseId}:${number}`;
+    this._flagTexCache ??= new Map();
+    if (this._flagTexCache.has(key)) return this._flagTexCache.get(key);
+
+    let h = 2166136261;
+    for (let i = 0; i < courseId.length; i++) h = ((h ^ courseId.charCodeAt(i)) * 16777619) >>> 0;
+    h = ((h ^ number) * 16777619) >>> 0;
+    const rk = mulberry32(h);
+
+    const PALETTE = [0xe8443a, 0x3a6de8, 0xe8b83a, 0xffffff, 0xe87a3a, 0x9a3ae8, 0x2ab8a6, 0xe83a9e];
+    const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+    const bg = PALETTE[Math.floor(rk() * PALETTE.length)];
+
+    const W = 128, H = 84, cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    g.fillStyle = hex(bg); g.fillRect(0, 0, W, H);
+
+    // a second stripe so two holes that land on the same base colour
+    // (there are more holes than colours) still read as visually distinct
+    if (rk() < 0.55) {
+      g.fillStyle = hex(PALETTE[Math.floor(rk() * PALETTE.length)]);
+      g.fillRect(0, 0, W, H * 0.3);
+    }
+
+    /* White-on-black outline so the number reads on every palette colour
+       without a per-background contrast decision — including white
+       itself, which is one of the palette entries. A translucent stroke
+       reads as a mid-grey hairline against a white flag, at which point
+       a near-white fill on a white background is just gone; the stroke
+       has to be fully opaque to actually function as a border there. */
+    g.font = 'bold 56px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.lineWidth = 8;
+    g.strokeStyle = '#14120e';
+    g.strokeText(String(number), W / 2, H / 2 + 4);
+    g.fillStyle = '#fbfbf6';
+    g.fillText(String(number), W / 2, H / 2 + 4);
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.userData.shared = true;
+    this._flagTexCache.set(key, tex);
+    return tex;
+  }
+
   _buildPin(hole, T, bio) {
     const grp = new THREE.Group();
     const y = T.heightAt(hole.pin.x, hole.pin.z);
@@ -1408,7 +1460,10 @@ export class GolfScene {
        moment the wind isn't dead calm — which it almost never is. */
     const flagGeo = new THREE.PlaneGeometry(0.52, 0.34, 12, 4);
     flagGeo.translate(0.26, 0, 0);
-    const flagMat = new THREE.MeshLambertMaterial({ color: 0xe8443a, side: THREE.DoubleSide });
+    const flagMat = new THREE.MeshLambertMaterial({
+      map: this._flagTexture(hole.number, hole.courseId),
+      side: THREE.DoubleSide
+    });
     const flag = new THREE.Mesh(flagGeo, flagMat);
     flag.position.set(hole.pin.x, y + 1.92, hole.pin.z);
     flag.frustumCulled = false;
@@ -1807,8 +1862,20 @@ export class GolfScene {
     // A 43 mm ball 200 m away is a fraction of a pixel.  Draw it oversized and
     // grow it further with distance so you can always actually follow the shot
     // — every golf game does this, and without it the ball simply vanishes.
+    //
+    // But the floor used to be a flat 2.4x with no exemption for close range,
+    // so a ball sitting right next to the cup — exactly the moment true scale
+    // matters most — was STILL drawn 2.4x true size. Against a regulation
+    // 108mm cup that shrinks the real ~2.53x cup-to-ball ratio down to about
+    // 1.05x on screen: the hole reads as barely bigger than the ball, which
+    // is the "the holes are way too small" report. Tapered to true scale
+    // (1x) within NEAR, ramping smoothly up to the old distance curve by
+    // FAR, so a putt or a look at the pin shows the real geometry and a
+    // shot from the fairway still gets the same visibility boost as before.
     const d = this.camera.position.distanceTo(b.mesh.position);
-    const grow = 2.4 * Math.max(1, Math.pow(d / 22, 0.72));
+    const NEAR = 2, FAR = 10;
+    const farGrow = 2.4 * Math.max(1, Math.pow(d / 22, 0.72));
+    const grow = 1 + (farGrow - 1) * clamp((d - NEAR) / (FAR - NEAR), 0, 1);
     b.mesh.scale.setScalar(grow);
     // the sphere grows around its centre, which sits one true ball-radius off
     // the deck — without lifting it the drawn ball sinks into the turf and you

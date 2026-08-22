@@ -1417,9 +1417,30 @@ function drainEvents(a) {
   }
 }
 
+const HOLE_SINK_MS = 550;
+const HOLE_SINK_DEPTH = 0.22;
+
+/* The server's own answer for this shot (`a.srv`) arrives in the SAME
+   message that starts the animation — see beginShot — so it is already
+   known and trustworthy the whole time the local sim is still playing
+   out. Nothing currently stops that local playback from taking an
+   unreasonable amount of real time to produce a result: a slow device, a
+   background tab throttled by the browser, or a genuine physics edge
+   case would all look identical from the player's side — a ball that
+   just stops updating. Rather than chase every possible cause of that
+   individually, this is the backstop: if the local animation hasn't
+   finished by the time it reasonably should have, stop waiting on it and
+   resolve straight to the answer the server already gave. */
+const ANIM_WATCHDOG_MS = 12000;
+
 function stepAnim(dt, now) {
   const a = G.anim;
   if (!a) return;
+  if (!a.done && !a.startedAt) a.startedAt = now;
+  if (!a.done && a.startedAt && now - a.startedAt > ANIM_WATCHDOG_MS) {
+    a.done = true; a.doneAt = now; a.hold = 0;
+    announce(a);   // still tell the player what happened, just without the local flight to watch
+  }
 
   if (!a.done) {
     const res = a.sim.advance(dt);
@@ -1453,6 +1474,21 @@ function stepAnim(dt, now) {
       }
     }
     return;
+  }
+
+  /* A hole-out used to be a teleport: the instant the capture radius and
+     speed gate were satisfied, the ball sat flush on the green at the cup
+     centre — the physics result is correct (it has to be, that's what
+     scoring reads), but visually a ball just parked on top of a dark
+     circle instead of falling into one. This drops it down the cup's own
+     shaft (_buildPin builds a real 0.32m-deep cylinder there) over a
+     short window, purely as a render — the logical rest position from
+     _finish never changes. */
+  if (a.srv?.holed && now - a.doneAt < HOLE_SINK_MS) {
+    const t = clamp((now - a.doneAt) / HOLE_SINK_MS, 0, 1);
+    const eased = t * t;                         // accelerating, like it dropped
+    const groundY = G.T.heightAt(a.srv.x, a.srv.z);
+    scene.setBall(a.pid, a.srv.x, groundY + BALL_RADIUS - eased * HOLE_SINK_DEPTH, a.srv.z);
   }
 
   if (now - a.doneAt > a.hold) {
