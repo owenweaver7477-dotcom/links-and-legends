@@ -17,6 +17,7 @@ import { EMOTES, MELEES, meleesAt, meleeById } from './celebrations.js';
 import { UNLOCKS, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { SwingController, SWING, setForgiveness, setMarkBand } from './swing.js';
 import { HUD } from './hud.js';
+import { icon } from './icons.js';
 import { playIntro3D } from './intro3d.js';
 import { wearOutfit, normaliseCustom, outfitEffect } from '../shared/wardrobe.js';
 import { weatherText, weatherEffects } from '../shared/weather.js';
@@ -1532,13 +1533,13 @@ function announce(a) {
     const tier = REACTION_TIER[reactionFor(r.strokes, h.par, false)] || 0;
     HUD.flash(HUD.scoreName(rel, r.strokes), `${p?.name || ''} holed out in ${r.strokes}`,
       tier >= 3 ? '#ffd94a' : rel < 0 ? '#8fe07a' : '#fff', tier);
-    HUD.toast(`⛳ ${p?.name} holed out in ${r.strokes}`, 'good', 3200);
+    HUD.toast(`${p?.name} holed out in ${r.strokes}`, 'good', 3200, 'flag');
   } else if (r.reason === 'water') {
     HUD.flash('Water', `${who} — one penalty stroke`, '#7fd4ff');
-    HUD.toast(`💦 ${who} found the water — +1`, 'bad', 2800);
+    HUD.toast(`${who} found the water — +1`, 'bad', 2800, 'droplet');
   } else if (r.reason === 'ob') {
     HUD.flash('Out of bounds', `${who} — stroke and distance`, '#ff8f7f');
-    HUD.toast(`⚑ ${who} went OB — +1, replaying the lie`, 'bad', 2800);
+    HUD.toast(`${who} went OB — +1, replaying the lie`, 'bad', 2800, 'flag');
   } else if (r.capped) {
     fireReaction(a.pid, r.strokes, G.hole.par, true);
     HUD.toast(`${who} picked up at ${r.strokes}`, 'warn', 2600);
@@ -1549,7 +1550,7 @@ function announce(a) {
     fireReaction(a.pid, r.strokes, G.hole.par, false);
     HUD.flash(HUD.scoreName(rel, r.strokes), `${who} — that's good`,
       rel < 0 ? '#8fe07a' : '#fff', REACTION_TIER[reactionFor(r.strokes, G.hole.par, false)] || 0);
-    HUD.toast(`⛳ ${who} — given, ${r.strokes}`, 'good', 2600);
+    HUD.toast(`${who} — given, ${r.strokes}`, 'good', 2600, 'flag');
   } else if (a.pid === G.myPid) {
     const lie = SURFACES[r.lie]?.label || 'Rough';
     HUD.flash(`${yd(r.carry)} ${HUD.unit()}`, `carry · ${yd(r.total)} total · ${lie}`, '#eaf4ec');
@@ -2772,7 +2773,7 @@ Net.on('profile', prof => {
   if (G.room?.state === 'lobby') renderLobbyAll(G.room);
   // the post-round payout, announced once the results are up
   if (before && prof.coins > before.coins) {
-    HUD.toast(`🪙 +${prof.coins - before.coins} coins · rating ${prof.rating}`, 'good', 4200);
+    HUD.toast(`+${prof.coins - before.coins} coins · rating ${prof.rating}`, 'good', 4200, 'coin');
     trackCoins(prof.coins - before.coins, 'round_payout');
   }
   refreshRewardsBadge();
@@ -2796,7 +2797,7 @@ Net.on('records', d => {
   /* Somebody else's record, announced to everyone. Yours is already toasted
      by the room you set it in, so it is not said twice. */
   if (d?.pid && d.pid !== G.myPid && d.round) {
-    HUD.toast(`🏆 ${d.name} set the course record at ${d.course} — ${d.round.total}`, 'good');
+    HUD.toast(`${d.name} set the course record at ${d.course} — ${d.round.total}`, 'good', 2600, 'trophy');
   }
 });
 Net.on('kicked', d => { G.joined = false; G.room = null; route(); HUD.homeError(d.reason || 'Disconnected.'); });
@@ -4036,11 +4037,15 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     Net.claimLogin(res => {
       if (!res?.ok) { HUD.el.rwErr.textContent = res?.error || 'Could not claim right now.'; return; }
       const r = res.reward || {};
+      // every value here is a number straight off the reward response, never
+      // a player-supplied string, so toastHTML (not the escaping HUD.toast)
+      // is the right one to build this from — see its own comment for why
+      // that distinction exists at all.
       const bits = [];
-      if (r.coins) bits.push(`🪙 +${r.coins}`);
-      if (r.gems) bits.push(`💎 +${r.gems}`);
-      if (r.cases) bits.push(`📦 +${r.cases}`);
-      HUD.toast(`Day ${res.day} claimed — ${bits.join('  ')}`, 'good', 3200);
+      if (r.coins) bits.push(`${icon('coin')} +${r.coins}`);
+      if (r.gems) bits.push(`${icon('gem')} +${r.gems}`);
+      if (r.cases) bits.push(`${icon('case')} +${r.cases}`);
+      HUD.toastHTML(`Day ${res.day} claimed — ${bits.join('  ')}`, 'good', 3200);
       if (res.usedFreeze) HUD.toast('A streak freeze covered yesterday.', 'info', 2600);
       else if (res.reset) HUD.toast('The streak reset — back to day 1.', 'warn', 2600);
     });

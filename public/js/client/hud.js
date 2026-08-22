@@ -17,6 +17,7 @@ import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
 import { RARITIES } from '../shared/cases.js';
+import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
 const el = {};
@@ -117,7 +118,7 @@ HUD.show = which => {
   document.body.classList.toggle('landed', landing);
 };
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
-HUD.setHomeCoins = n => { el.homeCoins.textContent = '🪙 ' + (n || 0).toLocaleString(); };
+HUD.setHomeCoins = n => { el.homeCoins.innerHTML = icon('coin') + ' ' + (n || 0).toLocaleString(); };
 
 /** The in-round balance.  Bumps when it goes UP, so a payout is felt. */
 let lastCoins = null;
@@ -134,10 +135,33 @@ HUD.setCoins = n => {
 HUD.homeError = msg => { el.homeErr.textContent = msg || ''; };
 
 /* ----------------------------------------------------------------- toasts */
-HUD.toast = (msg, kind, ms = 2600) => {
+/* `msg` reaches here with player, course and room names baked straight in —
+   the server allow-lists what it sends but does not escape it for HTML, so
+   this stays a real text node rather than innerHTML. `iconName` is trusted
+   (it only ever comes from a call site literal, one of icons.js's own
+   names), so it is fine to render as markup ahead of that text node. */
+HUD.toast = (msg, kind, ms = 2600, iconName) => {
   const t = document.createElement('div');
   t.className = 'toast ' + (kind || '');
-  t.textContent = msg;
+  if (iconName) t.innerHTML = icon(iconName) + ' ';
+  t.appendChild(document.createTextNode(msg));
+  el.toasts.appendChild(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 320); }, ms);
+  while (el.toasts.children.length > 4) el.toasts.firstChild.remove();
+};
+
+/**
+ * A toast built from markup you already know is safe — every interpolated
+ * value at the call site is internal (a coin/gem/case count), never a
+ * player-supplied name. Kept separate from HUD.toast on purpose: that one
+ * promises plain text no matter what it's handed, and blurring that
+ * promise in one shared function is how a name eventually sneaks through
+ * as HTML.
+ */
+HUD.toastHTML = (html, kind, ms = 2600) => {
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind || '');
+  t.innerHTML = html;
   el.toasts.appendChild(t);
   setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 320); }, ms);
   while (el.toasts.children.length > 4) el.toasts.firstChild.remove();
@@ -413,7 +437,7 @@ HUD.renderBoard = (room, myPid, course) => {
     const nm = document.createElement('span'); nm.className = 'pname'; nm.textContent = p.name;
     if (p.pid === myPid) { const y = document.createElement('span'); y.className = 'you'; y.textContent = 'YOU'; nm.appendChild(y); }
     const st = document.createElement('span'); st.className = 'pstroke';
-    st.textContent = p.spectator ? '–' : (p.finished ? '✓' : p.strokes || 0);
+    st.innerHTML = p.spectator ? '–' : (p.finished ? icon('check') : p.strokes || 0);
 
     // running total against par, counting only holes actually completed
     let played = 0, taken = 0;
@@ -428,7 +452,7 @@ HUD.renderBoard = (room, myPid, course) => {
     if (p.pid !== myPid) {
       const rep = document.createElement('button');
       rep.type = 'button'; rep.className = 'preport'; rep.title = `Report ${p.name}`;
-      rep.textContent = '🚩';
+      rep.innerHTML = icon('report');
       rep.dataset.reportPid = p.pid; rep.dataset.reportName = p.name;
       row.appendChild(rep);
       /* The host can always remove somebody; everyone else can only start a
@@ -439,7 +463,7 @@ HUD.renderBoard = (room, myPid, course) => {
         const kick = document.createElement('button');
         kick.type = 'button'; kick.className = 'pkick';
         kick.title = isHost ? `Remove ${p.name}` : `Vote to remove ${p.name}`;
-        kick.textContent = '🚫';
+        kick.innerHTML = icon('kick');
         kick.dataset.kickPid = p.pid; kick.dataset.kickName = p.name;
         kick.dataset.kickHost = isHost ? '1' : '';
         row.appendChild(kick);
@@ -511,7 +535,7 @@ HUD.renderColours = (room, myPid, onPick, rating = 0) => {
     b.style.background = c.hex;
     b.title = locked ? c.name + ' — unlocks at rating ' + c.lockRating
       : taken ? c.name + ' (taken)' : c.name;
-    if (locked) b.textContent = '🔒';
+    if (locked) b.innerHTML = icon('lock');
     if (!taken && !locked) b.addEventListener('click', () => onPick(c.hex));
     el.ballColours.appendChild(b);
   }
@@ -789,7 +813,7 @@ HUD.renderCareer = (prof) => {
        <span><b>${prof.birdies || 0}</b> birdies</span>
        <span><b>${prof.eagles || 0}</b> eagles</span>
        <span><b>${prof.aces || 0}</b> aces</span>
-       <span><b>🪙 ${(prof.coins || 0).toLocaleString()}</b></span>
+       <span><b>${icon('coin')} ${(prof.coins || 0).toLocaleString()}</b></span>
      </div>`;
 };
 
@@ -800,7 +824,7 @@ const CADDIE_HEX = {
 
 HUD.renderShop = (prof, onBuy) => {
   if (!el.shopList) return;
-  el.coinBal.textContent = prof ? '🪙 ' + (prof.coins || 0) : '';
+  el.coinBal.innerHTML = prof ? icon('coin') + ' ' + (prof.coins || 0) : '';
   el.shopList.innerHTML = '';
 
   /* The payoff panel.  An upgrade that only moves a hidden number is not an
@@ -864,13 +888,13 @@ HUD.renderShop = (prof, onBuy) => {
         ${lvl ? `<span class="cad-now">${c.line(lvl)}</span>` : ''}`;
       const btn = document.createElement('button');
       if (lvl >= CADDIE_MAX) {
-        btn.className = 'btn'; btn.textContent = 'Legend ★'; btn.disabled = true;
+        btn.className = 'btn'; btn.innerHTML = 'Legend ' + icon('star'); btn.disabled = true;
       } else {
         const can = coins >= cost;
         btn.className = 'btn' + (can ? ' primary' : '');
-        btn.textContent = can
-          ? (lvl ? 'Level up · ' : 'Hire · ') + '🪙 ' + cost
-          : `🪙 ${cost} · need ${cost - coins} more`;
+        btn.innerHTML = can
+          ? (lvl ? 'Level up · ' : 'Hire · ') + icon('coin') + ' ' + cost
+          : `${icon('coin')} ${cost} · need ${cost - coins} more`;
         btn.disabled = !can;
         if (can) btn.addEventListener('click', () => onBuy('caddie:' + key));
       }
@@ -890,9 +914,9 @@ HUD.renderShop = (prof, onBuy) => {
       const rc = REFINE_COSTS(tier)[refine];
       const rb = document.createElement('button');
       rb.className = 'btn' + (coins >= rc ? ' primary' : '');
-      rb.textContent = coins >= rc
-        ? 'Refine ' + ['I','II','III'][refine] + ' · 🪙 ' + rc
-        : `🪙 ${rc} · need ${rc - coins} more`;
+      rb.innerHTML = coins >= rc
+        ? 'Refine ' + ['I','II','III'][refine] + ' · ' + icon('coin') + ' ' + rc
+        : `${icon('coin')} ${rc} · need ${rc - coins} more`;
       rb.disabled = coins < rc;
       if (coins >= rc) rb.addEventListener('click', () => onBuy('club:refine'));
       curCard.appendChild(rb);
@@ -910,9 +934,9 @@ HUD.renderShop = (prof, onBuy) => {
         <span class="cad-now">Refinements reset on upgrade — a new set starts raw</span>`;
       const nb = document.createElement('button');
       nb.className = 'btn' + (coins >= nxt.cost ? ' primary' : '');
-      nb.textContent = coins >= nxt.cost
-        ? 'Upgrade set · 🪙 ' + nxt.cost
-        : `🪙 ${nxt.cost} · need ${nxt.cost - coins} more`;
+      nb.innerHTML = coins >= nxt.cost
+        ? 'Upgrade set · ' + icon('coin') + ' ' + nxt.cost
+        : `${icon('coin')} ${nxt.cost} · need ${nxt.cost - coins} more`;
       nb.disabled = coins < nxt.cost;
       if (coins >= nxt.cost) nb.addEventListener('click', () => onBuy('club:tier'));
       nc.appendChild(nb);
@@ -947,11 +971,11 @@ HUD.renderShop = (prof, onBuy) => {
       btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
       // A dead grey button with a price on it tells the player nothing about
       // WHY they cannot press it.  Say the actual reason.
-      const short = coins < it.cost ? `🪙 ${it.cost} · need ${it.cost - coins} more` : null;
-      btn.textContent = owned ? 'In the bag ✓'
+      const short = coins < it.cost ? `${icon('coin')} ${it.cost} · need ${it.cost - coins} more` : null;
+      btn.innerHTML = owned ? 'In the bag ' + icon('check')
         : short ? short
           : blocked ? blocked
-            : '🪙 ' + it.cost;
+            : icon('coin') + ' ' + it.cost;
       btn.disabled = owned || !!blocked;
       if (!owned && !blocked) btn.addEventListener('click', () => onBuy(key));
       card.appendChild(btn);
@@ -1198,11 +1222,11 @@ HUD.renderDailyLogin = (profile) => {
     tile.className = 'rw-tile ' +
       (d === claimableDay ? 'current' : d <= (login.day || 0) ? 'claimed' : 'locked');
     if (reward.cases) tile.classList.add('milestone');
-    const icon = reward.cases ? '📦' : reward.gems ? '💎' : '🪙';
+    const rewardIcon = reward.cases ? icon('case') : reward.gems ? icon('gem') : icon('coin');
     const amt = reward.cases
-      ? `${reward.cases}×${reward.gems ? ` +${reward.gems}💎` : ''}`
+      ? `${reward.cases}×${reward.gems ? ` +${reward.gems}${icon('gem')}` : ''}`
       : reward.gems ? `+${reward.gems}` : `+${reward.coins}`;
-    tile.innerHTML = `<span class="rw-day">${d}</span><span class="rw-ico">${icon}</span><span class="rw-amt">${amt}</span>`;
+    tile.innerHTML = `<span class="rw-day">${d}</span><span class="rw-ico">${rewardIcon}</span><span class="rw-amt">${amt}</span>`;
     el.rwGrid.appendChild(tile);
   }
 
@@ -1216,7 +1240,7 @@ HUD.renderDailyLogin = (profile) => {
 };
 
 /* --------------------------------------------------------- case opening */
-const CASE_KIND_ICON = { decal: '🎨', trail: '💫', title: '🎖️', ball: '⚪' };
+const CASE_KIND_ICON = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ball' };
 
 /** Back to "tap to open", for the moment the modal is shown. */
 HUD.resetCaseModal = () => {
@@ -1240,12 +1264,16 @@ HUD.revealCase = (result) => {
   el.caseRarity.textContent = rarity.name;
   el.caseRarity.style.color = rarity.color;
   if (isItem) {
-    el.caseItemArt.textContent = CASE_KIND_ICON[result.item.kind] || '🎁';
+    // currentColor icons (see icons.js) — this is the whole point of the
+    // switch off emoji: the SAME decal/trail/title/ball glyph can actually
+    // be tinted to the item's own colour, or the rarity colour, instead of
+    // showing an identical fixed-colour picture for every rarity there is.
+    el.caseItemArt.innerHTML = icon(CASE_KIND_ICON[result.item.kind] || 'gift', { size: 64 });
     el.caseItemArt.style.color = result.item.color || rarity.color;
     el.caseItemName.textContent = result.item.name;
     el.caseItemKind.textContent = UNLOCK_KINDS[result.item.kind]?.name || result.item.kind;
   } else {
-    el.caseItemArt.textContent = '💎';
+    el.caseItemArt.innerHTML = icon('gem', { size: 64 });
     el.caseItemArt.style.color = rarity.color;
     el.caseItemName.textContent = `+${result.amount} gems`;
     el.caseItemKind.textContent = 'you already own everything in that tier';
@@ -1272,7 +1300,7 @@ HUD.renderLobby = (room, myPid) => {
     const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = p.color;
     const nm = document.createElement('span'); nm.textContent = p.name + (p.pid === myPid ? ' (you)' : '');
     chip.append(sw, nm);
-    if (p.pid === room.hostPid) { const t = document.createElement('span'); t.className = 'tag host'; t.textContent = '★ host'; chip.appendChild(t); }
+    if (p.pid === room.hostPid) { const t = document.createElement('span'); t.className = 'tag host'; t.innerHTML = icon('star') + ' host'; chip.appendChild(t); }
     el.lobbyPlayers.appendChild(chip);
   }
   // empty seats, so a lone host sees a lobby waiting for friends rather
@@ -1289,7 +1317,7 @@ HUD.renderLobby = (room, myPid) => {
     el.btnPrivacy.hidden = false;
     el.btnPrivacy.classList.toggle('private', priv);
     el.btnPrivacy.classList.toggle('host', isHost);
-    el.btnPrivacy.textContent = priv ? '🔒 Private' : '🌍 Public';
+    el.btnPrivacy.innerHTML = priv ? icon('lock') + ' Private' : icon('globe') + ' Public';
     el.btnPrivacy.title = isHost
       ? (priv ? 'Only people with the link can join — click to make public'
               : 'Anyone can find and join from Open rounds — click to make private')
@@ -1324,7 +1352,7 @@ HUD.renderHoleOver = (room, myPid, course, myDifficulty) => {
     const rel = r.s - h.par;
     const div = document.createElement('div');
     div.className = 'rrow' + (r.s === best ? ' win' : '');
-    div.innerHTML = `<span class="pos">${r.s === best ? '🏆' : (i + 1) + '.'}</span>
+    div.innerHTML = `<span class="pos">${r.s === best ? icon('trophy') : (i + 1) + '.'}</span>
       <span class="sw" style="background:${r.p.color}"></span>
       <span class="nm">${escapeHtml(r.p.name)}${r.p.pid === myPid ? ' (you)' : ''}</span>
       <span class="st">${r.s}</span>
@@ -1355,7 +1383,7 @@ HUD.renderHoleOver = (room, myPid, course, myDifficulty) => {
   if (rec) {
     const isMe = rec.pid === myPid && mine && mine.s === rec.strokes;
     holder.innerHTML = isMe
-      ? `<b>🏅 ${diffName} hole record</b><span>${rec.strokes} — that is yours</span>`
+      ? `<b>${icon('medal')} ${diffName} hole record</b><span>${rec.strokes} — that is yours</span>`
       : `<b>${diffName} hole record</b><span>${rec.strokes} by ${escapeHtml(rec.name)}</span>`;
   } else {
     holder.innerHTML = `<b>${diffName} hole record</b><span>nobody has set one yet</span>`;
@@ -1878,7 +1906,7 @@ HUD.renderRecords = (courses, records, myPid) => {
       head.className = 'recdiff-head' + (dr && dr.pid === myPid ? ' mine' : '');
       const drRel = dr ? dr.total - dr.par : 0;
       head.innerHTML =
-        `<span class="rd-badge">${isCourseRecord ? '👑' : dr ? '🏅' : ''}</span>` +
+        `<span class="rd-badge">${isCourseRecord ? icon('crown') : dr ? icon('medal') : ''}</span>` +
         `<span class="rd-name">${escapeHtml(difficultyById(diffId).name)}</span>` +
         `<span class="rd-score">${dr ? dr.total + (drRel === 0 ? ' (E)' : drRel > 0 ? ` (+${drRel})` : ` (${drRel})`) : '—'}</span>` +
         `<span class="rd-who">${dr ? escapeHtml(dr.pid === myPid ? 'you' : dr.name) : 'unclaimed'}</span>`;
@@ -1944,8 +1972,8 @@ HUD.renderOnline = (list, myPid, onJoin) => {
     row.innerHTML =
       (o.rating != null ? `<span class="on-rate" title="skill rating">${o.rating}</span>` : '') +
       (o.badge ? `<span class="on-badge" title="holds course records">` +
-        (o.badge.courses ? '🏆' + (o.badge.courses > 1 ? o.badge.courses : '') : '') +
-        (o.badge.holes ? '⛳' + (o.badge.holes > 1 ? o.badge.holes : '') : '') + `</span>` : '') +
+        (o.badge.courses ? icon('trophy') + (o.badge.courses > 1 ? o.badge.courses : '') : '') +
+        (o.badge.holes ? icon('flag') + (o.badge.holes > 1 ? o.badge.holes : '') : '') + `</span>` : '') +
       `<span class="on-name">${escapeHtml(o.name)}` +
       (rel ? `<em title="their best round">best ${escapeHtml(rel)}</em>` : '') +
       `</span>` +
@@ -2000,7 +2028,7 @@ HUD.chatMessage = (m, myPid) => {
     `${escapeHtml(m.name)}</b>${escapeHtml(m.text)}`;
   if (m.pid !== myPid) {
     const mute = document.createElement('span');
-    mute.className = 'chatmute'; mute.textContent = '🔇'; mute.title = 'Mute ' + m.name;
+    mute.className = 'chatmute'; mute.innerHTML = icon('mute'); mute.title = 'Mute ' + m.name;
     mute.addEventListener('click', () => {
       HUD.toggleMute(m.pid);
       HUD.toast(HUD.isMuted(m.pid) ? `Muted ${m.name}` : `Unmuted ${m.name}`, 'info', 1800);
@@ -2195,7 +2223,7 @@ HUD.renderDecalTab = (look, lv) => {
       const L = lock(d, lv);
       return `<button class="wd-decal${d.id === cur ? ' on' : ''}${L ? ' locked' : ''}"
         data-decal="${d.id}" title="${d.name}${L ? ` — level ${d.at}` : ''}"${L ? ' disabled' : ''}>
-        ${L ? `<span class="lk">🔒${d.at}</span>` : ''}</button>`;
+        ${L ? `<span class="lk">${icon('lock')}${d.at}</span>` : ''}</button>`;
     }).join('');
 
   el.wdRBody.innerHTML =
@@ -2334,7 +2362,7 @@ HUD.renderBoards = (data, myPid, courseNames) => {
   const row = (r, main, sub, tag) =>
     `<div class="rkrow${r.pid === myPid || r.me ? ' me' : ''}${r.friend ? ' pal' : ''}">
        <span class="rkn${r.rank <= 3 ? ' gold' : ''}">${r.rank}</span>
-       <span class="rkname">${r.friend ? '<i class="rkstar">★</i>' : ''}<b>${escapeHtml(r.name)}</b>${tag || ''}</span>
+       <span class="rkname">${r.friend ? `<i class="rkstar">${icon('star')}</i>` : ''}<b>${escapeHtml(r.name)}</b>${tag || ''}</span>
        <span class="rkv">${main}</span>
        <span class="rksub">${sub}</span>
      </div>`;
@@ -2460,8 +2488,8 @@ HUD.renderFriends = (state, people) => {
       <span class="fr-nm"><b>${escapeHtml(q.name || 'A golfer')}</b>
         <small>wants to be friends · ${ago(q.ago)}${q.note ? ' · “' + escapeHtml(q.note) + '”' : ''}</small></span>
       <span class="fr-acts">
-        <button data-fr="accept" data-pid="${q.pid}" title="Accept">✓</button>
-        <button data-fr="decline" data-pid="${q.pid}" title="Decline">✕</button>
+        <button data-fr="accept" data-pid="${q.pid}" title="Accept">${icon('check')}</button>
+        <button data-fr="decline" data-pid="${q.pid}" title="Decline">${icon('cancel')}</button>
       </span></div>`);
   }
 
@@ -2473,12 +2501,12 @@ HUD.renderFriends = (state, people) => {
       : `Level ${f.level} · ${t.name}${f.index != null ? ' · plays off ' + hcpText(f.index) : ''}`;
     rows.push(`<div class="fr-row${f.fav ? ' fav' : ''}">
       <span class="fr-dot${f.online ? ' on' : ''}"></span>
-      <span class="fr-nm"><b>${f.fav ? '★ ' : ''}${escapeHtml(f.name)}</b><small>${escapeHtml(sub)}</small></span>
+      <span class="fr-nm"><b>${f.fav ? icon('star') + ' ' : ''}${escapeHtml(f.name)}</b><small>${escapeHtml(sub)}</small></span>
       <span class="fr-acts">
         ${f.room ? `<button class="join" data-fr="join" data-room="${f.room}">Join</button>` : ''}
-        ${f.online && !f.room ? `<button data-fr="invite" data-pid="${f.pid}" title="Invite to your round">🏌️</button>` : ''}
-        <button data-fr="favourite" data-pid="${f.pid}" title="${f.fav ? 'Unfavourite' : 'Favourite'}">${f.fav ? '★' : '☆'}</button>
-        <button data-fr="remove" data-pid="${f.pid}" title="Remove">✕</button>
+        ${f.online && !f.room ? `<button data-fr="invite" data-pid="${f.pid}" title="Invite to your round">${icon('golfer')}</button>` : ''}
+        <button data-fr="favourite" data-pid="${f.pid}" title="${f.fav ? 'Unfavourite' : 'Favourite'}">${f.fav ? icon('star') : icon('starOff')}</button>
+        <button data-fr="remove" data-pid="${f.pid}" title="Remove">${icon('cancel')}</button>
       </span></div>`);
   }
 
@@ -2690,7 +2718,7 @@ HUD.renderFeed = items => {
   if (!items?.length) { block.hidden = true; return; }
   block.hidden = false;
   box.innerHTML = items.map(it => {
-    const k = FEED_ICON[it.kind] || '•';
+    const k = FEED_ICON[it.kind] ? icon(FEED_ICON[it.kind], { size: 16 }) : '•';
     return `<div class="feeditem${it.mine ? ' mine' : ''}">
       <span class="fd-ico">${k}</span>
       <span class="fd-txt"><b>${escapeHtml(it.name)}</b> ${escapeHtml(it.text)}</span>
@@ -2699,8 +2727,8 @@ HUD.renderFeed = items => {
   }).join('');
 };
 
-const FEED_ICON = { ace: '🎯', albatross: '🦅', eagle: '🦅', record: '🏆',
-                    best: '📈', level: '⭐', round: '⛳', joined: '👋' };
+const FEED_ICON = { ace: 'target', albatross: 'eagle', eagle: 'eagle', record: 'trophy',
+                    best: 'trending', level: 'star', round: 'flag', joined: 'joined' };
 
 /* "4m", "2h", "3d" — short, because it is a column and not a sentence.
    Deliberately NOT the `ago` above: that one takes a duration and spells

@@ -1174,7 +1174,7 @@ body.playing .quitbtn { display: block; }
   color: #ffd94a; background: rgba(10,18,15,.8); border: 1px solid rgba(255,217,74,.28);
   backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0,0,0,.45);
   font-variant-numeric: tabular-nums; }
-.coinhud::before { content: '🪙 '; }
+.coinhud svg { margin-right: 5px; }
 body.playing .coinhud { display: block; }
 .coinhud.bump { animation: coinBump .55s ease-out; }
 @keyframes coinBump {
