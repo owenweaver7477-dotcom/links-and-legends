@@ -2246,7 +2246,7 @@ window.addEventListener('keydown', ev => {
       const i = have.findIndex(m => m.id === meleePick);
       meleePick = have[(i + 1) % have.length].id;
       const m = meleeById(meleePick);
-      HUD.toast(`${m.icon} ${m.name} — ${m.blurb}`, 'info', 1800);
+      HUD.toast(`${m.name} — ${m.blurb}`, 'info', 1800, m.icon);
     }
     return;
   }
@@ -3690,15 +3690,15 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   const RADIAL_ACTIONS = () => {
     const seated = mode() === 'drive' || mode() === 'ride';
     return [
-      { id: 'emote', icon: '😄', name: 'Emote' },
-      { id: 'chat',  icon: '💬', name: 'Say something' },
-      { id: 'toBall', icon: '✨', name: seated ? 'Get out first' : 'Teleport to my ball',
+      { id: 'emote', icon: 'emoteFace', name: 'Emote' },
+      { id: 'chat',  icon: 'chat', name: 'Say something' },
+      { id: 'toBall', icon: 'sparkle', name: seated ? 'Get out first' : 'Teleport to my ball',
         locked: seated, sub: 'not from the cart' },
-      { id: 'cart',  icon: '🛺', name: seated ? 'Get out' : 'Get in the cart' },
-      { id: 'hail',  icon: '📣', name: 'Hail a cart' },
-      { id: 'map',   icon: '🗺️', name: 'Hole map' },
-      { id: 'view',  icon: '🎥', name: 'Change view' },
-      { id: 'card',  icon: '📋', name: 'Scorecard' }
+      { id: 'cart',  icon: 'cart', name: seated ? 'Get out' : 'Get in the cart' },
+      { id: 'hail',  icon: 'megaphone', name: 'Hail a cart' },
+      { id: 'map',   icon: 'map', name: 'Hole map' },
+      { id: 'view',  icon: 'camera', name: 'Change view' },
+      { id: 'card',  icon: 'scorecard', name: 'Scorecard' }
     ];
   };
   /* ON DESKTOP TOO. The wheel was bound only to the phone-only More button,

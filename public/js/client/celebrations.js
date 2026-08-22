@@ -172,35 +172,41 @@ export const clipDuration = name => CLIPS[name]?.dur || 0;
    coins do not already cover.  `at` is the level each one arrives at.
    ========================================================================= */
 export const EMOTES = [
-  { id: 'wave', name: 'Wave', icon: '👋', at: 2,
+  { id: 'wave', name: 'Wave', icon: 'wave', at: 2,
     blurb: 'A friendly one for the tee box' },
-  { id: 'fistpump', name: 'Fist pump', icon: '💪', at: 3,
+  { id: 'fistpump', name: 'Fist pump', icon: 'fistpump', at: 3,
     blurb: 'For when it drops from distance' },
-  { id: 'twirl', name: 'Club twirl', icon: '🌀', at: 4,
+  { id: 'twirl', name: 'Club twirl', icon: 'twirl', at: 4,
     blurb: 'Pure showboating, and it is earned' },
-  { id: 'shrug', name: 'Shrug', icon: '🤷', at: 5,
+  { id: 'shrug', name: 'Shrug', icon: 'shrug', at: 5,
     blurb: 'No idea what happened there either' },
-  { id: 'clap', name: 'Slow clap', icon: '👏', at: 6,
+  { id: 'clap', name: 'Slow clap', icon: 'clap', at: 6,
     blurb: 'Sincere. Mostly.' },
 
   /* The back half. Five emotes ran out at level 6, which on a hundred-level
      ladder meant the wheel was finished before anybody had really started —
      and the emote wheel is the most-opened thing in the game after the
      scorecard. These are spread the rest of the way up. */
-  { id: 'bow', name: 'Take a bow', icon: '🙇', at: 15,
+  { id: 'bow', name: 'Take a bow', icon: 'bow', at: 15,
     blurb: 'For an audience that may not exist' },
-  { id: 'facepalm', name: 'Facepalm', icon: '🤦', at: 21,
+  { id: 'facepalm', name: 'Facepalm', icon: 'facepalm', at: 21,
     blurb: 'The only honest response to that one' },
-  { id: 'point', name: 'Called it', icon: '👉', at: 30,
+  { id: 'point', name: 'Called it', icon: 'point', at: 30,
     blurb: 'Point at the hole before it drops' },
-  { id: 'dance', name: 'Little dance', icon: '🕺', at: 44,
+  { id: 'dance', name: 'Little dance', icon: 'dance', at: 44,
     blurb: 'Undignified and entirely earned' },
-  { id: 'flex', name: 'Flex', icon: '🦾', at: 58,
+  { id: 'airswing', name: 'Air swing', icon: 'airswing', at: 50,
+    blurb: 'A practice pass at absolutely nothing' },
+  { id: 'flex', name: 'Flex', icon: 'flex', at: 58,
     blurb: 'Both arms. No apology.' },
-  { id: 'tip', name: 'Cap tip', icon: '🎩', at: 70,
+  { id: 'tip', name: 'Cap tip', icon: 'tip', at: 70,
     blurb: 'The old-fashioned one' },
-  { id: 'sleep', name: 'Slow play', icon: '😴', at: 88,
-    blurb: 'For whoever is reading their putt again' }
+  { id: 'crown', name: 'Crown', icon: 'crown', at: 80,
+    blurb: 'Both hands, held above the head' },
+  { id: 'sleep', name: 'Slow play', icon: 'sleep', at: 88,
+    blurb: 'For whoever is reading their putt again' },
+  { id: 'micdrop', name: 'Mic drop', icon: 'micdrop', at: 95,
+    blurb: 'Nothing left to prove up here' }
 ];
 
 /** Which emotes a player of this level has. */
@@ -361,6 +367,64 @@ EMOTE_CLIPS.tip = {
   }
 };
 
+/** A big, self-mocking practice pass at nothing — the swing overcooks its
+ *  own follow-through and the feet catch up a beat late. */
+EMOTE_CLIPS.airswing = {
+  dur: 1.60, in: 0.14, out: 0.30,
+  pose(P, k) {
+    const e = env(k, 1.6);
+    const swing = Math.sin(k * Math.PI * 1.3);
+    P.yaw = swing * 1.1 * e;
+    P.armRx = -0.9 * e + swing * 0.6 * e;
+    P.armRz = -0.5 * e;
+    P.armLx = -0.5 * e;
+    P.armLz = 0.3 * e;
+    P.bodyRz = swing * 0.35 * e;
+    P.legLx = -swing * 0.2 * e;
+    P.legRx = swing * 0.25 * e;
+    P.headRy = swing * 0.3 * e;
+    P.bodyY = -Math.max(0, swing) * 0.05 * e;     // a little stumble at the end
+  }
+};
+
+/** Both hands meet above the head — a crown, not a fist pump. Held rather
+ *  than pulsed, the way a real "yes, obviously" pose would be. */
+EMOTE_CLIPS.crown = {
+  dur: 1.50, in: 0.18, out: 0.34,
+  pose(P, k) {
+    const e = env(k, 1.8);
+    P.armLx = UP * 0.95 * e;
+    P.armRx = UP * 0.95 * e;
+    P.armLz = 0.5 * e;
+    P.armRz = -0.5 * e;
+    P.bodyY = 0.05 * e;
+    P.bodyRx = -0.06 * e;
+  }
+};
+
+/** Up fast, held, then dropped hard well before the clip ends — the whole
+ *  point is the drop, so unlike everything else here the arm does not ease
+ *  back out with a symmetric envelope. Every channel below is scaled by
+ *  the SAME armPhase rather than tracking k independently, which is what
+ *  guarantees they all reach exactly zero together once the drop
+ *  finishes — a channel with its own timing is a channel that can still
+ *  be nonzero after the arm has already let go. */
+EMOTE_CLIPS.micdrop = {
+  dur: 1.35, in: 0.10, out: 0.10,
+  pose(P, k) {
+    const RISE = 0.35, DROP_AT = 0.62, DROP_DUR = 0.18;
+    let armPhase;
+    if (k < RISE) armPhase = k / RISE;
+    else if (k < DROP_AT) armPhase = 1;
+    else armPhase = Math.max(0, 1 - (k - DROP_AT) / DROP_DUR);
+    P.armRx = UP * 0.55 * armPhase;
+    P.armRz = -0.3 * armPhase;
+    P.headRy = 0.14 * armPhase;
+    P.bodyRz = -0.05 * armPhase;
+    P.bodyY = 0.02 * armPhase;
+  }
+};
+
 EMOTE_CLIPS.sleep = {
   dur: 2.30, in: 0.20, out: 0.40,
   pose(P, k) {
@@ -397,13 +461,13 @@ EMOTE_CLIPS.sleep = {
    the barge, so a melee is something you grow into.
    ========================================================================= */
 export const MELEES = [
-  { id: 'barge', name: 'Barge', icon: '🫸', at: 1, key: 'B',
+  { id: 'barge', name: 'Barge', icon: 'barge', at: 1, key: 'B',
     power: 1.0, cool: 320, spin: 0.0, reach: 2.4,
     blurb: 'Shoulder first. Always in the bag.' },
-  { id: 'slap', name: 'Slap', icon: '✋', at: 11, key: 'B',
+  { id: 'slap', name: 'Slap', icon: 'slap', at: 11, key: 'B',
     power: 0.42, cool: 240, spin: 2.6, reach: 2.1,
     blurb: 'Barely moves them. Spins them right round.' },
-  { id: 'kick', name: 'Boot', icon: '🦵', at: 28, key: 'B',
+  { id: 'kick', name: 'Boot', icon: 'kick', at: 28, key: 'B',
     power: 1.85, cool: 1100, spin: 0.6, reach: 2.6,
     blurb: 'Slow, obvious, and it sends them.' }
 ];

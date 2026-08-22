@@ -138,6 +138,127 @@ const ICONS = {
   cancel: `
     <path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
   `,
+  /* ---- the emote wheel and the melee bar --------------------------------
+     Abstract pictograms rather than literal little figures — at 16-20px
+     next to a text label (the wheel always shows the name) a clean shape
+     reads faster than a tiny anatomically-correct hand ever would. */
+  wave: `
+    <path d="M5 17q3-2 3-6t3-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M11 18q3-2 3-6t3-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M17 19q2-2 2-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  `,
+  fistpump: `
+    <circle cx="12" cy="14" r="5" fill="currentColor"/>
+    <path d="M12 6v2M6.5 9.5l1.4 1.4M17.5 9.5l-1.4 1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  `,
+  twirl: `
+    <path d="M12 20a8 8 0 1 1 8-8 6 6 0 1 1-6-6 4 4 0 1 1 4 4" fill="none"
+          stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  `,
+  shrug: `
+    <path d="M5 18 9 12M19 18 15 12M9 12c0-1.2 1.2-2 3-2s3 .8 3 2" fill="none"
+          stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  `,
+  clap: `
+    <path d="M7 16 12 12 17 16" fill="none" stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M12 6v2M8 7.5l1 1.6M16 7.5l-1 1.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+  `,
+  bow: `
+    <circle cx="12" cy="6" r="2.2" fill="currentColor"/>
+    <path d="M12 8v4l-5 6M12 12l5 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  `,
+  facepalm: `
+    <circle cx="12" cy="12" r="6" fill="currentColor" opacity=".3"/>
+    <path d="M7 9 17 15M17 9c-2 2-3 3.5-3 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  `,
+  point: `
+    <path d="M4 14h13M13 9l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  `,
+  dance: `
+    <circle cx="9" cy="5" r="2" fill="currentColor"/>
+    <path d="M9 7v5l5 3M9 12l-4 3M14 15l3-2" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  `,
+  flex: `
+    <path d="M6 18c0-4 2-6 2-9a2 2 0 1 1 4 0c0 2 3 2 3 5a4 4 0 0 1-4 4Z" fill="currentColor"/>
+  `,
+  tip: `
+    <ellipse cx="12" cy="15" rx="8" ry="2" fill="currentColor" opacity=".5"/>
+    <path d="M8 15c-1-4 1-8 5-8s5 3 4 7Z" fill="currentColor"/>
+  `,
+  sleep: `
+    <path d="M6 12c1-1.4 2.4-1.4 3.4 0M13 12c1-1.4 2.4-1.4 3.4 0" stroke="currentColor"
+          stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <path d="M16 6h3l-3 3h3" stroke="currentColor" stroke-width="1.3" fill="none"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  `,
+  airswing: `
+    <path d="M5 19 16 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M9 15q3-3 7-9" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" opacity=".5"/>
+    <circle cx="16" cy="6" r="1.6" fill="currentColor"/>
+  `,
+  micdrop: `
+    <rect x="10" y="2" width="4" height="7" rx="2" fill="currentColor"/>
+    <path d="M8 8a4 4 0 0 0 8 0" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+    <path d="M12 12v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M14 17l3 4M20 21h-6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  `,
+  barge: `
+    <circle cx="7" cy="8" r="2.4" fill="currentColor"/>
+    <path d="M7 11v6M7 11l6-2 4 3" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  `,
+  slap: `
+    <path d="M5 14c3 3 8 4 12 1" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M17 15l3-3-1-4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  `,
+  kick: `
+    <circle cx="8" cy="5" r="2" fill="currentColor"/>
+    <path d="M8 7v6l8-2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M8 13l-2 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+  `,
+  /* ---- the toolbar radial (emote/chat/teleport/cart/hail/map/view/card) - */
+  emoteFace: `
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
+    <circle cx="9" cy="10" r="1.3" fill="currentColor"/>
+    <circle cx="15" cy="10" r="1.3" fill="currentColor"/>
+    <path d="M8 14c1.3 1.6 2.7 2.3 4 2.3s2.7-.7 4-2.3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  `,
+  chat: `
+    <path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4 4v-4H6a2 2 0 0 1-2-2Z" fill="currentColor"/>
+  `,
+  sparkle: `
+    <path d="M12 2c0 4 1 7 4 8-3 1-4 4-4 8 0-4-1-7-4-8 3-1 4-4 4-8Z" fill="currentColor"/>
+    <path d="M19 14c0 1.6.6 2.6 2 3-1.4.4-2 1.4-2 3 0-1.6-.6-2.6-2-3 1.4-.4 2-1.4 2-3Z" fill="currentColor" opacity=".7"/>
+  `,
+  cart: `
+    <path d="M4 15V9h9l4 4h2a1 1 0 0 1 1 1v1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M4 15h16" stroke="currentColor" stroke-width="1.6"/>
+    <circle cx="7" cy="18" r="1.8" fill="currentColor"/>
+    <circle cx="18" cy="18" r="1.8" fill="currentColor"/>
+    <path d="M8 9V5h5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+  `,
+  megaphone: `
+    <path d="M3 10v4h3l6 4V6L6 10Z" fill="currentColor"/>
+    <path d="M15 9a4 4 0 0 1 0 6M17.5 6.5a8 8 0 0 1 0 11" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  `,
+  map: `
+    <path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M9 4v14M15 6v14" stroke="currentColor" stroke-width="1.3"/>
+  `,
+  camera: `
+    <rect x="3" y="7" width="14" height="10" rx="2" fill="currentColor"/>
+    <path d="M17 10.5 21 8v8l-4-2.5Z" fill="currentColor"/>
+    <circle cx="10" cy="12" r="2.6" fill="var(--icon-lens,#141a12)"/>
+  `,
+  menu: `
+    <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  `,
+  scorecard: `
+    <rect x="5" y="4" width="14" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <rect x="9" y="2.5" width="6" height="3" rx="1" fill="currentColor"/>
+    <path d="M8 10h8M8 13h8M8 16h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+  `,
   warning: `
     <path d="M12 3 2 20h20Z" fill="#ffb14a" stroke="#c9832e" stroke-width="1" stroke-linejoin="round"/>
     <rect x="11" y="9.5" width="2" height="5.5" rx="1" fill="#3a2a12"/>

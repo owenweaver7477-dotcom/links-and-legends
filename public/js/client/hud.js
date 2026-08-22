@@ -1653,7 +1653,8 @@ HUD.renderEmotes = (level, onPick) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'emote' + (locked ? ' locked' : '');
-    b.innerHTML = `<span class="em-ico">${e.icon}</span>` +
+    b.style.setProperty('--rarity-color', rarityForLevel(e.at).color);
+    b.innerHTML = `<span class="em-ico">${icon(e.icon, { size: 20 })}</span>` +
       `<span class="em-name">${escapeHtml(e.name)}</span>` +
       `<span class="em-sub">${locked ? 'Level ' + e.at : escapeHtml(e.blurb)}</span>`;
     b.disabled = locked;

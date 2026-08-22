@@ -21,6 +21,8 @@
    and what makes hit-testing the drawn buttons feel broken on a phone.
    ========================================================================= */
 
+import { icon } from './icons.js';
+
 const DEAD_ZONE = 26;        // px: inside this, nothing is selected
 
 let root = null, items = [], open = false, chosen = -1;
@@ -89,7 +91,7 @@ export function openRadial(list, at, cb) {
     b.className = 'rad-item' + (it.locked ? ' locked' : '');
     b.style.transform =
       `translate(-50%,-50%) translate(${Math.cos(a) * RAD}px, ${-Math.sin(a) * RAD}px)`;
-    b.innerHTML = `<span class="rad-ico">${it.icon || '•'}</span>`;
+    b.innerHTML = `<span class="rad-ico">${it.icon ? icon(it.icon, { size: 22 }) : '•'}</span>`;
     b.title = it.locked ? `${it.name} — ${it.sub || 'locked'}` : (it.name || '');
     r.appendChild(b);
   });
