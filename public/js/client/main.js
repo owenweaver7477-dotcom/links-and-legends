@@ -1263,18 +1263,38 @@ function holdAim(el, dir) {
 }
 
 /* A rolling average of real frame time. Averaged over a second so it reads
-   steadily rather than flickering on every hitch. */
+   steadily rather than flickering on every hitch.
+
+   The average alone hides exactly the thing a player on weak hardware
+   actually notices: a smooth 58fps with one 400ms stall a second reads as
+   perfect here and terrible to them. _frameHist keeps the raw per-frame
+   deltas from the last 10s (only while the overlay is open, so this never
+   costs anything the rest of the time) purely so the worst one can be
+   shown alongside the average. */
 let _fpsAcc = 0, _fpsN = 0, _fpsAt = 0;
 let _slowRuns = 0, _autoDropped = false;
+const _frameHist = [];
 function measureFrame(now) {
-  if (_fpsAt) { _fpsAcc += now - _fpsAt; _fpsN++; }
+  const dt = _fpsAt ? now - _fpsAt : 0;
+  if (_fpsAt) {
+    _fpsAcc += dt; _fpsN++;
+    if (HUD.perfVisible()) {
+      _frameHist.push({ t: now, ms: dt });
+      const cutoff = now - 10000;
+      while (_frameHist.length && _frameHist[0].t < cutoff) _frameHist.shift();
+    } else if (_frameHist.length) {
+      _frameHist.length = 0;   // don't carry a stale window into the next open
+    }
+  }
   _fpsAt = now;
   if (_fpsN < 30) return;
   const ms = _fpsAcc / _fpsN;
   _fpsAcc = 0; _fpsN = 0;
   if (HUD.perfVisible()) {
     const r = scene.renderer.info.render;
-    HUD.setPerf(1000 / ms, ms, r.calls, r.triangles, HUD.quality);
+    let worst = 0;
+    for (const f of _frameHist) if (f.ms > worst) worst = f.ms;
+    HUD.setPerf(1000 / ms, ms, r.calls, r.triangles, HUD.quality, worst);
   }
 
   /* Adaptive quality. Sun shadows are a whole extra pass over every caster,

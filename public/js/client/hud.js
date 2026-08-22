@@ -342,10 +342,14 @@ HUD.showTouchPad = on => { el.touchPad.hidden = !on; };
 /* ------------------------------------------------------------- perf HUD */
 HUD.showPerf = on => { el.perfHud.hidden = !on; };
 HUD.perfVisible = () => !el.perfHud.hidden;
-HUD.setPerf = (fps, ms, calls, tris, quality) => {
+HUD.setPerf = (fps, ms, calls, tris, quality, worstMs) => {
   const cls = fps >= 55 ? '' : fps >= 30 ? 'warn' : 'bad';
+  // the average hides stutters; the worst frame in the last 10s is the
+  // number that actually matches what a player felt just now
+  const worstCls = worstMs >= 100 ? 'bad' : worstMs >= 34 ? 'warn' : '';
   el.perfHud.innerHTML =
-    `<b class="${cls}">${fps.toFixed(0)} fps</b>  ${ms.toFixed(1)} ms\n` +
+    `<b class="${cls}">${fps.toFixed(0)} fps</b>  ${ms.toFixed(1)} ms` +
+    (worstMs != null ? `  <b class="${worstCls}">worst ${worstMs.toFixed(0)}ms</b>` : '') + `\n` +
     `${calls} draws · ${(tris/1000).toFixed(0)}k tris\n` +
     `graphics: ${quality}`;
 };
