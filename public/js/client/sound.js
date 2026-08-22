@@ -202,10 +202,21 @@ Sound.cart = (speed) => {
     cartOsc.connect(cartFilter); cartFilter.connect(cartGain); cartGain.connect(master);
     cartOsc.start();
   }
+  /* This runs every rendered frame while driving — 60 to 144 times a
+     second — against a physics speed that itself changes in discrete
+     jumps (collision response, the governor, engine braking). Setting
+     `.value` directly is an instantaneous step, so that many steps a
+     second reads as a grainy, zippering buzz instead of a hum, and it
+     got audibly worse once the cart's top speed and cornering grip went
+     up — the same physics jumps now swing a wider frequency/gain range.
+     setTargetAtTime glides toward each new value instead of jumping to
+     it, which is inaudible for a single call but smooths the whole
+     stream into one continuous engine note. */
   const s = Math.abs(speed);
-  cartOsc.frequency.value = 42 + s * 6.5;
-  cartFilter.frequency.value = 220 + s * 40;
-  cartGain.gain.value = (muted || platformMuted) ? 0 : Math.min(0.10, 0.03 + s * 0.006);
+  const now = c.currentTime, k = 0.06;
+  cartOsc.frequency.setTargetAtTime(42 + s * 6.5, now, k);
+  cartFilter.frequency.setTargetAtTime(220 + s * 40, now, k);
+  cartGain.gain.setTargetAtTime((muted || platformMuted) ? 0 : Math.min(0.10, 0.03 + s * 0.006), now, k);
 };
 
 /* ═══════════════════════════════════════════════════════════ AMBIENCE ═══

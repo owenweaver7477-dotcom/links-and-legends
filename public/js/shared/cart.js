@@ -557,7 +557,15 @@ export class CartBody {
          impact that should absolutely put a cart on its roof, generated
          almost no roll at all because its cross product is near zero. */
       const over = Math.sign(side) || (this.tilt >= 0 ? 1 : -1);
-      this.tiltV += -over * (0.5 + 0.5 * head) * (Math.abs(sp) / MAX_FWD) * 17.0;
+      /* Clamped at 1, the same way `hit` just above already is — a full
+         square hit at (old) stock top speed already means "roll it", and
+         this term was the one impact value that wasn't bounded to that.
+         MAX_FWD is the fixed stock top speed, not the boosted one, so
+         once carts could go faster than that this ratio could climb past
+         1.9 and roll a maxed-out cart much harder than a stock one for
+         the exact same kind of hit — physics tuned against a top speed
+         that no longer capped anything. */
+      this.tiltV += -over * (0.5 + 0.5 * head) * Math.min(1, Math.abs(sp) / MAX_FWD) * 17.0;
       // and a genuinely heavy square hit stalls the drivetrain for a beat
       if (what === 'tree' && head > 0.7 && Math.abs(sp) > CRASH_SPEED) this.stunned = 0.45;
     }
