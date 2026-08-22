@@ -3917,6 +3917,30 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     });
   });
 
+  /* -------------------------------------------------------------- kick --- */
+  let kickPid = null;
+  document.getElementById('boardRows')?.addEventListener('click', e => {
+    const b = e.target.closest('.pkick'); if (!b) return;
+    kickPid = b.dataset.kickPid;
+    const isHost = b.dataset.kickHost === '1';
+    HUD.el.kickErr.textContent = '';
+    HUD.el.kickReason.value = '';
+    HUD.el.kickTarget.textContent = b.dataset.kickName || 'this player';
+    HUD.el.kickNote.textContent = isHost
+      ? 'This removes them from the room immediately.'
+      : 'Starts a vote — needs 60% of the room to agree within 45 seconds.';
+    HUD.el.modalKick.hidden = false;
+  });
+  document.getElementById('btnKickCancel')?.addEventListener('click', () => { HUD.el.modalKick.hidden = true; });
+  document.getElementById('btnKickSend')?.addEventListener('click', () => {
+    if (!kickPid) return;
+    Net.kickPlayer(kickPid, HUD.el.kickReason.value.trim(), res => {
+      if (!res?.ok) { HUD.el.kickErr.textContent = res?.error || 'Could not do that — try again.'; return; }
+      HUD.el.modalKick.hidden = true;
+      HUD.toast(res.kicked ? 'Removed.' : `Vote cast — ${res.votes}/${res.needed}.`, 'good', 2200);
+    });
+  });
+
   document.getElementById('btnBindsReset')?.addEventListener('click', () => {
     resetBinds();
     HUD.renderBinds();

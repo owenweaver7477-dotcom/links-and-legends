@@ -804,6 +804,21 @@
   </div>
 </div>
 
+<!-- REMOVE A PLAYER — the host acts immediately; anyone else in a public
+     room casts a vote instead. Same modal, the subtitle just says which. -->
+<div class="modal" id="modalKick" hidden>
+  <div class="modal-card">
+    <h3>Remove <span id="kickTarget">this player</span>?</h3>
+    <p class="tiny" id="kickNote">This removes them from the room immediately.</p>
+    <textarea id="kickReason" maxlength="200" placeholder="Reason (optional — kept in server logs only)"></textarea>
+    <p class="err tiny" id="kickErr"></p>
+    <div class="modal-actions">
+      <button class="btn" id="btnKickCancel">Cancel</button>
+      <button class="btn primary" id="btnKickSend">Remove</button>
+    </div>
+  </div>
+</div>
+
 <script type="module" src="js/client/main.js"></script>
 </body>
 </html>

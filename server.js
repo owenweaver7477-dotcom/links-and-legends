@@ -207,7 +207,7 @@ import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, color
          weeklyGainers, seasonBoard, courseBoard } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
 import { EMOTES, meleeById } from './public/js/client/celebrations.js';
-import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allowChat, PHRASES } from './server/chat.js';
+import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allowChat, PHRASES, clean } from './server/chat.js';
 import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound, setDifficulty, difficultyOf,
@@ -474,6 +474,8 @@ const HOLE_SUMMARY_MS = 20000;
 // test can see it happen in seconds rather than waiting three real minutes.
 const AFK_MS = Number(process.env.GOLF_AFK_MS) || 3 * 60 * 1000;
 const AFK_SWEEP_MS = Number(process.env.GOLF_AFK_SWEEP_MS) || 20000;
+const KICK_VOTE_WINDOW_MS = Number(process.env.GOLF_KICK_VOTE_MS) || 45000;
+const KICK_VOTE_COOLDOWN_MS = Number(process.env.GOLF_KICK_COOLDOWN_MS) || 5 * 60 * 1000;
 
 /* A published game is a public one, and every visitor who presses Play Now
    creates a room.  The reaper collects idle ones after 20 minutes, but that
@@ -749,6 +751,40 @@ function dropIfNeverPlayed(room, p) {
   if (room.state === 'lobby' || (p.spectator && p.scores.every(s => s == null))) {
     room.players = room.players.filter(x => x.pid !== p.pid);
   }
+}
+
+/* How long a removed pid is refused this room's code. Long enough that a
+   griefer can't just rejoin and start over, short enough that a wrongful
+   kick — the vote misfired, or the host changes their mind — is not a
+   life sentence against a room that only lives as long as the round does
+   anyway. */
+const KICK_BLOCK_MS = 30 * 60 * 1000;
+
+/**
+ * The one path a player leaves a room involuntarily. Unlike a disconnect —
+ * which parks the seat so a dropped connection never costs a scorecard —
+ * this clears it outright: a kicked player is meant to be gone, not
+ * reconnectable. Handles host/turn succession itself via ensureContinuable
+ * so every caller gets that for free.
+ */
+function removePlayer(room, pid, reason) {
+  const p = room.players.find(x => x.pid === pid);
+  if (!p) return;
+  room.kickBlocklist ??= new Map();
+  room.kickBlocklist.set(pid, Date.now() + KICK_BLOCK_MS);
+  const sid = p.socketId;
+  room.players = room.players.filter(x => x.pid !== pid);
+  if (room.turnPid === pid) room.turnPid = null;
+  if (sid) {
+    // Removed from `sockets` here, ahead of disconnect() firing, so that
+    // handler's own lookup finds nothing and no-ops rather than repeating
+    // (or fighting) the cleanup this function just did.
+    sockets.delete(sid);
+    const s = io.sockets.sockets.get(sid);
+    if (s) { try { s.emit('kicked', { reason }); s.disconnect(true); } catch { /* already gone */ } }
+  }
+  ensureContinuable(room);
+  if (!room.players.some(x => x.connected)) room.emptySince = Date.now();
 }
 
 /* Long enough that coming back is news, short enough that it is not an
@@ -1156,6 +1192,13 @@ io.on('connection', socket => {
     if (!pid) return reply({ ok: false, error: 'Bad client id — refresh the page.' });
     const room = rooms.get(code);
     if (!room) return reply({ ok: false, error: 'No room with code ' + (code || '—') });
+    // A kicked pid stays out of THIS room for the block's duration — see
+    // removePlayer. Checked ahead of everything else so there is no path
+    // back in, rejoin included.
+    const blockedUntil = room.kickBlocklist?.get(pid);
+    if (blockedUntil && blockedUntil > Date.now()) {
+      return reply({ ok: false, error: 'You were removed from this room and cannot rejoin it yet.' });
+    }
     const prev = sockets.get(socket.id);
     if (!prev || prev.code !== code || prev.pid !== pid) unbind();
 
@@ -1976,6 +2019,72 @@ io.on('connection', socket => {
     const room = ref && rooms.get(ref.code);
     const target = room?.players.find(p => p.pid === d?.targetPid);
     reply(submitReport(pid, d?.targetPid, target?.name, d?.reason, ref?.code, d?.context));
+  });
+
+  /* §8.1 — a player can always be removed, but never unilaterally except by
+     the host. In a private lobby that authority is absolute and immediate:
+     it's the host's link, the host's guest list. In a public one — where
+     nobody chose to be in the room with anybody else — the host still acts
+     immediately, but so can the room itself, by vote: 60% of everyone
+     present other than the target, at least two of them, inside a 45s
+     window that resets if the vote goes stale. The reason travels no
+     further than this server's own log — there is no moderator role yet to
+     read a stored one, and a public "why you were kicked" board is just a
+     second harassment channel with extra steps. */
+  socket.on('player:kick', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const ref = sockets.get(socket.id);
+    if (!ref) return reply({ ok: false, error: 'Not in a room.' });
+    const room = rooms.get(ref.code);
+    if (!room) return reply({ ok: false, error: 'Room is gone.' });
+    const targetPid = cleanPid(d?.targetPid);
+    if (!targetPid || targetPid === ref.pid) return reply({ ok: false, error: 'Pick somebody else.' });
+    const target = room.players.find(p => p.pid === targetPid);
+    if (!target) return reply({ ok: false, error: 'They already left.' });
+    const reason = clean(String(d?.reason || '')).slice(0, 200) || '(no reason given)';
+
+    if (ref.pid === room.hostPid) {
+      console.log(`  kick: host removed ${targetPid} from ${room.code} — ${reason}`);
+      toast(room, `${target.name} was removed by the host.`, 'warn');
+      removePlayer(room, targetPid, 'Removed by the host.');
+      broadcastState(room);
+      return reply({ ok: true, kicked: true });
+    }
+
+    if (room.privacy !== 'public') {
+      return reply({ ok: false, error: 'Only the host can remove players in a private lobby.' });
+    }
+    const others = room.players.filter(p => p.connected && p.pid !== targetPid);
+    if (others.length < 2) {
+      return reply({ ok: false, error: 'Not enough other players for a vote.' });
+    }
+    const cdKey = ref.pid + '|' + targetPid;
+    room.kickCooldowns ??= new Map();
+    const lastVote = room.kickCooldowns.get(cdKey) || 0;
+    if (Date.now() - lastVote < KICK_VOTE_COOLDOWN_MS) {
+      return reply({ ok: false, error: 'You already voted on this — give it a few minutes.' });
+    }
+    room.kickCooldowns.set(cdKey, Date.now());
+
+    room.kickVotes ??= new Map();
+    let v = room.kickVotes.get(targetPid);
+    if (!v || Date.now() - v.startedAt > KICK_VOTE_WINDOW_MS) {
+      v = { voters: new Set(), startedAt: Date.now() };
+      room.kickVotes.set(targetPid, v);
+    }
+    v.voters.add(ref.pid);
+    const threshold = Math.max(2, Math.ceil(others.length * 0.6));
+
+    if (v.voters.size >= threshold) {
+      room.kickVotes.delete(targetPid);
+      console.log(`  kick: vote removed ${targetPid} from ${room.code} — ${reason}`);
+      toast(room, `${target.name} was voted out.`, 'warn');
+      removePlayer(room, targetPid, 'Voted out by the room.');
+      broadcastState(room);
+      return reply({ ok: true, kicked: true });
+    }
+    toast(room, `Vote to remove ${target.name}: ${v.voters.size}/${threshold}`, 'warn');
+    return reply({ ok: true, kicked: false, votes: v.voters.size, needed: threshold });
   });
 
   socket.on('cart:hail', () => {

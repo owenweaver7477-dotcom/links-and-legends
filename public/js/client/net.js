@@ -250,6 +250,11 @@ Net.listFeedback = (sort, cb) => ask('feedback:list', { sort }, res => cb?.(res?
 Net.voteFeedback = (id, cb) => ask('feedback:vote', { id }, res => cb?.(res));
 Net.reportPlayer = (targetPid, reason, context, cb) =>
   ask('player:report', { targetPid, reason, context }, res => cb?.(res));
+/* The host removes immediately; anyone else in a public room casts a vote.
+   Same call either way — the server already knows which one applies, see
+   §8.1 in server.js — so the client never has to guess and be wrong. */
+Net.kickPlayer = (targetPid, reason, cb) =>
+  ask('player:kick', { targetPid, reason }, res => cb?.(res));
 Net.prefs = p => Net.socket?.emit('player:prefs', p);
 Net.setLook = look => Net.socket?.emit('player:look', { look });
 Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, rot, moving, cart });

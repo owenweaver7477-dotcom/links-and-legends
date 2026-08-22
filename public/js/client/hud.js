@@ -34,6 +34,7 @@ for (const id of [
   'btnFeedbackMid', 'btnFeedbackNew', 'modalFeedback', 'fbCats', 'fbBody',
   'fbCourseNote', 'fbErr', 'btnFeedbackCancel', 'btnFeedbackSend', 'feedbackBoard',
   'modalReport', 'reportTarget', 'reportBody', 'reportErr', 'btnReportCancel', 'btnReportSend',
+  'modalKick', 'kickTarget', 'kickNote', 'kickReason', 'kickErr', 'btnKickCancel', 'btnKickSend',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
   'wArrow', 'wSpeed', 'wDesc', 'wWeather',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
@@ -419,6 +420,19 @@ HUD.renderBoard = (room, myPid, course) => {
       rep.textContent = '🚩';
       rep.dataset.reportPid = p.pid; rep.dataset.reportName = p.name;
       row.appendChild(rep);
+      /* The host can always remove somebody; everyone else can only start a
+         vote, and only in a public room — a private one is the host's own
+         guest list, see §8.1 in server.js. */
+      const isHost = myPid === room.hostPid;
+      if (isHost || room.privacy === 'public') {
+        const kick = document.createElement('button');
+        kick.type = 'button'; kick.className = 'pkick';
+        kick.title = isHost ? `Remove ${p.name}` : `Vote to remove ${p.name}`;
+        kick.textContent = '🚫';
+        kick.dataset.kickPid = p.pid; kick.dataset.kickName = p.name;
+        kick.dataset.kickHost = isHost ? '1' : '';
+        row.appendChild(kick);
+      }
     }
     el.boardRows.appendChild(row);
   }
