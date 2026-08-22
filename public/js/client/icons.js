@@ -171,6 +171,11 @@ const ICONS = {
     <path d="M4 9v6h4l6 4V5l-6 4Z" fill="currentColor"/>
     <path d="M16.5 9.5l4 5M20.5 9.5l-4 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
   `,
+  // inspect / zoom in on an item
+  inspect: `
+    <circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>
+    <line x1="14.6" y1="14.6" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+  `,
   // a public room
   globe: `
     <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>

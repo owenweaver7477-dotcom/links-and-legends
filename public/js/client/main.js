@@ -675,6 +675,11 @@ function applyWardrobe(patch) {
     else delete d[patch.__decal.slot];
     lookDraft = normaliseLook({ ...lookDraft, decals: d, outfit: lookDraft.outfit },
       0, undefined, G.profile?.level ?? 1);
+  } else if ('__clubDecal' in patch) {
+    // the shaft band, not a body decal slot — orthogonal to "outfit", so
+    // unlike a garment swap this must NOT clear a named outfit
+    lookDraft = normaliseLook({ ...lookDraft, decal: patch.__clubDecal, outfit: lookDraft.outfit },
+      0, undefined, G.profile?.level ?? 1);
   } else if (patch.__custom) {
     lookDraft = normaliseLook({
       ...lookDraft,
@@ -694,6 +699,11 @@ function applyWardrobe(patch) {
 
   saveLook(lookDraft);
   refreshMenuAvatar();
+  // the inspect modal has its own grid outside HUD.renderWardrobe's tree —
+  // keep its "on" state honest if a club decal changed while it was open
+  if (!document.getElementById('modalClubInspect')?.hidden) {
+    HUD.renderClubDecalPicker(lookDraft, G.profile?.level ?? 1, G.profile?.caseUnlocks || []);
+  }
   /* ALWAYS, not only in a room. The wardrobe is reached from the front page,
      where `G.joined` is false — so this sent nothing at all in exactly the
      place people actually dress their golfer, and the outfit lived in this
@@ -4088,6 +4098,38 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     });
   });
   HUD.el.btnCaseDone?.addEventListener('click', () => { HUD.el.modalCase.hidden = true; });
+
+  /* ------------------------------------------------------- club inspect */
+  document.getElementById('btnBagInspect')?.addEventListener('click', () => {
+    HUD.openClubInspect();
+    HUD.renderClubDecalPicker(lookDraft, G.profile?.level ?? 1, G.profile?.caseUnlocks || []);
+  });
+  document.getElementById('btnInspectClose')?.addEventListener('click', () => {
+    document.getElementById('modalClubInspect').hidden = true;
+  });
+  // Drag to turn it yourself. Same idea as the wardrobe's own turntable
+  // drag (bindWardrobeDrag) but scoped to this one canvas and forwarded
+  // into shopview.js rather than the main scene's camera.
+  (() => {
+    const cv = document.getElementById('inspectCanvas');
+    if (!cv) return;
+    const orbit = { yaw: 0, pitch: 0 };
+    let last = null;
+    cv.addEventListener('pointerdown', e => {
+      last = { x: e.clientX, y: e.clientY };
+      cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener('pointermove', e => {
+      if (!last) return;
+      orbit.yaw += (e.clientX - last.x) * 0.012;
+      orbit.pitch = clamp(orbit.pitch + (e.clientY - last.y) * 0.010, -0.6, 0.6);
+      last = { x: e.clientX, y: e.clientY };
+      HUD.orbitInspect(orbit.yaw, orbit.pitch);
+    });
+    const release = () => { last = null; };
+    cv.addEventListener('pointerup', release);
+    cv.addEventListener('pointercancel', release);
+  })();
 
   document.getElementById('btnBindsReset')?.addEventListener('click', () => {
     resetBinds();

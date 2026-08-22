@@ -624,10 +624,74 @@ HUD.previewBagClub = what => {
   const cv = document.getElementById('bagCanvas');
   if (!cv || !what) return;
   showShopItem(cv, what);
+  HUD._lastBagView = what;   // so the Inspect button shows whatever you were just looking at
   const cap = document.getElementById('bagCap');
   if (cap) {
     cap.innerHTML = `<b>${escapeHtml(what.name || '')}</b>` +
       (what.sub ? `<small>${escapeHtml(what.sub)}</small>` : '');
+  }
+};
+
+/* ═══════════════════════════════════════════════ CLUB INSPECT ═══════════
+   The bag's little auto-spinning preview was already the real 3D club —
+   this is the same object, bigger, held still where a hand puts it rather
+   than watched go past. Reuses shopview.js's renderer wholesale; the only
+   new thing it needs from that module is a way to override the spin. */
+HUD.openClubInspect = () => {
+  const modal = document.getElementById('modalClubInspect');
+  const cv = document.getElementById('inspectCanvas');
+  if (!modal || !cv) return;
+  const what = HUD._lastBagView || { kind: 'club', key: 'DR', tier: HUD.myClubTier || 0 };
+  modal.hidden = false;
+  showShopItem(cv, what);
+  releaseShopOrbit(cv);   // a freshly opened inspect starts turning on its own, same as the bag
+  const cap = document.getElementById('inspectCap');
+  if (cap) {
+    cap.innerHTML = `<b>${escapeHtml(what.name || '')}</b>` +
+      (what.sub ? `<small>${escapeHtml(what.sub)}</small>` : '');
+  }
+};
+
+/** Drive the inspect canvas's orbit directly — main.js owns the actual
+ *  pointer events (same split as the wardrobe's own drag handler), this
+ *  just forwards into shopview.js. */
+HUD.orbitInspect = (yaw, pitch) => {
+  const cv = document.getElementById('inspectCanvas');
+  if (cv) setShopOrbit(cv, yaw, pitch);
+};
+
+/**
+ * The shaft decal picker. This is the one cosmetic slot in the whole game
+ * that had a working field (`look.decal`, read by Avatar.setDecal) and no
+ * UI anywhere that ever wrote to it — earned, stored, applied, and simply
+ * unreachable. Shows every decal-kind unlock, earned or not, the same way
+ * club finishes already do: owned ones are pressable, others show the
+ * level that unlocks them so there is always a next one to want.
+ */
+HUD.renderClubDecalPicker = (look, level, caseUnlocks = []) => {
+  const grid = document.getElementById('inspectDecalGrid');
+  if (!grid) return;
+  const decals = UNLOCKS.filter(u => u.kind === 'decal');
+  const owned = id => (Number(level) || 1) >= 0 &&
+    (decals.find(u => u.id === id)?.at <= (Number(level) || 1) || caseUnlocks.includes('decal:' + id));
+  const cur = look?.decal || null;
+  const none = `<button class="none${!cur ? ' on' : ''}" data-decal="" title="No shaft decal">None</button>`;
+  const cells = decals.map(u => {
+    const has = owned(u.id);
+    return `<button class="${!has ? 'locked' : ''}${u.id === cur ? ' on' : ''}"
+      data-decal="${has ? u.id : ''}" ${has ? '' : 'disabled'}
+      title="${escapeHtml(u.name)}${has ? '' : ` — level ${u.at}`}">
+      ${has ? `<i style="background:${u.color || '#8fe07a'}"></i>` : u.at}
+    </button>`;
+  }).join('');
+  grid.innerHTML = none + cells;
+  if (!grid.dataset.wired) {
+    grid.dataset.wired = '1';
+    grid.addEventListener('click', e => {
+      const b = e.target.closest('button:not([disabled])');
+      if (!b || !('decal' in b.dataset)) return;
+      HUD.onWardrobe?.({ __clubDecal: b.dataset.decal || null });
+    });
   }
 };
 
@@ -2183,7 +2247,7 @@ import {
   outfitStats, spinWord, outfitById
 } from '../shared/wardrobe.js';
 import { decalTexture } from './decals.js';
-import { showItem as showShopItem } from './shopview.js';
+import { showItem as showShopItem, setUserOrbit as setShopOrbit, releaseUserOrbit as releaseShopOrbit } from './shopview.js';
 import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress } from '../shared/clubskins.js';
 import { DIFFICULTIES, difficultyById } from '../shared/difficulty.js';
 import { weatherEffects, clockText } from '../shared/weather.js';

@@ -423,6 +423,7 @@ export function showItem(canvas, what) {
   r.camera.updateProjectionMatrix();
 
   r.spin = 0;
+  r.userControlled = false;   // a new item starts turning on its own until touched
   start();
 }
 
@@ -441,14 +442,42 @@ function frame() {
       R.camera.aspect = w / h;
       R.camera.updateProjectionMatrix();
     }
-    R.spin += 0.012;
-    R.stage.rotation.y = R.spin;
-    /* A slight nod as well as the turn. A pure Y spin is a lazy susan; the
-       tilt is what lets you see the sole of a club and the face of a badge
-       in the same revolution. */
-    R.stage.rotation.x = Math.sin(R.spin * 0.6) * 0.16;
+    if (R.userControlled) {
+      // a hand has touched this one: hold exactly where it was left,
+      // permanently off the auto-spin until a fresh item resets it
+      R.stage.rotation.y = R.userYaw;
+      R.stage.rotation.x = R.userPitch;
+    } else {
+      R.spin += 0.012;
+      R.stage.rotation.y = R.spin;
+      /* A slight nod as well as the turn. A pure Y spin is a lazy susan; the
+         tilt is what lets you see the sole of a club and the face of a badge
+         in the same revolution. */
+      R.stage.rotation.x = Math.sin(R.spin * 0.6) * 0.16;
+    }
     R.renderer.render(R.scene, R.camera);
   }
+}
+
+/**
+ * Let a pointer drag take over this canvas's turntable — for the club
+ * inspect view, where the whole point is holding a specific angle rather
+ * than watching it spin past. Sticky: once dragged, it stays exactly
+ * where released rather than drifting back into the auto-spin, the way a
+ * real turntable you've grabbed does not start moving on its own again.
+ */
+export function setUserOrbit(canvas, yaw, pitch) {
+  const R = views.get(canvas);
+  if (!R) return;
+  R.userControlled = true;
+  R.userYaw = yaw; R.userPitch = pitch;
+}
+
+/** Back to full auto-spin, e.g. when a fresh item is put on the stage. */
+export function releaseUserOrbit(canvas) {
+  const R = views.get(canvas);
+  if (!R) return;
+  R.userControlled = false;
 }
 
 export function start() { if (!raf) raf = requestAnimationFrame(frame); }

@@ -659,6 +659,7 @@
         <div class="shopview">
           <canvas id="bagCanvas"></canvas>
           <div class="shopview-cap" id="bagCap"></div>
+          <button class="shopview-inspect" id="btnBagInspect" title="Inspect up close"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="14.6" y1="14.6" x2="20.5" y2="20.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg> Inspect</button>
         </div>
         <div>
           <div class="bag" id="bagList"></div>
@@ -810,7 +811,7 @@
   <div class="modal-card rewardscard">
     <div class="rw-head">
       <h3>Daily rewards</h3>
-      <button class="btn mini" id="btnRewardsClose">✕</button>
+      <button class="btn mini" id="btnRewardsClose"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
     </div>
     <div class="rw-streak">
       <span id="rwStreakTxt">Day 1</span>
@@ -849,6 +850,27 @@
       <p class="case-kind" id="caseItemKind"></p>
     </div>
     <button class="btn primary case-done" id="btnCaseDone" hidden>Nice!</button>
+  </div>
+</div>
+
+<!-- CLUB INSPECT — the club you're carrying, up close. Drag to turn it
+     yourself rather than watching the bag panel's little auto-spin;
+     "New decal" reaches the one cosmetic slot (the shaft band) that had
+     no picker anywhere in the game before this. -->
+<div class="modal" id="modalClubInspect" hidden>
+  <div class="modal-card inspectcard">
+    <div class="rw-head">
+      <h3>Inspect</h3>
+      <button class="btn mini" id="btnInspectClose" title="Close"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="inspect-stage">
+      <canvas id="inspectCanvas"></canvas>
+    </div>
+    <div class="inspect-cap" id="inspectCap"></div>
+    <div class="inspect-decals">
+      <h5>Shaft decal</h5>
+      <div class="inspect-decal-grid" id="inspectDecalGrid"></div>
+    </div>
   </div>
 </div>
 
