@@ -36,6 +36,17 @@
      { rounds: n }        n complete rounds
      { clubTier: n }      own that set — a finish only the top set can wear
    `shaft`, `head` and `grip` are what shopview and the avatar draw. */
+/* One accent colour per SET TIER (not a skin) — the same seven colours
+   avatar.js's setClub() paints the actual club with, duplicated here on
+   purpose rather than imported: avatar.js pulls in the whole THREE.js
+   client stack, and this is presentation data for a 2D shop card, not a
+   3D model. The top three tiers use their real glow colour so a Titanium
+   or Signature card looks like what you're actually holding; the bottom
+   four have no glow in-game, so their head colour stands in instead. */
+export const TIER_ACCENT = [
+  '#6e5432', '#8a5a42', '#3a3d42', '#1d1f24', '#141821', '#2f5060', '#6a34a0'
+];
+
 export const CLUB_SKINS = [
   { id: 'stock', name: 'Stock', blurb: 'However the set came.',
     need: null, shaft: null, head: null, grip: null },

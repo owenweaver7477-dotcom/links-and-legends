@@ -903,11 +903,15 @@ h1 em { font-style: normal; color: #7ed492; }
 .coinbal { font-size: 12px; color: #ffd76b; letter-spacing: 0; text-transform: none; font-weight: 700; }
 .shop { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .shopcard { display: flex; flex-direction: column; gap: 5px; padding: 12px;
-  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.10); border-radius: 12px; }
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.10); border-radius: 12px;
+  /* a tier/set's own colour on top, when it has one — see TIER_ACCENT and
+     the case system's --rarity-color, the same language everywhere now */
+  border-top: 3px solid var(--rarity-color, rgba(255,255,255,.10)); }
 .shopcard b { font-size: 13.5px; }
 .shopcard .sc-blurb { font-size: 11px; color: #a9c2ae; line-height: 1.45; flex: 1; }
 .shopcard .btn { margin-top: 7px; font-size: 12.5px; padding: 8px 10px; }
-.shopcard.owned { border-color: rgba(111,212,138,.45); }
+.shopcard.owned { border-color: rgba(111,212,138,.45); border-top-color: var(--rarity-color, rgba(111,212,138,.45));
+  box-shadow: 0 0 18px -6px var(--rarity-color, transparent); }
 .shopcard.owned .btn { color: #8fe07a; opacity: 1; }
 
 
@@ -1494,10 +1498,10 @@ body.playing .coinhud { display: block; }
 .cr-top { display: flex; align-items: stretch; gap: 12px; margin: 4px 0 14px; }
 .cr-rating { flex: none; min-width: 104px; padding: 12px 16px; border-radius: 14px;
   display: flex; flex-direction: column; justify-content: center; align-items: center;
-  background: linear-gradient(160deg, rgba(143,224,122,.18), rgba(143,224,122,.04));
-  border: 1px solid rgba(143,224,122,.28); }
+  background: linear-gradient(160deg, rgba(143,224,122,.22), rgba(143,224,122,.05));
+  border: 1px solid rgba(143,224,122,.32); box-shadow: 0 0 22px -8px rgba(143,224,122,.55); }
 .cr-num { font-size: 38px; font-weight: 900; line-height: 1; letter-spacing: -1.5px;
-  color: #eaffe4; font-variant-numeric: tabular-nums; }
+  color: #eaffe4; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px rgba(143,224,122,.45); }
 .cr-cap { font-size: 9px; font-weight: 800; letter-spacing: 1.6px;
   text-transform: uppercase; color: #8fb69a; margin-top: 4px; }
 .cr-side { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }

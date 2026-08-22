@@ -937,6 +937,7 @@ HUD.renderShop = (prof, onBuy) => {
       const cost = caddieCost(lvl);
       const card = document.createElement('div');
       card.className = 'shopcard caddie' + (lvl >= CADDIE_MAX ? ' owned' : '');
+      card.style.setProperty('--rarity-color', CADDIE_HEX[key] || '#e8c15a');
       /* A colour per caddie, so the six of them are six people on the
          turntable rather than one gold figure with different captions.
          Keyed off the caddie id, which is stable — the stat strings are
@@ -973,6 +974,7 @@ HUD.renderShop = (prof, onBuy) => {
     const cur = CLUB_TIERS[tier];
     const curCard = document.createElement('div');
     curCard.className = 'shopcard owned';
+    curCard.style.setProperty('--rarity-color', TIER_ACCENT[tier] || TIER_ACCENT[0]);
     curCard.innerHTML = `<span class="sc-art">${clubSvg(cur.look, 46)}</span>
       <b>${escapeHtml(cur.name)}</b><span class="sc-blurb">${escapeHtml(cur.blurb)}</span>
       <span class="cad-now">Tier ${tier + 1}/7${refine ? ' · Refinement ' + ['I','II','III'][refine - 1] : ''}</span>`;
@@ -993,6 +995,7 @@ HUD.renderShop = (prof, onBuy) => {
       const nxt = CLUB_TIERS[tier + 1];
       const nc = document.createElement('div');
       nc.className = 'shopcard';
+      nc.style.setProperty('--rarity-color', TIER_ACCENT[tier + 1] || TIER_ACCENT[0]);
       nc.dataset.view = JSON.stringify({ kind: 'club', key: 'DR', tier: tier + 1,
         name: nxt.name, sub: 'The next set up' });
       nc.innerHTML = `<span class="sc-art">${clubSvg(nxt.look, 46)}</span>
@@ -2249,7 +2252,7 @@ import {
 } from '../shared/wardrobe.js';
 import { decalTexture } from './decals.js';
 import { showItem as showShopItem, setUserOrbit as setShopOrbit, releaseUserOrbit as releaseShopOrbit } from './shopview.js';
-import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress } from '../shared/clubskins.js';
+import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress, TIER_ACCENT } from '../shared/clubskins.js';
 import { DIFFICULTIES, difficultyById } from '../shared/difficulty.js';
 import { weatherEffects, clockText } from '../shared/weather.js';
 
