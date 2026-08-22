@@ -1370,10 +1370,15 @@ export class GolfScene {
     const grp = new THREE.Group();
     const y = T.heightAt(hole.pin.x, hole.pin.z);
 
-    // the cup: a dark cylinder sunk into the green, plus a white liner ring
+    // the cup: a dark cylinder sunk into the green, plus a white liner ring.
+    // Never LOD/cull this group — it's the target, and it must read from the
+    // tee at every distance. A misjudged auto bounding sphere on the thin
+    // flagstick is exactly the kind of thing that produces "the hole is
+    // sometimes just missing" with no other symptom to explain it.
     const cupGeo = new THREE.CylinderGeometry(hole.cup.r, hole.cup.r, 0.32, 20, 1, true);
     const cup = new THREE.Mesh(cupGeo, new THREE.MeshBasicMaterial({ color: 0x0a0f07, side: THREE.BackSide }));
     cup.position.set(hole.cup.x, y - 0.16 + 0.005, hole.cup.z);
+    cup.frustumCulled = false;
     grp.add(cup);
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(hole.cup.r * 0.92, hole.cup.r * 1.06, 24),
@@ -1381,6 +1386,7 @@ export class GolfScene {
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(hole.cup.x, y + 0.012, hole.cup.z);
+    ring.frustumCulled = false;
     grp.add(ring);
 
     // flagstick
@@ -1390,13 +1396,22 @@ export class GolfScene {
     );
     stick.position.set(hole.pin.x, y + 1.065, hole.pin.z);
     stick.castShadow = true;
+    stick.frustumCulled = false;
     grp.add(stick);
 
-    // flag — a small plane we ripple in update()
+    /* flag — a small plane we ripple and swing with the wind in update().
+       The geometry is translated so its OWN local origin sits at the
+       pole-attached edge rather than the plane's visual centre. That one
+       line is what keeps the flag on the pole: rotation.y below turns the
+       mesh around its local origin, and rotating around anything other
+       than the pole itself swings the attached edge away from it the
+       moment the wind isn't dead calm — which it almost never is. */
     const flagGeo = new THREE.PlaneGeometry(0.52, 0.34, 12, 4);
+    flagGeo.translate(0.26, 0, 0);
     const flagMat = new THREE.MeshLambertMaterial({ color: 0xe8443a, side: THREE.DoubleSide });
     const flag = new THREE.Mesh(flagGeo, flagMat);
-    flag.position.set(hole.pin.x + 0.26, y + 1.92, hole.pin.z);
+    flag.position.set(hole.pin.x, y + 1.92, hole.pin.z);
+    flag.frustumCulled = false;
     grp.add(flag);
     this.flag = flag;
     this.flagBase = new THREE.Vector3(hole.pin.x, y + 1.92, hole.pin.z);
@@ -2428,12 +2443,13 @@ export class GolfScene {
       if (sh) sh.uniforms.uTime.value = this.t;
     }
     if (this.flag) {
-      // ripple the flag and let it stream with the wind
+      // ripple the flag and let it stream with the wind. Geometry x is in
+      // [0, 0.52] post-translate (see _buildPin) — 0 at the pole, 0.52 at
+      // the free edge — so fx is already the 0..1 the ripple wants.
       const g = this.flag.geometry;
       const pos = g.attributes.position;
       for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const fx = (x + 0.26) / 0.52;
+        const fx = pos.getX(i) / 0.52;
         pos.setZ(i, Math.sin(fx * 7 + this.t * 8) * 0.07 * fx);
       }
       pos.needsUpdate = true;
