@@ -11,29 +11,37 @@
    yards, not a different sport.  Buying gear buys polish, not victory.
    ========================================================================= */
 
+/* Costs scaled ~8x from their original values (a flagged balance pass, not a
+   bug fix): a level-par 9-hole round nets roughly 5,400 coins, and the
+   original prices summed to 4,700 — the ENTIRE gear shop, all six items,
+   was affordable inside a single round. Every other sink in the economy is
+   a real grind (caddies ~59 rounds to max, the club ladder 147-300+), so
+   gear was the one shop category with no progression curve at all. Now the
+   full set totals ~35,500, about 6-7 rounds — still clearly the quick early
+   tier relative to caddies/clubs, just no longer trivial. */
 export const SHOP = {
   ball_tour: {
-    name: 'Tour ball', cost: 400, slot: 'ball', tier: 1,
+    name: 'Tour ball', cost: 3000, slot: 'ball', tier: 1,
     blurb: '+1% ball speed, +3% spin — holds its line in wind'
   },
   ball_pro: {
-    name: 'Pro ball', cost: 1200, slot: 'ball', tier: 2, requires: 'ball_tour',
+    name: 'Pro ball', cost: 9000, slot: 'ball', tier: 2, requires: 'ball_tour',
     blurb: '+2% ball speed, +5% spin — checks up hard on the green'
   },
   irons_plus: {
-    name: 'Forged irons', cost: 800, slot: 'irons', tier: 1,
+    name: 'Forged irons', cost: 6000, slot: 'irons', tier: 1,
     blurb: 'About +3 yards on every iron and wedge'
   },
   woods_plus: {
-    name: 'Carbon woods', cost: 1000, slot: 'woods', tier: 1,
+    name: 'Carbon woods', cost: 7500, slot: 'woods', tier: 1,
     blurb: 'About +5 yards off the tee'
   },
   putter_pro: {
-    name: 'Milled putter', cost: 600, slot: 'putter', tier: 1,
+    name: 'Milled putter', cost: 4500, slot: 'putter', tier: 1,
     blurb: 'The green read extends past the cup, showing the run-out'
   },
   cart_tune: {
-    name: 'Tuned cart', cost: 700, slot: 'cart', tier: 1,
+    name: 'Tuned cart', cost: 5500, slot: 'cart', tier: 1,
     blurb: '+12% top speed and a stronger motor on your golf cart'
   }
 };

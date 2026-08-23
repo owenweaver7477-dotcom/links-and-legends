@@ -384,7 +384,7 @@ head('gear — bought upgrades change the flight, absence changes nothing');
   ok('tiers require their prerequisite',
      purchaseBlocked('ball_pro', { coins: 99999, gear: { ...NO_GEAR } }) !== null);
   ok('a funded player can',
-     purchaseBlocked('ball_tour', { coins: 500, gear: { ...NO_GEAR } }) === null);
+     purchaseBlocked('ball_tour', { coins: SHOP.ball_tour.cost, gear: { ...NO_GEAR } }) === null);
 }
 
 /* ============================================================== economy */

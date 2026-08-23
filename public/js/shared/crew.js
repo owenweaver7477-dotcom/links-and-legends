@@ -143,9 +143,13 @@ export const CLUB_TIERS = [
    what a player swings — it is the yardstick the ladder is measured with. */
 const REFERENCE_SET = { speed: 1, faceDamp: 0 };
 
-/** Refinements: three sub-levels inside a tier, lost on tier-up (by design). */
+/** Refinements: three sub-levels inside a tier, lost on tier-up (by design).
+    `?? 1500`, not `||` — the Wooden Starter Set's cost is a real 0, and `||`
+    treated that as "missing" and silently priced refining a FREE set the
+    same as refining the 1,500-cost tier above it. Only a genuinely
+    out-of-range tierIdx should ever hit the fallback. */
 export const REFINE_COSTS = tierIdx => {
-  const c = CLUB_TIERS[tierIdx]?.cost || 1500;
+  const c = CLUB_TIERS[tierIdx]?.cost ?? 1500;
   return [Math.round(c * 0.2), Math.round(c * 0.35), Math.round(c * 0.5)];
 };
 export const REFINE_SPEED = [0.004, 0.008, 0.014];   // cumulative extra ball speed
