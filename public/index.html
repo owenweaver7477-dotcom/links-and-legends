@@ -928,6 +928,20 @@
   </div>
 </div>
 
+<!-- THE FULL ROADMAP — every level unlock, not just the next one. The
+     career tab's own "Next: X at level N" line answers "what's coming,"
+     this answers "what's the whole path" — the difference between a
+     progress bar and something worth actually planning around. -->
+<div class="modal" id="modalRoadmap" hidden>
+  <div class="modal-card roadmapcard">
+    <div class="rw-head">
+      <h3>Level roadmap</h3>
+      <button class="btn mini" id="btnRoadmapClose" title="Close"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="roadmap-list" id="roadmapList"></div>
+  </div>
+</div>
+
 <!-- REMOVE A PLAYER — the host acts immediately; anyone else in a public
      room casts a vote instead. Same modal, the subtitle just says which. -->
 <div class="modal" id="modalKick" hidden>

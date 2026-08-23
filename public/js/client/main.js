@@ -4334,6 +4334,13 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   document.getElementById('btnInspectClose')?.addEventListener('click', () => {
     document.getElementById('modalClubInspect').hidden = true;
   });
+
+  /* --------------------------------------------------------- roadmap --- */
+  HUD.onRoadmap = () => {
+    HUD.renderRoadmap(G.profile);
+    HUD.el.modalRoadmap.hidden = false;
+  };
+  HUD.el.btnRoadmapClose?.addEventListener('click', () => { HUD.el.modalRoadmap.hidden = true; });
   // Drag to turn it yourself. Same idea as the wardrobe's own turntable
   // drag (bindWardrobeDrag) but scoped to this one canvas and forwarded
   // into shopview.js rather than the main scene's camera.

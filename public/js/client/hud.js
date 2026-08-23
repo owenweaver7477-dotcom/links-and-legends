@@ -40,6 +40,7 @@ for (const id of [
   'fbCourseNote', 'fbErr', 'btnFeedbackCancel', 'btnFeedbackSend', 'feedbackBoard',
   'modalReport', 'reportTarget', 'reportBody', 'reportErr', 'btnReportCancel', 'btnReportSend',
   'modalKick', 'kickTarget', 'kickNote', 'kickReason', 'kickErr', 'btnKickCancel', 'btnKickSend',
+  'modalRoadmap', 'roadmapList', 'btnRoadmapClose',
   'lpRewardsBtn', 'lpRewardsSub', 'lpRewardsBadge',
   'modalRewards', 'btnRewardsClose', 'rwStreakTxt', 'rwFreezes', 'rwGrid', 'btnRewardsClaim', 'rwErr',
   'rwGems', 'rwCases', 'rwCasesS', 'btnRewardsOpenCase', 'btnRewardsBuyCase',
@@ -762,9 +763,46 @@ function levelRow(prof) {
     ${next ? `<span>Next: <b>${escapeHtml(next.name)}</b> ` +
       `<em>${escapeHtml((UNLOCK_KINDS[next.kind] || {}).name || next.kind)}</em> at level ${next.at}</span>`
       : '<span>Everything unlocked</span>'}
+    <button class="btn mini" id="btnRoadmap">Full roadmap</button>
   </div>`;
 }
 HUD.levelRow = levelRow;
+
+/* The "Next: X at level N" line only ever answers one step ahead. This is
+   the whole ladder — all 40, in level order, so a player who wants to plan
+   around a specific level (or just see how much is left) can, without the
+   career tab itself growing to fit forty rows every time it renders. */
+const ROADMAP_KIND_ICON = { emote: 'emoteFace', decal: 'decal', trail: 'trail',
+  hat: 'shirt', title: 'title', ball: 'ball' };
+
+HUD.renderRoadmap = (prof) => {
+  const list = el.roadmapList;
+  if (!list) return;
+  const lvl = prof?.level ?? 1;
+  const sorted = [...UNLOCKS].sort((a, b) => a.at - b.at);
+  const rows = [];
+  let markerPlaced = false;
+  for (const u of sorted) {
+    const earned = u.at <= lvl;
+    if (!earned && !markerPlaced) {
+      markerPlaced = true;
+      rows.push(`<div class="rmap-here">You are here — level ${lvl}</div>`);
+    }
+    // melee unlocks are the one kind whose icon IS the item id (slap, kick)
+    // — everything else keys off the kind, since a decal or a title does
+    // not have its own icon per item
+    const kindIcon = u.kind === 'melee' ? icon(u.id, { size: 18 })
+      : icon(ROADMAP_KIND_ICON[u.kind] || 'gift', { size: 18 });
+    rows.push(`<div class="rmap-row${earned ? ' earned' : ''}">
+      <span class="rmap-lvl">${u.at}</span>
+      <span class="rmap-ico">${kindIcon}</span>
+      <div class="rmap-txt"><b>${escapeHtml(u.name)}</b><em>${escapeHtml((UNLOCK_KINDS[u.kind] || {}).name || u.kind)}</em></div>
+      <span class="rmap-state">${earned ? icon('check', { size: 14 }) : icon('lock', { size: 12 })}</span>
+    </div>`);
+  }
+  if (!markerPlaced) rows.push('<div class="rmap-here">Everything unlocked</div>');
+  list.innerHTML = rows.join('');
+};
 
 /* Which tab the Pro Shop is showing. Module-level so it survives the
    re-render that every purchase triggers — a tab that reset itself on each
@@ -947,6 +985,17 @@ function buildCaddieCompare(prof) {
 HUD.renderCareer = (prof) => {
   const box = el.careerBox;
   if (!box) return;
+
+  // Delegated, not a direct listener on #btnRoadmap — this whole box is
+  // rebuilt (innerHTML replaced) on every render, which would tear a
+  // direct listener off with it. Bound once; the callback is swapped in
+  // by main.js the same way HUD.onWardrobe/HUD.onBoards are.
+  if (!box.dataset.bound) {
+    box.dataset.bound = '1';
+    box.addEventListener('click', e => {
+      if (e.target.closest('#btnRoadmap')) HUD.onRoadmap?.();
+    });
+  }
 
   /* Rebuilt as a card with a shape at the top of it rather than eight
      numbers in eight boxes. Numbers tell you what happened; the form line
