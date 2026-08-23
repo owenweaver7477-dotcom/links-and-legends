@@ -282,6 +282,7 @@ function buildClub(key, tier = 0, skinId = 'stock') {
    nobody checked is how they ended up identical in the first place. */
 export const __buildClubForTest = (key, tier = 0, skin = 'stock') =>
   buildClub(key, tier, skin);
+export const __buildCartForTest = (hex) => buildCart(hex);
 
 /* -------------------------------------------------------------- decals ---
    Shown on a flat plate rather than floating: a badge in mid-air is a
@@ -352,6 +353,36 @@ function buildCaddie(hex = '#e8c15a') {
   return g;
 }
 
+/* -------------------------------------------------------------- cart ---
+   The gear shop's cart upgrade was the one item in the whole Pro Shop
+   with genuinely no representation at all — not even the generic crate
+   below, since 'item' isn't a kind showItem recognises, so it silently
+   fell all the way through to buildGeneric's fallback. A small blocky
+   cart, built from the same box/rod primitives as the caddie above: this
+   is a 260px preview canvas, not the actual drivable cart's geometry —
+   that has physics and wheels that turn, this only needs to say "cart". */
+function buildCart(hex = '#7fb6dd') {
+  const g = new THREE.Group();
+  const body = M(hex, 0.3), trim = M('#1c2420'), wheelM = M('#161616'), glass = M('#bcd6e8', 0.55);
+
+  g.add(box(body, 0.60, 0.18, 0.32, 0, -0.06, 0.02));          // chassis
+  g.add(box(trim, 0.54, 0.20, 0.06, 0, 0.10, -0.13));          // seat back
+  g.add(box(trim, 0.54, 0.05, 0.20, 0, 0.02, -0.03));          // seat base
+
+  for (const [x, z] of [[-0.24, -0.13], [0.24, -0.13], [-0.24, 0.15], [0.24, 0.15]]) {
+    g.add(rod(trim, 0.013, 0.013, 0.36, x, 0.22, z));          // roof posts
+  }
+  g.add(box(body, 0.64, 0.03, 0.38, 0, 0.41, 0.01));           // roof
+  g.add(box(glass, 0.50, 0.16, 0.02, 0, 0.16, 0.155));         // windshield
+
+  for (const [x, z] of [[-0.30, -0.15], [0.30, -0.15], [-0.30, 0.16], [0.30, 0.16]]) {
+    const w = rod(wheelM, 0.11, 0.11, 0.07, x, -0.17, z);
+    w.rotation.z = Math.PI / 2;                                // a cylinder lies on its side as a wheel
+    g.add(w);
+  }
+  return g;
+}
+
 /** A generic crate, for anything with no model of its own. */
 function buildGeneric(hex = '#6fce8a') {
   const g = new THREE.Group();
@@ -388,6 +419,7 @@ export function showItem(canvas, what) {
   else if (what?.kind === 'decal') obj = buildDecal(what.key);
   else if (what?.kind === 'ball') obj = buildBall(what.hex);
   else if (what?.kind === 'caddie') obj = buildCaddie(what.hex);
+  else if (what?.kind === 'cart') obj = buildCart(what.hex);
   else obj = buildGeneric(what?.hex);
   r.stage.add(obj);
 

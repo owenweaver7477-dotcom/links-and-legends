@@ -1041,19 +1041,33 @@ HUD.renderShop = (prof, onBuy) => {
       const card = document.createElement('div');
       card.className = 'shopcard' + (owned ? ' owned' : '');
       /* Which model to turn: a ball for the ball upgrades, the matching club
-         for irons, woods and the putter, and a crate for anything else.
-         Driven off the SLOT rather than the item name, so a new item in an
-         existing slot gets a preview without anybody remembering to add one. */
+         for irons, woods and the putter, a cart for the cart, and a crate
+         for anything else. Driven off the SLOT rather than the item name,
+         so a new item in an existing slot gets a preview without anybody
+         remembering to add one. */
       const viewFor = {
         ball: { kind: 'ball', hex: '#f6f9f4' },
         irons: { kind: 'club', key: 'I7' },
         woods: { kind: 'club', key: 'DR' },
         putter: { kind: 'club', key: 'PT' },
-        cart: { kind: 'item', hex: '#7fb6dd' }
+        cart: { kind: 'cart', hex: '#7fb6dd' }
       }[it.slot] || { kind: 'item', hex: '#6fce8a' };
       card.dataset.view = JSON.stringify({ ...viewFor, tier: it.tier,
         name: it.name, sub: it.blurb });
-      card.innerHTML = `<b>${escapeHtml(it.name)}</b><span class="sc-blurb">${escapeHtml(it.blurb)}</span>`;
+      // A static thumbnail too, not just the shared hover turntable — the
+      // gear cards were the one shop category with literally no art at
+      // all, not even a placeholder icon, so nothing distinguished a
+      // ball upgrade from a cart tune-up until you hovered one.
+      const SLOT_ART = {
+        ball: () => icon('ball', { size: 24 }),
+        irons: () => icon('ironHead', { size: 24 }),
+        woods: () => clubSvg('carbon', 40),
+        putter: () => icon('putterHead', { size: 24 }),
+        cart: () => icon('cart', { size: 24 })
+      };
+      const art = SLOT_ART[it.slot]?.() || '';
+      card.innerHTML = `${art ? `<span class="sc-art">${art}</span>` : ''}` +
+        `<b>${escapeHtml(it.name)}</b><span class="sc-blurb">${escapeHtml(it.blurb)}</span>`;
       const btn = document.createElement('button');
       btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
       // A dead grey button with a price on it tells the player nothing about

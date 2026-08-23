@@ -376,6 +376,16 @@ const ICONS = {
     <path d="M12 2 20 7v10l-8 5-8-5V7Z" fill="#8fd8ff" opacity=".85" stroke="#bfeeff" stroke-width=".9"/>
     <path d="M12 2v20M4.5 7.2 12 12l7.5-4.8M4.5 16.8 12 12l7.5 4.8" stroke="#e8faff" stroke-width=".8" opacity=".7" fill="none"/>
   `,
+  // an iron blade, angled — the gear shop's iron upgrade had no icon at all
+  ironHead: `
+    <path d="M4 15 15 7 20 11 17 19 8 20Z" fill="currentColor"/>
+    <path d="M6.5 15 14.5 9.5" stroke="#000" stroke-width="1" opacity=".18"/>
+  `,
+  // a mallet putter, front-on — same gap as ironHead
+  putterHead: `
+    <rect x="3" y="10" width="15" height="6" rx="1.5" fill="currentColor"/>
+    <rect x="9" y="3" width="3" height="8" rx="1" fill="currentColor" opacity=".75"/>
+  `,
   // a sprout, for the first rank tier
   seedling: `
     <path d="M12 21V11.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
