@@ -488,6 +488,7 @@ html.touch .fsbtn { display: grid; }
 .bagbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
 .unitsel { font-size: 12px; color: #93ad99; display: flex; align-items: center; gap: 7px; cursor: pointer; }
 .unitsel input { accent-color: #4fb767; }
+.volsel input[type="range"] { width: 84px; accent-color: #4fb767; cursor: pointer; }
 #bagCount.over { color: #ffab9c; }
 
 /* ────────────────────────────────────────── live roster + name labels */

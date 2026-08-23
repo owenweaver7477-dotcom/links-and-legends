@@ -14,9 +14,21 @@
    ========================================================================= */
 
 let ctx = null;
-let master = null;
+/* Three buses, not one. Effects (a strike, the reel, an emote) and ambience
+   (wind, birds) used to share the single master gain, so turning either
+   down meant losing both — one player wants the birds but not another
+   fistpump chime, another wants the opposite. sfxGain/ambienceGain both
+   feed master, so the overall mute still silences everything at once. */
+let master = null, sfxGain = null, ambienceGain = null;
 let muted = false;
+let volSfx = 1, volAmbient = 1;
 try { muted = localStorage.getItem('lg_muted') === '1'; } catch { /* private mode */ }
+try {
+  const s = localStorage.getItem('lg_vol_sfx');
+  if (s != null) volSfx = Math.max(0, Math.min(1, Number(s)));
+  const a = localStorage.getItem('lg_vol_ambient');
+  if (a != null) volAmbient = Math.max(0, Math.min(1, Number(a)));
+} catch { /* private mode */ }
 
 function ac() {
   if (!ctx) {
@@ -26,6 +38,8 @@ function ac() {
     master = ctx.createGain();
     master.gain.value = (muted || platformMuted) ? 0 : 0.8;
     master.connect(ctx.destination);
+    sfxGain = ctx.createGain(); sfxGain.gain.value = volSfx; sfxGain.connect(master);
+    ambienceGain = ctx.createGain(); ambienceGain.gain.value = volAmbient; ambienceGain.connect(master);
   }
   // resume() REJECTS if it is called before the browser has seen a gesture,
   // and an unhandled rejection every time a sound is attempted is exactly the
@@ -35,6 +49,22 @@ function ac() {
 }
 
 export const Sound = {};
+
+/** The two channels a player can balance against each other — see the
+ *  bus comment above. Read on settings-screen load to seed the sliders;
+ *  set from them as they're dragged. */
+Sound.sfxVolume = () => volSfx;
+Sound.ambientVolume = () => volAmbient;
+Sound.setSfxVolume = v => {
+  volSfx = Math.max(0, Math.min(1, Number(v)));
+  try { localStorage.setItem('lg_vol_sfx', String(volSfx)); } catch { /* ignore */ }
+  if (sfxGain) sfxGain.gain.value = volSfx;
+};
+Sound.setAmbientVolume = v => {
+  volAmbient = Math.max(0, Math.min(1, Number(v)));
+  try { localStorage.setItem('lg_vol_ambient', String(volAmbient)); } catch { /* ignore */ }
+  if (ambienceGain) ambienceGain.gain.value = volAmbient;
+};
 
 /* CrazyGames can mute a game from their own chrome, and their requirements
    say that must take priority over the game's own setting.  Keeping it as a
@@ -68,7 +98,7 @@ function noiseBurst({ dur = 0.1, freq = 2000, q = 1, gain = 0.5, sweep = 0 }) {
   const g = c.createGain();
   g.gain.setValueAtTime(gain, c.currentTime);
   g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
-  n.connect(f); f.connect(g); g.connect(master);
+  n.connect(f); f.connect(g); g.connect(sfxGain);
   n.start();
 }
 
@@ -82,7 +112,7 @@ function ping(freq, dur = 0.3, gain = 0.25, delay = 0) {
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(gain, t + 0.012);
   g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g); g.connect(master);
+  o.connect(g); g.connect(sfxGain);
   o.start(t); o.stop(t + dur + 0.05);
 }
 
@@ -118,7 +148,7 @@ Sound.thud = () => {
   f.type = 'lowpass'; f.frequency.value = 420;
   g.gain.setValueAtTime(0.22, c.currentTime);
   g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.19);
-  o.connect(f); f.connect(g); g.connect(master);
+  o.connect(f); f.connect(g); g.connect(sfxGain);
   o.start(); o.stop(c.currentTime + 0.2);
 };
 
@@ -278,7 +308,7 @@ Sound.power = (power, state, isPutt = false) => {
     powerFilter = c.createBiquadFilter();
     powerFilter.type = 'lowpass'; powerFilter.frequency.value = 2400; powerFilter.Q.value = 0.4;
     powerGain = c.createGain(); powerGain.gain.value = 0;
-    powerOsc.connect(powerFilter); powerFilter.connect(powerGain); powerGain.connect(master);
+    powerOsc.connect(powerFilter); powerFilter.connect(powerGain); powerGain.connect(sfxGain);
     powerOsc.start();
   }
   const norm = Math.max(0, Math.min(1, power / 1.12));
@@ -327,7 +357,7 @@ Sound.cart = (speed) => {
     cartFilter = c.createBiquadFilter();
     cartFilter.type = 'lowpass'; cartFilter.frequency.value = 240; cartFilter.Q.value = 0.6;
     cartGain = c.createGain(); cartGain.gain.value = 0;
-    cartOsc.connect(cartFilter); cartFilter.connect(cartGain); cartGain.connect(master);
+    cartOsc.connect(cartFilter); cartFilter.connect(cartGain); cartGain.connect(sfxGain);
     cartOsc.start();
   }
   /* This runs every rendered frame while driving — 60 to 144 times a
@@ -378,7 +408,7 @@ function chirp() {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(0.035, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0005, t + 0.075);
-    o.connect(g); g.connect(master);
+    o.connect(g); g.connect(ambienceGain);
     o.start(t); o.stop(t + 0.12);
   }
 }
@@ -435,7 +465,7 @@ Sound.ambience = on => {
   gain.gain.setValueAtTime(0, c.currentTime);
   gain.gain.linearRampToValueAtTime(0.16, c.currentTime + 2.2);
 
-  src.connect(lp); lp.connect(gain); gain.connect(master);
+  src.connect(lp); lp.connect(gain); gain.connect(ambienceGain);
   src.start(); lfo.start();
 
   /* A pad: root, fifth, major third, detuned a few cents apart so it beats

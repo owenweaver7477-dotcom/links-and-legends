@@ -3392,6 +3392,19 @@ HUD.el.optQuality.addEventListener('change', e => {
 const sndBox = document.getElementById('optSound');
 sndBox.checked = !Sound.muted();
 sndBox.addEventListener('change', e => Sound.setMuted(!e.target.checked));
+
+// Effects and ambience, balanced independently of each other and of the
+// master on/off above — see sound.js's own comment on why they're split.
+const volSfxEl = document.getElementById('optVolSfx');
+const volAmbientEl = document.getElementById('optVolAmbient');
+if (volSfxEl) {
+  volSfxEl.value = Math.round(Sound.sfxVolume() * 100);
+  volSfxEl.addEventListener('input', e => Sound.setSfxVolume(Number(e.target.value) / 100));
+}
+if (volAmbientEl) {
+  volAmbientEl.value = Math.round(Sound.ambientVolume() * 100);
+  volAmbientEl.addEventListener('input', e => Sound.setAmbientVolume(Number(e.target.value) / 100));
+}
 HUD.el.optMetres.checked = HUD.metric;
 HUD.el.optMetres.addEventListener('change', e => {
   HUD.setMetric(e.target.checked);

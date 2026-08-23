@@ -715,6 +715,15 @@
         <button class="btn" id="btnBagReset">Reset to standard</button>
         <label class="unitsel"><input type="checkbox" id="optMetres"> distances in metres</label>
         <label class="unitsel"><input type="checkbox" id="optSound"> sound</label>
+        <!-- Everything here used to be one on/off switch — effects (the
+             strike, the reel, an emote) and ambience (wind, birds) always
+             moved together, so turning either down meant losing both. -->
+        <label class="unitsel volsel">effects
+          <input type="range" id="optVolSfx" min="0" max="100" value="100" step="1">
+        </label>
+        <label class="unitsel volsel">ambience
+          <input type="range" id="optVolAmbient" min="0" max="100" value="100" step="1">
+        </label>
         <label class="unitsel">graphics
           <select id="optQuality">
             <option value="low">Low — for weak laptops</option>
