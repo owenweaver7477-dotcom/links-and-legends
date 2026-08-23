@@ -2936,6 +2936,9 @@ const refreshRewardsBadge = () => HUD.showRewardsBadge(todaysClaimIsWaiting(G.pr
    profile:me handshake), or it comes straight back as "Still connecting"
    — firing it right after Net.connect() raced that handshake and lost. */
 let pendingDevLevel = 0;
+/* ?testcase — same one-shot idea as pendingDevLevel above, for gems instead
+   of xp: consumed the first time a profile lands, never re-armed. */
+let pendingDevTestCase = false;
 /* The course picker is built inside boot(), but it has to be REDRAWN
    whenever the level changes — a level-up mid-session (or the ?levelup
    cheat) otherwise leaves it showing the requirement gap it had when the
@@ -2951,6 +2954,17 @@ Net.on('profile', prof => {
     Net.debugLevelUp(want, res => {
       if (res?.ok) HUD.toast(`Dev: now level ${res.level}.`, 'good', 2600);
       else HUD.toast(res?.error || 'Level cheat is disabled here.', 'warn', 2600);
+    });
+  }
+  if (pendingDevTestCase) {
+    pendingDevTestCase = false;                // one shot, never a loop
+    Net.debugTestCase(res => {
+      if (res?.ok) {
+        HUD.toast(`Dev: ${res.gems} gems for case testing.`, 'good', 2600);
+        HUD.setShopTab('cases');
+        HUD.openClubhouse?.();
+        try { HUD.bindClubhouse?.(); HUD.showClubhouseTab('shop'); } catch { /* ignore */ }
+      } else HUD.toast(res?.error || 'Case test mode is disabled here.', 'warn', 2600);
     });
   }
   /* One line saying what the server actually thinks this account is, every
@@ -3208,6 +3222,24 @@ const loadLook = () => {
   catch { return normaliseLook(null); }
 };
 
+/* Which case type the modal is currently open on — set by whichever "Open"
+   button was pressed (the Pro Shop's Cases tab or the daily-rewards panel,
+   which both lead here), read by the case box's own click handler so there
+   is one open flow, not two near-duplicates. */
+let caseModalIsPro = false;
+function openCaseFlow(isPro) {
+  caseModalIsPro = isPro;
+  HUD.el.modalRewards.hidden = true;
+  HUD.resetCaseModal(isPro ? 0 : (G.profile?.casesSincePity ?? 0), isPro);
+  HUD.el.modalCase.hidden = false;
+}
+function buyCaseOfKind(isPro) {
+  (isPro ? Net.buyProCase : Net.buyCase)(res => {
+    if (!res?.ok) { HUD.toast(res?.error || 'Could not buy that.', 'warn', 2200); return; }
+    HUD.toast((isPro ? 'Pro case' : 'Case') + ' bought.', 'good', 1800);
+  });
+}
+
 /** The clubhouse: career, pro shop and the bag, all outside any room. */
 function renderClubhouse() {
   /* The mode picker. Rendered here with everything else on the screen, so
@@ -3225,7 +3257,13 @@ function renderClubhouse() {
   HUD.renderRewards(prof);
   HUD.renderBinds();
   Net.ranking(d => HUD.renderWorld(d, G.myPid));
-  HUD.renderShop(prof, item => Net.buy(item));
+  HUD.renderShop(prof, item => {
+    if (item === 'case:buy') return buyCaseOfKind(false);
+    if (item === 'case:buyPro') return buyCaseOfKind(true);
+    if (item === 'case:open') return openCaseFlow(false);
+    if (item === 'case:openPro') return openCaseFlow(true);
+    Net.buy(item);
+  });
   /* The room player FIRST, then the saved profile, then the default set.
      The middle step was missing, and the clubhouse is opened from the front
      page where there is no room — so `me()` was null and the bag screen
@@ -3712,6 +3750,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      'production' — so this is inert against the live game no matter what
      anybody types into their own address bar. */
   pendingDevLevel = Number(q.get('levelup')) || 0;
+  pendingDevTestCase = q.get('testcase') != null;
   // Returning players are recognised, not interrogated: the same browser
   // key that pins your career also pins your name, so the front door says
   // hello instead of asking who you are.  "Change" brings the field back.
@@ -4505,34 +4544,10 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       else if (res.reset) HUD.toast('The streak reset — back to day 1.', 'warn', 2600);
     });
   });
-  HUD.el.btnRewardsBuyCase?.addEventListener('click', () => {
-    Net.buyCase(res => {
-      if (!res?.ok) { HUD.el.rwErr.textContent = res?.error || 'Could not buy that.'; return; }
-      HUD.toast('Case bought.', 'good', 1800);
-    });
-  });
-  HUD.el.btnRewardsBuyProCase?.addEventListener('click', () => {
-    Net.buyProCase(res => {
-      if (!res?.ok) { HUD.el.rwErr.textContent = res?.error || 'Could not buy that.'; return; }
-      HUD.toast('Pro case bought.', 'good', 1800);
-    });
-  });
-  // Which case type the modal is currently open on — set by whichever
-  // "Open a ___ case" button was pressed, read by the box's own click
-  // handler below so there is one open flow, not two near-duplicates.
-  let caseModalIsPro = false;
-  HUD.el.btnRewardsOpenCase?.addEventListener('click', () => {
-    caseModalIsPro = false;
-    HUD.el.modalRewards.hidden = true;
-    HUD.resetCaseModal(G.profile?.casesSincePity ?? 0, false);
-    HUD.el.modalCase.hidden = false;
-  });
-  HUD.el.btnRewardsOpenProCase?.addEventListener('click', () => {
-    caseModalIsPro = true;
-    HUD.el.modalRewards.hidden = true;
-    HUD.resetCaseModal(0, true);
-    HUD.el.modalCase.hidden = false;
-  });
+  HUD.el.btnRewardsBuyCase?.addEventListener('click', () => buyCaseOfKind(false));
+  HUD.el.btnRewardsBuyProCase?.addEventListener('click', () => buyCaseOfKind(true));
+  HUD.el.btnRewardsOpenCase?.addEventListener('click', () => openCaseFlow(false));
+  HUD.el.btnRewardsOpenProCase?.addEventListener('click', () => openCaseFlow(true));
   HUD.el.btnCaseContents?.addEventListener('click', () => {
     const open = HUD.el.caseContents.hidden;
     HUD.el.caseContents.hidden = !open;

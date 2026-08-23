@@ -71,6 +71,12 @@ export const caseItemKey = idOf;
 export const PITY_TIER = 'pro';
 export const PITY_THRESHOLD = 20;
 
+/* Gem prices for both case types — shared so the Pro Shop's cards and the
+   server's ruling can never quote different numbers, the same reason
+   economy.js and crew.js's tables are shared rather than duplicated. */
+export const CASE_GEM_COST = 100;
+export const PRO_CASE_GEM_COST = 400;
+
 /** The odds a player is shown before they open anything — every tier's
  *  real share of the roll (not rounded away to nothing for Mythic), which
  *  kinds of item can come from it, and how many items are actually in that

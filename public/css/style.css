@@ -1010,6 +1010,8 @@ h1 em { font-style: normal; color: #7ed492; }
    blending into the blurb it sits under. */
 .shopcard .sc-try { display: block; margin-top: 3px; font-size: 10.5px; font-weight: 700; color: #6fce8a; }
 .shopcard .btn { margin-top: 7px; font-size: 12.5px; padding: 8px 10px; }
+.shopcard-row { display: flex; gap: 6px; }
+.shopcard-row .btn { flex: 1; margin-top: 7px; }
 .shopcard.owned { border-color: rgba(111,212,138,.45); border-top-color: var(--rarity-color, rgba(111,212,138,.45));
   box-shadow: 0 0 18px -6px var(--rarity-color, transparent); }
 .shopcard.owned .btn { color: #8fe07a; opacity: 1; }

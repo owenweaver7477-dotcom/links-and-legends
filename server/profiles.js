@@ -18,7 +18,8 @@ import { handicapIndex, differential, ratingTier } from '../public/js/shared/han
 import { normaliseSkin } from '../public/js/shared/clubskins.js';
 import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js';
 import { planClaim } from '../public/js/shared/loginrewards.js';
-import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD } from '../public/js/shared/cases.js';
+import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD,
+         CASE_GEM_COST, PRO_CASE_GEM_COST } from '../public/js/shared/cases.js';
 import { unlocksAt } from '../public/js/shared/unlocks.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
@@ -975,7 +976,6 @@ export function openCase(pid) {
 /* Gems buy an extra case directly — the one thing gems can be spent on
    right now, and the reason the trickle from login rewards is worth
    saving up rather than sitting there as a number. */
-const CASE_GEM_COST = 100;
 export function buyCase(pid) {
   const p = getProfile(pid);
   if ((p.gems || 0) < CASE_GEM_COST) return { ok: false, error: `Not enough gems (need ${CASE_GEM_COST}).` };
@@ -994,7 +994,6 @@ export function buyCase(pid) {
    just the existing floor, offered on demand for more gems. Deliberately
    NOT purchasable with anything but gems (an earned currency), same rule
    the base case already follows. */
-const PRO_CASE_GEM_COST = 400;
 export function openProCase(pid) {
   const p = getProfile(pid);
   if ((p.proCases || 0) < 1) return { ok: false, error: 'No Pro cases to open.' };
@@ -1023,6 +1022,19 @@ export function devSetLevel(pid, level) {
   saveSoon();
   const now = levelFromXp(p.xp);
   return { level: now.level, xp: p.xp };
+}
+
+/* DEV-ONLY. Tops gems up to enough for one of each case, so the Pro Shop's
+   buy-then-open flow can be tested end to end without a grind — the real
+   buyCase/buyProCase calls still run afterwards, gems still get spent, this
+   just removes the "earn 400 gems first" step. Never below what the player
+   already has, so it can't be used to zero anyone out. Same DEV gate as
+   devSetLevel, for the same reason. */
+export function devGrantTestGems(pid) {
+  const p = getProfile(pid);
+  p.gems = Math.max(p.gems || 0, CASE_GEM_COST + PRO_CASE_GEM_COST);
+  saveSoon();
+  return { gems: p.gems };
 }
 
 export function buyProCase(pid) {

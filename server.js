@@ -213,7 +213,7 @@ import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound, setDifficulty, difficultyOf,
          setLook, setBallColor, setBag, setEquippedEmotes, kitOf, markSeen,
          flushProfiles, claimLogin, openCase, buyCase, openProCase, buyProCase,
-         devSetLevel } from './server/profiles.js';
+         devSetLevel, devGrantTestGems } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
 import { loadRecords, recordsFor, allRecords, submitRound,
@@ -2211,6 +2211,21 @@ io.on('connection', socket => {
     if (!pid) return reply({ ok: false, error: 'Still connecting.' });
     const res = devSetLevel(pid, d?.level);
     console.log(`  [dev] levelup: ${pid} -> level ${res.level} (xp ${res.xp})`);
+    socket.emit('profile', publicProfile(pid));
+    reply({ ok: true, ...res });
+  });
+
+  // ?testcase — tops gems up so the Pro Shop's buy/open flow can be tested
+  // without grinding for them first. Same DEV gate as debug:levelup, same
+  // reason: Render sets NODE_ENV=production, so this simply is not present
+  // on the live server.
+  socket.on('debug:testcase', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    if (!DEV) return reply({ ok: false, error: 'Not available.' });
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting.' });
+    const res = devGrantTestGems(pid);
+    console.log(`  [dev] testcase: ${pid} -> gems ${res.gems}`);
     socket.emit('profile', publicProfile(pid));
     reply({ ok: true, ...res });
   });

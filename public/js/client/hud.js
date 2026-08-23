@@ -16,7 +16,8 @@ import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
-import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, PITY_THRESHOLD } from '../shared/cases.js';
+import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, PITY_THRESHOLD,
+         CASE_GEM_COST, PRO_CASE_GEM_COST } from '../shared/cases.js';
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
@@ -58,7 +59,7 @@ for (const id of [
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
   'coinHud', 'coinHudN', 'netPill', 'walletHud', 'walletCoinsN', 'walletGemsN',
-  'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
+  'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal', 'gemBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -816,6 +817,7 @@ HUD.renderRoadmap = (prof) => {
    re-render that every purchase triggers — a tab that reset itself on each
    buy would bounce the player back to the Caddie Crew every time. */
 let shopTab = 'crew';
+HUD.setShopTab = id => { shopTab = id; };
 let caddieCompareOn = false;
 
 /* What the equipment is worth in YARDS, measured rather than asserted. The
@@ -1094,6 +1096,7 @@ const SLOT_ART = {
 HUD.renderShop = (prof, onBuy) => {
   if (!el.shopList) return;
   el.coinBal.innerHTML = prof ? icon('coin') + ' ' + (prof.coins || 0) : '';
+  if (el.gemBal) el.gemBal.innerHTML = prof ? icon('gem') + ' ' + (prof.gems || 0) : '';
   el.shopList.innerHTML = '';
 
   /* The payoff panel.  An upgrade that only moves a hidden number is not an
@@ -1116,7 +1119,7 @@ HUD.renderShop = (prof, onBuy) => {
      instead of one grid a filter would have to invent boundaries inside. */
   const tabs = document.createElement('div');
   tabs.className = 'shoptabs';
-  for (const [id, label] of [['clubs', 'Clubs'], ['gear', 'Gear'], ['crew', 'Caddie Crew']]) {
+  for (const [id, label] of [['clubs', 'Clubs'], ['gear', 'Gear'], ['crew', 'Caddie Crew'], ['cases', 'Cases']]) {
     const t = document.createElement('button');
     t.className = 'shoptab' + (shopTab === id ? ' on' : '');
     t.textContent = label;
@@ -1243,7 +1246,56 @@ HUD.renderShop = (prof, onBuy) => {
       nc.appendChild(nb);
       grid.appendChild(nc);
     }
-  } else {
+  } else if (shopTab === 'cases') {
+    /* Cases are the one category paid for in gems, not coins — everything
+       else in this file checks `coins`, so this reads prof.gems directly
+       rather than threading a second balance through every other branch.
+       Buy and Open are separate actions on the same card: buying adds to
+       an inventory count (prof.cases / prof.proCases), opening spends one
+       and runs the exact reel/reveal flow the daily-rewards panel already
+       uses — onBuy carries both, and main.js's dispatcher tells them apart
+       by the item string, the same way it already tells 'club:tier' from
+       'caddie:ace' apart. */
+    const gems = prof?.gems || 0;
+    const top = tierOdds().at(-1);
+    const proTop = proTierOdds()[0];
+    const cases = [
+      { key: 'standard', name: 'Case', owned: prof?.cases || 0, cost: CASE_GEM_COST,
+        blurb: `Every tier in the game, including a ${top.pct.toFixed(1)}% shot at ${top.name}.`,
+        buyItem: 'case:buy', openItem: 'case:open' },
+      { key: 'pro', name: 'Pro Case', owned: prof?.proCases || 0, cost: PRO_CASE_GEM_COST,
+        blurb: `${proTop.name} or better, guaranteed — no roll below the pity floor.`,
+        buyItem: 'case:buyPro', openItem: 'case:openPro' }
+    ];
+    for (const c of cases) {
+      const card = document.createElement('div');
+      card.className = 'shopcard';
+      card.dataset.view = JSON.stringify({ kind: 'case', hex: c.key === 'pro' ? '#ffb84d' : '#8a5a2e', name: c.name, sub: c.blurb });
+      card.innerHTML = `<span class="sc-art">${icon('case', { size: 40 })}</span>
+        <b>${c.name}</b><span class="sc-blurb">${escapeHtml(c.blurb)}</span>
+        <span class="cad-now">${c.owned} in inventory</span>`;
+      const row = document.createElement('div');
+      row.className = 'shopcard-row';
+      const buyBtn = document.createElement('button');
+      const canBuy = gems >= c.cost;
+      buyBtn.className = 'btn' + (canBuy ? ' primary' : '');
+      buyBtn.innerHTML = canBuy
+        ? 'Buy · ' + icon('gem') + ' ' + c.cost
+        : `${icon('gem')} ${c.cost} · need ${c.cost - gems} more`;
+      buyBtn.disabled = !canBuy;
+      if (canBuy) buyBtn.addEventListener('click', () => onBuy(c.buyItem));
+      row.appendChild(buyBtn);
+      if (c.owned > 0) {
+        const openBtn = document.createElement('button');
+        openBtn.className = 'btn primary';
+        openBtn.textContent = 'Open';
+        openBtn.addEventListener('click', () => onBuy(c.openItem));
+        row.appendChild(openBtn);
+      }
+      card.appendChild(row);
+      grid.appendChild(card);
+    }
+  } else if (shopTab === 'gear') {
     /* EVERY item in the shop.  Three of the six — forged irons, carbon woods
        and the milled putter — used to be skipped here as "legacy", so they
        were unbuyable in the UI while still costing coins and changing the
