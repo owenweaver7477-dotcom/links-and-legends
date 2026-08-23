@@ -337,6 +337,9 @@ Net.levelStats = cb => {
   ask('profiles:levels', {}, res => cb?.(res?.error ? empty : res));
 };
 
+/** Top three by XP gained this week, for the landing page preview. */
+Net.weeklyTop = cb => ask('world:weeklyTop', {}, res => cb?.(res?.error ? { top: [] } : res));
+
 /** What your friends have been up to. */
 Net.feed = cb => ask('feed:list', {}, res => cb?.(res?.items || []));
 

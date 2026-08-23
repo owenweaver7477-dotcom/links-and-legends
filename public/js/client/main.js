@@ -2920,7 +2920,11 @@ function route() {
     if (G.screen === 'landing') { menuBackdrop(); return; }
     G.screen = 'landing'; HUD.show('landing');
     menuBackdrop();                  // back out of a room: the tee returns
-    if (prevScreen !== 'landing') funnel.menu();
+    if (prevScreen !== 'landing') {
+      funnel.menu();
+      // the round just played may have moved someone onto this board
+      Net.weeklyTop(d => HUD.renderWeeklyTop(d.top));
+    }
     return;
   }
   if (r.state === 'lobby') {
@@ -4154,6 +4158,14 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     });
   });
 
+  /* -------------------------------------------------- weekly leaders */
+  /* Same destination as the "Leaderboards" legend — the ranks tab, jumped
+     straight to the weekly board rather than whatever it last showed, since
+     that's the board this preview is a taste of. */
+  HUD.el.lpWeekTop?.addEventListener('click', () => {
+    leaveLanding('rankings').then(() => { HUD.rkBoard = 'weekly'; HUD.onBoards(null); });
+  });
+
   /* ------------------------------------------------------ daily rewards */
   HUD.el.lpRewardsBtn?.addEventListener('click', () => {
     if (!G.profile) { HUD.toast('Still connecting — try again in a second.', 'warn', 1800); return; }
@@ -4394,6 +4406,10 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     bootSay('Ready', 100);
     bootDone();
     if (firstConnect) { firstConnect = false; funnel.assetsReady(); }
+    // the socket does not exist until this fires, so the landing page's
+    // first paint could not have fetched this — and a reconnect may find
+    // the board has moved on, so it is worth asking again either way
+    if (G.screen === 'landing') Net.weeklyTop(d => HUD.renderWeeklyTop(d.top));
   });
   await Net.connect();
   watchPresence();

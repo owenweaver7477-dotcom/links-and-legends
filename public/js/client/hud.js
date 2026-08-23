@@ -26,6 +26,7 @@ for (const id of [
   'screenBoards', 'bdTabs', 'bdBack',
   'screenLanding', 'introCanvas', 'lpLegend', 'lpLive', 'lpSide', 'lpSideTitle',
   'lpSideClose', 'lpOnlineCount', 'lpCourseName', 'lpCourseSub', 'lpFriendSub',
+  'lpWeekTop', 'lpWeekTopRows',
   'nameState', 'nameSuggest',
   'screenWardrobe', 'wdCarousel', 'wdCourseName', 'wdCourseWhere', 'wdDots', 'wdPrev', 'wdNext',
   'wdAuto', 'wdCats', 'wdFits', 'wdRTabs', 'wdRBody', 'wdName', 'wdFit', 'wdStats',
@@ -1293,6 +1294,22 @@ HUD.renderNetQuality = (net) => {
   }
   pill.dataset.q = q;
   pill.title = detail;
+};
+
+/* ---------------------------------------------------- weekly leaders --- */
+/** The landing page's "top this week" preview. Hidden with zero rows rather
+    than shown empty — before anybody's played this week (a fresh server, or
+    a Monday morning) there is nothing to brag about yet. */
+HUD.renderWeeklyTop = rows => {
+  if (!el.lpWeekTop) return;
+  if (!rows?.length) { el.lpWeekTop.hidden = true; return; }
+  el.lpWeekTop.hidden = false;
+  el.lpWeekTopRows.innerHTML = rows.map(r => `
+    <div class="lp-wt-row">
+      <span class="lp-wt-rank">${r.rank}</span>
+      <span class="lp-wt-name">${escapeHtml(r.name)}</span>
+      <span class="lp-wt-gain">+${r.gained.toLocaleString()} XP</span>
+    </div>`).join('');
 };
 
 /* ------------------------------------------------------ daily rewards --- */

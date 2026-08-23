@@ -296,6 +296,16 @@
         <span class="nm-suggest" id="nameSuggest"></span></label>
     </div>
 
+    <!-- TOP THIS WEEK. A taste of the leaderboards from the front door: three
+         names and how much XP they've gained since Monday, so a returning
+         player sees there's a race going on before ever opening the boards
+         screen. Hidden until it has rows — an empty leaderboard reads as
+         broken, not as "nobody's played yet". -->
+    <button class="lp-weektop" id="lpWeekTop" hidden>
+      <span class="lp-wt-label"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" fill="#ffd76b" stroke="#a9822f" stroke-width="1"/><path d="M7 5H4a3 3 0 0 0 3 3M17 5h3a3 3 0 0 1-3 3" fill="none" stroke="#a9822f" stroke-width="1.3" stroke-linecap="round"/></svg> Top this week<span class="lp-wt-arrow" aria-hidden="true">→</span></span>
+      <div class="lp-wt-rows" id="lpWeekTopRows"></div>
+    </button>
+
     <!-- The legends. Each one either GOES somewhere or opens the panel on
          the right — nothing here dumps a wall of controls into this column,
          which is the whole reason this page reads better than the one it

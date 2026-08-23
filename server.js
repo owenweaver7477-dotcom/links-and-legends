@@ -1685,6 +1685,13 @@ io.on('connection', socket => {
     if (typeof ack === 'function') ack(levelHistogram());
   });
 
+  /* The landing page's "top this week" preview — same reasoning as
+     profiles:levels above: the front door loads before anybody has touched
+     leaderboards, and three rows is not worth fetching all four boards for. */
+  socket.on('world:weeklyTop', (d, ack) => {
+    if (typeof ack === 'function') ack({ top: weeklyGainers(3) });
+  });
+
   /* ═══════════════════════════════════════════════════ FRIENDS ═══════
      One handler, an action name and a payload, because eleven separate
      socket events for eleven verbs on the same graph is eleven places to
