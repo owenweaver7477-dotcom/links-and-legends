@@ -105,14 +105,19 @@ export const NO_CREW = Object.freeze({
    left to spend money on for eight hundred rounds. A currency you cannot
    spend stops being a reward.
 
-   80k / 200k / 500k puts the top three at roughly 24, 60 and 150 rounds of
-   saving. Owning literally everything now lands near 370 rounds — a third of
-   the way to level 100, which is the right relationship between the two:
-   your bag is the medium-term goal and your level is the long one, and
-   neither runs out while the other is still going.
+   80k / 200k / 500k are the prices; how many ROUNDS that is depends on
+   economy.js's PAYOUT_SCALE, which has moved twice since these were set
+   (194 rounds to own everything, then 370, were both true once and neither
+   is now — check economy.js's own history for the current one rather than
+   trusting a number here). At the scale in effect when this was last
+   checked, the top three cost roughly 11, 27 and 67 rounds of saving, and
+   owning literally everything lands at 218 — comfortably under level 100,
+   which is the right relationship between the two: your bag is the
+   medium-term goal and your level is the long one, and neither runs out
+   while the other is still going.
 
-   The Signature Set at 150 rounds is deliberately something you decide to go
-   after. Nobody drifts into it. */
+   The Signature Set at 67 rounds is still deliberately something you
+   decide to go after, not something you drift into. */
 export const CLUB_TIERS = [
   { name: 'Wooden Starter Set', cost: 0,
     speed: 0.860, faceDamp: 0.00, look: 'wood',

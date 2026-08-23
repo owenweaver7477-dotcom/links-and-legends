@@ -57,7 +57,7 @@ for (const id of [
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
-  'coinHud', 'coinHudN', 'netPill',
+  'coinHud', 'coinHudN', 'netPill', 'walletHud', 'walletCoinsN', 'walletGemsN',
   'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
@@ -125,6 +125,13 @@ HUD.show = which => {
 };
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
 HUD.setHomeCoins = n => { el.homeCoins.innerHTML = icon('coin') + ' ' + (n || 0).toLocaleString(); };
+/** The always-there top-right balance — see .wallethud in style.css for
+    which screens it's actually shown on. */
+HUD.setWallet = (coins, gems) => {
+  if (!el.walletCoinsN || !el.walletGemsN) return;
+  el.walletCoinsN.textContent = (coins || 0).toLocaleString();
+  el.walletGemsN.textContent = (gems || 0).toLocaleString();
+};
 
 /** The in-round balance.  Bumps when it goes UP, so a payout is felt. */
 let lastCoins = null;

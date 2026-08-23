@@ -3244,6 +3244,7 @@ function renderClubhouse() {
   }));
   HUD.setHomeCoins(prof?.coins ?? 0);
   HUD.setCoins(prof?.coins ?? 0);
+  HUD.setWallet(prof?.coins ?? 0, prof?.gems ?? 0);
   /* Back the career up where the PLAYER's platform keeps it.
      The server is the source of truth while it is running, but its profile
      file lives on an ephemeral disk — a free-tier host wipes it on every

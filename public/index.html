@@ -253,6 +253,17 @@
   <span class="nb" data-n="1"></span><span class="nb" data-n="2"></span><span class="nb" data-n="3"></span>
 </div>
 
+<!-- The account's coins and gems, top-right, everywhere they're not already
+     covered by a round's own HUD (coinHud) or the lobby/shop panels that
+     already occupy that corner — see .wallethud's body-state rules in
+     style.css. Same "outside #stage and every .screen" placement as
+     netPill just above, for the same reason: it should read the same
+     wherever it's shown rather than being re-built per screen. -->
+<div class="wallethud" id="walletHud">
+  <span class="wh-coins"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-0.15em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="#ffd76b" stroke="#a9822f" stroke-width="1.4"/><circle cx="12" cy="12" r="6.2" fill="none" stroke="#a9822f" stroke-width="1.1" opacity=".55"/><circle cx="12" cy="12" r="1.8" fill="#a9822f" opacity=".55"/></svg><span id="walletCoinsN">0</span></span>
+  <span class="wh-gems"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-0.15em" aria-hidden="true"><path d="M12 2 20 8 12 22 4 8Z" fill="#57b8e6"/><path d="M12 2 20 8 12 8Z" fill="#a6e6ff"/><path d="M12 2 4 8 12 8Z" fill="#8fdfff"/><path d="M4 8 12 8 12 22Z" fill="#4a9fce"/><path d="M20 8 12 8 12 22Z" fill="#3f8dbb"/></svg><span id="walletGemsN">0</span></span>
+</div>
+
 <!-- ═══════════════════════════════ OVERLAYS ═════════════════════════════ -->
 
 <!-- THE LANDING PAGE — the first thing anybody sees.

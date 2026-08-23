@@ -18,7 +18,13 @@
    a real grind (caddies ~59 rounds to max, the club ladder 147-300+), so
    gear was the one shop category with no progression curve at all. Now the
    full set totals ~35,500, about 6-7 rounds — still clearly the quick early
-   tier relative to caddies/clubs, just no longer trivial. */
+   tier relative to caddies/clubs, just no longer trivial.
+
+   (Those per-round figures were at economy.js's old PAYOUT_SCALE; a level-
+   par round now nets ~7,470, which drops this same 35,500 to about 5
+   rounds. Still the quick early tier — nothing here needed to change,
+   the whole curve just moved with the scale, which is the point of
+   having one.) */
 export const SHOP = {
   ball_tour: {
     name: 'Tour ball', cost: 3000, slot: 'ball', tier: 1,

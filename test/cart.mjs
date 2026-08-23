@@ -436,10 +436,14 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
      This used to assert 20-30 hours. The top three club sets were then
      repriced upward on purpose — a Signature Set you could own by the end of
      your second session is not something anyone looks forward to — so the
-     target moved with it. Owning literally everything is now a long-haul
-     goal; the FIRST four sets are what a normal player actually works
-     through, and those are checked separately below. */
-  const lo = rounds * 10 / 60, hi = rounds * 15 / 60;
+     target moved with it, to 60-130 hours (~240-520 rounds). That
+     overcorrected: 304 rounds measured out to 51-76 hours before the shop
+     was empty, and a player who cannot afford the FIRST club upgrade for
+     weeks stops believing the ladder is climbable at all. The target is now
+     the rounds directly — 200-250, not an hour range with a wide margin
+     built in for a pace nobody measured — moved by raising economy.js's
+     PAYOUT_SCALE rather than touching any of the prices below, which is
+     exactly what that constant is for. */
   const early = CLUB_TIERS.slice(0, 4).reduce((a, t) => a + t.cost, 0);
   const earlyRounds = Math.ceil(early / perRound);
   ok('the first four club sets are a normal progression', earlyRounds <= 12,
@@ -449,8 +453,8 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
      'top three ' + CLUB_TIERS.slice(4).reduce((a, t) => a + t.cost, 0) +
      ' vs first four ' + early);
 
-  ok('owning everything is a long haul, not a second job', hi >= 60 && lo <= 130,
-     `${rounds} rounds = ${lo.toFixed(0)}-${hi.toFixed(0)} h`);
+  ok('owning everything takes 200-250 rounds, not 300+', rounds >= 200 && rounds <= 250,
+     `${rounds} rounds = ${(rounds * 10 / 60).toFixed(0)}-${(rounds * 15 / 60).toFixed(0)} h`);
 
   /* The invariant that actually matters, and the one that was broken:
      the COIN ladder and the LEVEL ladder have to finish in the right order
@@ -485,6 +489,59 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
   ok('and a maxed player hits it a third further than a beginner',
      mult(6, 3, true) / mult(0, 0, false) > 1.3,
      'x' + (mult(6, 3, true) / mult(0, 0, false)).toFixed(2));
+}
+
+/* ===================================== fifty rounds of a real, uneven player */
+head('progression — what fifty rounds of actual golf, not idealised par, buys');
+{
+  /* The 200-250 target above is built on a level-par round: every hole
+     exactly at par, nine holes straight, no blow-ups. Nobody plays that.
+     This plays fifty rounds against a realistic score mix (bogeys more
+     common than birdies — a player still learning the game, not a scratch
+     golfer) and checks the coins that ACTUALLY land still make sense
+     against the tables above: real income is close enough to the idealised
+     figure that the 200-250 claim is honest, the first few club sets are
+     within easy reach the way crew.js's own comment claims, and the top of
+     the ladder still is not. */
+  const { roundCoins } = await import('../public/js/shared/economy.js');
+  const { mulberry32 } = await import('../public/js/shared/rng.js');
+  const { CADDIE_COSTS, CADDIE_KEYS, CLUB_TIERS, REFINE_COSTS } =
+    await import('../public/js/shared/crew.js');
+  const { SHOP } = await import('../public/js/shared/gear.js');
+
+  // relative-to-par distribution for a mixed-skill player: eagle, birdie,
+  // par, bogey, double, triple — bogey the single most likely outcome,
+  // matching how amateurs actually score rather than how a pro would
+  const BUCKETS = [[-2, 0.02], [-1, 0.15], [0, 0.35], [1, 0.30], [2, 0.13], [3, 0.05]];
+  const rng = mulberry32(20260824);
+  const drawRel = () => {
+    let r = rng(), acc = 0;
+    for (const [rel, p] of BUCKETS) { acc += p; if (r <= acc) return rel; }
+    return 3;
+  };
+
+  let earned = 0;
+  for (let round = 0; round < 50; round++) {
+    const holes = Array.from({ length: 9 }, () => ({ strokes: Math.max(1, 4 + drawRel()), par: 4 }));
+    earned += roundCoins(holes, round === 0).total;
+  }
+
+  const idealPerRound = roundCoins(Array(9).fill({ strokes: 4, par: 4 })).total;
+  const realAvg = earned / 50;
+  ok('a realistic mixed-skill round still pays close to the idealised figure',
+     realAvg > idealPerRound * 0.5 && realAvg <= idealPerRound,
+     `${Math.round(realAvg)} vs ${idealPerRound} idealised (${Math.round(realAvg / idealPerRound * 100)}%)`);
+
+  const early4 = CLUB_TIERS.slice(0, 4).reduce((a, t) => a + t.cost, 0);
+  ok('the first four club sets are affordable well within fifty rounds', earned >= early4 * 2,
+     `${earned} earned vs ${early4} for the first four sets`);
+
+  const everything = CADDIE_COSTS.reduce((a, b) => a + b, 0) * CADDIE_KEYS.length
+    + CLUB_TIERS.reduce((a, t) => a + t.cost, 0)
+    + REFINE_COSTS(6).reduce((a, b) => a + b, 0)
+    + Object.values(SHOP).reduce((a, i) => a + i.cost, 0);
+  ok('but the whole shop is nowhere close after fifty rounds', earned < everything * 0.3,
+     `${earned} of ${everything}`);
 }
 
 /* ================================================================= crew */

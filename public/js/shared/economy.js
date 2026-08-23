@@ -28,7 +28,19 @@
    shop lands near 300 rounds, which is still a long haul and no longer a
    second job. The club-set prices are unchanged: this moves the whole curve
    from one place, which is exactly what the constant is for. */
-export const PAYOUT_SCALE = 13;
+
+/* Raised again, from 13. "Near 300 rounds" above undersold it: measured
+   properly (every caddie maxed, every club tier, only the SURVIVING
+   refinement — the top tier's, since a tier-up erases the rest — plus the
+   one-off gear in shop.js) it was 304, not "near" it, and 304 rounds at
+   10-15 minutes each is 51-76 hours before there's nothing left to buy. The
+   ask was 200-250. At 18 a level-par round pays about 7,470 and the same
+   total lands at 218 rounds (36-55 hours) — inside the window, and still
+   comfortably behind level 100 (test/cart.mjs's ratio check keeps that
+   order honest). Club-set and caddie prices are unchanged, again: the
+   whole curve moves from this one number, which is exactly what it is
+   for. */
+export const PAYOUT_SCALE = 18;
 
 /* Finishing a hole is worth something no matter how it went.  The appearance
    fee used to be eaten alive by the over-par penalty — at four over it hit
