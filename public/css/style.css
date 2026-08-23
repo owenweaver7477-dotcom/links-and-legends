@@ -1047,6 +1047,22 @@ h1 em { font-style: normal; color: #7ed492; }
 .m-label { font-size: 12px; }
 input[type=text] { font-size: 16px; padding: 12px 14px; }
 
+/* The one recommended next purchase — computed per player (see
+   computeRecommended in hud.js), not a fixed pick, so it can't go stale.
+   Sits above the category tabs since it might point into any of them. */
+.shop-rec { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
+  padding: 11px 14px; margin-bottom: 12px; border-radius: 12px;
+  background: linear-gradient(100deg, rgba(111,206,138,.14), rgba(111,206,138,.04));
+  border: 1px solid rgba(111,206,138,.28); }
+.sr-label { flex-basis: 100%; font-size: 9.5px; font-weight: 800; letter-spacing: 1px;
+  text-transform: uppercase; color: #6fce8a; }
+.sr-body { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.sr-art { flex: 0 0 auto; font-size: 24px; line-height: 1; display: grid; place-items: center; width: 30px; }
+.sr-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sr-txt b { font-size: 13.5px; }
+.sr-txt span { font-size: 11px; color: #9fbaa6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-rec .btn { flex: 0 0 auto; font-size: 12px; padding: 8px 13px; }
+
 /* ---------------------------------------------------- caddie crew shop */
 .shoptabs { display: flex; gap: 8px; margin-bottom: 12px; }
 .shoptab { font: inherit; font-size: 13px; font-weight: 700; color: #a9c2ae;
@@ -1055,6 +1071,27 @@ input[type=text] { font-size: 16px; padding: 12px 14px; }
 .shoptab:hover { background: rgba(255,255,255,.1); }
 .shoptab.on { color: #fff; background: linear-gradient(180deg, rgba(76,180,102,.35), rgba(46,125,67,.25));
   border-color: rgba(140,230,160,.4); }
+.shop-cmp-btn { margin: -6px 0 12px; }
+.shop-cmp-btn.on { background: rgba(111,206,138,.22); border-color: rgba(111,206,138,.45); }
+
+/* The caddie comparison table — eight specialists, one row each, so "which
+   one actually helps me right now" is a glance instead of eight card
+   flips. */
+.cmp-table { display: flex; flex-direction: column; gap: 3px; }
+.cmp-row { display: grid; grid-template-columns: 1.3fr 1.2fr 1.2fr .9fr; gap: 10px;
+  align-items: center; padding: 8px 10px; border-radius: 9px;
+  background: rgba(255,255,255,.03); border-left: 3px solid var(--rarity-color, transparent); font-size: 12px; }
+.cmp-head { background: none; border-left-color: transparent; color: #8fa694;
+  font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; padding: 0 10px; }
+.cmp-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cmp-face { flex: 0 0 auto; width: 26px; height: 26px; font-size: 16px;
+  display: grid; place-items: center; background: rgba(255,255,255,.06); border-radius: 8px; }
+.cmp-who b { font-size: 12.5px; }
+.cmp-who em { font-style: normal; display: block; font-size: 9.5px; color: #8fa694; }
+.cmp-now { color: #9fbaa6; }
+.cmp-next { color: #eaf4ec; font-weight: 600; }
+.cmp-cost { font-weight: 700; white-space: nowrap; }
+.cmp-cost em { font-style: normal; color: #e8a04a; font-weight: 600; font-size: 10.5px; }
 .cad-head { display: flex; align-items: center; gap: 9px; }
 .cad-face { font-size: 25px; width: 40px; height: 40px; display: grid; place-items: center;
   background: rgba(255,255,255,.06); border-radius: 11px; }

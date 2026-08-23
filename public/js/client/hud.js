@@ -770,6 +770,7 @@ HUD.levelRow = levelRow;
    re-render that every purchase triggers — a tab that reset itself on each
    buy would bounce the player back to the Caddie Crew every time. */
 let shopTab = 'crew';
+let caddieCompareOn = false;
 
 /* What the equipment is worth in YARDS, measured rather than asserted. The
    stat bars are honest but abstract — "Accuracy 62%" does not tell a player
@@ -850,6 +851,99 @@ function buildPayoff(prof) {
   return wrap;
 }
 
+/** The single best next move across the WHOLE shop — clubs, gear and crew
+ *  together — recommended dynamically per player rather than a fixed
+ *  marketing pick, so it can never go stale as prices or someone's own
+ *  progress change. Cheapest thing they can act on RIGHT NOW if anything is
+ *  affordable; otherwise the cheapest thing they are saving toward, so
+ *  there is always something to point at rather than nothing at all. */
+function computeRecommended(prof) {
+  const coins = prof?.coins || 0;
+  const gear = prof?.gear || {};
+  const crew = prof?.crew || {};
+  const candidates = [];
+
+  for (const [key, it] of Object.entries(SHOP)) {
+    if ((gear[it.slot] || 0) >= it.tier) continue;               // already owned
+    const blocked = purchaseBlocked(key, { coins, gear });
+    if (blocked && blocked.startsWith('Needs')) continue;         // prerequisite not owned yet — not a real option
+    candidates.push({ kind: 'gear', key, name: it.name, cost: it.cost, sub: it.blurb,
+      art: SLOT_ART[it.slot]?.() || '' });
+  }
+  const tier = prof?.clubTier ?? 0;
+  if (tier < 6) {
+    const nxt = CLUB_TIERS[tier + 1];
+    candidates.push({ kind: 'club:tier', name: nxt.name, cost: nxt.cost,
+      sub: 'The next set up', art: clubSvg(nxt.look, 28) });
+  }
+  for (const [key, c] of Object.entries(CADDIES)) {
+    const lvl = crew[key] || 0;
+    if (lvl >= CADDIE_MAX) continue;
+    candidates.push({ kind: 'caddie:' + key, name: c.name, cost: caddieCost(lvl),
+      sub: (lvl ? 'Level up — ' : 'Hire — ') + c.stat, art: caddieSvg(key, 28) || c.emoji });
+  }
+  if (!candidates.length) return null;
+
+  const affordable = candidates.filter(c => c.cost <= coins);
+  const pool = affordable.length ? affordable : candidates;
+  pool.sort((a, b) => a.cost - b.cost);
+  return { ...pool[0], affordable: pool[0].cost <= coins };
+}
+
+function buildRecommend(prof, onBuy) {
+  const rec = computeRecommended(prof);
+  if (!rec) return null;
+  const coins = prof?.coins || 0;
+  const wrap = document.createElement('div');
+  wrap.className = 'shop-rec';
+  wrap.innerHTML = `
+    <span class="sr-label">Recommended next</span>
+    <div class="sr-body">
+      <span class="sr-art">${rec.art}</span>
+      <div class="sr-txt"><b>${escapeHtml(rec.name)}</b><span>${escapeHtml(rec.sub)}</span></div>
+    </div>`;
+  const btn = document.createElement('button');
+  btn.className = 'btn' + (rec.affordable ? ' primary' : '');
+  btn.innerHTML = rec.affordable
+    ? icon('coin') + ' ' + rec.cost
+    : `${icon('coin')} ${rec.cost} · need ${rec.cost - coins} more`;
+  btn.disabled = !rec.affordable;
+  if (rec.affordable) btn.addEventListener('click', () => onBuy(rec.key ?? rec.kind));
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+/** Comparison mode for the Caddie Crew — all eight, side by side, instead
+ *  of one card each. The cards are better for browsing one at a time; this
+ *  is for the actual decision the cards make you scroll to answer: "which
+ *  of these eight actually moves the needle for me right now." */
+function buildCaddieCompare(prof) {
+  const crew = prof?.crew || {};
+  const coins = prof?.coins || 0;
+  const rows = Object.entries(CADDIES).map(([key, c]) => {
+    const lvl = crew[key] || 0;
+    const maxed = lvl >= CADDIE_MAX;
+    const cost = caddieCost(lvl);
+    return { key, c, lvl, maxed, cost };
+  }).sort((a, b) => b.lvl - a.lvl || (a.cost ?? Infinity) - (b.cost ?? Infinity));
+
+  const wrap = document.createElement('div');
+  wrap.className = 'cmp-table';
+  wrap.innerHTML = `
+    <div class="cmp-row cmp-head">
+      <span>Caddie</span><span>Now</span><span>Next level</span><span>Cost</span>
+    </div>` +
+    rows.map(({ key, c, lvl, maxed, cost }) => `
+      <div class="cmp-row" style="--rarity-color:${CADDIE_HEX[key] || '#e8c15a'}">
+        <span class="cmp-who"><span class="cmp-face">${caddieSvg(key, 22) || c.emoji}</span>
+          <b>${escapeHtml(c.name)}</b><em>${escapeHtml(c.stat)}</em></span>
+        <span class="cmp-now">${lvl ? escapeHtml(c.line(lvl)) : '— not hired —'}</span>
+        <span class="cmp-next">${maxed ? 'Maxed' : escapeHtml(c.line(lvl + 1))}</span>
+        <span class="cmp-cost">${maxed ? icon('star') : `${icon('coin')} ${cost}${cost > coins ? ` <em>need ${cost - coins}</em>` : ''}`}</span>
+      </div>`).join('');
+  return wrap;
+}
+
 HUD.renderCareer = (prof) => {
   const box = el.careerBox;
   if (!box) return;
@@ -908,6 +1002,18 @@ const CADDIE_HEX = {
   pitstop: '#e8c15a', lucky: '#a98cd8', gale: '#7fd8d0', grit: '#9c8f76'
 };
 
+/* Module scope rather than local to the gear loop, since the recommended-
+   purchase card (buildRecommend) needs the same art for whichever slot it
+   is pointing at — one thumbnail per slot, not two definitions to keep in
+   step with each other. */
+const SLOT_ART = {
+  ball: () => icon('ball', { size: 24 }),
+  irons: () => icon('ironHead', { size: 24 }),
+  woods: () => clubSvg('carbon', 40),
+  putter: () => icon('putterHead', { size: 24 }),
+  cart: () => icon('cart', { size: 24 })
+};
+
 HUD.renderShop = (prof, onBuy) => {
   if (!el.shopList) return;
   el.coinBal.innerHTML = prof ? icon('coin') + ' ' + (prof.coins || 0) : '';
@@ -918,6 +1024,11 @@ HUD.renderShop = (prof, onBuy) => {
      the bars grow, the club-set silhouette changes tier, and the crew badges
      light.  It is the same data the simulation uses, read straight back. */
   el.shopList.appendChild(buildPayoff(prof));
+
+  // one recommendation, above the category tabs, since it might point at
+  // any of the three — pinned there rather than repeated inside each tab
+  const rec = buildRecommend(prof, onBuy);
+  if (rec) el.shopList.appendChild(rec);
 
   /* Three categories, not two. Clubs and gear used to share one "Pro Shop"
      tab as a single undifferentiated grid — the club ladder's current/next
@@ -936,6 +1047,23 @@ HUD.renderShop = (prof, onBuy) => {
     tabs.appendChild(t);
   }
   el.shopList.appendChild(tabs);
+
+  // Comparison mode — caddies only, for now: eight different single-stat
+  // specialists is a real "which one do I want" decision every time, in a
+  // way a sequential ladder (clubs, gear tiers) is not — there is only
+  // ever one next rung on those, nothing to compare it against.
+  if (shopTab === 'crew') {
+    const cmp = document.createElement('button');
+    cmp.className = 'btn mini shop-cmp-btn' + (caddieCompareOn ? ' on' : '');
+    cmp.textContent = caddieCompareOn ? 'Show cards' : 'Compare';
+    cmp.addEventListener('click', () => { caddieCompareOn = !caddieCompareOn; HUD.renderShop(prof, onBuy); });
+    el.shopList.appendChild(cmp);
+  }
+
+  if (shopTab === 'crew' && caddieCompareOn) {
+    el.shopList.appendChild(buildCaddieCompare(prof));
+    return;
+  }
 
   const grid = document.createElement('div');
   grid.className = 'shop';
@@ -1067,13 +1195,6 @@ HUD.renderShop = (prof, onBuy) => {
       // gear cards were the one shop category with literally no art at
       // all, not even a placeholder icon, so nothing distinguished a
       // ball upgrade from a cart tune-up until you hovered one.
-      const SLOT_ART = {
-        ball: () => icon('ball', { size: 24 }),
-        irons: () => icon('ironHead', { size: 24 }),
-        woods: () => clubSvg('carbon', 40),
-        putter: () => icon('putterHead', { size: 24 }),
-        cart: () => icon('cart', { size: 24 })
-      };
       const art = SLOT_ART[it.slot]?.() || '';
       card.innerHTML = `${art ? `<span class="sc-art">${art}</span>` : ''}` +
         `<b>${escapeHtml(it.name)}</b><span class="sc-blurb">${escapeHtml(it.blurb)}</span>`;
