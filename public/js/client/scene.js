@@ -2944,17 +2944,24 @@ class EffectPool {
     this.parent = parent;
     this.items = [];
   }
-  burst(kind, x, y, z, n = 18) {
+  /**
+   * @param colorOverride  for kinds without one fixed colour of their own —
+   *   `trail` rides whatever cosmetic the shooter has equipped, `confetti`
+   *   rides the reaction tier — rather than every celebration and every
+   *   trail cosmetic looking the same shade of yellow.
+   */
+  burst(kind, x, y, z, n = 18, colorOverride = null) {
     const colors = {
       splash: 0xd6f0fb, sand: 0xf0e2b8, grass: 0x4e8a3c, leaves: 0x3f7a37,
-      fire: 0xffa33a, smoke: 0x4a4a4a
+      fire: 0xffa33a, smoke: 0x4a4a4a, trail: 0xffffff, confetti: 0xffd94a
     };
     // smoke drifts up and hangs; fire and debris are thrown and fall
     const rises = kind === 'smoke';
-    const size = kind === 'splash' ? 0.09 : kind === 'smoke' ? 0.30 : kind === 'fire' ? 0.13 : 0.06;
+    const size = kind === 'splash' ? 0.09 : kind === 'smoke' ? 0.30 : kind === 'fire' ? 0.13
+      : kind === 'trail' ? 0.045 : kind === 'confetti' ? 0.07 : 0.06;
     const geo = new THREE.SphereGeometry(size, 5, 4);
     const mat = new THREE.MeshBasicMaterial({
-      color: colors[kind] || 0xffffff, transparent: true,
+      color: colorOverride ?? (colors[kind] || 0xffffff), transparent: true,
       opacity: rises ? 0.55 : 1, depthWrite: false
     });
     const inst = new THREE.InstancedMesh(geo, mat, n);
@@ -2964,18 +2971,25 @@ class EffectPool {
       const a = (i / n) * Math.PI * 2 + i * 0.7;
       const sp = kind === 'splash' ? 2.2 + (i % 5) * 0.9
         : kind === 'fire' ? 3.0 + (i % 5) * 1.2
+          : kind === 'trail' ? 0.35 + (i % 3) * 0.15
+          : kind === 'confetti' ? 2.4 + (i % 5) * 1.0
           : rises ? 0.5 + (i % 4) * 0.25 : 1.4 + (i % 4) * 0.6;
       parts.push({
         x, y, z,
         vx: Math.cos(a) * sp * 0.6,
-        vy: rises ? 1.1 + (i % 5) * 0.3 : (kind === 'fire' ? 3.4 : 2.2) + (i % 6) * 0.5,
+        vy: rises ? 1.1 + (i % 5) * 0.3
+          : kind === 'fire' ? 3.4 + (i % 6) * 0.5
+          : kind === 'trail' ? 0.15 + (i % 3) * 0.1
+          : kind === 'confetti' ? 3.2 + (i % 6) * 0.7
+          : 2.2 + (i % 6) * 0.5,
         vz: Math.sin(a) * sp * 0.6
       });
     }
     this.parent.add(inst);
     this.items.push({
-      inst, parts, life: rises ? 2.6 : kind === 'fire' ? 1.5 : 1.15,
-      age: 0, mat, gravity: rises ? -0.4 : 9.8, grow: rises ? 1.7 : 1,
+      inst, parts,
+      life: rises ? 2.6 : kind === 'fire' ? 1.5 : kind === 'trail' ? 0.5 : kind === 'confetti' ? 1.6 : 1.15,
+      age: 0, mat, gravity: rises ? -0.4 : kind === 'trail' ? 2.5 : 9.8, grow: rises ? 1.7 : 1,
       baseOpacity: rises ? 0.55 : 1
     });
   }

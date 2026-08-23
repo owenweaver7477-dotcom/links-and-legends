@@ -1462,6 +1462,13 @@ function beginShot(msg) {
     ? UNLOCKS.find(u => u.kind === 'trail' && u.id === shooter.look.trail)
     : null;
   scene.setTraceColor(trail?.color || shooter?.color || '#ffffff');
+  /* The line has always been the trail cosmetic's whole effect — the item's
+     own unlocks.js comment calls it "particles the effect pool already
+     has," which was never actually true. A real equipped trail now sparks
+     as it flies too (see stepAnim's airborne branch); an unequipped one
+     stays exactly the plain tinted line it always was. */
+  G.anim.trailColor = trail?.color || null;
+  G.anim.trailAt = 0;
   Sound.strike(CLUB_BY_KEY[msg.shot.clubKey], msg.shot.power);
   scene.clearTrace();
   scene.setAimLine(null);
@@ -1518,6 +1525,16 @@ function stepAnim(dt, now) {
     // the broadcast-tracer glow rides the ball while it is in the air
     if (a.sim.airborne) {
       scene.setBallGlow(a.sim.p.x, a.sim.p.y, a.sim.p.z, player(a.pid)?.color);
+      // sparks trailing the ball, throttled rather than every frame — a
+      // fresh burst is real geometry, and the ball moves little enough
+      // between frames that firing on every one would just stack them
+      if (a.trailColor) {
+        a.trailAt = (a.trailAt || 0) + dt;
+        if (a.trailAt > 0.11) {
+          a.trailAt = 0;
+          scene.fx.burst('trail', a.sim.p.x, a.sim.p.y, a.sim.p.z, 3, a.trailColor);
+        }
+      }
     } else scene.setBallGlow(null);
     drainEvents(a);
     const p = a.sim.p;
@@ -1627,6 +1644,13 @@ function announce(a) {
  * scorer's.  G.celebUntil holds back the hole-over summary so the last player
  * to hole out actually sees their own reaction instead of a black overlay.
  */
+/* One colour per tier rather than a fixed "confetti gold" for all three —
+   a birdie should not look like the ace that follows it three holes
+   later. Deliberately not the rarity ladder's own colours (cases.js) —
+   those are already spoken for by cosmetics, and a hole result is not a
+   loot pull. */
+const REACTION_BURST_COLOR = { 1: '#8fe07a', 2: '#5ab8ff', 3: '#ffd94a' };
+
 function fireReaction(pid, strokes, par, capped) {
   const name = reactionFor(strokes, par, capped);
   if (!name) return;
@@ -1637,6 +1661,14 @@ function fireReaction(pid, strokes, par, capped) {
     G.celebUntil = Math.max(G.celebUntil || 0, performance.now() + dur * 1000);
     const tier = REACTION_TIER[name] || 0;
     Sound.celebrate(tier);
+    // the pose and the sound already existed; the burst is what was
+    // actually missing — a birdie/eagle/ace was a silhouette moving with a
+    // chime under it and nothing that read as a MOMENT in the 3D scene
+    if (tier >= 1) {
+      const p = av.root.position;
+      scene.fx.burst('confetti', p.x, p.y + 1.3, p.z, 10 + tier * 8, REACTION_BURST_COLOR[tier]);
+      if (tier >= 3) scene.fx.burst('confetti', p.x, p.y + 1.3, p.z, 16, '#ffffff');
+    }
     // an eagle, an albatross or an ace is a genuine milestone — the portal
     // has its own celebration for those, and this is what triggers it
     if (tier >= 2 && pid === G.myPid) happytime();
@@ -2766,7 +2798,18 @@ function levelUpMoment(from, to) {
       : next ? `Next: ${next.name} at ${next.at}` : 'Everything unlocked') +
     `</span></div>`;
   document.body.appendChild(el);
-  try { Sound.celebrate?.('birdie'); } catch { /* audio may be blocked */ }
+  // Sound.celebrate takes the numeric tier (see REACTION_TIER) — this was
+  // passing the string 'birdie', which matches none of its branches and
+  // has been playing nothing at all since the day it was written.
+  try { Sound.celebrate?.(1); } catch { /* audio may be blocked */ }
+  // Only when there's a golfer actually standing in the scene to burst
+  // from — a level-up can land mid-menu, between rounds, with nobody on
+  // the tee at all.
+  const av = G.avatars.get(G.myPid);
+  if (av) {
+    const p = av.root.position;
+    scene.fx.burst('confetti', p.x, p.y + 1.3, p.z, 18, '#ffd94a');
+  }
   setTimeout(() => el.remove(), 2700);
 }
 
