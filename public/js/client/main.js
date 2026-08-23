@@ -42,7 +42,7 @@ import { allCourses, getCourse, defaultAim, aimPlan } from '../shared/coursegen.
 import { ratingsFor } from '../shared/handicap.js';
 import { FORMATS, formatById, isScramble, TEAM_NAMES } from '../shared/scramble.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
-import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf, REGIONS, biomeFor, courseMeta } from '../shared/biomes.js';
+import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf, REGIONS, biomeFor, courseMeta, courseUnlockLevel } from '../shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
@@ -2781,6 +2781,20 @@ const refreshRewardsBadge = () => HUD.showRewardsBadge(todaysClaimIsWaiting(G.pr
 Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
+  /* Course-level gating landed after "no sign-up, pick anything" was
+     already the game — an existing save's remembered pick (or the plain
+     default, course 0) could be at or past its own unlock level, but a
+     save from before this shipped could just as easily have picked
+     something ahead of where a fresh level-1 read of it now lands.
+     Corrected here, the FIRST moment a real level is known, so nobody
+     can end up on the front page with a shot lined up on a hole they are
+     not high enough level to actually enter. */
+  if ((prof.level ?? 1) < courseUnlockLevel(pickedCourse)) {
+    const fallback = [...COURSE_ORDER].reverse()
+      .find(id => (prof.level ?? 1) >= courseUnlockLevel(id));
+    pickedCourse = fallback || COURSE_ORDER[0];
+    try { localStorage.setItem('lg_course', pickedCourse); } catch { /* private mode */ }
+  }
   applyDifficulty();
   /* THE SERVER'S COPY WINS on the first profile of a session. localStorage is
      a cache in front of it, not the record — so a browser that has never
@@ -3520,10 +3534,12 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
       const list = document.createElement('div');
       list.className = 'cp-rlist';
+      const level = G.profile?.level ?? 1;
       for (const c of region.courses) {
         const meta = COURSES.find(x => x.id === c.id) || {};
+        const locked = level < c.unlockLevel;
         const b = document.createElement('button');
-        b.className = 'cpbtn' + (c.id === pickedCourse ? ' on' : '');
+        b.className = 'cpbtn' + (c.id === pickedCourse ? ' on' : '') + (locked ? ' locked' : '');
         b.type = 'button';
         b.setAttribute('aria-pressed', c.id === pickedCourse ? 'true' : 'false');
         b.textContent = c.name;
@@ -3533,7 +3549,15 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
            filtered out of COURSE_ORDER, which is itself difficulty-ordered,
            so the courses inside each region already run easiest first. */
         const rt = meta.id ? ratingsFor(meta) : null;
-        if (rt) {
+        if (locked) {
+          // the requirement itself, not the difficulty — a locked course's
+          // slope rating is not the thing standing between you and it
+          const chip = document.createElement('em');
+          chip.className = 'cp-diff cp-locked';
+          chip.innerHTML = icon('lock', { size: 10 }) + ` Lv ${c.unlockLevel}`;
+          chip.title = `Reach level ${c.unlockLevel} to unlock — you are ${level}`;
+          b.appendChild(chip);
+        } else if (rt) {
           const band = HUD.slopeBand(rt.slope);
           const chip = document.createElement('em');
           chip.className = 'cp-diff ' + band.cls;
@@ -3542,10 +3566,15 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
           b.appendChild(chip);
         }
         const sub = document.createElement('small');
-        sub.textContent = `${c.region} · par ${meta.par ?? 36}`
-          + (rt ? ` · ${meta.yards} yds` : '');
+        sub.textContent = locked
+          ? `Unlocks at level ${c.unlockLevel} — ${c.unlockLevel - level} to go`
+          : `${c.region} · par ${meta.par ?? 36}` + (rt ? ` · ${meta.yards} yds` : '');
         b.appendChild(sub);
         b.addEventListener('click', () => {
+          if (locked) {
+            HUD.toast(`${c.name} unlocks at level ${c.unlockLevel} — you're ${level}, ${c.unlockLevel - level} to go.`, 'warn', 2800);
+            return;
+          }
           if (c.id === pickedCourse) return;
           pickedCourse = c.id;
           try { localStorage.setItem('lg_course', c.id); } catch { /* ignore */ }

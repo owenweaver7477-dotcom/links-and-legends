@@ -195,7 +195,7 @@ const courseRatings = id => {
 import { storeName } from './server/store.js';
 import { terrainFor } from './public/js/shared/terrain.js';
 import { BIOMES, COURSE_ORDER, BALL_COLORS, MAX_PLAYERS, HOLES_PER_COURSE,
-         biomeFor, courseMeta } from './public/js/shared/biomes.js';
+         biomeFor, courseMeta, courseUnlockLevel } from './public/js/shared/biomes.js';
 import { ShotSim, calibrateCarries } from './public/js/shared/ballistics.js';
 import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs.js';
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
@@ -1154,7 +1154,15 @@ io.on('connection', socket => {
       return reply({ ok: false, error: 'The course is completely full right now — try again in a minute.' });
     }
     unbind();
-    const room = createRoom(makeCode(), data?.courseId, data?.format, data?.privacy);
+    // A client that has never seen the level-gated picker (an old tab, a
+    // hand-crafted message) cannot be trusted to only ever ask for a course
+    // it has actually unlocked — same rule as every other client-supplied
+    // value here: the request is a request, not a fact until this checks it.
+    const creatorLevel = levelFromXp(getProfile(pid)?.xp || 0).level;
+    const wantedCourse = data?.courseId;
+    const courseId = (COURSE_ORDER.includes(wantedCourse) && creatorLevel >= courseUnlockLevel(wantedCourse))
+      ? wantedCourse : COURSE_ORDER[0];
+    const room = createRoom(makeCode(), courseId, data?.format, data?.privacy);
     rollWind(room);
     const p = addPlayer(room, pid, cleanName(data?.name), false);
     assignTeams(room);
@@ -1226,6 +1234,10 @@ io.on('connection', socket => {
     const room = rooms.get(ref.code); if (!room) return;
     if (ref.pid !== room.hostPid || room.state !== 'lobby') return;
     if (!COURSE_ORDER.includes(courseId)) return;
+    const hostLevel = levelFromXp(getProfile(ref.pid)?.xp || 0).level;
+    if (hostLevel < courseUnlockLevel(courseId)) {
+      return socket.emit('toast', { msg: `That course unlocks at level ${courseUnlockLevel(courseId)}.`, kind: 'warn' });
+    }
     room.courseId = courseId;
     room.holeIndex = 0;
     rollWind(room);

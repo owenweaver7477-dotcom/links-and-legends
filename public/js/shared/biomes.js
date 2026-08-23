@@ -514,6 +514,25 @@ const GENERATED_ORDER = [
    picker sorts what it shows, which is where the ordering actually matters. */
 export const COURSE_ORDER = [...GENERATED_ORDER, ...realCourseIds()];
 
+/* Level gate per course, by POSITION in COURSE_ORDER — the same
+   easiest-to-hardest ordering the difficulty ratings already establish
+   (see the GENERATED_ORDER comment above: meadow at 97 is "the beginners'
+   course", headland at 139 is "the championship test"). The first course
+   is always open; the rest spread across the full level range, back-loaded
+   the way RANK_TIERS in handicap.js already paces the game — early levels
+   come fast, the back half is the real grind — so working through all
+   twelve courses reads as a career, not a formality on hole one.
+   `courseUnlockLevel` degrades gracefully for an id outside this list
+   (a freshly-imported real course with no slot assigned yet) by handing
+   back the hardest tier's requirement rather than crashing or, worse,
+   silently unlocking it for everybody. */
+const COURSE_UNLOCK_LEVELS = [1, 8, 15, 22, 30, 38, 46, 55, 65, 75, 85, 95];
+export const courseUnlockLevel = id => {
+  const i = COURSE_ORDER.indexOf(id);
+  return i < 0 ? COURSE_UNLOCK_LEVELS[COURSE_UNLOCK_LEVELS.length - 1]
+    : (COURSE_UNLOCK_LEVELS[i] ?? COURSE_UNLOCK_LEVELS[COURSE_UNLOCK_LEVELS.length - 1]);
+};
+
 /* ---------------------------------------------------------------- crowns ---
    How wide a tree's canopy is, as a fraction of its height. ONE number per
    species, and it is the single source of truth for three things that were
@@ -607,9 +626,10 @@ export function courseMeta(id) {
   const bio = biomeFor(id);
   if (!bio) return null;
   const real = realCourse(id);
+  const unlockLevel = courseUnlockLevel(id);
   return real
-    ? { ...bio, id, name: real.name, region: real.region, blurb: real.blurb, real: true }
-    : { ...bio, id };
+    ? { ...bio, id, name: real.name, region: real.region, blurb: real.blurb, real: true, unlockLevel }
+    : { ...bio, id, unlockLevel };
 }
 
 /** Courses grouped by region, in REGIONS order, with empty regions dropped. */

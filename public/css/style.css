@@ -1221,6 +1221,14 @@ body:not(.playing) .hintbar { display: none; }
 .cpbtn.on { color: #fff; border-color: rgba(150,236,172,.65);
   background: linear-gradient(180deg, rgba(76,180,102,.38), rgba(46,125,67,.26));
   box-shadow: 0 0 14px rgba(110,220,140,.3); }
+/* Locked, not disabled — still tappable, still says why, per the same
+   "explain the wall, don't just hide it" rule the shop's blocked-purchase
+   buttons already follow. */
+.cpbtn.locked { color: #8a9690; background: rgba(255,255,255,.025);
+  border-style: dashed; border-color: rgba(255,255,255,.10); cursor: pointer; }
+.cpbtn.locked small { color: #6a7570; }
+.cp-locked { background: rgba(255,255,255,.08); color: #cfd6d1; }
+.cp-locked svg { vertical-align: -0.1em; margin-right: 2px; }
 
 /* Leaving a round.  Sits out of the way, top-right under the roster. */
 .quitbtn { position: absolute; right: 14px; bottom: 14px; z-index: 8;
