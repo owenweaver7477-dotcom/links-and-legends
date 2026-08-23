@@ -206,12 +206,12 @@ import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, color
          setClubSkin,
          weeklyGainers, seasonBoard, courseBoard, levelHistogram } from './server/profiles.js';
 import { SHOP, purchaseBlocked } from './public/js/shared/gear.js';
-import { EMOTES, meleeById } from './public/js/client/celebrations.js';
+import { EMOTES, meleeById, normaliseEmoteLoadout } from './public/js/client/celebrations.js';
 import { prepare as prepareChat, phraseText, forget as forgetChat, allow as allowChat, PHRASES, clean } from './server/chat.js';
 import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound, setDifficulty, difficultyOf,
-         setLook, setBallColor, setBag, kitOf, markSeen,
+         setLook, setBallColor, setBag, setEquippedEmotes, kitOf, markSeen,
          flushProfiles, claimLogin, openCase, buyCase } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
@@ -1314,6 +1314,17 @@ io.on('connection', socket => {
       socket.emit('profile', publicProfile(pid));
       const inRoom = ref && rooms.get(ref.code)?.players.find(x => x.pid === pid);
       if (inRoom) inRoom.bag = clean;
+    }
+
+    /* The equipped emote loadout — same profile-setting reasoning as the
+       bag above, and the wheel mid-round has no way to fix an over-full or
+       stale list itself, so it is cleaned here before it is ever stored:
+       normaliseEmoteLoadout drops anything the level does not actually own
+       and caps it at EMOTE_SLOTS, same as normaliseBag does for clubs. */
+    if (Array.isArray(d?.emotes)) {
+      const lvl = levelFromXp(getProfile(pid).xp || 0).level;
+      setEquippedEmotes(pid, normaliseEmoteLoadout(d.emotes, lvl));
+      socket.emit('profile', publicProfile(pid));
     }
 
     const room = ref ? rooms.get(ref.code) : null;

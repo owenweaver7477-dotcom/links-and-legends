@@ -521,6 +521,20 @@ html.touch .fsbtn { display: grid; }
   white-space: nowrap; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
 .namelabel.self { border-color: rgba(255,255,255,.7); }
 
+/* The Legend/Mythic emote flair — see Roster.burst(). Eight sparks fly out
+   from just above the name label and fade; the label's own position is
+   already tracked every frame, so this rides along for free rather than
+   needing its own screen projection. */
+.emote-burst { position: absolute; left: 50%; top: -6px; width: 0; height: 0; pointer-events: none; }
+.emote-burst i { position: absolute; left: 0; top: 0; width: 6px; height: 6px; margin: -3px 0 0 -3px;
+  border-radius: 50%; background: var(--burst-color, #ffd94a);
+  box-shadow: 0 0 7px 1px var(--burst-color, #ffd94a);
+  animation: emoteBurstFly .8s cubic-bezier(.15,.7,.3,1) both; }
+@keyframes emoteBurstFly {
+  from { transform: translate(0,0) scale(1); opacity: 1; }
+  to { transform: translate(var(--dx), var(--dy)) scale(.2); opacity: 0; }
+}
+
 /* walk prompt */
 .walkbar { position: absolute; bottom: 118px; left: 50%; transform: translateX(-50%); z-index: 6;
   background: rgba(10,18,15,.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.12);
@@ -1302,7 +1316,7 @@ body.playing .coinhud { display: block; }
   background: rgba(6,12,10,.86); border: 1px solid rgba(255,255,255,.12);
   border-radius: 16px; backdrop-filter: blur(9px);
   box-shadow: 0 10px 34px rgba(0,0,0,.45); }
-.emote { width: 96px; padding: 9px 8px; border-radius: 12px; cursor: pointer;
+.emote { position: relative; width: 96px; padding: 9px 8px; border-radius: 12px; cursor: pointer;
   font: inherit; text-align: center; color: #eaf3ea; line-height: 1.25;
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.13);
   border-top: 3px solid var(--rarity-color, rgba(255,255,255,.13));
@@ -1316,6 +1330,45 @@ body.playing .coinhud { display: block; }
 .emote.locked { opacity: .5; cursor: default;
   border-color: color-mix(in srgb, var(--rarity-color, #8fa694) 45%, rgba(255,255,255,.13)); }
 .emote.locked .em-sub { color: var(--rarity-color, #d9a24a); font-weight: 700; }
+/* The number-key hint — which digit fires this slot, see main.js's
+   keydown handler. Top-left corner, out of the way of the icon. */
+.em-slot { position: absolute; top: 4px; left: 6px; font-size: 9px; font-weight: 800;
+  color: #8fa694; opacity: .7; }
+
+/* ---------------------------------------------------- wardrobe: emotes --- */
+/* The loadout strip — what the wheel actually offers, dragged into the
+   order the wheel shows it in. Emptied out entirely rather than padded
+   with a placeholder when nothing is equipped yet, because "drag one of
+   the cards below up here" is a clearer empty state than a row of blanks. */
+.em-strip { display: flex; flex-wrap: wrap; gap: 8px; min-height: 40px;
+  padding: 8px; border-radius: 12px; background: rgba(255,255,255,.04);
+  border: 1px dashed rgba(255,255,255,.14); }
+.em-chip { display: flex; align-items: center; gap: 6px; padding: 6px 10px 6px 8px;
+  border-radius: 999px; cursor: grab; font: inherit; font-size: 12px; font-weight: 600;
+  color: #eaf3ea; background: rgba(255,255,255,.07);
+  border: 1px solid var(--rarity-color, rgba(255,255,255,.16)); }
+.em-chip:active { cursor: grabbing; }
+.em-chip.drag-over { box-shadow: 0 0 0 2px var(--rarity-color, #6fce8a) inset; }
+.em-chip svg { flex: 0 0 auto; }
+
+/* The full library — every emote you have ever earned, own or not. Cards,
+   not a list: rarity colour, lock state and equip state all read at a
+   glance the same way the decal grid already does. */
+.em-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; }
+.em-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 11px 8px 9px; border-radius: 12px; cursor: pointer; text-align: center;
+  font: inherit; color: #eaf3ea; background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.12);
+  border-top: 3px solid var(--rarity-color, rgba(255,255,255,.13)); transition: .13s; }
+.em-card:hover:not(.locked) { background: rgba(143,224,122,.14); transform: translateY(-2px); }
+.em-card.on { background: rgba(111,206,138,.16); border-color: rgba(111,206,138,.5); }
+.em-card.locked { opacity: .5; cursor: default;
+  border-color: color-mix(in srgb, var(--rarity-color, #8fa694) 45%, rgba(255,255,255,.12)); }
+.em-card .em-name { font-size: 11.5px; }
+.em-card .em-sub { font-size: 9px; color: #8fa694; }
+.em-card.locked .em-sub { color: var(--rarity-color, #d9a24a); font-weight: 700; }
+.em-on-badge { position: absolute; top: 5px; right: 5px; width: 16px; height: 16px;
+  border-radius: 50%; background: #6fce8a; color: #07120c; display: grid; place-items: center; }
 
 /* ------------------------------------------------------------ xp / level --
    The career's second currency. Coins go down; this only ever goes up. */

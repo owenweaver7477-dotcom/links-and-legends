@@ -338,6 +338,7 @@ export function publicProfile(pid) {
     look: p.look || null,
     ballColor: p.ballColor || null,
     bag: p.bag || null,
+    equippedEmotes: p.equippedEmotes || null,
     difficulty: normaliseDifficulty(p.difficulty),
     earnRate: earnRate(p.difficulty),
     /* Records held, because a club finish is gated on it and the client
@@ -855,6 +856,17 @@ export function setBallColor(pid, hex, name) {
 export function setBag(pid, bag) {
   const p = getProfile(pid);
   p.bag = Array.isArray(bag) ? bag : null;
+  saveSoon();
+}
+
+/** The equipped emote loadout — same shape as the bag, and the same
+ *  division of labour: this just stores what it is given, trusting the
+ *  caller (server.js's player:prefs handler) to have already run it
+ *  through normaliseEmoteLoadout so nothing unowned or over the slot cap
+ *  ever lands here. */
+export function setEquippedEmotes(pid, ids) {
+  const p = getProfile(pid);
+  p.equippedEmotes = Array.isArray(ids) ? ids : null;
   saveSoon();
 }
 

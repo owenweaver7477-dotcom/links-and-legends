@@ -182,4 +182,28 @@ export class Roster {
       lbl.style.transform = `translate(-50%,-100%) scale(${(1 - Math.min(0.45, dist / 500)).toFixed(2)})`;
     }
   }
+
+  /** A short particle burst above one avatar's head — the "reads as
+   *  special" flair for a Legend/Mythic emote (see main.js's
+   *  Net.on('emote', ...)). Spawned as a child of the SAME label div
+   *  update() already tracks every frame, so it rides the avatar's correct
+   *  screen position for free instead of needing its own projection math,
+   *  and disappears with it if the label does. */
+  burst(pid, color = '#ffd94a') {
+    const lbl = this.labels.get(pid);
+    if (!lbl) return;
+    const b = document.createElement('span');
+    b.className = 'emote-burst';
+    b.style.setProperty('--burst-color', color);
+    for (let i = 0; i < 8; i++) {
+      const s = document.createElement('i');
+      const a = (Math.PI * 2 * i) / 8;
+      s.style.setProperty('--dx', (Math.cos(a) * 34).toFixed(1) + 'px');
+      s.style.setProperty('--dy', (Math.sin(a) * 34).toFixed(1) + 'px');
+      s.style.animationDelay = (i % 2 ? 0.04 : 0) + 's';
+      b.appendChild(s);
+    }
+    lbl.appendChild(b);
+    setTimeout(() => b.remove(), 900);
+  }
 }

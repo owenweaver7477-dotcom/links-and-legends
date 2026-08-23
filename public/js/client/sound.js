@@ -207,6 +207,39 @@ Sound.reward = (rarity) => {
   }
 };
 
+/* ------------------------------------------------------------- §7 emotes */
+/** One family of sound per mood — a cheer, a laugh, a groan, a stinger —
+    so an emote SOUNDS like what it looks like instead of every one playing
+    the same chime. `mood` comes off the EMOTES entry in celebrations.js;
+    `rarity` is rarityForLevel(e.at).id, and reuses the exact tier scale
+    Sound.reward already built for cases — richer and a touch louder the
+    rarer the emote, with a shimmer on top for Legend and Mythic so a
+    showcase emote is audibly a moment, not just differently coloured. */
+Sound.emote = (mood, rarity = 'standard') => {
+  const tier = CASE_RARITY_TIER[rarity] ?? 0;
+  const boost = 1 + tier * 0.08;
+  if (mood === 'laugh') {
+    ping(660, 0.09, 0.16 * boost);
+    ping(830, 0.09, 0.16 * boost, 0.09);
+    ping(740, 0.09, 0.14 * boost, 0.18);
+    ping(930, 0.13, 0.16 * boost, 0.27);
+  } else if (mood === 'groan') {
+    noiseBurst({ dur: 0.22, freq: 320, q: 0.8, gain: 0.18 * boost, sweep: -180 });
+    ping(220, 0.35, 0.12 * boost, 0.08);
+  } else if (mood === 'stinger') {
+    noiseBurst({ dur: 0.05, freq: 1600, q: 2, gain: 0.2 * boost });
+    ping(523, 0.14, 0.2 * boost, 0.02);
+    ping(659, 0.16, 0.2 * boost, 0.06);
+    ping(784, 0.28, 0.22 * boost, 0.12);
+  } else {                                        // cheer, and the default
+    ping(740, 0.16, 0.18 * boost);
+    ping(988, 0.2, 0.18 * boost, 0.08);
+    if (tier >= 2) ping(1318, 0.22, 0.14 * boost, 0.16);
+  }
+  if (tier >= 3) noiseBurst({ dur: 0.3, freq: 1900, q: 3, gain: 0.1, sweep: 450 });
+  if (tier >= 4) ping(2217, 0.4, 0.12, 0.3);
+};
+
 /** The cart giving up: a low thump, then a long ragged tail. */
 Sound.explode = () => {
   noiseBurst({ dur: 0.5, freq: 110, q: 0.4, gain: 0.75, sweep: -70 });

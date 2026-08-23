@@ -8,7 +8,7 @@ import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
          HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES, bodiesOf } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
-import { EMOTES } from './celebrations.js';
+import { EMOTES, EMOTE_SLOTS } from './celebrations.js';
 import { UNLOCKS, unlocksAt, unlocksOfKind, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { ACTIONS, keysFor, bindKey, resetBinds, keyLabel, RESERVED } from './binds.js';
 import { clubSvg, caddieSvg, statSvg, finishName } from './clubart.js';
@@ -1716,27 +1716,34 @@ HUD.escapeHtml = escapeHtml;
 
 /* ------------------------------------------------------------- emotes --- */
 /**
- * The emote wheel.  Everything you have is pickable; everything you have not
- * is shown greyed with the level it needs, because a locked slot you can SEE
- * is a reason to play another round and a hidden one is not.
+ * The emote wheel. Shows only the EQUIPPED loadout, in loadout order — not
+ * the whole library, which is the wardrobe's job now (see renderEmoteTab).
+ * The slot number on each button is what the number-key quick-picks (see
+ * main.js's keydown handler) actually correspond to, so the wheel has to
+ * show it rather than leave the shortcut undiscoverable. `locked` stays as
+ * a defensive check even though a clean loadout should never contain one —
+ * a stale equip from before a level was somehow lost is a display bug, not
+ * a crash, if this were not here.
  */
-HUD.renderEmotes = (level, onPick) => {
+HUD.renderEmotes = (level, equipped, onPick) => {
   if (!el.emoteWheel) return;
   el.emoteWheel.innerHTML = '';
   const lvl = Number(level) || 1;
-  for (const e of EMOTES) {
+  const list = (equipped || []).map(id => EMOTES.find(e => e.id === id)).filter(Boolean);
+  list.forEach((e, i) => {
     const locked = lvl < e.at;
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'emote' + (locked ? ' locked' : '');
     b.style.setProperty('--rarity-color', rarityForLevel(e.at).color);
-    b.innerHTML = `<span class="em-ico">${icon(e.icon, { size: 20 })}</span>` +
+    b.innerHTML = `<span class="em-slot">${i + 1}</span>` +
+      `<span class="em-ico">${icon(e.icon, { size: 20 })}</span>` +
       `<span class="em-name">${escapeHtml(e.name)}</span>` +
       `<span class="em-sub">${locked ? 'Level ' + e.at : escapeHtml(e.blurb)}</span>`;
     b.disabled = locked;
     if (!locked) b.addEventListener('click', () => onPick(e.id));
     el.emoteWheel.appendChild(b);
-  }
+  });
 };
 HUD.showEmotes = on => { if (el.emoteWheel) el.emoteWheel.hidden = !on; };
 HUD.emotesOpen = () => el.emoteWheel && !el.emoteWheel.hidden;
@@ -2389,7 +2396,7 @@ HUD.renderWardrobeStats = look => {
   el.wdStats.classList.toggle('four', !!HUD.wdDetail);
 };
 
-HUD.renderWardrobe = (look, level, name) => {
+HUD.renderWardrobe = (look, level, name, equipped) => {
   if (!el.screenWardrobe) return;
   const lv = Number(level) || 1;
 
@@ -2444,6 +2451,8 @@ HUD.renderWardrobe = (look, level, name) => {
       optRow('Arm sleeves', SLEEVES, look.sleeve, lv, 'sleeve') +
       optRow('Neck', NECKWEAR, look.neck, lv, 'neck') +
       colRow('Cap colour', CAPS, look.cap, 'cap');
+  } else if (HUD.wdTab === 'emotes') {
+    HUD.renderEmoteTab(lv, equipped);
   } else {
     HUD.renderDecalTab(look, lv);
   }
@@ -2523,6 +2532,45 @@ function customEditor(look) {
   </div></div>`;
 }
 
+/* The emotes tab. "Own many, carry a few" — the strip at the top is the
+   loadout the wheel actually offers, drag-reordered into wheel order; the
+   grid below is the whole library, own or not, exactly like the decal grid
+   above it. A card and a strip chip share the same data-emote attribute
+   and the same click handler (see HUD.bindWardrobe): clicking either one
+   toggles that id in or out of the loadout, so there is only one code path
+   for "equip" regardless of which one a player actually touches. */
+HUD.renderEmoteTab = (lv, equipped) => {
+  const eq = Array.isArray(equipped) ? equipped : [];
+  const strip = eq.length
+    ? eq.map(id => {
+        const e = EMOTES.find(x => x.id === id);
+        if (!e) return '';
+        return `<button class="em-chip" draggable="true" data-emote="${e.id}"
+          style="--rarity-color:${rarityForLevel(e.at).color}"
+          title="${escapeHtml(e.name)} — click to unequip, drag to reorder">
+          ${icon(e.icon, { size: 15 })}<span>${escapeHtml(e.name)}</span></button>`;
+      }).join('')
+    : '';
+
+  const grid = EMOTES.map(e => {
+    const L = lv < e.at;
+    const on = eq.includes(e.id);
+    return `<button class="em-card${on ? ' on' : ''}${L ? ' locked' : ''}"
+      data-emote="${e.id}"${L ? ' disabled' : ''} style="--rarity-color:${rarityForLevel(e.at).color}">
+      <span class="em-ico">${icon(e.icon, { size: 22 })}</span>
+      <span class="em-name">${escapeHtml(e.name)}</span>
+      <span class="em-sub">${L ? `Unlocks at level ${e.at}` : escapeHtml(e.blurb)}</span>
+      ${on ? `<span class="em-on-badge">${icon('check', { size: 11 })}</span>` : ''}
+    </button>`;
+  }).join('');
+
+  el.wdRBody.innerHTML =
+    `<div class="wd-grp"><h5>Your loadout <small>${eq.length}/${EMOTE_SLOTS} · drag to reorder</small></h5>
+      <div class="em-strip">${strip || '<p class="tiny">Pick up to ' + EMOTE_SLOTS + ' below — this is what the wheel offers mid-round.</p>'}</div>
+    </div>
+    <div class="wd-grp"><h5>All emotes</h5><div class="em-grid">${grid}</div></div>`;
+};
+
 /* ═══════════════════════════════════════════════ THE STATS CORNER ═══════
    "What does this do, what does it look like, how rare is it" — the three
    questions a wardrobe never answered before. The first is a real number
@@ -2573,6 +2621,10 @@ function wdInfoFromTarget(t) {
     const d = DECALS.find(x => x.id === t.dataset.decal);
     return d ? { name: d.name, at: d.at || 0, effect: 'Cosmetic — no effect on your golf' } : null;
   }
+  if (t.hasAttribute('data-emote') && t.dataset.emote) {
+    const e = EMOTES.find(x => x.id === t.dataset.emote);
+    return e ? { name: e.name, at: e.at || 0, effect: e.blurb } : null;
+  }
   return null;
 }
 
@@ -2609,6 +2661,10 @@ HUD.bindWardrobe = () => {
     if (!t) return;
     const info = wdInfoFromTarget(t);
     if (info) HUD.showWardrobeInfo(info.name, info.at, info.effect);
+    /* The card IS the preview — no separate animation to build. Same
+       philosophy as the rest of the wardrobe: the 3D golfer standing right
+       there plays the pose live rather than a canned loop in the card. */
+    if (t.hasAttribute('data-emote') && !t.disabled) HUD.onEmotePreview?.(t.dataset.emote);
   };
   el.screenWardrobe.addEventListener('pointerover', showInfo);
   el.screenWardrobe.addEventListener('focusin', showInfo);
@@ -2631,7 +2687,11 @@ HUD.bindWardrobe = () => {
     if (t.dataset.cb) { HUD.onWardrobe({ __custom: { b: t.dataset.cb } }); return; }
     if (t.hasAttribute('data-decal')) {
       HUD.onWardrobe({ __decal: { slot: HUD.wdSlot, id: t.dataset.decal || null } });
+      return;
     }
+    /* Shared by a loadout chip and a library card — see renderEmoteTab.
+       Equip/unequip is one toggle regardless of which one was clicked. */
+    if (t.hasAttribute('data-emote')) { HUD.onEmoteEquip?.(t.dataset.emote); return; }
   });
 
   /* The monogram field. `input` rather than `change` so the badge updates as
@@ -2640,6 +2700,42 @@ HUD.bindWardrobe = () => {
   el.screenWardrobe.addEventListener('input', e => {
     if (e.target.id !== 'wdInitials') return;
     HUD.onWardrobe({ __custom: { txt: e.target.value }, __keepFocus: true });
+  });
+
+  /* Drag-to-reorder the loadout strip. Native HTML5 drag-and-drop rather
+     than a library: it is one array of chips, not a general-purpose sortable
+     list, and the browser's own drag events cover exactly that. Dropping on
+     a chip inserts before it; dropping on the strip's empty space (or
+     anywhere else in the wardrobe) appends to the end. */
+  let dragId = null;
+  el.screenWardrobe.addEventListener('dragstart', e => {
+    const chip = e.target.closest('.em-chip');
+    if (!chip) return;
+    dragId = chip.dataset.emote;
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  el.screenWardrobe.addEventListener('dragover', e => {
+    if (!dragId) return;
+    const chip = e.target.closest('.em-chip');
+    if (!chip) return;
+    e.preventDefault();
+    chip.classList.add('drag-over');
+  });
+  el.screenWardrobe.addEventListener('dragleave', e => {
+    e.target.closest('.em-chip')?.classList.remove('drag-over');
+  });
+  el.screenWardrobe.addEventListener('drop', e => {
+    if (!dragId) return;
+    e.preventDefault();
+    const chip = e.target.closest('.em-chip');
+    chip?.classList.remove('drag-over');
+    HUD.onEmoteReorder?.(dragId, chip && chip.dataset.emote !== dragId ? chip.dataset.emote : null);
+    dragId = null;
+  });
+  el.screenWardrobe.addEventListener('dragend', () => {
+    el.screenWardrobe.querySelectorAll('.em-chip.drag-over')
+      .forEach(c => c.classList.remove('drag-over'));
+    dragId = null;
   });
 };
 

@@ -8,12 +8,13 @@ import { Avatar } from './avatar.js';
 import { Walker } from './walker.js';
 import { CartManager } from './carts.js';
 import { reactionFor, REACTION_TIER } from './celebrations.js';
+import { rarityForLevel, RARITIES } from '../shared/cases.js';
 import { BOARD_RADIUS, KMH, TOP_SPEED_KMH, MAX_BOOST } from '../shared/cart.js';
 import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
-import { EMOTES, MELEES, meleesAt, meleeById } from './celebrations.js';
+import { EMOTES, MELEES, meleesAt, meleeById, emotesAt, normaliseEmoteLoadout, EMOTE_SLOTS } from './celebrations.js';
 import { UNLOCKS, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { SwingController, SWING, setForgiveness, setMarkBand } from './swing.js';
 import { HUD } from './hud.js';
@@ -654,6 +655,15 @@ function ensureLevelHist() {
   Net.levelStats(hist => { HUD.levelHist = hist; });
 }
 
+/* The wardrobe's own editable copy of the loadout — same relationship to
+   G.profile.equippedEmotes that bagDraft/lookDraft have to their server
+   fields: opening the wardrobe seeds it from whatever the server last
+   confirmed, every click updates it optimistically, and Net.prefs pushes
+   the result. The in-round wheel never touches this — it reads the
+   confirmed profile straight through myEquippedEmotes(), because the
+   wardrobe is never open during a round. */
+let emoteDraft = [];
+
 function openWardrobe() {
   G.screen = 'wardrobe';
   HUD.show('wardrobe');
@@ -661,12 +671,41 @@ function openWardrobe() {
   ensureLevelHist();
   wd.t = 0; wd.hold = 0;
   wdCourse(COURSE_ORDER.indexOf(pickedCourse) >= 0 ? COURSE_ORDER.indexOf(pickedCourse) : 0);
+  emoteDraft = myEquippedEmotes();
   drawWardrobe();
 }
 
 function drawWardrobe() {
   HUD.renderWardrobe(lookDraft, G.profile?.level ?? 1,
-    Net.lastName || document.getElementById('inpName')?.value || 'Your golfer');
+    Net.lastName || document.getElementById('inpName')?.value || 'Your golfer', emoteDraft);
+}
+
+/** Toggle one emote in or out of the loadout — a card and a strip chip both
+ *  land here (see hud.js's click delegate), since equip and unequip are the
+ *  same action from opposite starting states. */
+function toggleEmoteEquip(id) {
+  if (emoteDraft.includes(id)) {
+    emoteDraft = emoteDraft.filter(x => x !== id);
+  } else {
+    if (emoteDraft.length >= EMOTE_SLOTS) {
+      HUD.toast(`You can only carry ${EMOTE_SLOTS} emotes — drop one first.`, 'warn');
+      return;
+    }
+    emoteDraft = [...emoteDraft, id];
+  }
+  drawWardrobe();
+  Net.prefs({ emotes: emoteDraft });
+}
+
+/** Drag-to-reorder within the loadout strip. `beforeId` null means "dropped
+ *  at the end" — off the strip, or onto the chip being dragged itself. */
+function reorderEmoteDraft(id, beforeId) {
+  const arr = emoteDraft.filter(x => x !== id);
+  const at = beforeId ? arr.indexOf(beforeId) : -1;
+  arr.splice(at < 0 ? arr.length : at, 0, id);
+  emoteDraft = arr;
+  drawWardrobe();
+  Net.prefs({ emotes: emoteDraft });
 }
 
 /**
@@ -2185,6 +2224,21 @@ window.addEventListener('keydown', ev => {
   const m = mode();
   const seated = m === 'drive' || m === 'ride';
 
+  /* Number-key quick-slots, live only while the wheel is open — the same
+     request as a D-pad on a controller: pick a slot without hunting across
+     the wheel for it. Checked and returned on BEFORE the camera presets
+     below, which also live on 1-4 — those keys mean two different things
+     depending on whether a hand is on the wheel, never both at once. */
+  if (HUD.emotesOpen()) {
+    const idx = Number(k) - 1;
+    if (idx >= 0 && idx < EMOTE_SLOTS) {
+      const id = myEquippedEmotes()[idx];
+      if (id) { Net.emote(id); HUD.showEmotes(false); }
+      ev.preventDefault();
+      return;
+    }
+  }
+
   /* Keys are DATA — see binds.js. Every comparison below asks what ACTION
      this key is bound to rather than whether it is a particular letter, so
      the whole scheme is rebindable and the dispatch did not have to change
@@ -2267,7 +2321,7 @@ window.addEventListener('keydown', ev => {
   if (a === 'emote' && !seated) {
     // hold T for the wheel; it closes on keyup or once something is picked
     if (!HUD.emotesOpen()) {
-      HUD.renderEmotes(G.profile?.level ?? 1, id => { Net.emote(id); HUD.showEmotes(false); });
+      HUD.renderEmotes(G.profile?.level ?? 1, myEquippedEmotes(), id => { Net.emote(id); HUD.showEmotes(false); });
       HUD.showEmotes(true);
     }
   }
@@ -2718,6 +2772,13 @@ function levelUpMoment(from, to) {
 
 Net.on('levelup', d => { if (d?.to) levelUpMoment(d.from || 1, d.to); });
 
+/** The wheel's own contents — never the full library. "Own many, carry a
+ *  few" is the whole point of the loadout (see celebrations.js), so this is
+ *  the one place that turns a profile's equippedEmotes into what actually
+ *  gets offered, both for the wheel itself and for its number-key slots. */
+const myEquippedEmotes = () =>
+  normaliseEmoteLoadout(G.profile?.equippedEmotes, G.profile?.level ?? 1);
+
 /** Which melee the B key throws, and the animation each one plays. */
 const MELEE_CLIP = { barge: 'shoving', slap: 'slapping', kick: 'kicking' };
 const TOOK_IT = { barge: 'staggered', slap: 'spun', kick: 'launched' };
@@ -2765,9 +2826,22 @@ Net.on('gather', d => {
 
 Net.on('chat', d => HUD.chatMessage(d, G.myPid));
 
+/* One path for both a local pick and everyone else's: the server echoes
+   every emote back to the whole room including the sender (see the comment
+   above), so what plays here is the only copy — there is no separate local
+   preview to keep in sync with it. Sound and the rarity flair ride along
+   with the animation for exactly the same reason: a remote player's emote
+   was silent and static-tier before this, which is most of "emojis have no
+   life" — the pose was always real, nobody could hear or see past it. */
 Net.on('emote', d => {
   const av = G.avatars?.get(d?.pid);
   if (av) av.play(d.id);
+  const e = EMOTES.find(x => x.id === d?.id);
+  if (!e) return;
+  const rarity = rarityForLevel(e.at);
+  const tier = RARITIES.findIndex(r => r.id === rarity.id);
+  Sound.emote?.(e.mood, rarity.id);
+  if (tier >= 3) roster.burst(d.pid, rarity.color);
 });
 
 /* §7.1 — whether today's login reward is still sitting there unclaimed.
@@ -3838,7 +3912,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   function radialPick(id, item) {
     if (!id) { if (item) HUD.toast(`${item.name} — ${item.sub || 'not now'}`, 'warn', 1500); return; }
     if (id === 'emote') {
-      HUD.renderEmotes(G.profile?.level ?? 1, e => { Net.emote(e); HUD.showEmotes(false); });
+      HUD.renderEmotes(G.profile?.level ?? 1, myEquippedEmotes(), e => { Net.emote(e); HUD.showEmotes(false); });
       HUD.showEmotes(true);
     } else if (id === 'chat') document.body.classList.add('saying');
     else if (id === 'toBall') teleportToMyBall();
@@ -3863,6 +3937,11 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
   /* ---- the wardrobe ---------------------------------------------------- */
   HUD.onWardrobe = applyWardrobe;
+  HUD.onEmoteEquip = toggleEmoteEquip;
+  HUD.onEmoteReorder = reorderEmoteDraft;
+  // the card IS the preview: play it on the same live golfer standing
+  // behind the panel, the same way every other wardrobe piece previews
+  HUD.onEmotePreview = id => menu.av?.play(id);
   document.getElementById('btnWardrobe')?.addEventListener('click', openWardrobe);
   HUD.el.wdPrev.addEventListener('click', () => { wd.auto = false; syncAuto(); wd.hold = 0; wdCourse(wd.idx - 1); });
   HUD.el.wdNext.addEventListener('click', () => { wd.auto = false; syncAuto(); wd.hold = 0; wdCourse(wd.idx + 1); });

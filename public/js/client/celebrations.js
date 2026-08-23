@@ -170,48 +170,75 @@ export const clipDuration = name => CLIPS[name]?.dur || 0;
 
    Unlocked by LEVEL, not bought, so there is a reason to keep playing that
    coins do not already cover.  `at` is the level each one arrives at.
-   ========================================================================= */
+
+   `mood` picks which family of sound Sound.emote reaches for — cheer, laugh,
+   groan or stinger — so an emote SOUNDS like what it looks like instead of
+   every one playing the same chime. See sound.js. */
 export const EMOTES = [
-  { id: 'wave', name: 'Wave', icon: 'wave', at: 2,
+  { id: 'wave', name: 'Wave', icon: 'wave', at: 2, mood: 'cheer',
     blurb: 'A friendly one for the tee box' },
-  { id: 'fistpump', name: 'Fist pump', icon: 'fistpump', at: 3,
+  { id: 'fistpump', name: 'Fist pump', icon: 'fistpump', at: 3, mood: 'stinger',
     blurb: 'For when it drops from distance' },
-  { id: 'twirl', name: 'Club twirl', icon: 'twirl', at: 4,
+  { id: 'twirl', name: 'Club twirl', icon: 'twirl', at: 4, mood: 'cheer',
     blurb: 'Pure showboating, and it is earned' },
-  { id: 'shrug', name: 'Shrug', icon: 'shrug', at: 5,
+  { id: 'shrug', name: 'Shrug', icon: 'shrug', at: 5, mood: 'laugh',
     blurb: 'No idea what happened there either' },
-  { id: 'clap', name: 'Slow clap', icon: 'clap', at: 6,
+  { id: 'clap', name: 'Slow clap', icon: 'clap', at: 6, mood: 'cheer',
     blurb: 'Sincere. Mostly.' },
 
   /* The back half. Five emotes ran out at level 6, which on a hundred-level
      ladder meant the wheel was finished before anybody had really started —
      and the emote wheel is the most-opened thing in the game after the
      scorecard. These are spread the rest of the way up. */
-  { id: 'bow', name: 'Take a bow', icon: 'bow', at: 15,
+  { id: 'bow', name: 'Take a bow', icon: 'bow', at: 15, mood: 'stinger',
     blurb: 'For an audience that may not exist' },
-  { id: 'facepalm', name: 'Facepalm', icon: 'facepalm', at: 21,
+  { id: 'facepalm', name: 'Facepalm', icon: 'facepalm', at: 21, mood: 'groan',
     blurb: 'The only honest response to that one' },
-  { id: 'point', name: 'Called it', icon: 'point', at: 30,
+  { id: 'point', name: 'Called it', icon: 'point', at: 30, mood: 'cheer',
     blurb: 'Point at the hole before it drops' },
-  { id: 'dance', name: 'Little dance', icon: 'dance', at: 44,
+  { id: 'dance', name: 'Little dance', icon: 'dance', at: 44, mood: 'laugh',
     blurb: 'Undignified and entirely earned' },
-  { id: 'airswing', name: 'Air swing', icon: 'airswing', at: 50,
+  { id: 'airswing', name: 'Air swing', icon: 'airswing', at: 50, mood: 'laugh',
     blurb: 'A practice pass at absolutely nothing' },
-  { id: 'flex', name: 'Flex', icon: 'flex', at: 58,
+  { id: 'flex', name: 'Flex', icon: 'flex', at: 58, mood: 'stinger',
     blurb: 'Both arms. No apology.' },
-  { id: 'tip', name: 'Cap tip', icon: 'tip', at: 70,
+  { id: 'tip', name: 'Cap tip', icon: 'tip', at: 70, mood: 'cheer',
     blurb: 'The old-fashioned one' },
-  { id: 'crown', name: 'Crown', icon: 'crown', at: 80,
+  { id: 'crown', name: 'Crown', icon: 'crown', at: 80, mood: 'stinger',
     blurb: 'Both hands, held above the head' },
-  { id: 'sleep', name: 'Slow play', icon: 'sleep', at: 88,
+  { id: 'sleep', name: 'Slow play', icon: 'sleep', at: 88, mood: 'groan',
     blurb: 'For whoever is reading their putt again' },
-  { id: 'micdrop', name: 'Mic drop', icon: 'micdrop', at: 95,
+  { id: 'micdrop', name: 'Mic drop', icon: 'micdrop', at: 95, mood: 'stinger',
     blurb: 'Nothing left to prove up here' }
 ];
 
 /** Which emotes a player of this level has. */
 export const emotesAt = level =>
   EMOTES.filter(e => e.at <= (Number(level) || 1));
+
+/* ---- the loadout -------------------------------------------------------
+   "Own many, carry a few" — the same shape as the club bag. A player earns
+   the whole back half of this list over a hundred levels; scrolling all of
+   it open-wheel mid-round is the exact complaint this fixes. Equipping is a
+   PROFILE setting (validated here, on both ends) so a level lost to nothing
+   — levels do not go down — never leaves a stale id in the loadout; the
+   filter below is what makes that true regardless of how it got there. */
+export const EMOTE_SLOTS = 8;
+
+/**
+ * Clean a client-submitted loadout down to ids the player actually owns,
+ * deduplicated and capped at EMOTE_SLOTS, preserving the order given (that
+ * order is the whole point — it is what drag-to-reorder is arranging).
+ * An empty or entirely-invalid submission is not an error, just a player
+ * who has not built a loadout yet — falls back to their earliest unlocks,
+ * so the wheel is never blank the first time it opens.
+ */
+export function normaliseEmoteLoadout(ids, level) {
+  const owned = new Set(emotesAt(level).map(e => e.id));
+  const clean = [...new Set((Array.isArray(ids) ? ids : []).filter(id => owned.has(id)))]
+    .slice(0, EMOTE_SLOTS);
+  return clean.length ? clean : emotesAt(level).slice(0, EMOTE_SLOTS).map(e => e.id);
+}
 
 export const EMOTE_CLIPS = {
   wave: {
