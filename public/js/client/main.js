@@ -43,7 +43,8 @@ import { allCourses, getCourse, defaultAim, aimPlan } from '../shared/coursegen.
 import { ratingsFor } from '../shared/handicap.js';
 import { FORMATS, formatById, isScramble, TEAM_NAMES } from '../shared/scramble.js';
 import { terrainFor, SURFACES } from '../shared/terrain.js';
-import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf, REGIONS, biomeFor, courseMeta, courseUnlockLevel } from '../shared/biomes.js';
+import { BIOMES, COURSE_ORDER, coursesByRegion, regionOf, REGIONS, biomeFor, courseMeta, courseUnlockLevel, PLANNED_COURSES } from '../shared/biomes.js';
+import { xpForLevel } from '../shared/economy.js';
 import { ShotSim, calibrateCarries, suggestedPower, BALL_RADIUS } from '../shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub, clubIndex, normaliseBag, DEFAULT_BAG, BAG_SIZE } from '../shared/clubs.js';
 import { toYards, clamp, lerp } from '../shared/rng.js';
@@ -2930,9 +2931,34 @@ const todaysClaimIsWaiting = prof =>
   !!prof && prof.login?.lastClaimDate !== new Date().toISOString().slice(0, 10);
 const refreshRewardsBadge = () => HUD.showRewardsBadge(todaysClaimIsWaiting(G.profile));
 
+/* ?levelup=N, waiting for an identity. The request has to go AFTER the
+   server has associated this socket with a pid (which happens on the
+   profile:me handshake), or it comes straight back as "Still connecting"
+   — firing it right after Net.connect() raced that handshake and lost. */
+let pendingDevLevel = 0;
+/* The course picker is built inside boot(), but it has to be REDRAWN
+   whenever the level changes — a level-up mid-session (or the ?levelup
+   cheat) otherwise leaves it showing the requirement gap it had when the
+   page loaded. Held here so the profile handler can reach it. */
+let redrawCourses = () => {};
+
 Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
+  if (pendingDevLevel >= 1) {
+    const want = pendingDevLevel;
+    pendingDevLevel = 0;                       // one shot, never a loop
+    Net.debugLevelUp(want, res => {
+      if (res?.ok) HUD.toast(`Dev: now level ${res.level}.`, 'good', 2600);
+      else HUD.toast(res?.error || 'Level cheat is disabled here.', 'warn', 2600);
+    });
+  }
+  /* One line saying what the server actually thinks this account is, every
+     time a profile lands. Level is DERIVED from xp (economy.js's
+     levelFromXp) — there is no level field anywhere to be stale or wrong —
+     so if the number on screen ever looks wrong, this is the number to
+     check it against, and `xp` is the only thing that could be at fault. */
+  console.log(`[profile] level ${prof.level} · xp ${prof.xp} · ${prof.into}/${prof.need} into this level`);
   /* Course-level gating landed after "no sign-up, pick anything" was
      already the game — an existing save's remembered pick (or the plain
      default, course 0) could be at or past its own unlock level, but a
@@ -2978,6 +3004,8 @@ Net.on('profile', prof => {
     HUD.toast(`+${prof.coins - before.coins} coins · rating ${prof.rating}`, 'good', 4200, 'coin');
     trackCoins(prof.coins - before.coins, 'round_payout');
   }
+  // a level change moves what the course picker says about the locked ones
+  if (!before || before.level !== prof.level) redrawCourses();
   refreshRewardsBadge();
   // claiming or opening a case triggers this same push — keep an open
   // rewards panel showing the balance it just changed, not a stale one
@@ -3674,6 +3702,15 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   const room = invitedRoom()
     || (q.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
   if (room) HUD.el.inpCode.value = room;
+  /* ?levelup=N — jump this account to level N for testing progression
+     gates. Read here, ACTED ON after Net.connect() below: Net.on replaces
+     the handler for an event rather than adding to it, so registering a
+     second 'connect' listener here would have silently clobbered the real
+     one (or been clobbered by it). The SERVER decides whether to honour
+     the request at all — see debug:levelup, gated on NODE_ENV !==
+     'production' — so this is inert against the live game no matter what
+     anybody types into their own address bar. */
+  pendingDevLevel = Number(q.get('levelup')) || 0;
   // Returning players are recognised, not interrogated: the same browser
   // key that pins your career also pins your name, so the front door says
   // hello instead of asking who you are.  "Change" brings the field back.
@@ -3703,7 +3740,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
   /* The course strip.  Choosing one rebuilds the title-screen backdrop, so
      the picture behind the menu IS the course you are about to play. */
-  const drawCourses = () => {
+  const drawCourses = redrawCourses = () => {
     const row = document.getElementById('homeCourses');
     if (!row) return;
     row.innerHTML = '';
@@ -3788,6 +3825,89 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
           clearMenuBackdrop();     // drop the old tee...
           G.loadedKey = null;
           menuBackdrop();          // ...and stand on the new one
+        });
+        list.appendChild(b);
+      }
+      group.appendChild(list);
+      row.appendChild(group);
+    }
+
+    /* ---- what is coming ------------------------------------------------
+       The planned courses (see PLANNED_COURSES in biomes.js). These are NOT
+       in COURSE_ORDER and have no terrain behind them yet, so they are
+       deliberately unselectable — the point is to show a player working
+       through the twelve free courses that the ladder keeps going, not to
+       offer something that would fail to load if it were clicked.
+
+       The rounds-to-go estimate is honest arithmetic rather than a guess:
+       XP still needed divided by what a decent nine actually pays (see
+       roundXp/holeXp in economy.js — about 200 for a level-par round). */
+    const xp = G.profile?.xp ?? 0;
+    const lvl = G.profile?.level ?? 1;
+    /* Shown whether or not the level requirement is met. Filtering the met
+       ones out made a course silently VANISH the moment you passed its
+       level — you lost the teaser and gained nothing, because the map does
+       not exist yet. Saying "unlocked, still being built" is the honest
+       version of the same fact. */
+    const planned = PLANNED_COURSES;
+    if (planned.length) {
+      const group = document.createElement('div');
+      group.className = 'cp-region cp-soon';
+
+      const head = document.createElement('div');
+      head.className = 'cp-rhead';
+      head.innerHTML = `<span class="cp-flag">${icon('lock', { size: 14 })}</span>` +
+        `<span class="cp-rname">Still to come</span>` +
+        `<span class="cp-rblurb">In the works — every course above is free to play now</span>`;
+      group.appendChild(head);
+
+      const list = document.createElement('div');
+      list.className = 'cp-rlist';
+      for (const c of planned) {
+        const need = xpForLevel(c.unlockLevel);
+        const pct = Math.max(0, Math.min(1, need > 0 ? xp / need : 0));
+        const rounds = Math.max(1, Math.ceil((need - xp) / 200));
+        const reached = lvl >= c.unlockLevel;
+
+        const b = document.createElement('button');
+        b.className = 'cpbtn soon' + (reached ? ' reached' : ' locked');
+        b.type = 'button';
+        b.textContent = c.name;
+
+        const chip = document.createElement('em');
+        chip.className = 'cp-diff ' + (reached ? 'cp-ready' : 'cp-locked');
+        chip.innerHTML = reached
+          ? icon('check', { size: 10 }) + ' Ready'
+          : icon('lock', { size: 10 }) + ` Lv ${c.unlockLevel}`;
+        chip.title = reached
+          ? `Level requirement met — the course itself is still being built`
+          : `Level ${c.unlockLevel} required — you are level ${lvl}`;
+        b.appendChild(chip);
+
+        const sub = document.createElement('small');
+        sub.textContent = `${c.region} · ${c.blurb}`;
+        b.appendChild(sub);
+
+        // the progress bar: how far this account is toward that level
+        const bar = document.createElement('span');
+        bar.className = 'cp-prog';
+        const fill = document.createElement('i');
+        fill.style.width = (pct * 100).toFixed(1) + '%';
+        bar.appendChild(fill);
+        b.appendChild(bar);
+
+        const note = document.createElement('small');
+        note.className = 'cp-soonnote';
+        note.textContent = reached
+          ? `Level ${c.unlockLevel} reached — the course is still being built`
+          : `Level ${lvl} of ${c.unlockLevel} — roughly ${rounds} more round${rounds === 1 ? '' : 's'}`;
+        b.appendChild(note);
+
+        b.addEventListener('click', () => {
+          HUD.toast(reached
+            ? `${c.name} is unlocked — it just isn't built yet. Coming soon.`
+            : `${c.name} needs level ${c.unlockLevel} — you're level ${lvl}. About ${rounds} more round${rounds === 1 ? '' : 's'}.`,
+            'info', 3600);
         });
         list.appendChild(b);
       }

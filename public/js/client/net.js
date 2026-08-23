@@ -258,6 +258,8 @@ Net.claimLogin = cb => ask('login:claim', null, res => cb?.(res));
 Net.openCase = cb => ask('case:open', null, res => cb?.(res));
 Net.buyCase = cb => ask('case:buy', null, res => cb?.(res));
 Net.openProCase = cb => ask('case:openPro', null, res => cb?.(res));
+/** DEV-ONLY: the server refuses this outright in production. */
+Net.debugLevelUp = (level, cb) => ask('debug:levelup', { level }, res => cb?.(res));
 Net.buyProCase = cb => ask('case:buyPro', null, res => cb?.(res));
 Net.prefs = p => Net.socket?.emit('player:prefs', p);
 Net.setLook = look => Net.socket?.emit('player:look', { look });

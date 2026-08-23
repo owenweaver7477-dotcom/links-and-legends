@@ -11,7 +11,7 @@
    profile is a record of what actually happened, not what a client claimed.
    ========================================================================= */
 
-import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp } from '../public/js/shared/economy.js';
+import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp, xpForLevel } from '../public/js/shared/economy.js';
 import { openStore, touch, saveSoon as storeSaveSoon, flushNow as flushStore,
          setPersistFilter } from './store.js';
 import { handicapIndex, differential, ratingTier } from '../public/js/shared/handicap.js';
@@ -1011,6 +1011,20 @@ export function openProCase(pid) {
   saveSoon();
   return { ok: true, ...result, proCasesLeft: p.proCases };
 }
+/* DEV-ONLY. Sets a profile to exactly the XP that level requires.
+   Exported from here rather than mutated from server.js so it goes through
+   saveSoon() like every other write — a cheat that does not persist is a
+   cheat that wastes the tester's next twenty minutes. server.js gates the
+   only caller behind NODE_ENV !== 'production'. */
+export function devSetLevel(pid, level) {
+  const want = Math.max(1, Math.min(100, Math.floor(Number(level) || 1)));
+  const p = getProfile(pid);
+  p.xp = xpForLevel(want);
+  saveSoon();
+  const now = levelFromXp(p.xp);
+  return { level: now.level, xp: p.xp };
+}
+
 export function buyProCase(pid) {
   const p = getProfile(pid);
   if ((p.gems || 0) < PRO_CASE_GEM_COST) return { ok: false, error: `Not enough gems (need ${PRO_CASE_GEM_COST}).` };

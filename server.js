@@ -212,7 +212,8 @@ import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound, setDifficulty, difficultyOf,
          setLook, setBallColor, setBag, setEquippedEmotes, kitOf, markSeen,
-         flushProfiles, claimLogin, openCase, buyCase, openProCase, buyProCase } from './server/profiles.js';
+         flushProfiles, claimLogin, openCase, buyCase, openProCase, buyProCase,
+         devSetLevel } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
 import { loadRecords, recordsFor, allRecords, submitRound,
@@ -2193,6 +2194,25 @@ io.on('connection', socket => {
     const result = buyProCase(pid);
     if (result.ok) socket.emit('profile', publicProfile(pid));
     reply(result);
+  });
+
+  /* DEV-ONLY level cheat, for testing progression gates without playing a
+     hundred rounds. Gated on DEV (NODE_ENV !== 'production'), which Render
+     sets in production — so this handler simply does not exist on the live
+     server, and a client asking for it there gets nothing back rather than
+     a level. Grants XP rather than writing a level directly, because level
+     is DERIVED from xp (see economy.js's levelFromXp) and there is no level
+     field to write: faking one would desync the moment anything recomputed
+     it from the xp total. */
+  socket.on('debug:levelup', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    if (!DEV) return reply({ ok: false, error: 'Not available.' });
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting.' });
+    const res = devSetLevel(pid, d?.level);
+    console.log(`  [dev] levelup: ${pid} -> level ${res.level} (xp ${res.xp})`);
+    socket.emit('profile', publicProfile(pid));
+    reply({ ok: true, ...res });
   });
 
   socket.on('game:start', () => {

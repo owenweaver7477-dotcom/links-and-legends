@@ -514,24 +514,39 @@ const GENERATED_ORDER = [
    picker sorts what it shows, which is where the ordering actually matters. */
 export const COURSE_ORDER = [...GENERATED_ORDER, ...realCourseIds()];
 
-/* Level gate per course, by POSITION in COURSE_ORDER — the same
-   easiest-to-hardest ordering the difficulty ratings already establish
-   (see the GENERATED_ORDER comment above: meadow at 97 is "the beginners'
-   course", headland at 139 is "the championship test"). The first course
-   is always open; the rest spread across the full level range, back-loaded
-   the way RANK_TIERS in handicap.js already paces the game — early levels
-   come fast, the back half is the real grind — so working through all
-   twelve courses reads as a career, not a formality on hole one.
-   `courseUnlockLevel` degrades gracefully for an id outside this list
-   (a freshly-imported real course with no slot assigned yet) by handing
-   back the hardest tier's requirement rather than crashing or, worse,
-   silently unlocking it for everybody. */
-const COURSE_UNLOCK_LEVELS = [1, 8, 15, 22, 30, 38, 46, 55, 65, 75, 85, 95];
-export const courseUnlockLevel = id => {
-  const i = COURSE_ORDER.indexOf(id);
-  return i < 0 ? COURSE_UNLOCK_LEVELS[COURSE_UNLOCK_LEVELS.length - 1]
-    : (COURSE_UNLOCK_LEVELS[i] ?? COURSE_UNLOCK_LEVELS[COURSE_UNLOCK_LEVELS.length - 1]);
-};
+/* ---------------------------------------------------------- level gates ---
+   EVERY COURSE THAT EXISTS TODAY IS FREE. This used to spread the twelve
+   across levels 1-95, which made the game look enormous and play tiny: a
+   new player could reach exactly one course, and the other eleven — all
+   of them already built, already generating, already paid for — sat behind
+   a grind. Twelve courses on day one is the product; the gate belongs on
+   what comes NEXT, not on what is already there.
+
+   So `courseUnlockLevel` answers 0 for anything in the real roster, and a
+   real level only for the planned courses below. Written as a lookup on
+   the planned table rather than a positional array so a course's gate is
+   its own property — adding, reordering or shipping one cannot silently
+   shift another course's requirement the way an index-aligned list could. */
+export const PLANNED_COURSES = [
+  { id: 'quarry',    name: 'Ironstone Quarry',  unlockLevel: 30,  region: 'Peak District, England',
+    blurb: 'Cut into a worked-out quarry — blind tee shots off the benches' },
+  { id: 'saltmarsh', name: 'Saltmarsh',         unlockLevel: 40,  region: 'Camargue, France',
+    blurb: 'Tidal channels that move between rounds, and nowhere to bail out' },
+  { id: 'highdesert',name: 'High Desert',       unlockLevel: 60,  region: 'Atacama, Chile',
+    blurb: 'Thin air, enormous carries, and greens that will not hold' },
+  { id: 'boreal',    name: 'Boreal',            unlockLevel: 80,  region: 'Lapland, Finland',
+    blurb: 'Cold, heavy air off the taiga — the ball simply goes nowhere' },
+  { id: 'caldera',   name: 'The Caldera',       unlockLevel: 100, region: 'Iceland',
+    blurb: 'Nine holes around a live crater rim. The last course in the game.' }
+];
+
+const PLANNED_UNLOCK = new Map(PLANNED_COURSES.map(c => [c.id, c.unlockLevel]));
+
+/** What level a course needs. 0 — free — for everything currently playable;
+ *  the planned courses carry their own gate. An unknown id answers 0 rather
+ *  than the old "hardest tier" guess: a freshly imported real course should
+ *  be playable the moment it lands, not accidentally locked to level 95. */
+export const courseUnlockLevel = id => PLANNED_UNLOCK.get(id) ?? 0;
 
 /* ---------------------------------------------------------------- crowns ---
    How wide a tree's canopy is, as a fraction of its height. ONE number per

@@ -1319,6 +1319,23 @@ body:not(.playing) .hintbar { display: none; }
 .cp-locked { background: rgba(255,255,255,.08); color: #cfd6d1; }
 .cp-locked svg { vertical-align: -0.1em; margin-right: 2px; }
 
+/* ---- "Still to come": the planned courses (see PLANNED_COURSES in
+   biomes.js). Dimmer than a real locked row and explicitly not clickable
+   into a round — these have no terrain behind them yet, so the section
+   exists to show the ladder continues, not to sell a dead link. */
+.cp-soon { opacity: .9; }
+.cp-soon .cp-rhead .cp-rname { color: #9fb0a6; }
+.cpbtn.soon { cursor: default; border-style: dashed; }
+.cpbtn.soon:hover { background: rgba(255,255,255,.04); }
+.cp-prog { display: block; height: 3px; margin: 6px 0 3px; border-radius: 99px;
+  background: rgba(255,255,255,.10); overflow: hidden; }
+.cp-prog i { display: block; height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, #4cb466, #8fe07a); transition: width .3s ease; }
+.cp-soonnote { display: block; font-size: 10px; color: #7d8a82; }
+.cp-ready { background: rgba(111,206,138,.18); color: #8fe07a; }
+.cp-ready svg { vertical-align: -0.1em; margin-right: 2px; }
+.cpbtn.soon.reached { border-style: solid; border-color: rgba(111,206,138,.30); }
+
 /* Leaving a round.  Sits out of the way, top-right under the roster. */
 .quitbtn { position: absolute; right: 14px; bottom: 14px; z-index: 8;
   display: none; padding: 8px 13px; border-radius: 11px; cursor: pointer;
