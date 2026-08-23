@@ -215,6 +215,24 @@ html, body {
 .screen[hidden] { display: none; }
 .screen.soft { background: rgba(4,9,7,.72); backdrop-filter: blur(4px); }
 
+/* The menu screens rise and fade in rather than snapping into place. Landing
+   is deliberately left out — its own legend rows already stagger in on
+   their own (see .lp-item's lpUp animation further down), and a second
+   motion on the wrapper around them would just double the distance they
+   appear to travel. The shop is left out for the same reason: it already
+   has its own #screenShop { animation: shopIn ... } further down. The
+   round's own screens (hole-over, loading) are left out too — those
+   interrupt actual play, sometimes many times a round, and a snap reads as
+   responsive there in a way it would not on a menu opened once. */
+@keyframes screenIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+#screenBoards:not([hidden]), #screenWardrobe:not([hidden]),
+#screenLobby:not([hidden]), #screenResults:not([hidden]) {
+  animation: screenIn .32s cubic-bezier(.2,.8,.3,1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  #screenBoards, #screenWardrobe, #screenLobby, #screenResults { animation: none; }
+}
+
 .card { width: min(560px,100%); background: rgba(12,21,17,.93); border: 1px solid rgba(255,255,255,.11);
   border-radius: 20px; padding: 25px; box-shadow: 0 24px 70px rgba(0,0,0,.65); }
 .card.wide { width: min(760px,100%); }
