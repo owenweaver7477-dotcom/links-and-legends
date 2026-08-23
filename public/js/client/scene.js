@@ -464,6 +464,36 @@ export class GolfScene {
     return m;
   }
 
+  /* The exact height the rendered mesh shows at (x,z) — NOT T.heightAt(x,z).
+     The terrain mesh is a coarse grid (GRID_STEP apart) with straight
+     triangles between its vertices; heightAt() is an exact analytic sample
+     that only equals the mesh at those vertices and disagrees everywhere
+     else, worse the sharper the local terrain is. Measured up to 17cm on a
+     ridge green — plainly a floating or buried cup. Anything that has to
+     sit flush on the ground, the cup above all, needs the value the mesh
+     will actually show, found the same way _buildTerrain triangulates it. */
+  _meshHeightAt(T, hole, x, z) {
+    const b = hole.bounds;
+    const spanX = b.maxX - b.minX, spanZ = b.maxZ - b.minZ;
+    const nx = Math.max(8, Math.round(spanX / GRID_STEP));
+    const nz = Math.max(8, Math.round(spanZ / GRID_STEP));
+    let fx = (x - b.minX) / spanX * nx, fz = (z - b.minZ) / spanZ * nz;
+    fx = Math.min(Math.max(fx, 0), nx - 1e-6);
+    fz = Math.min(Math.max(fz, 0), nz - 1e-6);
+    const ix = Math.floor(fx), iz = Math.floor(fz);
+    const tx = fx - ix, tz = fz - iz;
+    const gx = i => b.minX + (i / nx) * spanX;
+    const gz = i => b.minZ + (i / nz) * spanZ;
+    const h00 = T.heightAt(gx(ix), gz(iz));
+    const h10 = T.heightAt(gx(ix + 1), gz(iz));
+    const h01 = T.heightAt(gx(ix), gz(iz + 1));
+    const h11 = T.heightAt(gx(ix + 1), gz(iz + 1));
+    // same a,d,c / c,d,e split _buildTerrain cuts each grid cell into
+    return (tx + tz <= 1)
+      ? h00 + tx * (h10 - h00) + tz * (h01 - h00)
+      : h11 + (1 - tx) * (h01 - h11) + (1 - tz) * (h10 - h11);
+  }
+
   /* ---------------------------------------------------------- terrain --- */
   _buildTerrain(hole, T, bio) {
     const b = hole.bounds;
@@ -1420,7 +1450,7 @@ export class GolfScene {
 
   _buildPin(hole, T, bio) {
     const grp = new THREE.Group();
-    const y = T.heightAt(hole.pin.x, hole.pin.z);
+    const y = this._meshHeightAt(T, hole, hole.pin.x, hole.pin.z);
 
     // the cup: a dark cylinder sunk into the green, plus a white liner ring.
     // Never LOD/cull this group — it's the target, and it must read from the
