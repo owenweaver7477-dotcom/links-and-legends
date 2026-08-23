@@ -164,7 +164,6 @@ Net.connect = async () => {
   Net.socket.on('connect', () => Net.fetchProfile());
   Net.socket.on('game:started', d => fire('started', d));
   Net.socket.on('game:shot', d => fire('shot', d));
-  Net.socket.on('game:drop', d => fire('drop', d));
   Net.socket.on('game:hole', d => fire('hole', d));
   Net.socket.on('game:reset', d => fire('reset', d));
   Net.socket.on('toast', d => fire('toast', d));
@@ -387,4 +386,3 @@ Net.next = () => Net.socket?.emit('game:next');
 Net.again = () => Net.socket?.emit('game:again');
 Net.lobby = () => Net.socket?.emit('room:lobby');
 Net.swing = shot => Net.socket?.emit('game:swing', shot);
-Net.takeDrop = () => Net.socket?.emit('game:drop');

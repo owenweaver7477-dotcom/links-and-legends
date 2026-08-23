@@ -49,7 +49,6 @@ for (const id of [
   'wArrow', 'wSpeed', 'wDesc', 'wWeather',
   'boardRows', 'boardRoom', 'turnbar', 'tbText', 'tbDot',
   'playbar', 'clubName', 'clubCarry', 'clubUp', 'clubDown', 'mFill', 'mFaceDot', 'mLabel', 'aimTxt', 'mPct',
-  'btnTakeDrop',
   'shotinfo', 'toasts', 'mapwrap', 'mapc', 'minic', 'miniPanel',
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
@@ -368,10 +367,7 @@ HUD.setMeter = (m, enabled) => {
     el.mLabel.classList.remove('hot');
   }
 };
-HUD.showPlaybar = on => {
-  el.playbar.classList.toggle('show', !!on);
-  el.btnTakeDrop.classList.toggle('show', !!on);
-};
+HUD.showPlaybar = on => el.playbar.classList.toggle('show', !!on);
 
 /** The touch pad belongs to a live round, not to the menus over the top. */
 HUD.showTouchPad = on => { el.touchPad.hidden = !on; };

@@ -2038,21 +2038,6 @@ function cancelShot() {
   return true;
 }
 
-/* The stuck-ball safety valve.  Embedded in a prop, wedged on a lie nobody
-   meant to be reachable, or just somewhere you don't trust any shot from —
-   one penalty stroke and the server drops the ball on the nearest dry,
-   playable ground with room to swing.  Same gate as cancelShot: only makes
-   sense standing over your own ball, mid-turn.
-   NOT window.confirm() — this game runs embedded in a portal iframe, and a
-   sandboxed iframe without allow-modals silently kills native dialogs. The
-   button arms itself and asks again instead, the same tap-twice pattern the
-   Leave button already uses. */
-function takeDrop() {
-  if (!canSwing()) return false;
-  Net.takeDrop();
-  return true;
-}
-
 /* Shot telemetry.  Power and shape used to be tuned by feel, which is how a
    meter that disagreed with the shot went unnoticed for so long — every
    number here is the one actually committed, read back off the controller
@@ -2676,20 +2661,6 @@ Net.on('shot', msg => {
   refreshTurnUi();
 });
 
-/* The ball just teleported to clear ground rather than flying there — the
-   next room:state (right behind this event) snaps G.balls to the server's
-   new x/z on its own, so there's nothing to animate here. Just say what
-   happened. */
-Net.on('drop', d => {
-  if (d.pid === G.myPid) {
-    HUD.toast('Took a drop — +1 stroke.', 'warn', 2400);
-    Sound.thud?.();
-  } else {
-    HUD.toast(`${player(d.pid)?.name || 'Someone'} took a drop.`, 'info', 1800);
-  }
-  refreshTurnUi();
-});
-
 Net.on('reset', () => {
   G.anim = null; G.queue.length = 0;
   HUD.toast('Fresh card — back to the first tee.', 'good', 2400);
@@ -3203,31 +3174,6 @@ if (quitBtn) {
 document.getElementById('btnCancelShot')?.addEventListener('click', ev => {
   ev.preventDefault(); cancelShot();
 });
-
-const dropBtn = document.getElementById('btnTakeDrop');
-if (dropBtn) {
-  const dropLabel = dropBtn.querySelector('span');
-  let dropArmed = 0;
-  dropBtn.addEventListener('click', ev => {
-    ev.preventDefault();
-    if (!canSwing()) return;
-    const now = Date.now();
-    if (now - dropArmed > 3000) {
-      dropArmed = now;
-      dropBtn.classList.add('confirm');
-      if (dropLabel) dropLabel.textContent = 'Sure? +1 stroke';
-      setTimeout(() => {
-        dropBtn.classList.remove('confirm');
-        if (dropLabel) dropLabel.textContent = 'Take a Drop';
-      }, 3000);
-      return;
-    }
-    dropArmed = 0;
-    dropBtn.classList.remove('confirm');
-    if (dropLabel) dropLabel.textContent = 'Take a Drop';
-    takeDrop();
-  });
-}
 
 for (const [id, fn] of [
   ['tbBall', () => { if (carts.inCart) HUD.toast('Get out of the cart first.', 'warn', 1600); else teleportToMyBall(); }],

@@ -196,7 +196,7 @@ import { storeName } from './server/store.js';
 import { terrainFor } from './public/js/shared/terrain.js';
 import { BIOMES, COURSE_ORDER, BALL_COLORS, MAX_PLAYERS, HOLES_PER_COURSE,
          biomeFor, courseMeta } from './public/js/shared/biomes.js';
-import { ShotSim, calibrateCarries, dryPlayable } from './public/js/shared/ballistics.js';
+import { ShotSim, calibrateCarries } from './public/js/shared/ballistics.js';
 import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs.js';
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/avatars.js';
@@ -469,11 +469,6 @@ app.get('*', (req, res) => {
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const EMPTY_ROOM_TTL = 20 * 60 * 1000;
 const HOLE_SUMMARY_MS = 20000;
-// how long a turn can sit with nothing at all happening before it is taken
-// away — see the AFK sweep near the bottom of the file. Overridable so a
-// test can see it happen in seconds rather than waiting three real minutes.
-const AFK_MS = Number(process.env.GOLF_AFK_MS) || 3 * 60 * 1000;
-const AFK_SWEEP_MS = Number(process.env.GOLF_AFK_SWEEP_MS) || 20000;
 const KICK_VOTE_WINDOW_MS = Number(process.env.GOLF_KICK_VOTE_MS) || 45000;
 const KICK_VOTE_COOLDOWN_MS = Number(process.env.GOLF_KICK_COOLDOWN_MS) || 5 * 60 * 1000;
 
@@ -603,8 +598,7 @@ function addPlayer(room, pid, name, spectator) {
     scores: new Array(HOLES_PER_COURSE).fill(null),
     strokes: 0, penalties: 0, finished: false,
     x: t.x, z: t.z, lie: 'tee',
-    connected: true, spectator: !!spectator, socketId: null,
-    lastActiveAt: Date.now()
+    connected: true, spectator: !!spectator, socketId: null
   };
   room.players.push(p);
   if (!room.hostPid) room.hostPid = pid;
@@ -661,7 +655,6 @@ function pickNextToPlay(room, teeOff = false) {
     const totals = p => p.scores.reduce((s, v) => s + (v ?? 0), 0);
     eligible.sort((a, b) => totals(a) - totals(b) || room.players.indexOf(a) - room.players.indexOf(b));
     room.turnPid = eligible[0].pid;
-    eligible[0].lastActiveAt = Date.now();
     return;
   }
   /* In a SCRAMBLE nobody plays twice until their side is level.
@@ -690,9 +683,6 @@ function pickNextToPlay(room, teeOff = false) {
     if (d > bestD) { bestD = d; best = p; }
   }
   room.turnPid = best.pid;
-  // the AFK sweep measures from the moment a turn actually starts, not
-  // from whatever they last did while waiting for everyone else
-  best.lastActiveAt = Date.now();
 }
 
 /**
@@ -1108,29 +1098,6 @@ io.on('connection', socket => {
      handler that needed it most. */
   socket.use(([event], next) => {
     if (overRate(socket, event)) return;   // dropped, deliberately silently
-    /* Any message at all is evidence of a present human — chat, an emote,
-       just moving the camera around while waiting your turn. Stamped here
-       rather than in each handler for the same reason the rate limit is:
-       one guard everything passes through beats one added by hand to
-       every place that might need it. See the AFK sweep below for what
-       actually reads this.
-
-       EXCEPT net:ping. It fires on a bare setInterval in net.js the whole
-       time a tab is open and connected — proving the pipe is alive, not
-       that anyone is at the keyboard. Counting it here silently defeated
-       the entire AFK sweep: a player who genuinely walked away, tab still
-       open, would auto-heartbeat their own lastActiveAt every 6s forever,
-       so `now - lastActiveAt` could never cross AFK_MS. Caught by reading
-       both commits together rather than either one's own tests, since
-       test/afk.mjs drives a raw socket that never emits net:ping at all. */
-    if (event !== 'net:ping') {
-      const ref = sockets.get(socket.id);
-      if (ref) {
-        const room = rooms.get(ref.code);
-        const p = room?.players.find(x => x.pid === ref.pid);
-        if (p) p.lastActiveAt = Date.now();
-      }
-    }
     next();
   });
 
@@ -2356,54 +2323,6 @@ io.on('connection', socket => {
     broadcastState(room);
   });
 
-  /* THE SAFETY VALVE. A stuck player — embedded in a prop, wedged on a lie
-     the terrain gen never meant to be reachable, or just lost in the rough
-     with no shot they trust — can stand there forever otherwise. One penalty
-     stroke, and the ball goes to the nearest dry, playable ground with room
-     to swing. Same `dryPlayable` search the water-hazard drop already uses
-     (ballistics.js), so "clear of trouble" means the same thing here as it
-     does mid-shot. */
-  socket.on('game:drop', () => {
-    const ref = sockets.get(socket.id); if (!ref) return;
-    const room = rooms.get(ref.code); if (!room || room.state !== 'playing') return;
-    const p = room.players.find(x => x.pid === ref.pid);
-    if (!p || p.finished || p.spectator) return;
-    if (room.turnPid !== p.pid) return socket.emit('toast', { msg: "It isn't your turn.", kind: 'warn' });
-    if (inCart(p)) return socket.emit('toast', { msg: 'Get out of the cart to play.', kind: 'warn' });
-
-    const h = hole(room);
-    const T = terrain(room);
-    const from = { x: p.x, z: p.z };
-    let drop = null;
-    outer:
-    for (let r = 2; r <= 60; r += 2) {
-      for (let k = 0; k < 24; k++) {
-        const a = (k / 24) * Math.PI * 2;
-        const cx = from.x + Math.cos(a) * r, cz = from.z + Math.sin(a) * r;
-        if (dryPlayable(T, h, cx, cz)) { drop = { x: cx, z: cz }; break outer; }
-      }
-    }
-    if (!drop) return socket.emit('toast', { msg: "Couldn't find safe ground nearby.", kind: 'warn' });
-
-    p.strokes += 1;
-    p.penalties += 1;
-    p.ax = p.x; p.az = p.z;
-    p.x = drop.x; p.z = drop.z; p.lie = T.surfaceAt(drop.x, drop.z).id;
-
-    if (p.strokes >= h.maxStrokes) { p.strokes = h.maxStrokes; p.finished = true; }
-    if (p.finished) p.scores[room.holeIndex] = p.strokes;
-
-    room.seq++;
-    io.to(room.code).emit('game:drop', {
-      seq: room.seq, pid: p.pid,
-      from, x: drop.x, z: drop.z, lie: p.lie, strokes: p.strokes
-    });
-
-    if (everyoneDone(room)) finishHole(room);
-    else pickNextToPlay(room);
-    broadcastState(room);
-  });
-
   socket.on('game:next', () => {
     const ref = sockets.get(socket.id); if (!ref) return;
     const room = rooms.get(ref.code); if (!room) return;
@@ -2476,43 +2395,6 @@ setInterval(() => {
     }
   }
 }, 60000).unref();
-
-/**
- * AFK sweep. A connected player who is simply quiet costs nobody anything
- * — most of a round is watching somebody else play. The actual failure
- * mode is a player whose TURN it is going silent, because that stalls
- * every other player in the room with them. So this only ever acts on
- * whoever currently holds the turn, checked against the clock that
- * pickNextToPlay resets the moment a turn actually starts.
- *
- * Acts by handing them the spectator flag rather than disconnecting them
- * — the same flag a mid-round joiner gets, and `startHole` already
- * promotes any CONNECTED spectator back to play at the next hole with no
- * further code needed here. A quiet three minutes costs the rest of this
- * hole, not the round.
- *
- * Skipped entirely below two eligible players: the whole point is
- * unblocking somebody ELSE, which does not apply to a solo round — and
- * spectating the only active player would stall the hole with nobody
- * left whose turn could ever end it.
- */
-setInterval(() => {
-  const now = Date.now();
-  for (const room of rooms.values()) {
-    if (room.state !== 'playing' || !room.turnPid) continue;
-    const eligible = active(room).filter(p => !p.finished && p.connected);
-    if (eligible.length < 2) continue;
-    const p = room.players.find(x => x.pid === room.turnPid);
-    if (!p || p.spectator || !p.connected || p.finished) continue;
-    if (now - (p.lastActiveAt || 0) < AFK_MS) continue;
-
-    p.spectator = true;
-    toast(room, `${p.name} was away too long and is sitting out this hole.`, 'warn');
-    if (everyoneDone(room)) finishHole(room);
-    else pickNextToPlay(room);
-    broadcastState(room);
-  }
-}, AFK_SWEEP_MS).unref();
 
 /* ---------------------------------------------------------------------- boot */
 httpServer.listen(PORT, HOST, () => {
