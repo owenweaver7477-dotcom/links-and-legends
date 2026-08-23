@@ -583,7 +583,14 @@ button.roomtag:active { transform: translateY(1px); }
 .d-read em { font-style: normal; font-size: 10px; color: #93ad99; }
 .cartbar .c-damage { margin-top: 3px; font-size: 10.5px; font-weight: 700; color: #ffb35c;
   display: flex; align-items: center; gap: 5px; }
-.cartbar .c-damage::before { content: '⚠'; }
+/* Same triangle as icons.js's `warning`, as a CSS background — a ::before's
+   content can hold text or nothing, never real markup, so this is the one
+   spot in the game an icon has to be a data URI instead of an inline SVG. */
+.cartbar .c-damage::before {
+  content: ''; display: inline-block; width: 11px; height: 11px;
+  margin-right: 4px; vertical-align: -1px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3 2 20h20Z' fill='%23ffb14a' stroke='%23c9832e' stroke-width='1' stroke-linejoin='round'/%3E%3Crect x='11' y='9.5' width='2' height='5.5' rx='1' fill='%233a2a12'/%3E%3Ccircle cx='12' cy='17' r='1.1' fill='%233a2a12'/%3E%3C/svg%3E") center/contain no-repeat;
+}
 .cartbar .c-damage.critical { color: #ff6b52; animation: dmgblink .6s steps(2) infinite; }
 @keyframes dmgblink { 50% { opacity: .35; } }
 .cartbar .c-keys { font-size: 10px; color: #7e937f; margin-top: 4px; line-height: 1.5; }

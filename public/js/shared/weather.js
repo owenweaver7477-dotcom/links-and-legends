@@ -68,24 +68,27 @@ export const seasonById = id => SEASONS.find(s => s.id === id) || SEASONS[1];
      windMul   how much the round's wind is scaled
      vis       fog distance multiplier — 1 is the clear-day 1900 m
      grip      how much a putt breaks less on a wet green (slower surface) */
+/* `icon` is an icons.js NAME, not a literal glyph — this file is shared with
+   the server, which has no business knowing what a weather icon looks like,
+   only which one a client should draw. See icons.js's weatherClear..weatherSnow. */
 export const CONDITIONS = [
-  { id: 'clear',   name: 'Clear',        icon: '☀️', weight: 30,
+  { id: 'clear',   name: 'Clear',        icon: 'weatherClear', weight: 30,
     carry: 1,      roll: 1,     windMul: 0.8, vis: 1.00, grip: 1,    wet: 0,   cloud: 0.25 },
-  { id: 'fair',    name: 'Fair',         icon: '🌤️', weight: 26,
+  { id: 'fair',    name: 'Fair',         icon: 'weatherFair', weight: 26,
     carry: 1,      roll: 1,     windMul: 1.0, vis: 0.94, grip: 1,    wet: 0,   cloud: 0.5 },
-  { id: 'cloudy',  name: 'Overcast',     icon: '☁️', weight: 18,
+  { id: 'cloudy',  name: 'Overcast',     icon: 'weatherCloudy', weight: 18,
     carry: 0.998,  roll: 0.99,  windMul: 1.1, vis: 0.82, grip: 1,    wet: 0.1, cloud: 0.9 },
-  { id: 'breezy',  name: 'Blowing',      icon: '🍃', weight: 12,
+  { id: 'breezy',  name: 'Blowing',      icon: 'weatherBreezy', weight: 12,
     carry: 1,      roll: 1.03,  windMul: 1.7, vis: 0.90, grip: 1,    wet: 0,   cloud: 0.45 },
-  { id: 'drizzle', name: 'Drizzle',      icon: '🌦️', weight: 8,
+  { id: 'drizzle', name: 'Drizzle',      icon: 'weatherDrizzle', weight: 8,
     carry: 0.990,  roll: 0.90,  windMul: 1.2, vis: 0.66, grip: 0.94, wet: 0.55, cloud: 0.95,
     rain: 0.35 },
-  { id: 'rain',    name: 'Rain',         icon: '🌧️', weight: 5,
+  { id: 'rain',    name: 'Rain',         icon: 'weatherRain', weight: 5,
     carry: 0.976,  roll: 0.78,  windMul: 1.4, vis: 0.44, grip: 0.88, wet: 1,   cloud: 1,
     rain: 1 },
-  { id: 'fog',     name: 'Fog',          icon: '🌫️', weight: 4,
+  { id: 'fog',     name: 'Fog',          icon: 'weatherFog', weight: 4,
     carry: 0.995,  roll: 0.97,  windMul: 0.5, vis: 0.16, grip: 1,    wet: 0.3, cloud: 0.7 },
-  { id: 'snow',    name: 'Snow',         icon: '🌨️', weight: 3,
+  { id: 'snow',    name: 'Snow',         icon: 'weatherSnow', weight: 3,
     carry: 0.962,  roll: 0.82,  windMul: 1.1, vis: 0.36, grip: 0.9,  wet: 0.7, cloud: 1,
     snow: 1 }
 ];
@@ -245,9 +248,10 @@ export function clockText(hour) {
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-/** One line for the HUD: "Rain · 4:10 pm · autumn". */
+/** One line for the HUD: "Rain · 4:10 pm · autumn". Plain text — w.icon is
+    an icons.js NAME now, not a glyph, so it has no place in a text string. */
 export const weatherText = w =>
-  `${w.icon} ${w.conditionName} · ${clockText(w.hour)} · ${w.seasonName.toLowerCase()}`;
+  `${w.conditionName} · ${clockText(w.hour)} · ${w.seasonName.toLowerCase()}`;
 
 /** What the weather is doing to your ball, for the pre-shot panel. */
 /**

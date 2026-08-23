@@ -312,6 +312,75 @@ const ICONS = {
     <ellipse cx="12" cy="12" rx="4" ry="9" fill="none" stroke="currentColor" stroke-width="1.3"/>
     <line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="1.3"/>
     <path d="M5 7.5c2 1.4 12 1.4 14 0M5 16.5c2-1.4 12-1.4 14 0" stroke="currentColor" stroke-width="1.1" fill="none"/>
+  `,
+  /* ---- landing page / misc nav ------------------------------------------ */
+  // two people — front one solid, back one dimmed, so it reads as "others"
+  people: `
+    <circle cx="8.2" cy="8" r="3.1" fill="currentColor"/>
+    <path d="M2 20.5c0-4.4 3-7 6.2-7s6.2 2.6 6.2 7Z" fill="currentColor"/>
+    <circle cx="16.8" cy="8.6" r="2.6" fill="currentColor" opacity=".55"/>
+    <path d="M13.4 20.5c.3-3.6 2.3-6 4.8-6s4.6 2.3 4.8 6Z" fill="currentColor" opacity=".55"/>
+  `,
+  // a t-shirt, for wardrobe/appearance entry points
+  shirt: `
+    <path d="M8.5 3.5 4 6.5l1.6 3.4L8 9v11.5h8V9l2.4.9L20 6.5l-4.5-3-1 1.6a3 3 0 0 1-5 0Z"
+          fill="currentColor"/>
+  `,
+  // a small lodge with a flag on the roof — distinct from the golfer glyph
+  // so "Play now" and "Clubhouse" don't read as the same button twice
+  clubhouse: `
+    <path d="M4 21V11L12 4l8 7v10Z" fill="currentColor"/>
+    <rect x="9.4" y="13.6" width="5.2" height="7.4" fill="#000" opacity=".28"/>
+    <line x1="12" y1="4" x2="12" y2="1" stroke="currentColor" stroke-width="1.3"/>
+    <path d="M12 1.4 16.5 3.2 12 5Z" fill="#e8443a"/>
+  `,
+  /* ---- the weather line, one glyph per condition ------------------------
+     Same abstract-not-literal reasoning as the emote set: a cloud is a
+     cloud, not a tiny photorealistic sky. */
+  weatherClear: `
+    <circle cx="12" cy="13" r="5" fill="#ffd76b"/>
+    <path d="M12 3v2.4M12 21v-2.4M3 13h2.4M18.6 13H21M5.8 6.8l1.7 1.7M16.5 16.5l1.7 1.7M18.2 6.8l-1.7 1.7M7.5 16.5l-1.7 1.7"
+          stroke="#ffd76b" stroke-width="1.5" stroke-linecap="round"/>
+  `,
+  weatherFair: `
+    <circle cx="8.5" cy="9" r="4" fill="#ffd76b"/>
+    <path d="M8.5 2.8v1.8M8.5 15.4v-1.8M2.3 9h1.8M14.9 9h-1.8" stroke="#ffd76b" stroke-width="1.3" stroke-linecap="round"/>
+    <path d="M6 21h11a4 4 0 0 0 .5-8 5.5 5.5 0 0 0-10.6-1.6A4.5 4.5 0 0 0 6 21Z" fill="#c7d0d6"/>
+  `,
+  weatherCloudy: `
+    <path d="M5 20h13a4.5 4.5 0 0 0 .6-9 6.2 6.2 0 0 0-12-1.8A5 5 0 0 0 5 20Z" fill="#aab4bc"/>
+  `,
+  weatherBreezy: `
+    <path d="M2 8h11a2.6 2.6 0 1 0-2.4-3.6" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <path d="M2 13h15a2.8 2.8 0 1 1-2.6 3.9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+    <path d="M2 18h9" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  `,
+  weatherDrizzle: `
+    <path d="M5 14h13a4.2 4.2 0 0 0 .5-8.4A5.8 5.8 0 0 0 7.4 4.2 4.6 4.6 0 0 0 5 14Z" fill="#aab4bc"/>
+    <path d="M8 18v2M12.5 18v2M17 18v2" stroke="#7fb6dd" stroke-width="1.6" stroke-linecap="round"/>
+  `,
+  weatherRain: `
+    <path d="M5 13h13a4.2 4.2 0 0 0 .5-8.4A5.8 5.8 0 0 0 7.4 3.2 4.6 4.6 0 0 0 5 13Z" fill="#8b96a0"/>
+    <path d="M7.5 17.5 6 21M12.5 17.5 11 21M17.5 17.5 16 21" stroke="#5ab8ff" stroke-width="1.8" stroke-linecap="round"/>
+  `,
+  weatherFog: `
+    <path d="M4 8h16M3 12h18M4 16h16M6 20h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".7"/>
+  `,
+  weatherSnow: `
+    <path d="M5 12h13a4.2 4.2 0 0 0 .5-8.4A5.8 5.8 0 0 0 7.4 2.2 4.6 4.6 0 0 0 5 12Z" fill="#aab4bc"/>
+    <path d="M8 17v5M6 18.5l4 2M10 18.5l-4 2M13 17v5M11 18.5l4 2M15 18.5l-4 2M18 17v5M16 18.5l4 2M20 18.5l-4 2"
+          stroke="#d9f0ff" stroke-width="1.1" stroke-linecap="round"/>
+  `,
+  // streak-freeze token — a faceted cube, not a literal ice photo
+  freeze: `
+    <path d="M12 2 20 7v10l-8 5-8-5V7Z" fill="#8fd8ff" opacity=".85" stroke="#bfeeff" stroke-width=".9"/>
+    <path d="M12 2v20M4.5 7.2 12 12l7.5-4.8M4.5 16.8 12 12l7.5 4.8" stroke="#e8faff" stroke-width=".8" opacity=".7" fill="none"/>
+  `,
+  // a sprout, for the first rank tier
+  seedling: `
+    <path d="M12 21V11.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M12 11.5C12 6.8 8 4.5 3.8 4.5c0 4.4 2.3 8.3 8.2 8.3Z" fill="currentColor" opacity=".85"/>
+    <path d="M12 13.2c0-3.8 2.8-5.9 6.4-5.9 0 3.4-2 6.6-6.4 6.6Z" fill="currentColor" opacity=".55"/>
   `
 };
 ICONS.medal = ICONS.title;   // 🏅 and 🎖️ were the same idea wearing two names

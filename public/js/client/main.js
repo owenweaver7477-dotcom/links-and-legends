@@ -414,7 +414,7 @@ async function leaveLanding(target = 'play') {
        light without being so late it goes orange. */
     scene.setWeather({
       season: 'summer', seasonName: 'Summer', condition: 'clear',
-      conditionName: 'Clear', icon: '☀️', hour: 16.7,
+      conditionName: 'Clear', icon: 'weatherClear', hour: 16.7,
       vis: 1, cloud: 0.16, wet: 0, rain: 0, snow: 0,
       carry: 1, roll: 1, windMul: 0.8, grip: 1
     });
@@ -1708,9 +1708,9 @@ function frame(now) {
         scene.fx.burst('smoke', shore.x, ey + 0.4, shore.z, 18);
         rig.kick(1.1);
         Sound.explode();
-        HUD.toast('💥 The cart is a write-off. You are walking.', 'warn', 3800);
+        HUD.toast('The cart is a write-off. You are walking.', 'warn', 3800);
       } else {
-        HUD.toast('🌊 The cart is at the bottom of the lake. You swam.', 'warn', 3600);
+        HUD.toast('The cart is at the bottom of the lake. You swam.', 'warn', 3600);
       }
     } else {
       // the golfer goes where the cart goes, so everything downstream — the
@@ -3499,7 +3499,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
       const head = document.createElement('div');
       head.className = 'cp-rhead';
-      head.innerHTML = `<span class="cp-flag">${region.flag}</span>` +
+      head.innerHTML = `<span class="cp-flag">${icon(region.flag, { size: 16 })}</span>` +
         `<span class="cp-rname">${region.name}</span>` +
         `<span class="cp-rblurb">${region.blurb}</span>`;
       group.appendChild(head);
@@ -3604,7 +3604,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   });
   if (qmRegion) {
     qmRegion.innerHTML = '<option value="any">Anywhere</option>' +
-      REGIONS.map(r => `<option value="${r.id}">${r.flag} ${r.name}</option>`).join('');
+      REGIONS.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
     try { qmRegion.value = localStorage.getItem('lg_region') || 'any'; } catch { /* ignore */ }
     qmRegion.addEventListener('change', () => {
       try { localStorage.setItem('lg_region', qmRegion.value); } catch { /* ignore */ }

@@ -1281,7 +1281,7 @@ HUD.renderDailyLogin = (profile) => {
 
   el.rwStreakTxt.textContent = `Day ${login.day || 0} of this cycle · Cycle ${login.cycle || 1}`;
   const freezeCount = login.freezes || 0;
-  el.rwFreezes.textContent = freezeCount ? '🧊'.repeat(freezeCount) : 'no freezes held';
+  el.rwFreezes.innerHTML = freezeCount ? icon('freeze', { size: 16 }).repeat(freezeCount) : 'no freezes held';
   el.rwFreezes.title = `${freezeCount} streak freeze${freezeCount === 1 ? '' : 's'} — covers a missed day automatically, earned one every 7 days claimed`;
 
   el.rwGrid.innerHTML = '';
@@ -1934,7 +1934,7 @@ HUD.renderRewards = (prof) => {
   box.innerHTML =
     `<div class="lv-top">
        <div class="lv-me" style="--c:${tier.color}">
-         <span class="lv-badge">${tier.badge}</span>
+         <span class="lv-badge">${icon(tier.badge, { size: 20 })}</span>
          <span><b>Level ${level}</b><small>${tier.name} · ${owned} of ${UNLOCKS.length} unlocked</small></span>
        </div>
        <div class="lv-xp"><b>${xp.toLocaleString()}</b><em>XP</em></div>
@@ -1993,7 +1993,7 @@ HUD.showLevelPreview = (at, myLevel) => {
   box.className = 'lv-preview' + (got ? ' got' : '');
   box.innerHTML =
     `<div class="lv-pv-head" style="--c:${t.color}">
-       <span class="lv-pv-badge">${t.badge}</span>
+       <span class="lv-pv-badge">${icon(t.badge, { size: 20 })}</span>
        <span><b>Level ${at}</b><small>${t.name}${got ? ' · earned' : ' · locked'}</small></span>
      </div>` +
     (mile ? `<p class="lv-pv-mile"><b>${escapeHtml(mile.name)}</b> — ${escapeHtml(mile.gives)}</p>` : '') +
@@ -2602,7 +2602,7 @@ HUD.renderRankMe = (profile, me, name) => {
 
   box.className = 'rkme';
   box.innerHTML =
-    `<div class="rkme-badge" style="background:${t.glow};color:${t.color}">${t.badge}</div>
+    `<div class="rkme-badge" style="background:${t.glow};color:${t.color}">${icon(t.badge, { size: 22 })}</div>
      <div class="rkme-mid">
        <b>${name || 'Your golfer'} <span style="color:${t.color}">· ${t.name}</span></b>
        <span>Level ${lv} · ${t.ranks}</span>
@@ -2640,7 +2640,7 @@ HUD.renderBoards = (data, myPid, courseNames) => {
   };
   const lvTag = lv => {
     const t = rankTier(lv);
-    return `<span class="rktag" style="color:${t.color}">${t.badge} ${lv}</span>`;
+    return `<span class="rktag" style="color:${t.color}">${icon(t.badge, { size: 12 })} ${lv}</span>`;
   };
 
   let rows = [], head = '';
@@ -2715,7 +2715,7 @@ HUD.setWeather = w => {
      from two different calls. */
   const fx = weatherEffects(w, HUD._lastWindMs ?? null);
   el.wWeather.innerHTML =
-    `<span class="wcond">${w.icon} ${w.conditionName}</span>` +
+    `<span class="wcond">${icon(w.icon, { size: 15 })} ${w.conditionName}</span>` +
     `<span class="wclock">${clockText(w.hour)} · ${w.seasonName.toLowerCase()}</span>` +
     (fx.length ? `<div class="wfx">${fx.map(f =>
       `<i class="${f.good ? 'good' : 'bad'}">${f.label} ${f.value}</i>`).join('')}</div>` : '');

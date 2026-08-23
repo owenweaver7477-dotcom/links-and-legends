@@ -572,16 +572,19 @@ export const canopyOf = species => CANOPY[species] || CANOPY.maple;
    filled in ahead of the courses that will go in it.
 
    `blurb` is what the region is like to play, not a geography lesson. */
+/* `flag` is an icons.js NAME (all five share the one globe glyph — these are
+   continents, not countries, and five near-identical globe-with-a-highlight
+   icons would cost more to draw than they'd tell you). */
 export const REGIONS = [
-  { id: 'north-america', name: 'North America', flag: '🌎',
+  { id: 'north-america', name: 'North America', flag: 'globe',
     blurb: 'Parkland and desert — generous off the tee, punishing around the green' },
-  { id: 'europe', name: 'Europe', flag: '🌍',
+  { id: 'europe', name: 'Europe', flag: 'globe',
     blurb: 'Wind off the sea, thin mountain air, and the north Atlantic' },
-  { id: 'latin-america', name: 'Latin America', flag: '🏝️',
+  { id: 'latin-america', name: 'Latin America', flag: 'globe',
     blurb: 'Water, palms and soft greens that hold' },
-  { id: 'asia-pacific', name: 'Asia Pacific', flag: '🌏',
+  { id: 'asia-pacific', name: 'Asia Pacific', flag: 'globe',
     blurb: 'Deep sand and cedar corridors — the widest driving and the tightest' },
-  { id: 'africa', name: 'Africa', flag: '🌍',
+  { id: 'africa', name: 'Africa', flag: 'globe',
     blurb: 'High open veld — thin air, long carries, and nothing to stop the wind' }
 ];
 

@@ -12,6 +12,7 @@
 import * as THREE from '../../vendor/three.module.js';
 import { HUD } from './hud.js';
 import { UNLOCKS } from '../shared/unlocks.js';
+import { icon } from './icons.js';
 
 /* A level title, if they have one equipped. Shown as its own small tag
    rather than glued to the name, so a title can never be mistaken for part
@@ -25,8 +26,8 @@ const titleOf = look => (look?.title
    point of holding it. A trophy and a count, beside the name, everywhere the
    name appears. */
 const badgeText = b => !b ? ''
-  : (b.courses ? '🏆' + (b.courses > 1 ? b.courses : '') : '') +
-    (b.holes ? '⛳' + (b.holes > 1 ? b.holes : '') : '');
+  : (b.courses ? icon('trophy', { size: 12 }) + (b.courses > 1 ? b.courses : '') : '') +
+    (b.holes ? icon('flag', { size: 12 }) + (b.holes > 1 ? b.holes : '') : '');
 
 const _v = new THREE.Vector3();
 
@@ -71,7 +72,10 @@ export class Roster {
       const title = titleOf(p.look);
       r.dot.style.background = p.color;
       const bt2 = badgeText(p.badge);
-      r.name.textContent = (bt2 ? bt2 + ' ' : '') + p.name;
+      // the badge is trusted markup (our own SVG + a count); the name is
+      // not, so this is innerHTML with the name run through escapeHtml
+      // rather than one blind textContent assignment
+      r.name.innerHTML = (bt2 ? bt2 + ' ' : '') + HUD.escapeHtml(p.name);
       r.name.title = title ? p.name + ' — ' + title : p.name;
       r.row.classList.toggle('me', p.pid === myPid);
       r.row.classList.toggle('gone', !p.connected);
@@ -81,7 +85,7 @@ export class Roster {
       const bt = badgeText(p.badge);
       if (bt) {
         const bd = document.createElement('span');
-        bd.className = 'nl-badge'; bd.textContent = bt;
+        bd.className = 'nl-badge'; bd.innerHTML = bt;   // trusted: our own icon markup + a count, never player text
         bd.title = (p.badge.courses ? p.badge.courses + ' course record' +
           (p.badge.courses > 1 ? 's' : '') : '') +
           (p.badge.courses && p.badge.holes ? ', ' : '') +

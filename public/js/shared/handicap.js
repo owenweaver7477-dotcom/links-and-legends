@@ -269,21 +269,22 @@ export function ratingTier(avgVsRating) {
    meaningful regional ladder to a level-30 player and a global one to a
    level-60 one, so what these actually gate is which board you are LISTED
    on by default, not which you may look at. Everybody can see everything. */
+/* `badge` is an icons.js NAME, not a literal glyph — see icons.js. */
 export const RANK_TIERS = [
   { id: 'novice', name: 'Novice',       from: 1,  to: 10,
-    color: '#6fce8a', glow: 'rgba(111,206,138,.30)', badge: '🌱',
+    color: '#6fce8a', glow: 'rgba(111,206,138,.30)', badge: 'seedling',
     ranks: 'Unranked — play five rounds to get a handicap' },
   { id: 'amateur', name: 'Amateur',     from: 11, to: 25,
-    color: '#7fb6dd', glow: 'rgba(127,182,221,.32)', badge: '🏌️',
+    color: '#7fb6dd', glow: 'rgba(127,182,221,.32)', badge: 'golfer',
     ranks: 'Listed on your regional board' },
   { id: 'semipro', name: 'Semi-Pro',    from: 26, to: 50,
-    color: '#a98cd8', glow: 'rgba(169,140,216,.34)', badge: '⛳',
+    color: '#a98cd8', glow: 'rgba(169,140,216,.34)', badge: 'flag',
     ranks: 'Regional rankings, weekly gainers' },
   { id: 'pro', name: 'Professional',    from: 51, to: 75,
-    color: '#e8c15a', glow: 'rgba(232,193,90,.36)', badge: '🏆',
+    color: '#e8c15a', glow: 'rgba(232,193,90,.36)', badge: 'trophy',
     ranks: 'Global rankings and seasonal boards' },
   { id: 'master', name: 'Master',       from: 76, to: 100,
-    color: '#dfe6ec', glow: 'rgba(223,230,236,.42)', badge: '👑',
+    color: '#dfe6ec', glow: 'rgba(223,230,236,.42)', badge: 'crown',
     ranks: 'Elite — eligible for the Hall of Fame' }
 ];
 
