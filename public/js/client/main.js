@@ -871,6 +871,7 @@ function stepClub(dir) {
   swing.clubKey = clubKey;
   clubManual = true;
   const club = CLUB_BY_KEY[clubKey];
+  Sound.clubClick?.(club);
   const lieId = G.T ? G.T.surfaceAt(ballOf(G.myPid).x, ballOf(G.myPid).z).id : 'fairway';
   swing.setLie(lieId);
   HUD.setClub(club, lieId, carryMult(club), bagEnds());
@@ -1991,6 +1992,7 @@ canvas.addEventListener('pointerdown', ev => {
   // the marker is already sweeping: this click IS the strike, not a new swing
   if (swing.state === SWING.ACCURACY) { strike(); return; }
   swing.pointerDown(ev.clientX, ev.clientY);
+  maxPowerBuzzed = false;
   canvas.classList.add('swinging');
 });
 
@@ -2014,6 +2016,7 @@ function cancelShot() {
     swing.cancel();
     canvas.classList.remove('swinging');
     HUD.setMeter(swing.meter(), canSwing());
+    Sound.power?.(0, 'idle');
     HUD.toast('Swing cancelled — line it up again.', 'info', 1400);
     return true;
   }
@@ -2089,7 +2092,7 @@ function strike() {
   if (!shot || !canSwing()) { HUD.setMeter(swing.meter(), canSwing()); return; }
   // call the strike the moment it leaves the face — a golfer knows
   const t = shot.timing ?? 0;
-  if (t < 0.06) HUD.flash('FLUSHED', 'right out of the middle', '#8fe07a');
+  if (t < 0.06) { HUD.flash('FLUSHED', 'right out of the middle', '#8fe07a'); navigator.vibrate?.(35); }
   else if (Math.abs(shot.faceDeg) >= 6 || shot.power > 1.08) {
     HUD.flash('MISHIT', Math.abs(shot.faceDeg) >= 6
       ? (shot.faceDeg > 0 ? 'face wide open' : 'face shut') : 'overswung', '#ff6b52');
@@ -2104,6 +2107,7 @@ function strike() {
 }
 
 let shiftLook = null;
+let maxPowerBuzzed = false;   // one haptic buzz per drag, the moment it first hits the cap
 window.addEventListener('pointermove', ev => {
   if (looking) {
     const dx = ev.clientX - looking.x, dy = ev.clientY - looking.y;
@@ -2129,7 +2133,13 @@ window.addEventListener('pointermove', ev => {
   shiftLook = null;
   if (swing.state !== SWING.IDLE && swing.state !== SWING.DONE) {
     swing.pointerMove(ev.clientX, ev.clientY);
-    HUD.setMeter(swing.meter(), true);
+    const m = swing.meter();
+    HUD.setMeter(m, true);
+    Sound.power?.(m.power, m.state, CLUB_BY_KEY[swing.clubKey]?.putter);
+    if (m.state === 'back' && m.power >= 1.12 && !maxPowerBuzzed) {
+      maxPowerBuzzed = true;
+      navigator.vibrate?.(25);
+    }
   }
 });
 
@@ -2138,9 +2148,13 @@ window.addEventListener('pointerup', () => {
   canvas.classList.remove('swinging');
   // Releasing the drag locks the power and starts the strike bar; it does not
   // play the shot.  The next click does that.
-  if (swing.state === SWING.BACK) swing.pointerUp();
+  const wasBack = swing.state === SWING.BACK;
+  const releasedPower = swing.meter().power;
+  if (wasBack) swing.pointerUp();
   else if (swing.state !== SWING.ACCURACY) swing.cancel();
   HUD.setMeter(swing.meter(), canSwing());
+  Sound.power?.(0, 'idle');
+  if (wasBack) Sound.powerRelease?.(releasedPower);
 });
 
 canvas.addEventListener('contextmenu', e => e.preventDefault());

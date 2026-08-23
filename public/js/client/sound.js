@@ -217,6 +217,61 @@ Sound.explode = () => {
 let cartOsc = null, cartGain = null, cartFilter = null;
 
 /** The cart hum: on while driving, pitch riding the speed. */
+/* ------------------------------------------------------------ the power bar
+   A persistent tone, glided toward each new note the same way Sound.cart
+   glides its engine note — pointermove reports dozens of power values a
+   second while you drag the club back, and a fresh oscillator per event
+   would just be a click storm, not a tone. Quantized to a pentatonic run
+   rather than a continuous frequency sweep, so wherever the drag actually
+   stops it always lands on a real note, never a dissonant one caught
+   mid-glide. Putting gets the same run an octave down and at half the
+   gain — a putt is a nudge, not a swing, and should not sound like one. */
+const PENTATONIC = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25, 783.99, 880.00];
+let powerOsc = null, powerGain = null, powerFilter = null;
+Sound.power = (power, state, isPutt = false) => {
+  const active = state === 'back';
+  if (!active) {
+    if (!powerOsc) return;
+    const c = ac(); if (!c) return;
+    powerGain.gain.linearRampToValueAtTime(0, c.currentTime + 0.08);
+    const o = powerOsc; setTimeout(() => { try { o.stop(); } catch { /* done */ } }, 150);
+    powerOsc = null; powerGain = null; powerFilter = null;
+    return;
+  }
+  const c = ac(); if (!c) return;
+  if (!powerOsc) {
+    powerOsc = c.createOscillator();
+    powerOsc.type = 'triangle';
+    powerFilter = c.createBiquadFilter();
+    powerFilter.type = 'lowpass'; powerFilter.frequency.value = 2400; powerFilter.Q.value = 0.4;
+    powerGain = c.createGain(); powerGain.gain.value = 0;
+    powerOsc.connect(powerFilter); powerFilter.connect(powerGain); powerGain.connect(master);
+    powerOsc.start();
+  }
+  const norm = Math.max(0, Math.min(1, power / 1.12));
+  const idx = Math.round(norm * (PENTATONIC.length - 1));
+  const note = isPutt ? PENTATONIC[idx] * 0.5 : PENTATONIC[idx];
+  const now = c.currentTime, k = 0.045;
+  powerOsc.frequency.setTargetAtTime(note, now, k);
+  powerGain.gain.setTargetAtTime((muted || platformMuted) ? 0 : (isPutt ? 0.035 : 0.06), now, k);
+};
+
+/** The moment the drag is released and power locks in — a short breathy
+ *  whoosh, distinct from the tone that was just playing rather than a
+ *  continuation of it, so release reads as its own event. */
+Sound.powerRelease = (power = 1) => {
+  const p = Math.max(0.2, Math.min(1.12, power));
+  noiseBurst({ dur: 0.12, freq: 500 + p * 700, q: 0.5, gain: 0.16 * p, sweep: 260 });
+};
+
+/** Cycling clubs: a small metallic tick, pitched by the club in hand — a
+ *  lofted wedge rings higher than a driver, the way a smaller head would. */
+Sound.clubClick = (club) => {
+  if (club?.putter) { noiseBurst({ dur: 0.02, freq: 2600, q: 6, gain: 0.14 }); return; }
+  const loft = club?.loft ?? 30;
+  noiseBurst({ dur: 0.03, freq: 1900 + loft * 14, q: 5, gain: 0.16 });
+};
+
 Sound.cart = (speed) => {
   if (speed == null) {                      // switch the motor off
     // This is called EVERY frame on foot, so if the motor is already off it
