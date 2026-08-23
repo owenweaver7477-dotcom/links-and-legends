@@ -212,7 +212,7 @@ import { levelFromXp } from './public/js/shared/economy.js';
 import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound, setDifficulty, difficultyOf,
          setLook, setBallColor, setBag, setEquippedEmotes, kitOf, markSeen,
-         flushProfiles, claimLogin, openCase, buyCase } from './server/profiles.js';
+         flushProfiles, claimLogin, openCase, buyCase, openProCase, buyProCase } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
 import { loadRecords, recordsFor, allRecords, submitRound,
@@ -2173,6 +2173,24 @@ io.on('connection', socket => {
     const pid = sockets.get(socket.id)?.pid || socket.data.pid;
     if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
     const result = buyCase(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('case:openPro', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = openProCase(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('case:buyPro', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = buyProCase(pid);
     if (result.ok) socket.emit('profile', publicProfile(pid));
     reply(result);
   });

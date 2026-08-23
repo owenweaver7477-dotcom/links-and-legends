@@ -10,7 +10,7 @@
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CASE_POOL, RARITIES, rollCase, caseItemKey, tierIndex, tierOdds, PITY_TIER, PITY_THRESHOLD } from '../public/js/shared/cases.js';
+import { CASE_POOL, RARITIES, rollCase, caseItemKey, tierIndex, tierOdds, proTierOdds, PITY_TIER, PITY_THRESHOLD } from '../public/js/shared/cases.js';
 
 test('the pool is non-trivial and every item resolves to a real rarity', () => {
   assert.ok(CASE_POOL.length >= 15, `only ${CASE_POOL.length} items in the case pool`);
@@ -121,4 +121,24 @@ test('tierOdds covers every rarity once, sums to 100%, and never invents an item
 
 test('PITY_THRESHOLD is a real, positive number the UI can count down from', () => {
   assert.ok(Number.isInteger(PITY_THRESHOLD) && PITY_THRESHOLD > 0);
+});
+
+/* ---- the Pro Case's own odds table --------------------------------------
+   A second case type, not a second tier carved out of the first one's pool
+   (see profiles.js's openProCase) — this only has to prove the odds table
+   shown for it is honest: pro-tier-and-up only, and summing to 100% on its
+   own rather than reading like a sliver of the full ladder. */
+test('proTierOdds only covers PITY_TIER and rarer, and sums to 100% on its own', () => {
+  const odds = proTierOdds();
+  const full = tierOdds();
+  assert.ok(odds.length < full.length, 'the Pro Case table should be a strict subset of the full ladder');
+  for (const t of odds) assert.ok(tierIndex(t.id) >= tierIndex(PITY_TIER), `${t.id} is below the Pro Case's own floor`);
+  const total = odds.reduce((s, t) => s + t.pct, 0);
+  assert.ok(Math.abs(total - 100) < 0.01, `Pro Case odds summed to ${total}, expected 100`);
+});
+
+test('every tier at or above PITY_TIER on the full ladder also appears in proTierOdds', () => {
+  const odds = proTierOdds();
+  const ids = new Set(odds.map(t => t.id));
+  for (const r of RARITIES) if (tierIndex(r.id) >= tierIndex(PITY_TIER)) assert.ok(ids.has(r.id), `${r.id} missing from the Pro Case table`);
 });

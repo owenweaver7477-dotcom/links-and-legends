@@ -326,7 +326,7 @@ export function publicProfile(pid) {
     rounds: p.rounds, best: p.best, coins: p.coins, rating: Math.round(p.rating),
     xp: p.xp || 0, ...levelFromXp(p.xp || 0),
     gems: p.gems || 0, cases: p.cases || 0, caseUnlocks: p.caseUnlocks || [],
-    casesSincePity: p.casesSincePity || 0,
+    casesSincePity: p.casesSincePity || 0, proCases: p.proCases || 0,
     login: p.login || { day: 0, cycle: 1, freezes: 0, lastClaimDate: null },
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
@@ -983,4 +983,39 @@ export function buyCase(pid) {
   p.cases = (p.cases || 0) + 1;
   saveSoon();
   return { ok: true, gems: p.gems, cases: p.cases };
+}
+
+/* The Pro Case — a second, separate case type rather than a second tier
+   carved out of the first one's pool. Reuses rollCase's OWN pity
+   mechanism to guarantee the floor instead of inventing a parallel one:
+   forcePity=true always starts the roll at PITY_TIER (pro) or above, the
+   exact same code path a regular case's 20th unlucky open already uses.
+   No new rarity names, no new pool, no fragmenting the base case's odds —
+   just the existing floor, offered on demand for more gems. Deliberately
+   NOT purchasable with anything but gems (an earned currency), same rule
+   the base case already follows. */
+const PRO_CASE_GEM_COST = 400;
+export function openProCase(pid) {
+  const p = getProfile(pid);
+  if ((p.proCases || 0) < 1) return { ok: false, error: 'No Pro cases to open.' };
+  const level = levelFromXp(p.xp || 0).level;
+  const owned = new Set(unlocksAt(level).map(u => u.kind + ':' + u.id));
+  for (const id of (p.caseUnlocks || [])) owned.add(id);
+  const result = rollCase(owned, Math.random, true);
+  p.proCases -= 1;
+  if (result.kind === 'item') {
+    p.caseUnlocks = [...(p.caseUnlocks || []), caseItemKey(result.item)];
+  } else {
+    p.gems = (p.gems || 0) + result.amount;
+  }
+  saveSoon();
+  return { ok: true, ...result, proCasesLeft: p.proCases };
+}
+export function buyProCase(pid) {
+  const p = getProfile(pid);
+  if ((p.gems || 0) < PRO_CASE_GEM_COST) return { ok: false, error: `Not enough gems (need ${PRO_CASE_GEM_COST}).` };
+  p.gems -= PRO_CASE_GEM_COST;
+  p.proCases = (p.proCases || 0) + 1;
+  saveSoon();
+  return { ok: true, gems: p.gems, proCases: p.proCases };
 }

@@ -16,7 +16,7 @@ import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
-import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, PITY_THRESHOLD } from '../shared/cases.js';
+import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, PITY_THRESHOLD } from '../shared/cases.js';
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
@@ -44,6 +44,7 @@ for (const id of [
   'lpRewardsBtn', 'lpRewardsSub', 'lpRewardsBadge',
   'modalRewards', 'btnRewardsClose', 'rwStreakTxt', 'rwFreezes', 'rwGrid', 'btnRewardsClaim', 'rwErr',
   'rwGems', 'rwCases', 'rwCasesS', 'btnRewardsOpenCase', 'btnRewardsBuyCase',
+  'rwProCases', 'rwProCasesS', 'btnRewardsOpenProCase', 'btnRewardsBuyProCase',
   'modalCase', 'caseStage', 'caseBox', 'caseHint', 'casePity', 'btnCaseContents', 'caseContents',
   'caseReelWrap', 'caseReelTrack',
   'caseReveal', 'caseBurst', 'caseItemArt',
@@ -838,6 +839,26 @@ function carryYds(clubKey, prof) {
   return v;
 }
 
+/** "Try it" — a real, computed preview of what buying THIS item alone
+ *  would change, off the exact same simulation the payoff panel already
+ *  trusts. Deliberately client-side display only: nothing is granted,
+ *  nothing reaches the server, so there is no window for a preview to
+ *  become a free temporary upgrade mid-round — it can only ever show a
+ *  number, never actually change what a shot does. Ball/putter/cart do
+ *  not reduce to one club's carry the way irons/woods do, so they keep
+ *  their existing text-only blurb instead of a number that would either
+ *  be misleading (ball affects every club, not just one) or not exist
+ *  (a putter's effect is a green-read hint, not a distance). */
+function tryItLine(it, prof) {
+  if (it.slot !== 'irons' && it.slot !== 'woods') return '';
+  const club = it.slot === 'irons' ? 'I7' : 'DR';
+  const label = it.slot === 'irons' ? '7 iron' : 'Driver';
+  const before = carryYds(club, prof);
+  const withIt = carryYds(club, { ...prof, gear: { ...(prof?.gear || {}), [it.slot]: it.tier } });
+  if (withIt <= before) return '';
+  return `<span class="sc-try">Try it — ${label} ${before}→${withIt} yds</span>`;
+}
+
 /** The same player with nothing bought — the honest baseline to compare to. */
 const BARE = { clubTier: 0, refine: 0, gear: { ball: 0, irons: 0, woods: 0, putter: 0 }, crew: {} };
 
@@ -1246,7 +1267,8 @@ HUD.renderShop = (prof, onBuy) => {
       // ball upgrade from a cart tune-up until you hovered one.
       const art = SLOT_ART[it.slot]?.() || '';
       card.innerHTML = `${art ? `<span class="sc-art">${art}</span>` : ''}` +
-        `<b>${escapeHtml(it.name)}</b><span class="sc-blurb">${escapeHtml(it.blurb)}</span>`;
+        `<b>${escapeHtml(it.name)}</b><span class="sc-blurb">${escapeHtml(it.blurb)}</span>` +
+        (owned ? '' : tryItLine(it, prof));
       const btn = document.createElement('button');
       btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
       // A dead grey button with a price on it tells the player nothing about
@@ -1533,6 +1555,10 @@ HUD.renderDailyLogin = (profile) => {
   el.rwCasesS.textContent = profile.cases === 1 ? '' : 's';
   el.btnRewardsOpenCase.disabled = !(profile.cases > 0);
   el.btnRewardsBuyCase.disabled = (profile.gems || 0) < 100;
+  el.rwProCases.textContent = profile.proCases || 0;
+  el.rwProCasesS.textContent = profile.proCases === 1 ? '' : 's';
+  el.btnRewardsOpenProCase.disabled = !(profile.proCases > 0);
+  el.btnRewardsBuyProCase.disabled = (profile.gems || 0) < 400;
 };
 
 /* --------------------------------------------------------- case opening */
@@ -1543,15 +1569,15 @@ const CASE_KIND_ICON = { decal: 'decal', trail: 'trail', title: 'title', ball: '
  *  to the guaranteed Pro-or-better pull, published rather than hidden, so
  *  a long run of Standard pulls reads as "N left" instead of "is this
  *  rigged". */
-HUD.resetCaseModal = (sincePity = 0) => {
+HUD.resetCaseModal = (sincePity = 0, isPro = false) => {
   el.caseStage.hidden = false;
   el.caseReelWrap.hidden = true;
   el.caseReveal.hidden = true;
   el.btnCaseDone.hidden = true;
-  el.caseBox.className = 'case-box';
+  el.caseBox.className = 'case-box' + (isPro ? ' pro' : '');
   el.caseHint.textContent = 'Tap to open';
-  HUD.renderCasePity(sincePity);
-  HUD.renderCaseContents();
+  HUD.renderCasePity(sincePity, isPro);
+  HUD.renderCaseContents(isPro);
   if (el.caseContents) {
     el.caseContents.hidden = true;
     el.btnCaseContents?.setAttribute('aria-expanded', 'false');
@@ -1559,32 +1585,43 @@ HUD.resetCaseModal = (sincePity = 0) => {
   el.caseReelWrap.closest('.casecard')?.classList.remove('reeling');
 };
 
-HUD.renderCasePity = sincePity => {
+/** `isPro` skips the countdown entirely — a Pro Case doesn't accrue pity,
+ *  it just always starts there (see profiles.js's openProCase, which reuses
+ *  rollCase's forcePity rather than tracking a second counter). */
+HUD.renderCasePity = (sincePity, isPro = false) => {
   if (!el.casePity) return;
+  if (isPro) { el.casePity.textContent = 'Always Pro or better'; return; }
   const left = Math.max(0, PITY_THRESHOLD - (Number(sincePity) || 0));
   el.casePity.textContent = left <= 0
     ? 'Guaranteed Pro or better — next open'
     : `${left} more open${left === 1 ? '' : 's'} until guaranteed Pro or better`;
 };
 
-/* The contents preview — built once, since nothing in it depends on the
-   player: every case draws from the exact same pool at the exact same
-   odds (see cases.js's tierOdds). */
-let caseContentsHTML = null;
-HUD.renderCaseContents = () => {
+function caseOddsRowsHTML(rows) {
+  return rows.map(t => {
+    const pct = t.pct < 0.1 ? '<0.1' : t.pct < 1 ? t.pct.toFixed(1) : Math.round(t.pct);
+    const kindIcons = t.kinds.map(k => icon(CASE_KIND_ICON[k] || 'gift', { size: 13 })).join('');
+    return `<div class="case-odds-row" style="--rarity-color:${t.color}">
+      <span class="case-odds-name">${t.name}</span>
+      <span class="case-odds-kinds">${kindIcons}</span>
+      <span class="case-odds-count">${t.count} item${t.count === 1 ? '' : 's'}</span>
+      <span class="case-odds-pct">${pct}%</span>
+    </div>`;
+  }).join('');
+}
+
+/* Built once per case type, since nothing in either depends on the player:
+   every case of a given type draws from the exact same pool at the exact
+   same odds (see cases.js's tierOdds/proTierOdds). */
+let caseContentsHTML = null, proCaseContentsHTML = null;
+HUD.renderCaseContents = (isPro = false) => {
   if (!el.caseContents) return;
-  if (!caseContentsHTML) {
-    caseContentsHTML = tierOdds().map(t => {
-      const pct = t.pct < 0.1 ? '<0.1' : t.pct < 1 ? t.pct.toFixed(1) : Math.round(t.pct);
-      const kindIcons = t.kinds.map(k => icon(CASE_KIND_ICON[k] || 'gift', { size: 13 })).join('');
-      return `<div class="case-odds-row" style="--rarity-color:${t.color}">
-        <span class="case-odds-name">${t.name}</span>
-        <span class="case-odds-kinds">${kindIcons}</span>
-        <span class="case-odds-count">${t.count} item${t.count === 1 ? '' : 's'}</span>
-        <span class="case-odds-pct">${pct}%</span>
-      </div>`;
-    }).join('');
+  if (isPro) {
+    if (!proCaseContentsHTML) proCaseContentsHTML = caseOddsRowsHTML(proTierOdds());
+    el.caseContents.innerHTML = proCaseContentsHTML;
+    return;
   }
+  if (!caseContentsHTML) caseContentsHTML = caseOddsRowsHTML(tierOdds());
   el.caseContents.innerHTML = caseContentsHTML;
 };
 

@@ -170,3 +170,55 @@ test('looksEarnedAt allows a case-won item and rejects one that was never rolled
   const forged = looksEarnedAt({ decal: 'signature' }, 0, 1, ['decal:houndstooth']);
   assert.equal(forged.decal, null, 'owning ONE case item let a different, unearned one through');
 });
+
+/* --------------------------------------------------------- the Pro Case */
+test('a Pro case can only be opened when one is actually owned', async () => {
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-procase-none-' + Math.random().toString(36).slice(2);
+  const result = profiles.openProCase(pid);
+  assert.equal(result.ok, false, 'a Pro case opened out of an empty inventory');
+});
+
+test('opening a Pro case always lands at or above PITY_TIER — the guarantee IS the product', async () => {
+  const { PITY_TIER, tierIndex } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-procase-open-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.proCases = 5;
+  for (let i = 0; i < 5; i++) {
+    const result = profiles.openProCase(pid);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (result.kind === 'item') {
+      assert.ok(tierIndex(result.rarity) >= tierIndex(PITY_TIER),
+        `Pro case landed on ${result.rarity}, below its own floor`);
+    }
+    // 'gems' is still an acceptable outcome — it means every item at or
+    // above the floor is already owned, not that the floor was skipped
+  }
+  assert.equal(profiles.getProfile(pid).proCases, 0, 'five opens should have consumed all five cases');
+});
+
+test('opening a Pro case does not touch the regular case\'s pity counter', async () => {
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-procase-pity-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.proCases = 1;
+  p.casesSincePity = 7;
+  profiles.openProCase(pid);
+  assert.equal(profiles.getProfile(pid).casesSincePity, 7,
+    'a Pro case open changed the regular case\'s pity progress');
+});
+
+test('buying a Pro case costs gems and only gems, same rule as the regular case', async () => {
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-procase-buy-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.gems = 100;
+  const short = profiles.buyProCase(pid);
+  assert.equal(short.ok, false, 'a Pro case was bought for fewer gems than it costs');
+  p.gems = 500;
+  const bought = profiles.buyProCase(pid);
+  assert.equal(bought.ok, true, JSON.stringify(bought));
+  assert.equal(profiles.getProfile(pid).proCases, 1);
+  assert.ok(profiles.getProfile(pid).gems < 500, 'gems were not actually spent');
+});

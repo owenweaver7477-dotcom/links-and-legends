@@ -89,6 +89,24 @@ export function tierOdds() {
   });
 }
 
+/** The Pro Case's own contents preview — the same tiers a forced-pity roll
+ *  can actually land on (PITY_TIER and above), re-weighted so their odds
+ *  sum to 100% on their own rather than reading as tiny slices of the full
+ *  ladder they no longer share. */
+export function proTierOdds() {
+  const eligible = RARITY_BOUNDS.filter(r => tierIndex(r.id) >= tierIndex(PITY_TIER));
+  const totalWeight = eligible.reduce((s, r) => s + r.weight, 0);
+  return eligible.map(r => {
+    const items = CASE_POOL.filter(it => it.rarity === r.id);
+    return {
+      id: r.id, name: r.name, color: r.color,
+      pct: (r.weight / totalWeight) * 100,
+      kinds: [...new Set(items.map(it => it.kind))],
+      count: items.length
+    };
+  });
+}
+
 /**
  * Roll one case. `owned` is a Set of "kind:id" strings — everything this
  * player already has, from level OR a previous case, so a duplicate can

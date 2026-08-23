@@ -1470,6 +1470,19 @@ function beginShot(msg) {
   G.anim.trailColor = trail?.color || null;
   G.anim.trailAt = 0;
   Sound.strike(CLUB_BY_KEY[msg.shot.clubKey], msg.shot.power);
+  /* The divot. EffectPool's own header already anticipated this ("splashes,
+     divots, sand puffs") but nothing ever actually threw one — a full swing
+     took a chunk out of the turf and the ground never showed it. Reuses the
+     same grass/sand kinds the landing bounces already use, at the ball's
+     OWN starting spot rather than a new effect, and skipped for a putt —
+     a green does not divot. */
+  const strikeClub = CLUB_BY_KEY[msg.shot.clubKey];
+  if (!strikeClub?.putter && G.T) {
+    const surf = G.T.surfaceAt(sim.p.x, sim.p.z)?.id;
+    if (surf !== 'water') {
+      scene.fx.burst(surf === 'sand' ? 'sand' : 'grass', sim.p.x, sim.p.y, sim.p.z, surf === 'sand' ? 10 : 6);
+    }
+  }
   scene.clearTrace();
   scene.setAimLine(null);
   rig.kick(0.55);
@@ -1689,6 +1702,7 @@ let smokeAt = 0;                 // countdown between puffs from a damaged cart
    property writes per golfer, and only when the hole or the wind changes. */
 let _liveKey = '';
 let _stride = 0, _strideSide = 1;   // footfall accumulator
+let _cartStride = 0;                // same idea, off the cart's rear axle
 function feedAvatars() {
   const key = `${G.loadedKey}|${G.wind.speed}|${G.wind.dir.toFixed(2)}`;
   if (key === _liveKey || !G.T) return;
@@ -1822,7 +1836,28 @@ function frame(now) {
       scene.addPrint(
         walker.x + Math.cos(a) * 0.16 * _strideSide,
         walker.z - Math.sin(a) * 0.16 * _strideSide, a);
+      // Dust on the same footfall, only once an actual sprint (not just a
+      // brisk walk) is under way — reusing the stride tick that already
+      // exists rather than a second timer for a second per-step effect.
+      if (walker.speed > SPRINT_SPEED * 0.7 && G.T) {
+        scene.fx.burst('grass', walker.x, G.T.heightAt(walker.x, walker.z), walker.z, 3);
+      }
     }
+  }
+  /* The cart, at speed, kicks up its own trail — distance-accumulated the
+     same way the footfalls are, off the cart's own rear axle rather than
+     the driver's feet. */
+  if (carts.driving && carts.body && G.T) {
+    const b = carts.body;
+    if (Math.abs(b.speed) > 3) {
+      _cartStride += Math.abs(b.speed) * dt;
+      if (_cartStride > 0.5) {
+        _cartStride = 0;
+        const behind = b.heading + Math.PI;
+        const rx = b.x + Math.cos(behind) * 1.1, rz = b.z - Math.sin(behind) * 1.1;
+        scene.fx.burst('grass', rx, G.T.heightAt(rx, rz), rz, 2);
+      }
+    } else _cartStride = 0;
   }
   carts.render(dt, G.T, G.myPid, tintOf, now);
   pushMyPosition(now);
@@ -4355,9 +4390,26 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       HUD.toast('Case bought.', 'good', 1800);
     });
   });
+  HUD.el.btnRewardsBuyProCase?.addEventListener('click', () => {
+    Net.buyProCase(res => {
+      if (!res?.ok) { HUD.el.rwErr.textContent = res?.error || 'Could not buy that.'; return; }
+      HUD.toast('Pro case bought.', 'good', 1800);
+    });
+  });
+  // Which case type the modal is currently open on — set by whichever
+  // "Open a ___ case" button was pressed, read by the box's own click
+  // handler below so there is one open flow, not two near-duplicates.
+  let caseModalIsPro = false;
   HUD.el.btnRewardsOpenCase?.addEventListener('click', () => {
+    caseModalIsPro = false;
     HUD.el.modalRewards.hidden = true;
-    HUD.resetCaseModal(G.profile?.casesSincePity ?? 0);
+    HUD.resetCaseModal(G.profile?.casesSincePity ?? 0, false);
+    HUD.el.modalCase.hidden = false;
+  });
+  HUD.el.btnRewardsOpenProCase?.addEventListener('click', () => {
+    caseModalIsPro = true;
+    HUD.el.modalRewards.hidden = true;
+    HUD.resetCaseModal(0, true);
     HUD.el.modalCase.hidden = false;
   });
   HUD.el.btnCaseContents?.addEventListener('click', () => {
@@ -4375,7 +4427,8 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     Sound.chestOpen?.();
     // the shake plays out before the ack usually even arrives — the
     // network round trip IS the suspense here, not an artificial delay
-    Net.openCase(res => {
+    const openFn = caseModalIsPro ? Net.openProCase : Net.openCase;
+    openFn(res => {
       caseOpening = false;
       if (!res?.ok) { HUD.toast(res?.error || 'Could not open that.', 'warn', 2000); HUD.el.modalCase.hidden = true; return; }
       // The item is already committed server-side in `res` — the reel is

@@ -1005,6 +1005,10 @@ h1 em { font-style: normal; color: #7ed492; }
   border-top: 3px solid var(--rarity-color, rgba(255,255,255,.10)); }
 .shopcard b { font-size: 13.5px; }
 .shopcard .sc-blurb { font-size: 11px; color: #a9c2ae; line-height: 1.45; flex: 1; }
+/* The "try before buy" line — a real computed number (see tryItLine in
+   hud.js), not a marketing claim, so it gets its own colour rather than
+   blending into the blurb it sits under. */
+.shopcard .sc-try { display: block; margin-top: 3px; font-size: 10.5px; font-weight: 700; color: #6fce8a; }
 .shopcard .btn { margin-top: 7px; font-size: 12.5px; padding: 8px 10px; }
 .shopcard.owned { border-color: rgba(111,212,138,.45); border-top-color: var(--rarity-color, rgba(111,212,138,.45));
   box-shadow: 0 0 18px -6px var(--rarity-color, transparent); }
@@ -1097,14 +1101,25 @@ input[type=text] { font-size: 16px; padding: 12px 14px; }
 .cmp-next { color: #eaf4ec; font-weight: 600; }
 .cmp-cost { font-weight: 700; white-space: nowrap; }
 .cmp-cost em { font-style: normal; color: #e8a04a; font-weight: 600; font-size: 10.5px; }
+/* Each of the eight had the same dark card with only a hairline top border
+   telling them apart — a colour identity that showed up nowhere you'd
+   actually look at the card itself. The face now carries it directly (a
+   tinted ring, not a plain grey box) and the whole card gets a faint wash
+   of it, the same way a rarity-coloured item already reads in the case
+   and wardrobe screens. */
+.shopcard.caddie { background:
+  radial-gradient(ellipse at 20% 0%, color-mix(in srgb, var(--rarity-color, transparent) 14%, transparent), transparent 65%),
+  rgba(255,255,255,.045); }
 .cad-head { display: flex; align-items: center; gap: 9px; }
 .cad-face { font-size: 25px; width: 40px; height: 40px; display: grid; place-items: center;
-  background: rgba(255,255,255,.06); border-radius: 11px; }
+  background: color-mix(in srgb, var(--rarity-color, #ffffff) 16%, rgba(255,255,255,.05));
+  border: 1px solid color-mix(in srgb, var(--rarity-color, #ffffff) 40%, transparent);
+  border-radius: 11px; }
 .cad-stat { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
-  color: #8fbf9c; font-weight: 700; }
+  color: var(--rarity-color, #8fbf9c); font-weight: 700; }
 .cad-pips { display: flex; gap: 3px; margin: 2px 0; }
 .cad-pips i { width: 14px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.10); }
-.cad-pips i.on { background: linear-gradient(90deg,#4cb466,#8fe07a); }
+.cad-pips i.on { background: linear-gradient(90deg, color-mix(in srgb, var(--rarity-color, #4cb466) 70%, black), var(--rarity-color, #8fe07a)); }
 .shopcard.caddie.owned .cad-pips i.on { background: linear-gradient(90deg,#ffd76b,#ffea9e); }
 .cad-now { font-size: 11px; color: #8fe07a; font-weight: 600; }
 
@@ -3554,6 +3569,10 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
   transition: transform .15s ease; }
 .case-box:hover { transform: scale(1.06); }
 .case-box.shaking { animation: caseShake .5s ease-in-out; }
+/* The Pro Case's own chest is the same SVG, tinted — a purple glow marks
+   it as the always-pro-or-better one before a player has even read the
+   pity line under it. */
+.case-box.pro { filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)) drop-shadow(0 0 20px rgba(199,125,255,.5)); }
 @keyframes caseShake {
   0%, 100% { transform: rotate(0) scale(1); filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)); }
   15% { transform: rotate(-8deg) scale(1.03); }
