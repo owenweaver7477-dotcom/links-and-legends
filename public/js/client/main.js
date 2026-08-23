@@ -3558,6 +3558,29 @@ document.getElementById('btnAgain').addEventListener('click', () => Net.again())
 document.getElementById('btnBackLobby').addEventListener('click', () => Net.lobby());
 document.getElementById('clubUp').addEventListener('click', () => stepClub(1));
 document.getElementById('clubDown').addEventListener('click', () => stepClub(-1));
+/* Touch has no wheel to cycle clubs with — desktop gets one (see the
+   keydown handler's wheel-equivalent below), touch had only the two small
+   arrow buttons. A swipe on the club readout does the same job, on a
+   surface well away from the canvas's swing/camera drag so it can never
+   be mistaken for either mid-round. Pointer events, not touch-specific
+   ones, so a mouse drag here works exactly the same way. */
+(() => {
+  const zone = document.querySelector('.clubsel');
+  if (!zone) return;
+  let startX = null, startY = null;
+  zone.addEventListener('pointerdown', e => {
+    if (e.target.closest('.cbtn')) return;   // the arrow buttons still just click
+    startX = e.clientX; startY = e.clientY;
+  });
+  zone.addEventListener('pointerup', e => {
+    if (startX == null) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    startX = null;
+    if (Math.abs(dx) < 32 || Math.abs(dx) < Math.abs(dy) * 1.5) return;   // not a real horizontal swipe
+    stepClub(dx < 0 ? 1 : -1);
+  });
+  zone.addEventListener('pointercancel', () => { startX = null; });
+})();
 // left is +heading in this frame (see stepAim), and both buttons repeat on hold
 holdAim(document.getElementById('aimL'), 1);
 holdAim(document.getElementById('aimR'), -1);
