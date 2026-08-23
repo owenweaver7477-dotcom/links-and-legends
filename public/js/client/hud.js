@@ -919,9 +919,16 @@ HUD.renderShop = (prof, onBuy) => {
      light.  It is the same data the simulation uses, read straight back. */
   el.shopList.appendChild(buildPayoff(prof));
 
+  /* Three categories, not two. Clubs and gear used to share one "Pro Shop"
+     tab as a single undifferentiated grid — the club ladder's current/next
+     cards sat in the same row order as a ball upgrade and a cart tune-up,
+     with nothing telling them apart but position. Splitting them here is
+     basic infrastructure for the category filtering a future pass wants:
+     there is now an actual category boundary in the UI to filter BY,
+     instead of one grid a filter would have to invent boundaries inside. */
   const tabs = document.createElement('div');
   tabs.className = 'shoptabs';
-  for (const [id, label] of [['crew', 'Caddie Crew'], ['pro', 'Pro Shop']]) {
+  for (const [id, label] of [['clubs', 'Clubs'], ['gear', 'Gear'], ['crew', 'Caddie Crew']]) {
     const t = document.createElement('button');
     t.className = 'shoptab' + (shopTab === id ? ' on' : '');
     t.textContent = label;
@@ -988,7 +995,7 @@ HUD.renderShop = (prof, onBuy) => {
       card.appendChild(btn);
       grid.appendChild(card);
     }
-  } else {
+  } else if (shopTab === 'clubs') {
     // the club ladder: your set, the refinement, the next rung
     const tier = prof?.clubTier ?? 0, refine = prof?.refine ?? 0;
     const cur = CLUB_TIERS[tier];
@@ -1031,7 +1038,7 @@ HUD.renderShop = (prof, onBuy) => {
       nc.appendChild(nb);
       grid.appendChild(nc);
     }
-
+  } else {
     /* EVERY item in the shop.  Three of the six — forged irons, carbon woods
        and the milled putter — used to be skipped here as "legacy", so they
        were unbuyable in the UI while still costing coins and changing the
