@@ -33,6 +33,14 @@ export class Walker {
     this.keys = new Set();
     this.enabled = false;
     this.arrowsAim = false;   // set by the game when you are over the ball
+    this.touch = null;        // {fwd, side} while a touch joystick is held, each -1..1
+  }
+
+  /** A touch joystick reports its own analog direction — camera-relative,
+   *  same as WASD, just continuous instead of on/off. `null` releases it. */
+  setTouchMove(fwd, side) {
+    this.touch = (fwd || side) ? { fwd, side } : null;
+    if (this.touch) this.auto = null;   // taking the stick over cancels an auto-walk, same as a key
   }
 
   reset(x, z, heading = 0) {
@@ -76,6 +84,17 @@ export class Walker {
       const d = Math.hypot(dx, dz);
       if (d < 0.35) { this.auto = null; }
       else { vx = dx / d; vz = dz / d; want = Math.min(this.auto.speed, d / Math.max(dt, 1e-3)); }
+    } else if (this.touch) {
+      // Analog, camera-relative exactly like WASD below — a soft push walks,
+      // shoving the stick to its edge runs, rather than a hard on/off switch.
+      const fwd = this.touch.fwd, side = this.touch.side;
+      const mag = Math.min(1, Math.hypot(fwd, side));
+      const sinY = Math.sin(camYaw), cosY = Math.cos(camYaw);
+      vx = sinY * fwd - cosY * side;
+      vz = cosY * fwd + sinY * side;
+      const l = Math.hypot(vx, vz) || 1;
+      vx /= l; vz /= l;
+      want = WALK_SPEED + (SPRINT_SPEED - WALK_SPEED) * Math.max(0, (mag - 0.55) / 0.45);
     } else {
       const k = this.keys;
       /* Movement is bound, not hard-coded — see binds.js. The arrows are the

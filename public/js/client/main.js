@@ -3185,6 +3185,70 @@ for (const [id, fn] of [
   if (el) el.addEventListener('click', ev => { ev.preventDefault(); fn(); });
 }
 
+/* The joystick. Drag from anywhere inside the base; the knob follows,
+   clamped to the base radius, and feeds a camera-relative fwd/side pair to
+   the walker every frame it's held — same update() path as WASD, just
+   analog. Released hands movement back to the keyboard. */
+(() => {
+  const base = document.getElementById('joyBase');
+  const knob = document.getElementById('joyKnob');
+  if (!base || !knob) return;
+  const RADIUS = 40;
+  let pid = null, cx = 0, cy = 0;
+
+  const move = (clientX, clientY) => {
+    let dx = clientX - cx, dy = clientY - cy;
+    const d = Math.hypot(dx, dy);
+    if (d > RADIUS) { dx = dx / d * RADIUS; dy = dy / d * RADIUS; }
+    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    // screen-space: dragging up is forward, dragging right is strafe right —
+    // same fwd/side sign convention walker.update() already uses for WASD.
+    walker.setTouchMove(-dy / RADIUS, dx / RADIUS);
+  };
+  const release = () => {
+    pid = null;
+    base.classList.remove('active');
+    knob.style.transform = '';
+    walker.setTouchMove(0, 0);
+  };
+
+  base.addEventListener('pointerdown', ev => {
+    ev.preventDefault();
+    pid = ev.pointerId;
+    base.setPointerCapture(pid);
+    base.classList.add('active');
+    const r = base.getBoundingClientRect();
+    cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+    move(ev.clientX, ev.clientY);
+  });
+  base.addEventListener('pointermove', ev => {
+    if (ev.pointerId !== pid) return;
+    move(ev.clientX, ev.clientY);
+  });
+  base.addEventListener('pointerup', release);
+  base.addEventListener('pointercancel', release);
+})();
+
+/* Fullscreen. Standard API, best-effort — iOS Safari has never supported it
+   on a plain element, so this quietly does nothing there rather than error;
+   everywhere else it's the difference between a phone's address bar eating
+   the top of the screen and not. */
+(() => {
+  const btn = document.getElementById('btnFullscreen');
+  if (!btn) return;
+  const enterIcon = btn.innerHTML;
+  const exitIcon = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 4v4a1 1 0 0 1-1 1H4M15 4v4a1 1 0 0 0 1 1h4M9 20v-4a1 1 0 0 0-1-1H4M15 20v-4a1 1 0 0 1 1-1h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const sync = () => {
+    btn.innerHTML = document.fullscreenElement ? exitIcon : enterIcon;
+    btn.title = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+  };
+  btn.addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else document.documentElement.requestFullscreen?.().catch(() => {});
+  });
+  document.addEventListener('fullscreenchange', sync);
+})();
+
 HUD.el.optQuality.value = HUD.quality;
 scene.setQuality(HUD.quality);
 

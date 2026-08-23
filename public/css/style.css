@@ -352,10 +352,61 @@ html.touch .touchpad { position: absolute; left: 10px; bottom: 108px; z-index: 7
 /* On a phone the play bar is two rows tall and reaches 123 px up, so a pad
    sitting at 108 has its bottom row underneath the swing controls — you go
    to press Ball and take a swing instead. */
-@media (max-width: 560px) {
+@media (max-width: 560px), (max-height: 480px) and (max-width: 950px) {
   .touchpad, html.touch .touchpad { bottom: 132px; }
 }
 html.touch .touchpad[hidden] { display: none !important; }
+
+/* Walking, on the side the action pad is not on so a thumb never has to
+   choose between them. Same two triggers as the touchpad above. */
+.joystick { display: none; }
+@media (pointer: coarse) {
+  .joystick { display: block; position: absolute; right: 18px; bottom: 108px; z-index: 7; }
+}
+html.touch .joystick { display: block; position: absolute; right: 18px; bottom: 108px; z-index: 7; }
+.joy-base { width: 108px; height: 108px; border-radius: 50%;
+  background: rgba(10,18,15,.55); border: 1px solid rgba(255,255,255,.16);
+  backdrop-filter: blur(6px); position: relative;
+  touch-action: none; -webkit-user-select: none; user-select: none; }
+.joy-knob { width: 46px; height: 46px; border-radius: 50%; position: absolute;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background: rgba(232,242,234,.85); border: 1px solid rgba(255,255,255,.4);
+  box-shadow: 0 4px 14px rgba(0,0,0,.4); pointer-events: none; }
+.joy-base.active .joy-knob { background: rgba(255,255,255,.96); }
+
+/* On a phone — portrait or landscape — the playbar and the touch pad are
+   BOTH full width, with a club/aim stepper sitting right at each edge. A
+   joystick beside them at the base size lands on top of the aim stepper.
+   Clearing the whole stack rather than just nudging up, and shrinking the
+   pad to match, keeps it out of everything without needing to know either
+   control's exact height down to the pixel. */
+@media (max-width: 560px), (max-height: 480px) and (max-width: 950px) {
+  .joystick, html.touch .joystick { bottom: 190px; right: 12px; }
+  .joy-base { width: 78px; height: 78px; }
+  .joy-knob { width: 34px; height: 34px; }
+}
+@media (max-height: 480px) and (max-width: 950px) {
+  /* Landscape has far less height to spare than portrait does at the same
+     compact width, so the stack is shorter — the pad can sit lower. */
+  .joystick, html.touch .joystick { bottom: 160px; }
+}
+
+/* Same two triggers as the touch controls above, but this one is useful the
+   instant you land on the page — before a round, before body.playing — so
+   it is NOT in that visibility list. Top corner, clear of the hole panel
+   which owns the top-left. */
+.fsbtn { display: none; }
+@media (pointer: coarse) {
+  .fsbtn { display: grid; }
+}
+html.touch .fsbtn { display: grid; }
+.fsbtn { position: absolute; top: 8px; right: 8px; z-index: 20;
+  width: 32px; height: 32px; border-radius: 9px; place-items: center;
+  background: rgba(10,18,15,.68); border: 1px solid rgba(255,255,255,.16);
+  color: #dfeee4; cursor: pointer; backdrop-filter: blur(6px);
+  -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+.fsbtn:active { background: rgba(255,255,255,.16); }
+
 .tbtn { width: 62px; height: 54px; border-radius: 13px; cursor: pointer;
   background: rgba(10,18,15,.82); border: 1px solid rgba(255,255,255,.15);
   color: #e8f2ea; font: inherit; font-size: 19px; line-height: 1;
@@ -712,6 +763,7 @@ body:not(.playing) .hintbar,
 body:not(.playing) .labellayer,
 body:not(.playing) .shotinfo,
 body:not(.playing) .touchpad,
+body:not(.playing) .joystick,
 /* Chat was missing from this list from the start. It never showed because
    the home screen's backdrop is opaque enough to hide it — the landing page
    is not, and six phrase buttons appeared over the aerial. */
@@ -1092,8 +1144,10 @@ body:not(.playing) .hintbar { display: none; }
    roster all fought for the same strip of screen.  Measured collisions at
    430x932 were hud/distPanel, hud/turnbar and distPanel/rosterPanel — so the
    top row becomes a single deliberate stack instead of three things each
-   assuming they own the middle. */
-@media (max-width: 560px) {
+   assuming they own the middle. Same treatment on a short LANDSCAPE screen
+   — a phone on its side has just as little vertical room, at a width the
+   portrait breakpoint alone never catches. */
+@media (max-width: 560px), (max-height: 480px) and (max-width: 950px) {
   /* hole card: compact, top-left */
   .hud { top: 8px; left: 8px; padding: 6px 9px; }
   .hud .h-course { font-size: 8.5px; letter-spacing: 1.4px; }
@@ -1385,7 +1439,7 @@ body.playing .coinhud { display: block; }
         sat directly on top of the yards-to-pin readout
      3. the phrase bar sat on the scorecard
    ========================================================================= */
-@media (max-width: 560px) {
+@media (max-width: 560px), (max-height: 480px) and (max-width: 950px) {
 
   /* ---- 1. the play bar has to fit ------------------------------------ */
   .playbar {
@@ -2577,8 +2631,10 @@ body.side-open .lp-play-fixed { opacity: .5; }
 
    Sizes are picked against the 44px touch minimum rather than scaled down
    from the desktop — a control that is merely smaller is not a control that
-   fits a thumb. */
-@media (max-width: 560px) {
+   fits a thumb. Also fires on a short landscape screen at up to 950px wide
+   — the portrait 560px cutoff never sees a real phone lying on its side,
+   which has just as little vertical room and the same thumb. */
+@media (max-width: 560px), (max-height: 480px) and (max-width: 950px) {
 
   /* ---- the top: ONE bar, not six panels ---------------------------- */
   body.playing #stage .panel.hud {
@@ -2707,7 +2763,7 @@ body.side-open .lp-play-fixed { opacity: .5; }
 }
 
 /* ── phone: the four things the first pass got wrong ─────────────────── */
-@media (max-width: 560px) {
+@media (max-width: 560px), (max-height: 480px) and (max-width: 950px) {
   /* 1. the hole card must leave room for the scorecard beside it, or they
         sit on top of each other — both were pinned to the same corner */
   body.playing #stage .panel.hud { right: 132px; }
@@ -2735,7 +2791,7 @@ body.side-open .lp-play-fixed { opacity: .5; }
 }
 
 /* ── phone: the playbar laid out by NAME, not by source order ────────── */
-@media (max-width: 560px) {
+@media (max-width: 560px), (max-height: 480px) and (max-width: 950px) {
   /* The children were being placed by document order with `order` on three
      of the four, so the cancel button — which has no order — landed first
      and got pushed into a row of its own under the meter, across the label

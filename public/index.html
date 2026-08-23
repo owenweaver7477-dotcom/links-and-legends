@@ -200,6 +200,21 @@
     <button class="tbtn phone-only" id="tbMore" title="Scorecard and settings"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>More</span></button>
   </div>
 
+  <!-- Walking on touch. WASD has no equivalent on a phone otherwise — a
+       player could reach their ball with the teleport button, but could
+       never just walk around, get to a cart, or line up a putt on foot.
+       Drag anywhere inside the base; the knob follows and snaps back. -->
+  <div class="joystick" id="joystick">
+    <div class="joy-base" id="joyBase"><div class="joy-knob" id="joyKnob"></div></div>
+  </div>
+
+  <!-- On a phone in landscape the browser's own address bar eats a chunk of
+       an already short screen. Fullscreen gets it back. Touch-only: a mouse
+       user already has the option in their browser's own chrome. -->
+  <button class="fsbtn" id="btnFullscreen" title="Fullscreen">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4M20 9V5a1 1 0 0 0-1-1h-4M4 15v4a1 1 0 0 0 1 1h4M20 15v4a1 1 0 0 1-1 1h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+
   <!-- There was no way to leave a round at all once you were in one. -->
   <!-- your balance, in the round.  Coins are banked hole by hole, so this
        genuinely moves as you play rather than only at the end. -->
