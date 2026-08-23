@@ -1113,12 +1113,23 @@ io.on('connection', socket => {
        rather than in each handler for the same reason the rate limit is:
        one guard everything passes through beats one added by hand to
        every place that might need it. See the AFK sweep below for what
-       actually reads this. */
-    const ref = sockets.get(socket.id);
-    if (ref) {
-      const room = rooms.get(ref.code);
-      const p = room?.players.find(x => x.pid === ref.pid);
-      if (p) p.lastActiveAt = Date.now();
+       actually reads this.
+
+       EXCEPT net:ping. It fires on a bare setInterval in net.js the whole
+       time a tab is open and connected — proving the pipe is alive, not
+       that anyone is at the keyboard. Counting it here silently defeated
+       the entire AFK sweep: a player who genuinely walked away, tab still
+       open, would auto-heartbeat their own lastActiveAt every 6s forever,
+       so `now - lastActiveAt` could never cross AFK_MS. Caught by reading
+       both commits together rather than either one's own tests, since
+       test/afk.mjs drives a raw socket that never emits net:ping at all. */
+    if (event !== 'net:ping') {
+      const ref = sockets.get(socket.id);
+      if (ref) {
+        const room = rooms.get(ref.code);
+        const p = room?.players.find(x => x.pid === ref.pid);
+        if (p) p.lastActiveAt = Date.now();
+      }
     }
     next();
   });

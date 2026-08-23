@@ -87,6 +87,50 @@ test('a silently AFK turn is benched, not left to stall the room', async () => {
   }
 });
 
+test('the connection-quality heartbeat does not count as being present', async () => {
+  /* net.js runs its own net:ping on a bare setInterval the entire time a
+     tab is open and connected — proving the pipe is alive, not that a
+     human is at the keyboard. It once passed through the same
+     activity-stamping middleware as everything else, which meant a
+     player who genuinely walked away with the tab open could never be
+     swept: their client kept silently resetting lastActiveAt every 6s
+     forever. This drives net:ping the way the real client does, on its
+     own timer, and asserts the sweep still fires anyway. */
+  const dir = await mkdtemp(path.join(tmpdir(), 'golf-afk-ping-'));
+  const srv = start(dir);
+  try {
+    assert.ok(await waitUp(), 'the server never came up');
+
+    const A = mk(); await wait(200);
+    let state = null;
+    A.on('room:state', s => { state = s; });
+    const ra = await rpc(A, 'room:create', { name: 'Ann', pid: 'AFK_PING_A' });
+    const code = ra.code;
+    const B = mk(); await wait(150);
+    await rpc(B, 'room:join', { code, name: 'Ben', pid: 'AFK_PING_B' });
+    await wait(150);
+    A.emit('game:start');
+    await wait(400);
+
+    assert.equal(state?.state, 'playing', 'the round never actually started');
+    const idlePid = state.turnPid;
+    const idleSocket = idlePid === 'AFK_PING_A' ? A : B;
+
+    // the idle player's tab is "open" — only pinging, never actually acting
+    const pinger = setInterval(() => idleSocket.emit('net:ping', Date.now(), () => {}), 150);
+    await wait(AFK_MS + SWEEP_MS * 2 + 300);
+    clearInterval(pinger);
+
+    const idle = state.players.find(p => p.pid === idlePid);
+    assert.equal(idle.spectator, true, 'a live net:ping stream kept the silent turn from being benched');
+
+    A.disconnect(); B.disconnect();
+  } finally {
+    srv.kill('SIGKILL');
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
 test('a solo round is never benched out from under the only player', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'golf-afk-solo-'));
   const srv = start(dir);
