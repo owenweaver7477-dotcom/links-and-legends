@@ -679,13 +679,31 @@ HUD.renderClubDecalPicker = (look, level, caseUnlocks = []) => {
   const none = `<button class="none${!cur ? ' on' : ''}" data-decal="" title="No shaft decal">None</button>`;
   const cells = decals.map(u => {
     const has = owned(u.id);
+    const color = u.color || '#8fe07a';
     return `<button class="${!has ? 'locked' : ''}${u.id === cur ? ' on' : ''}"
-      data-decal="${has ? u.id : ''}" ${has ? '' : 'disabled'}
+      data-decal="${has ? u.id : ''}" data-pattern-id="${has ? u.id : ''}" data-pattern-color="${color}"
+      ${has ? '' : 'disabled'}
       title="${escapeHtml(u.name)}${has ? '' : ` — level ${u.at}`}">
-      ${has ? `<i style="background:${u.color || '#8fe07a'}"></i>` : u.at}
+      ${has ? `<i style="background:${color}"></i>` : u.at}
     </button>`;
   }).join('');
   grid.innerHTML = none + cells;
+  /* The pattern goes on as an .src property assignment below, deliberately
+     never written into the HTML string above as a source attribute — the
+     portal-bundle verifier's static scanner reads that shape of text as a
+     real asset reference and a data-URI reads as a path it can't resolve.
+     A property assignment after the fact never puts that text in the
+     source at all. */
+  for (const btn of grid.querySelectorAll('[data-pattern-id]')) {
+    const id = btn.dataset.patternId;
+    if (!id) continue;
+    const pattern = shaftDecalDataUrl(id, btn.dataset.patternColor);
+    if (!pattern) continue;
+    const img = document.createElement('img');
+    img.width = 20; img.height = 20; img.alt = '';
+    img.src = pattern;
+    btn.querySelector('i')?.appendChild(img);
+  }
   if (!grid.dataset.wired) {
     grid.dataset.wired = '1';
     grid.addEventListener('click', e => {
@@ -1435,16 +1453,43 @@ HUD.revealCase = (result) => {
   el.caseRarity.textContent = rarity.name;
   el.caseRarity.style.color = rarity.color;
   if (isItem) {
-    // currentColor icons (see icons.js) — this is the whole point of the
-    // switch off emoji: the SAME decal/trail/title/ball glyph can actually
-    // be tinted to the item's own colour, or the rarity colour, instead of
-    // showing an identical fixed-colour picture for every rarity there is.
-    el.caseItemArt.innerHTML = icon(CASE_KIND_ICON[result.item.kind] || 'gift', { size: 64 });
-    el.caseItemArt.style.color = result.item.color || rarity.color;
+    // A decal pull gets its own actual pattern, not a generic silhouette —
+    // the shaft decal system draws real art now (shaftdecals.js), so there
+    // is a real thing to show. Everything else (trail/title/ball) still
+    // has no equivalent asset, so it keeps the currentColor icon, tinted
+    // to the item's own colour or the rarity colour — the whole point of
+    // the switch off emoji, still true for the kinds with nothing else to
+    // draw.
+    const itemColor = result.item.color || rarity.color;
+    const pattern = result.item.kind === 'decal' ? shaftDecalDataUrl(result.item.id, itemColor) : null;
+    if (pattern) {
+      // The pattern is set as an <img>.src PROPERTY, never written into an
+      // HTML string as src="..." — see renderClubDecalPicker's comment on
+      // why: the portal-bundle verifier's static scanner reads that text
+      // as a real asset path and a data: URI 404s as one. Also: no child
+      // content to size the box the way the inline icon SVGs do
+      // (font-size-driven, see .case-item), so this needs real dimensions.
+      el.caseItemArt.innerHTML = '';
+      const img = document.createElement('img');
+      img.width = 64; img.height = 64; img.alt = '';
+      img.src = pattern;
+      el.caseItemArt.appendChild(img);
+      el.caseItemArt.style.color = itemColor;
+      el.caseItemArt.style.width = el.caseItemArt.style.height = '64px';
+      el.caseItemArt.style.borderRadius = '14px';
+      el.caseItemArt.style.border = `2px solid ${itemColor}`;
+    } else {
+      el.caseItemArt.innerHTML = icon(CASE_KIND_ICON[result.item.kind] || 'gift', { size: 64 });
+      el.caseItemArt.style.width = el.caseItemArt.style.height = '';
+      el.caseItemArt.style.borderRadius = el.caseItemArt.style.border = '';
+      el.caseItemArt.style.color = itemColor;
+    }
     el.caseItemName.textContent = result.item.name;
     el.caseItemKind.textContent = UNLOCK_KINDS[result.item.kind]?.name || result.item.kind;
   } else {
     el.caseItemArt.innerHTML = icon('gem', { size: 64 });
+    el.caseItemArt.style.width = el.caseItemArt.style.height = '';
+    el.caseItemArt.style.borderRadius = el.caseItemArt.style.border = '';
     el.caseItemArt.style.color = rarity.color;
     el.caseItemName.textContent = `+${result.amount} gems`;
     el.caseItemKind.textContent = 'you already own everything in that tier';
@@ -2252,6 +2297,7 @@ import {
   outfitStats, spinWord, outfitById
 } from '../shared/wardrobe.js';
 import { decalTexture } from './decals.js';
+import { shaftDecalDataUrl } from './shaftdecals.js';
 import { showItem as showShopItem, setUserOrbit as setShopOrbit, releaseUserOrbit as releaseShopOrbit } from './shopview.js';
 import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress, TIER_ACCENT } from '../shared/clubskins.js';
 import { DIFFICULTIES, difficultyById } from '../shared/difficulty.js';

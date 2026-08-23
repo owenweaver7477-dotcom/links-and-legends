@@ -16,6 +16,7 @@ import { CLUB_BY_KEY } from '../shared/clubs.js';
 import { FABRICS, GLOVES, WATCHES, CUTS, SHOE_TYPES, DECAL_SLOTS } from '../shared/wardrobe.js';
 import { makeLife, blankLayer, breathe, footPlant, walkKnees, swingLayers } from './anim.js';
 import { shirtMaterial, decalMaterial, decalHalo } from './decals.js';
+import { shaftDecalTexture } from './shaftdecals.js';
 
 /* One unit box, reused by every part of every avatar.
    `userData.shared` is what stops GolfScene.dispose() from freeing these on
@@ -632,7 +633,15 @@ export class Avatar {
     const u = id ? UNLOCKS.find(x => x.kind === 'decal' && x.id === id) : null;
     if (!this.clubDecal) return;
     this.clubDecal.visible = !!u;
-    if (u) this.clubDecal.material.color.set(u.color || '#8fe07a');
+    if (!u) return;
+    const color = u.color || '#8fe07a';
+    // A real pattern per design, not a flat tint every design shared —
+    // shaftDecalTexture returns null for an id it doesn't recognise, which
+    // just leaves the band a plain rectangle in its own colour, same as
+    // the flat-tint behaviour this replaces.
+    this.clubDecal.material.color.set(color);
+    this.clubDecal.material.map = shaftDecalTexture(id, color);
+    this.clubDecal.material.needsUpdate = true;
   }
 
   setClub(key, tier = 0) {
