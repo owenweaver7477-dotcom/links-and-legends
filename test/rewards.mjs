@@ -98,6 +98,49 @@ test('opening an owned case updates the inventory and grants something real', as
   }
 });
 
+test('the pity counter climbs on ordinary opens and forces a Pro-or-better pull at the threshold', async () => {
+  const { PITY_TIER, PITY_THRESHOLD, tierIndex } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-pity-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  // Parked one open short of the forced roll — the NEXT open must be
+  // forced regardless of what Math.random() would otherwise have picked.
+  p.casesSincePity = PITY_THRESHOLD - 1;
+  p.cases = 1;
+  const result = profiles.openCase(pid);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (result.kind === 'item') {
+    assert.ok(tierIndex(result.rarity) >= tierIndex(PITY_TIER),
+      `pity should have forced at least ${PITY_TIER}, got ${result.rarity}`);
+  }
+  // Honoured either by landing on an item or by the exhausted-pool gems
+  // fallback — both reset the counter, since forcing it again immediately
+  // would just repeat the same gems payout for a maxed-out collector.
+  assert.equal(profiles.getProfile(pid).casesSincePity, 0, 'the counter should reset once pity is honoured');
+});
+
+test('the pity counter climbs on an ordinary below-pity open, so it actually accumulates', async () => {
+  const { CASE_POOL, caseItemKey, PITY_TIER, tierIndex } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-pity-accrue-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.casesSincePity = 0;
+  p.cases = 1;
+  /* Own everything AT OR ABOVE the pity tier, leaving only below-pity tiers
+     (standard/tour) reachable. A walk-up starting anywhere at or above the
+     pity tier is fully exhausted and falls to gems; a walk-up starting
+     below it lands on a real below-pity item. Neither outcome is real
+     Math.random()-controllable here, but BOTH count as "pity not met" —
+     see openCase's metPityNaturally — so the counter incrementing is
+     deterministic even though which of the two outcomes occurs is not. */
+  p.caseUnlocks = CASE_POOL.filter(i => tierIndex(i.rarity) >= tierIndex(PITY_TIER)).map(caseItemKey);
+  const result = profiles.openCase(pid);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (result.kind === 'item') assert.ok(tierIndex(result.rarity) < tierIndex(PITY_TIER),
+    `expected a below-pity item, got ${result.rarity}`);
+  assert.equal(profiles.getProfile(pid).casesSincePity, 1, 'a below-pity open should have incremented the counter');
+});
+
 test('gems buy a case, and refuse to when there are not enough', async () => {
   const profiles = await import('../server/profiles.js');
   const pid = 'reward-buy-' + Math.random().toString(36).slice(2);

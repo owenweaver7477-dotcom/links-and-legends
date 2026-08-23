@@ -3473,15 +3473,33 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 .case-box:hover { transform: scale(1.06); }
 .case-box.shaking { animation: caseShake .5s ease-in-out; }
 @keyframes caseShake {
-  0%, 100% { transform: rotate(0) scale(1); }
+  0%, 100% { transform: rotate(0) scale(1); filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)); }
   15% { transform: rotate(-8deg) scale(1.03); }
   30% { transform: rotate(7deg) scale(1.03); }
-  45% { transform: rotate(-9deg) scale(1.05); }
-  60% { transform: rotate(8deg) scale(1.05); }
+  45% { transform: rotate(-9deg) scale(1.05); filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)) drop-shadow(0 0 22px rgba(255,217,74,.6)); }
+  60% { transform: rotate(8deg) scale(1.05); filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)) drop-shadow(0 0 26px rgba(255,217,74,.7)); }
   75% { transform: rotate(-5deg) scale(1.03); }
   90% { transform: rotate(3deg) scale(1.01); }
 }
 .case-hint { font-size: 12px; color: #8fa694; }
+.case-pity { font-size: 11px; color: #c77dff; font-weight: 700; margin-top: -6px; }
+
+/* The contents preview. Collapsed by default, one row per rarity tier —
+   its own colour, which item kinds it can hand out, how many items are in
+   it right now, and its real share of the roll. */
+.case-contents-btn { align-self: center; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; padding: 5px 10px; }
+.case-contents-btn svg { transition: transform .18s ease; }
+.case-contents-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.case-contents { width: 100%; display: flex; flex-direction: column; gap: 5px;
+  margin-top: 2px; text-align: left; }
+.case-odds-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 8px; background: rgba(255,255,255,.04);
+  border-left: 3px solid var(--rarity-color, rgba(255,255,255,.2)); font-size: 12px; }
+.case-odds-name { font-weight: 700; color: var(--rarity-color, #eaf4ec); min-width: 62px; }
+.case-odds-kinds { display: flex; gap: 4px; color: #8fa694; }
+.case-odds-count { margin-left: auto; color: #8fa694; font-size: 10.5px; }
+.case-odds-pct { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
 
 /* the reel — a wider card just for this phase, so it reads as a CS:GO-style
    strip rather than five chips crammed into a 380px column */

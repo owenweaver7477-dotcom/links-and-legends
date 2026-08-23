@@ -4278,8 +4278,13 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   });
   HUD.el.btnRewardsOpenCase?.addEventListener('click', () => {
     HUD.el.modalRewards.hidden = true;
-    HUD.resetCaseModal();
+    HUD.resetCaseModal(G.profile?.casesSincePity ?? 0);
     HUD.el.modalCase.hidden = false;
+  });
+  HUD.el.btnCaseContents?.addEventListener('click', () => {
+    const open = HUD.el.caseContents.hidden;
+    HUD.el.caseContents.hidden = !open;
+    HUD.el.btnCaseContents.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 
   /* -------------------------------------------------------- case opening */
@@ -4309,6 +4314,12 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
           Sound.reelLand?.(rarity);
           HUD.revealCase(res);
           Sound.reward?.(rarity);
+          // Every item in the pool was already owned — rollCase converts
+          // that to a flat gem payout rather than handing back a duplicate
+          // (see cases.js). The reveal card already says so; the toast is
+          // what makes it register as "you got something," not "nothing
+          // happened," on the one pull in the game that isn't a new item.
+          if (res.kind === 'gems') HUD.toast(`+${res.amount} gems — already own everything in that tier`, 'good', 3200, 'gem');
         }
       });
     });

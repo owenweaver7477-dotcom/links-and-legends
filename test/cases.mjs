@@ -10,7 +10,7 @@
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CASE_POOL, RARITIES, rollCase, caseItemKey } from '../public/js/shared/cases.js';
+import { CASE_POOL, RARITIES, rollCase, caseItemKey, tierIndex, tierOdds, PITY_TIER, PITY_THRESHOLD } from '../public/js/shared/cases.js';
 
 test('the pool is non-trivial and every item resolves to a real rarity', () => {
   assert.ok(CASE_POOL.length >= 15, `only ${CASE_POOL.length} items in the case pool`);
@@ -76,4 +76,49 @@ test('the roll is server-controlled, not client-visible — an injected rand sti
   const owned = new Set([caseItemKey(CASE_POOL[0])]);
   const r = rollCase(owned, () => 0);   // always the first candidate in whichever tier
   if (r.kind === 'item') assert.notEqual(caseItemKey(r.item), caseItemKey(CASE_POOL[0]));
+});
+
+/* ---- the pity counter --------------------------------------------------
+   profiles.js decides WHEN to force it (see rewards.mjs for that seam);
+   this file only has to prove rollCase HONOURS forcePity once asked. */
+test('forcePity always lands at or above the pity tier, even on a roll that would normally miss', () => {
+  const pityIdx = tierIndex(PITY_TIER);
+  for (let i = 0; i < 200; i++) {
+    // rand()=0.999 would land deep in Standard on a normal roll — forcePity
+    // must override that, not just bias it
+    const r = rollCase(new Set(), () => 0.999, true);
+    if (r.kind === 'item') assert.ok(tierIndex(r.rarity) >= pityIdx,
+      `forced pull landed on ${r.rarity}, below the pity tier`);
+    // 'gems' is the only acceptable non-item outcome: it means every item
+    // at or above the pity tier is already owned, not that pity was ignored
+  }
+});
+
+test('forcePity still falls through to gems if everything at or above the pity tier is owned', () => {
+  const owned = new Set(CASE_POOL.filter(i => tierIndex(i.rarity) >= tierIndex(PITY_TIER)).map(caseItemKey));
+  const r = rollCase(owned, Math.random, true);
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, 'gems', 'a forced pity roll with nothing left to give should fall back to gems, not fail');
+});
+
+test('tierIndex orders the ladder standard (rarest-last) through mythic (rarest)', () => {
+  assert.equal(tierIndex('standard'), 0);
+  assert.ok(tierIndex('mythic') > tierIndex('legend'));
+  assert.ok(tierIndex('legend') > tierIndex('pro'));
+  assert.ok(tierIndex('pro') > tierIndex('tour'));
+  assert.equal(tierIndex('not-a-real-tier'), -1);
+});
+
+test('tierOdds covers every rarity once, sums to 100%, and never invents an item that is not in the pool', () => {
+  const odds = tierOdds();
+  assert.equal(odds.length, RARITIES.length);
+  const total = odds.reduce((s, t) => s + t.pct, 0);
+  assert.ok(Math.abs(total - 100) < 0.01, `odds summed to ${total}, expected 100`);
+  const poolCount = odds.reduce((s, t) => s + t.count, 0);
+  assert.equal(poolCount, CASE_POOL.length, 'tierOdds counted a different number of items than CASE_POOL actually has');
+  for (const t of odds) assert.ok(t.count > 0, `${t.id} has no items at all — a tier the UI would advertise but never pay out`);
+});
+
+test('PITY_THRESHOLD is a real, positive number the UI can count down from', () => {
+  assert.ok(Number.isInteger(PITY_THRESHOLD) && PITY_THRESHOLD > 0);
 });

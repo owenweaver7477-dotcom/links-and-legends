@@ -18,7 +18,7 @@ import { handicapIndex, differential, ratingTier } from '../public/js/shared/han
 import { normaliseSkin } from '../public/js/shared/clubskins.js';
 import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js';
 import { planClaim } from '../public/js/shared/loginrewards.js';
-import { rollCase, caseItemKey } from '../public/js/shared/cases.js';
+import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD } from '../public/js/shared/cases.js';
 import { unlocksAt } from '../public/js/shared/unlocks.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
@@ -326,6 +326,7 @@ export function publicProfile(pid) {
     rounds: p.rounds, best: p.best, coins: p.coins, rating: Math.round(p.rating),
     xp: p.xp || 0, ...levelFromXp(p.xp || 0),
     gems: p.gems || 0, cases: p.cases || 0, caseUnlocks: p.caseUnlocks || [],
+    casesSincePity: p.casesSincePity || 0,
     login: p.login || { day: 0, cycle: 1, freezes: 0, lastClaimDate: null },
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
@@ -947,7 +948,20 @@ export function openCase(pid) {
   const level = levelFromXp(p.xp || 0).level;
   const owned = new Set(unlocksAt(level).map(u => u.kind + ':' + u.id));
   for (const id of (p.caseUnlocks || [])) owned.add(id);
-  const result = rollCase(owned);
+
+  /* The pity counter. `sincePity` opens have gone by without a Pro-or-
+     better pull, so this one is forced to start there — see cases.js's own
+     comment on why Pro rather than Legend/Mythic. A forced roll can still
+     fall through to gems if the player already owns every Pro-and-up item
+     (a maxed collector forcing it again next time would just repeat the
+     same gems payout), so the counter resets whenever pity was HONOURED
+     this open, not only when it happens to land on an item. */
+  const sincePity = p.casesSincePity || 0;
+  const forcePity = sincePity >= PITY_THRESHOLD - 1;
+  const result = rollCase(owned, Math.random, forcePity);
+  const metPityNaturally = result.kind === 'item' && tierIndex(result.rarity) >= tierIndex(PITY_TIER);
+  p.casesSincePity = (forcePity || metPityNaturally) ? 0 : sincePity + 1;
+
   p.cases -= 1;
   if (result.kind === 'item') {
     p.caseUnlocks = [...(p.caseUnlocks || []), caseItemKey(result.item)];
@@ -955,7 +969,7 @@ export function openCase(pid) {
     p.gems = (p.gems || 0) + result.amount;
   }
   saveSoon();
-  return { ok: true, ...result, casesLeft: p.cases };
+  return { ok: true, ...result, casesLeft: p.cases, casesSincePity: p.casesSincePity };
 }
 
 /* Gems buy an extra case directly — the one thing gems can be spent on

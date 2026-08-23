@@ -42,6 +42,11 @@ const RARITY_BOUNDS = [
 export const RARITIES = RARITY_BOUNDS.map(({ id, name, color }) => ({ id, name, color }));
 const rarityFor = at => RARITY_BOUNDS.find(r => at <= r.max) || RARITY_BOUNDS[RARITY_BOUNDS.length - 1];
 
+/** Where a tier sits on the ladder, standard=0 through mythic=4 — for
+ *  comparing two rarities ("did this pull meet or beat the pity tier")
+ *  without either side reaching into RARITY_BOUNDS directly. */
+export const tierIndex = id => RARITY_BOUNDS.findIndex(r => r.id === id);
+
 /** The same level-derived tier, for anything gated by level rather than
  *  drawn from a case — the wardrobe's own items use this so a rare
  *  fabric or a deep-level outfit reads with the same colour language a
@@ -55,6 +60,34 @@ export const CASE_POOL = UNLOCKS
 
 const idOf = u => u.kind + ':' + u.id;
 export const caseItemKey = idOf;
+
+/* The pity counter. A gambling mechanic with no floor is the version that
+   gets a game called predatory; one where "how much worse can this get"
+   has a hard, published answer is the version that does not. Pro is the
+   tier picked rather than Legend or Mythic because THOSE staying rare is
+   the whole reason a pull feels earned — the floor exists so a long run of
+   Standard duplicates-of-luck cannot happen, not so the top tiers stop
+   being special. */
+export const PITY_TIER = 'pro';
+export const PITY_THRESHOLD = 20;
+
+/** The odds a player is shown before they open anything — every tier's
+ *  real share of the roll (not rounded away to nothing for Mythic), which
+ *  kinds of item can come from it, and how many items are actually in that
+ *  slice of the pool right now. Static: nothing here reads player state,
+ *  so a case's contents preview is the same for everyone. */
+export function tierOdds() {
+  const totalWeight = RARITY_BOUNDS.reduce((s, r) => s + r.weight, 0);
+  return RARITY_BOUNDS.map(r => {
+    const items = CASE_POOL.filter(it => it.rarity === r.id);
+    return {
+      id: r.id, name: r.name, color: r.color,
+      pct: (r.weight / totalWeight) * 100,
+      kinds: [...new Set(items.map(it => it.kind))],
+      count: items.length
+    };
+  });
+}
 
 /**
  * Roll one case. `owned` is a Set of "kind:id" strings — everything this
@@ -71,17 +104,23 @@ export const caseItemKey = idOf;
  * @param {Set<string>} owned
  * @param {() => number} rand  0..1 generator — Math.random by default, or
  *   injected for a test to make deterministic
+ * @param {boolean} forcePity  skip the weighted roll and start at
+ *   PITY_TIER — the caller (profiles.js's openCase) decides when the
+ *   counter has run out, this just knows how to honour it.
  * @returns {{ ok: true, kind: 'item', item: object, rarity: string } |
  *           { ok: true, kind: 'gems', amount: number }}
  */
-export function rollCase(owned, rand = Math.random) {
-  const totalWeight = RARITY_BOUNDS.reduce((s, r) => s + r.weight, 0);
-  let roll = rand() * totalWeight;
-  let startIdx = 0;
-  for (let i = 0; i < RARITY_BOUNDS.length; i++) {
-    if (roll < RARITY_BOUNDS[i].weight) { startIdx = i; break; }
-    roll -= RARITY_BOUNDS[i].weight;
-    startIdx = i + 1;
+export function rollCase(owned, rand = Math.random, forcePity = false) {
+  let startIdx = tierIndex(PITY_TIER);
+  if (!forcePity) {
+    const totalWeight = RARITY_BOUNDS.reduce((s, r) => s + r.weight, 0);
+    let roll = rand() * totalWeight;
+    startIdx = 0;
+    for (let i = 0; i < RARITY_BOUNDS.length; i++) {
+      if (roll < RARITY_BOUNDS[i].weight) { startIdx = i; break; }
+      roll -= RARITY_BOUNDS[i].weight;
+      startIdx = i + 1;
+    }
   }
   // walk upward from the rolled tier through rarer ones until something is
   // actually available — a thin Pro pool should not fail a whole case

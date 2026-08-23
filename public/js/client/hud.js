@@ -16,7 +16,7 @@ import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
-import { RARITIES, CASE_POOL, rarityForLevel } from '../shared/cases.js';
+import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, PITY_THRESHOLD } from '../shared/cases.js';
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
@@ -43,7 +43,8 @@ for (const id of [
   'lpRewardsBtn', 'lpRewardsSub', 'lpRewardsBadge',
   'modalRewards', 'btnRewardsClose', 'rwStreakTxt', 'rwFreezes', 'rwGrid', 'btnRewardsClaim', 'rwErr',
   'rwGems', 'rwCases', 'rwCasesS', 'btnRewardsOpenCase', 'btnRewardsBuyCase',
-  'modalCase', 'caseStage', 'caseBox', 'caseHint', 'caseReelWrap', 'caseReelTrack',
+  'modalCase', 'caseStage', 'caseBox', 'caseHint', 'casePity', 'btnCaseContents', 'caseContents',
+  'caseReelWrap', 'caseReelTrack',
   'caseReveal', 'caseBurst', 'caseItemArt',
   'caseRarity', 'caseItemName', 'caseItemKind', 'btnCaseDone',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
@@ -1360,15 +1361,54 @@ HUD.renderDailyLogin = (profile) => {
 /* --------------------------------------------------------- case opening */
 const CASE_KIND_ICON = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ball' };
 
-/** Back to "tap to open", for the moment the modal is shown. */
-HUD.resetCaseModal = () => {
+/** Back to "tap to open", for the moment the modal is shown.
+ *  `sincePity` is the profile's own casesSincePity — shown as a countdown
+ *  to the guaranteed Pro-or-better pull, published rather than hidden, so
+ *  a long run of Standard pulls reads as "N left" instead of "is this
+ *  rigged". */
+HUD.resetCaseModal = (sincePity = 0) => {
   el.caseStage.hidden = false;
   el.caseReelWrap.hidden = true;
   el.caseReveal.hidden = true;
   el.btnCaseDone.hidden = true;
   el.caseBox.className = 'case-box';
   el.caseHint.textContent = 'Tap to open';
+  HUD.renderCasePity(sincePity);
+  HUD.renderCaseContents();
+  if (el.caseContents) {
+    el.caseContents.hidden = true;
+    el.btnCaseContents?.setAttribute('aria-expanded', 'false');
+  }
   el.caseReelWrap.closest('.casecard')?.classList.remove('reeling');
+};
+
+HUD.renderCasePity = sincePity => {
+  if (!el.casePity) return;
+  const left = Math.max(0, PITY_THRESHOLD - (Number(sincePity) || 0));
+  el.casePity.textContent = left <= 0
+    ? 'Guaranteed Pro or better — next open'
+    : `${left} more open${left === 1 ? '' : 's'} until guaranteed Pro or better`;
+};
+
+/* The contents preview — built once, since nothing in it depends on the
+   player: every case draws from the exact same pool at the exact same
+   odds (see cases.js's tierOdds). */
+let caseContentsHTML = null;
+HUD.renderCaseContents = () => {
+  if (!el.caseContents) return;
+  if (!caseContentsHTML) {
+    caseContentsHTML = tierOdds().map(t => {
+      const pct = t.pct < 0.1 ? '<0.1' : t.pct < 1 ? t.pct.toFixed(1) : Math.round(t.pct);
+      const kindIcons = t.kinds.map(k => icon(CASE_KIND_ICON[k] || 'gift', { size: 13 })).join('');
+      return `<div class="case-odds-row" style="--rarity-color:${t.color}">
+        <span class="case-odds-name">${t.name}</span>
+        <span class="case-odds-kinds">${kindIcons}</span>
+        <span class="case-odds-count">${t.count} item${t.count === 1 ? '' : 's'}</span>
+        <span class="case-odds-pct">${pct}%</span>
+      </div>`;
+    }).join('');
+  }
+  el.caseContents.innerHTML = caseContentsHTML;
 };
 
 HUD.shakeCaseBox = () => { el.caseBox.classList.add('shaking'); };
