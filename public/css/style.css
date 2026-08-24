@@ -1380,6 +1380,12 @@ body:not(.playing) .hintbar { display: none; }
 body.playing .quitbtn { display: block; }
 .quitbtn:hover { background: rgba(64,20,18,.9); color: #ffd0c6; }
 .quitbtn.confirm { color: #fff; background: rgba(150,36,30,.92); border-color: #ff8a72; }
+/* The same arm-then-confirm pattern, on a purchase button — amber, not the
+   quit button's red, since spending currency isn't a destructive action
+   the way leaving a round is. Covers both the Pro Shop's case cards and
+   the daily-rewards panel's buy buttons — same confirm affordance either
+   way currency is about to be spent. */
+.btn.confirm { background: rgba(232,193,90,.92); border-color: #ffd76b; color: #241c0a; }
 @media (max-width: 560px) { .quitbtn { bottom: auto; top: 8px; right: 8px; padding: 6px 10px; font-size: 10.5px; } }
 
 /* your balance while you play — it moves hole by hole, so it is worth showing */

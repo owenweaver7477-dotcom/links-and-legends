@@ -3247,6 +3247,28 @@ function buyCaseOfKind(kind) {
   });
 }
 
+/* Arm on the first tap, fire on the second within 3s, revert if it never
+   comes — the quit-round button's own pattern (see btnQuitRound below),
+   reused here so a mis-click can't spend real currency on either the
+   rewards panel's buy buttons or the Pro Shop's case cards. */
+function armThenConfirm(btn, confirmText, onConfirm) {
+  const restLabel = btn.innerHTML;
+  let armed = 0;
+  btn.addEventListener('click', () => {
+    const now = Date.now();
+    if (now - armed > 3000) {
+      armed = now;
+      btn.classList.add('confirm');
+      btn.textContent = confirmText;
+      setTimeout(() => { btn.classList.remove('confirm'); btn.innerHTML = restLabel; }, 3000);
+      return;
+    }
+    btn.classList.remove('confirm');
+    btn.innerHTML = restLabel;
+    onConfirm();
+  });
+}
+
 /** The clubhouse: career, pro shop and the bag, all outside any room. */
 function renderClubhouse() {
   /* The mode picker. Rendered here with everything else on the screen, so
@@ -4559,8 +4581,8 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       else if (res.reset) HUD.toast('The streak reset — back to day 1.', 'warn', 2600);
     });
   });
-  HUD.el.btnRewardsBuyCase?.addEventListener('click', () => buyCaseOfKind('standard'));
-  HUD.el.btnRewardsBuyProCase?.addEventListener('click', () => buyCaseOfKind('pro'));
+  if (HUD.el.btnRewardsBuyCase) armThenConfirm(HUD.el.btnRewardsBuyCase, 'Tap again to buy', () => buyCaseOfKind('standard'));
+  if (HUD.el.btnRewardsBuyProCase) armThenConfirm(HUD.el.btnRewardsBuyProCase, 'Tap again to buy', () => buyCaseOfKind('pro'));
   HUD.el.btnRewardsOpenCase?.addEventListener('click', () => openCaseFlow('standard'));
   HUD.el.btnRewardsOpenProCase?.addEventListener('click', () => openCaseFlow('pro'));
   HUD.el.btnCaseContents?.addEventListener('click', () => {

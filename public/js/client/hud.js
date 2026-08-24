@@ -1317,7 +1317,31 @@ HUD.renderShop = (prof, onBuy) => {
         : `${icon(c.currency)} ${c.cost} · need ${c.cost - c.have} more`;
       buyBtn.title = canBuy ? '' : c.hint;      // and on hover over the dead button itself
       buyBtn.disabled = !canBuy;
-      if (canBuy) buyBtn.addEventListener('click', () => onBuy(c.buyItem));
+      /* Two taps to spend real currency, same pattern the quit-round button
+         already uses — arm on the first tap, confirm on the second within
+         3s, revert if it doesn't come. A single tap charging immediately
+         is one mis-click away from spending 2,500 coins or 400 gems on
+         nothing. */
+      if (canBuy) {
+        const buyLabel = buyBtn.innerHTML;
+        let armed = 0;
+        buyBtn.addEventListener('click', () => {
+          const now = Date.now();
+          if (now - armed > 3000) {
+            armed = now;
+            buyBtn.classList.add('confirm');
+            buyBtn.textContent = 'Tap again to buy';
+            setTimeout(() => {
+              buyBtn.classList.remove('confirm');
+              buyBtn.innerHTML = buyLabel;
+            }, 3000);
+            return;
+          }
+          buyBtn.classList.remove('confirm');
+          buyBtn.innerHTML = buyLabel;
+          onBuy(c.buyItem);
+        });
+      }
       row.appendChild(buyBtn);
       if (c.owned > 0) {
         const openBtn = document.createElement('button');
