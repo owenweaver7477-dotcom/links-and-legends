@@ -1264,28 +1264,37 @@ HUD.renderShop = (prof, onBuy) => {
       { key: 'standard', name: 'Fairway Supply Crate', rarity: 'Common', rarityClass: 'common',
         owned: prof?.cases || 0, cost: CASE_COIN_COST, currency: 'coin', have: coins,
         blurb: `Every tier in the game, including a ${top.pct.toFixed(1)}% shot at ${top.name}.`,
+        hint: 'Coins come from playing — every hole you finish pays, and the round pays again at the end.',
         buyItem: 'case:buy', openItem: 'case:open' },
       { key: 'pro', name: 'Hole-in-One Case', rarity: 'Legendary', rarityClass: 'legendary',
         owned: prof?.proCases || 0, cost: PRO_CASE_GEM_COST, currency: 'gem', have: gems,
         blurb: `${proTop.name} or better, guaranteed — no roll below the pity floor.`,
+        hint: 'Gems come from the daily rewards streak — days 4, 7, 9, 12 and 14 pay them out, and each full cycle pays more than the last.',
         buyItem: 'case:buyPro', openItem: 'case:openPro' }
     ];
     for (const c of cases) {
       const card = document.createElement('div');
       card.className = 'shopcard shopcard-case shopcard-case-' + c.rarityClass;
-      card.dataset.view = JSON.stringify({ kind: 'case', hex: c.key === 'pro' ? '#3fe0ff' : '#6fce8a', name: c.name, sub: c.blurb });
+      card.dataset.view = JSON.stringify({ kind: 'case', key: c.key, name: c.name, sub: c.hint });
+      const canBuy = c.have >= c.cost;
+      /* The how-to-earn line shows on the card only when they CANNOT
+         afford it — that is the one moment "where do gems come from?" is
+         a live question. Affording it, the same text would just be noise
+         above a button they are about to press. It is on the hover
+         preview's caption either way (dataset.view's `sub`). */
       card.innerHTML = `<span class="sc-art">${icon(c.key === 'pro' ? 'caseLegendary' : 'caseCommon', { size: 40 })}</span>
         <b>${c.name}</b><span class="sc-rarity">${c.rarity}</span>
         <span class="sc-blurb">${escapeHtml(c.blurb)}</span>
+        ${canBuy ? '' : `<span class="sc-earn">${escapeHtml(c.hint)}</span>`}
         <span class="cad-now">${c.owned} in inventory</span>`;
       const row = document.createElement('div');
       row.className = 'shopcard-row';
       const buyBtn = document.createElement('button');
-      const canBuy = c.have >= c.cost;
       buyBtn.className = 'btn' + (canBuy ? ' primary' : '');
       buyBtn.innerHTML = canBuy
         ? 'Buy · ' + icon(c.currency) + ' ' + c.cost
         : `${icon(c.currency)} ${c.cost} · need ${c.cost - c.have} more`;
+      buyBtn.title = canBuy ? '' : c.hint;      // and on hover over the dead button itself
       buyBtn.disabled = !canBuy;
       if (canBuy) buyBtn.addEventListener('click', () => onBuy(c.buyItem));
       row.appendChild(buyBtn);

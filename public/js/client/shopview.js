@@ -383,6 +383,63 @@ function buildCart(hex = '#7fb6dd') {
   return g;
 }
 
+/* -------------------------------------------------------------- cases ---
+   The two case tiers had no model at all — `kind: 'case'` fell through to
+   buildGeneric below, so the preview panel showed a flat green cube for
+   the Common crate and the same cube in another colour for the Legendary
+   one. These are the two objects the shop is actually selling; a cube is
+   not a preview of them.
+
+   Both are built from the same box/rod/blob primitives as the cart and
+   caddie above, at the same 260px-preview level of detail: enough to read
+   as a slatted supply crate and a sealed hard case from across the panel,
+   not a prop anybody inspects up close. */
+function buildCaseCommon() {
+  const g = new THREE.Group();
+  const shell = M('#3fae5a', 0.25), lid = M('#5fce7a', 0.3),
+        band = M('#eef4ea', 0.2), dark = M('#1f6b34'), ballM = M('#fbfbf6', 0.4);
+
+  g.add(box(shell, 0.86, 0.60, 0.70, 0, -0.10, 0));            // body
+  g.add(box(lid, 0.92, 0.16, 0.76, 0, 0.26, 0));               // lid
+  g.add(box(band, 0.88, 0.20, 0.02, 0, -0.08, 0.36));          // cream band across the front
+  g.add(box(dark, 0.10, 0.12, 0.03, 0, 0.14, 0.37));           // latch
+
+  // corner posts, the thing that makes it read as a crate rather than a box
+  for (const x of [-0.40, 0.40]) for (const z of [-0.33, 0.33]) {
+    g.add(box(dark, 0.07, 0.62, 0.07, x, -0.10, z));
+  }
+  // slats down the sides
+  for (const x of [-0.20, 0, 0.20]) g.add(box(dark, 0.02, 0.54, 0.02, x, -0.10, 0.355));
+
+  g.add(blob(ballM, 0.20, 0.20, 0.20, 0.16, 0.42, 0.10));      // a ball resting on the lid
+  return g;
+}
+
+function buildCaseLegendary() {
+  const g = new THREE.Group();
+  const shell = M('#14161c', 0.5), edge = M('#3fe0ff', 0.9),
+        gold = M('#ffd76b', 0.95), moon = M('#c98f4a', 0.4);
+
+  g.add(box(shell, 0.82, 0.82, 0.72, 0, 0, 0));                // the sealed cube
+
+  // cyan edge strips — the accent that makes it read as the premium tier
+  for (const y of [-0.42, 0.42]) for (const z of [-0.37, 0.37]) {
+    g.add(box(edge, 0.84, 0.035, 0.035, 0, y, z));
+  }
+  for (const x of [-0.42, 0.42]) for (const z of [-0.37, 0.37]) {
+    g.add(box(edge, 0.035, 0.84, 0.035, x, 0, z));
+  }
+
+  // the planet: a gold orb with a tilted cyan ring, straight off the front face
+  g.add(blob(gold, 0.34, 0.34, 0.34, 0, 0, 0.40));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 8, 32), edge);
+  ring.position.set(0, 0, 0.40);
+  ring.rotation.set(Math.PI / 2.4, 0, -0.35);
+  g.add(ring);
+  g.add(blob(moon, 0.09, 0.09, 0.09, 0.30, -0.20, 0.42));      // its little moon
+  return g;
+}
+
 /** A generic crate, for anything with no model of its own. */
 function buildGeneric(hex = '#6fce8a') {
   const g = new THREE.Group();
@@ -393,7 +450,8 @@ function buildGeneric(hex = '#6fce8a') {
 
 /**
  * Show one item.
- * @param what { kind: 'club'|'decal'|'ball'|'item', key, tier, hex, name, sub }
+ * @param what { kind: 'club'|'decal'|'ball'|'caddie'|'cart'|'case'|'item',
+ *               key, tier, hex, name, sub }
  */
 export function showItem(canvas, what) {
   if (!canvas) return;
@@ -420,6 +478,7 @@ export function showItem(canvas, what) {
   else if (what?.kind === 'ball') obj = buildBall(what.hex);
   else if (what?.kind === 'caddie') obj = buildCaddie(what.hex);
   else if (what?.kind === 'cart') obj = buildCart(what.hex);
+  else if (what?.kind === 'case') obj = what.key === 'pro' ? buildCaseLegendary() : buildCaseCommon();
   else obj = buildGeneric(what?.hex);
   r.stage.add(obj);
 
