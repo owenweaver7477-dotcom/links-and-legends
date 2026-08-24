@@ -76,15 +76,16 @@ export const PITY_THRESHOLD = 20;
    economy.js and crew.js's tables are shared rather than duplicated.
 
    The standard case (Fairway Supply Crate) moved from a 100-gem price to a
-   500-coin one to match the reference design's entry tier being earnable
-   through ordinary play rather than the premium currency — 500 coins is
-   well under a single level-par round (~7,470, see economy.js), so it's a
-   same-session purchase, not a grind. The top case (Hole-in-One Case)
-   stays at 400 gems: the reference design shows 1200, but login rewards
-   only pay out ~215 gems per 14-day cycle, so a 3x hike there is a real
-   economy call, not a cosmetic one — deliberately left for a dedicated
-   pass rather than guessed at here. */
-export const CASE_COIN_COST = 500;
+   coin one to match the reference design's entry tier being earnable
+   through ordinary play rather than the premium currency. At 2,500 that's
+   a third of a single level-par round (~7,470, see economy.js) — a
+   same-session purchase, not a grind, but a real one rather than an
+   afterthought. The top case (Hole-in-One Case) stays at 400 gems: the
+   reference design shows 1200, but login rewards only pay out ~215 gems
+   per 14-day cycle, so a 3x hike there is a real economy call, not a
+   cosmetic one — deliberately left for a dedicated pass rather than
+   guessed at here. */
+export const CASE_COIN_COST = 2500;
 export const VAULT_GEM_COST = 150;
 export const PRO_CASE_GEM_COST = 400;
 
