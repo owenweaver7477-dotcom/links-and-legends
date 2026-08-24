@@ -1282,7 +1282,8 @@ HUD.renderShop = (prof, onBuy) => {
          a live question. Affording it, the same text would just be noise
          above a button they are about to press. It is on the hover
          preview's caption either way (dataset.view's `sub`). */
-      card.innerHTML = `<span class="sc-art">${icon(c.key === 'pro' ? 'caseLegendary' : 'caseCommon', { size: 40 })}</span>
+      card.innerHTML = `<span class="sc-art">${icon(c.key === 'pro' ? 'caseLegendary' : 'caseCommon', { size: 40 })}
+          ${c.owned > 0 ? `<i class="sc-qty">×${c.owned}</i>` : ''}</span>
         <b>${c.name}</b><span class="sc-rarity">${c.rarity}</span>
         <span class="sc-blurb">${escapeHtml(c.blurb)}</span>
         ${canBuy ? '' : `<span class="sc-earn">${escapeHtml(c.hint)}</span>`}
@@ -1704,21 +1705,33 @@ HUD.shakeCaseBox = () => { el.caseBox.classList.add('shaking'); };
    currentColor set). Gems fill in as a plain gem on the "bonus" green — the
    colour HUD.revealCase already uses for a gems-only result. */
 const GEMS_CHIP_COLOR = '#8fe07a';
-function reelChipHTML(kind, color) {
+/* Every chip carries its own rarity name now — the spin used to be a row
+   of identically-shaped coloured icons blurring past, which is exactly
+   the moment "which is which" matters most and the one moment it wasn't
+   answered. The label sits UNDER the icon, inside the same chip, so it
+   scrolls with it rather than needing its own positioning. */
+function reelChipHTML(kind, color, label) {
   return `<div class="case-reel-chip" style="--chip-color:${color}">` +
-    `<span style="color:${color}">${icon(kind, { size: 34 })}</span></div>`;
+    `<span style="color:${color}">${icon(kind, { size: 30 })}</span>` +
+    `<b>${escapeHtml(label || '')}</b></div>`;
 }
 function decoyChipHTML(rarityId) {
   const pool = CASE_POOL.filter(it => it.rarity === rarityId);
   const it = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
   const rarity = RARITIES.find(r => r.id === rarityId) || RARITIES[0];
   const kind = it ? (CASE_KIND_ICON[it.kind] || 'gift') : 'gem';
-  return reelChipHTML(kind, it ? (it.color || rarity.color) : rarity.color);
+  return reelChipHTML(kind, it ? (it.color || rarity.color) : rarity.color, rarity.name);
 }
 
 const CHIP_W = 76, CHIP_GAP = 12, CHIP_STEP = CHIP_W + CHIP_GAP;   // must match .case-reel-chip in style.css
 const REEL_LEN = 34;
-const REEL_MS = 4200;
+/* Was 4200 — long enough to see the reel move, not long enough to feel the
+   deceleration build toward a result. 6000 gives the near-miss chips
+   (the two slots before the landing spot, deliberately biased toward the
+   real rarity below) enough time on screen to actually read as a tease
+   rather than a blur, which is the whole mechanism this animation exists
+   to deliver. */
+const REEL_MS = 6000;
 
 /**
  * Spin the reel to `result` (already server-committed — this never decides
@@ -1746,8 +1759,8 @@ HUD.playCaseReel = (result, { onTick, onSettle } = {}) => {
   for (let i = 0; i < REEL_LEN; i++) {
     if (i === targetIdx) {
       chips.push(isItem
-        ? reelChipHTML(CASE_KIND_ICON[result.item.kind] || 'gift', result.item.color || rarity.color)
-        : reelChipHTML('gem', GEMS_CHIP_COLOR));
+        ? reelChipHTML(CASE_KIND_ICON[result.item.kind] || 'gift', result.item.color || rarity.color, rarity.name)
+        : reelChipHTML('gem', GEMS_CHIP_COLOR, 'Gems'));
       continue;
     }
     // the two slots right before the landing spot lean toward the same

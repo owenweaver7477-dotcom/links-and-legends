@@ -396,31 +396,58 @@ function buildCart(hex = '#7fb6dd') {
    not a prop anybody inspects up close. */
 function buildCaseCommon() {
   const g = new THREE.Group();
-  const shell = M('#3fae5a', 0.25), lid = M('#5fce7a', 0.3),
-        band = M('#eef4ea', 0.2), dark = M('#1f6b34'), ballM = M('#fbfbf6', 0.4);
+  const shell = M('#3fae5a', 0.25), inset = M('#2e8a48', 0.15),
+        rim = M('#5fce7a', 0.3), band = M('#eef4ea', 0.2), dark = M('#1f6b34'),
+        ballM = M('#fbfbf6', 0.4), teeM = M('#e8443a', 0.15);
 
-  g.add(box(shell, 0.86, 0.60, 0.70, 0, -0.10, 0));            // body
-  g.add(box(lid, 0.92, 0.16, 0.76, 0, 0.26, 0));               // lid
-  g.add(box(band, 0.88, 0.20, 0.02, 0, -0.08, 0.36));          // cream band across the front
-  g.add(box(dark, 0.10, 0.12, 0.03, 0, 0.14, 0.37));           // latch
+  g.add(box(shell, 0.86, 0.60, 0.70, 0, -0.12, 0));            // body
+  // an inset front panel, not a flat face — the cheapest way to keep a
+  // box from reading as a box is to give it a second plane a few
+  // millimetres back, which is what an actual moulded crate wall has
+  g.add(box(inset, 0.76, 0.50, 0.02, 0, -0.12, 0.345));
+  g.add(box(band, 0.88, 0.18, 0.03, 0, -0.10, 0.36));          // cream band across the front
+  g.add(box(dark, 0.10, 0.12, 0.03, 0, 0.10, 0.365));          // latch
+
+  // an OPEN top — a hollow rim, not a solid lid, so the ball and tee
+  // sitting inside actually read as inside rather than balanced on a lid.
+  // The reference crate shows its own contents through a mesh top; a
+  // sealed box cannot show anything, which was the actual problem.
+  const rimY = 0.20;
+  g.add(box(rim, 0.92, 0.06, 0.06, 0, rimY, 0.35));            // front rail
+  g.add(box(rim, 0.92, 0.06, 0.06, 0, rimY, -0.35));           // back rail
+  g.add(box(rim, 0.06, 0.06, 0.76, -0.43, rimY, 0));           // left rail
+  g.add(box(rim, 0.06, 0.06, 0.76, 0.43, rimY, 0));            // right rail
+  // netting: a light diagonal lattice across the open top, thin enough
+  // to read as mesh rather than a second solid lid
+  for (const t of [-0.28, -0.09, 0.09, 0.28]) {
+    g.add(box(rim, 0.02, 0.015, 0.82, t, rimY, 0));
+    g.add(box(rim, 0.82, 0.015, 0.02, 0, rimY, t * 0.9));
+  }
 
   // corner posts, the thing that makes it read as a crate rather than a box
   for (const x of [-0.40, 0.40]) for (const z of [-0.33, 0.33]) {
-    g.add(box(dark, 0.07, 0.62, 0.07, x, -0.10, z));
+    g.add(box(dark, 0.07, 0.68, 0.07, x, -0.08, z));
   }
-  // slats down the sides
-  for (const x of [-0.20, 0, 0.20]) g.add(box(dark, 0.02, 0.54, 0.02, x, -0.10, 0.355));
+  // slats down the front face
+  for (const x of [-0.20, 0, 0.20]) g.add(box(dark, 0.02, 0.54, 0.02, x, -0.12, 0.355));
 
-  g.add(blob(ballM, 0.20, 0.20, 0.20, 0.16, 0.42, 0.10));      // a ball resting on the lid
+  // contents, visible through the open top: a ball and a tee, resting
+  // inside the crate rather than perched on top of it
+  g.add(blob(ballM, 0.20, 0.20, 0.20, 0.14, 0.06, 0.06));
+  g.add(rod(teeM, 0.008, 0.03, 0.16, -0.14, -0.02, -0.08));
   return g;
 }
 
 function buildCaseLegendary() {
   const g = new THREE.Group();
-  const shell = M('#14161c', 0.5), edge = M('#3fe0ff', 0.9),
+  const shell = M('#14161c', 0.5), inset = M('#1c1f27', 0.6),
+        edge = M('#3fe0ff', 0.9), rivet = M('#2a3542', 0.7),
         gold = M('#ffd76b', 0.95), moon = M('#c98f4a', 0.4);
 
   g.add(box(shell, 0.82, 0.82, 0.72, 0, 0, 0));                // the sealed cube
+  // a recessed front panel — same trick as the crate above, so the face
+  // the planet sits on reads as a panel set INTO the case, not painted on
+  g.add(box(inset, 0.62, 0.62, 0.02, 0, 0, 0.365));
 
   // cyan edge strips — the accent that makes it read as the premium tier
   for (const y of [-0.42, 0.42]) for (const z of [-0.37, 0.37]) {
@@ -429,14 +456,19 @@ function buildCaseLegendary() {
   for (const x of [-0.42, 0.42]) for (const z of [-0.37, 0.37]) {
     g.add(box(edge, 0.035, 0.84, 0.035, x, 0, z));
   }
+  // corner rivets — small raised cubes at each vertex, breaking up the
+  // otherwise dead-flat corners a plain box leaves behind
+  for (const x of [-0.42, 0.42]) for (const y of [-0.42, 0.42]) {
+    g.add(box(rivet, 0.07, 0.07, 0.07, x, y, 0.375));
+  }
 
-  // the planet: a gold orb with a tilted cyan ring, straight off the front face
-  g.add(blob(gold, 0.34, 0.34, 0.34, 0, 0, 0.40));
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.018, 8, 32), edge);
+  // the planet: a gold orb with a tilted cyan ring, set into the recess
+  g.add(blob(gold, 0.32, 0.32, 0.32, 0, 0, 0.40));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.017, 8, 32), edge);
   ring.position.set(0, 0, 0.40);
   ring.rotation.set(Math.PI / 2.4, 0, -0.35);
   g.add(ring);
-  g.add(blob(moon, 0.09, 0.09, 0.09, 0.30, -0.20, 0.42));      // its little moon
+  g.add(blob(moon, 0.085, 0.085, 0.085, 0.29, -0.19, 0.42));   // its little moon
   return g;
 }
 
