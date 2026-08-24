@@ -38,6 +38,22 @@ const ICONS = {
     <rect x="3" y="11" width="18" height="9" rx="2" fill="#8a5a2e" stroke="#5c3a1a" stroke-width="1.1"/>
     <rect x="9.6" y="13" width="4.8" height="4.4" rx="1" fill="#ffd76b" stroke="#5c3a1a" stroke-width=".8"/>
   `,
+  /* Two real shapes for the two case tiers, not a colour filter on the one
+     above — a green-tinted treasure chest reads as a treasure chest with a
+     filter on it, not as a different object. A crate and a glowing cube
+     ARE different objects, so they get their own paths. */
+  caseCommon: `
+    <rect x="2.5" y="6.5" width="19" height="4" rx="1.3" fill="#5fce7a" stroke="#1f6b34" stroke-width="1"/>
+    <rect x="3" y="9.5" width="18" height="11.5" rx="1.3" fill="#3fae5a" stroke="#1f6b34" stroke-width="1"/>
+    <path d="M3 9.5 21 21M21 9.5 3 21" stroke="#eef7ee" stroke-width="1.3" opacity=".55"/>
+    <circle cx="12" cy="6.2" r="2.1" fill="#fbfbf6" stroke="#c3c3ba" stroke-width=".7"/>
+  `,
+  caseLegendary: `
+    <rect x="3" y="3" width="18" height="18" rx="2.2" fill="#14161c" stroke="#3fe0ff" stroke-width="1"/>
+    <path d="M5 5h2M17 5h2M5 19h2M17 19h2" stroke="#3fe0ff" stroke-width="1" stroke-linecap="round" opacity=".85"/>
+    <ellipse cx="12" cy="12.5" rx="7" ry="2" fill="none" stroke="#3fe0ff" stroke-width="1" transform="rotate(-12 12 12.5)"/>
+    <circle cx="12" cy="12" r="3.6" fill="#ffd76b" stroke="#c8922f" stroke-width=".8"/>
+  `,
   /* The next five (gift, decal, trail, title, ball) are the CASE-REVEAL set:
      drawn in currentColor rather than baked-in colours, on purpose. The
      reveal already tints el.caseItemArt to the pulled item's own colour or

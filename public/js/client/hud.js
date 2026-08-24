@@ -1274,7 +1274,7 @@ HUD.renderShop = (prof, onBuy) => {
       const card = document.createElement('div');
       card.className = 'shopcard shopcard-case shopcard-case-' + c.rarityClass;
       card.dataset.view = JSON.stringify({ kind: 'case', hex: c.key === 'pro' ? '#3fe0ff' : '#6fce8a', name: c.name, sub: c.blurb });
-      card.innerHTML = `<span class="sc-art">${icon('case', { size: 40 })}</span>
+      card.innerHTML = `<span class="sc-art">${icon(c.key === 'pro' ? 'caseLegendary' : 'caseCommon', { size: 40 })}</span>
         <b>${c.name}</b><span class="sc-rarity">${c.rarity}</span>
         <span class="sc-blurb">${escapeHtml(c.blurb)}</span>
         <span class="cad-now">${c.owned} in inventory</span>`;
