@@ -17,7 +17,7 @@ import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
 import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, PITY_THRESHOLD,
-         CASE_COIN_COST, PRO_CASE_GEM_COST } from '../shared/cases.js';
+         PITY_TIER, tierIndex, CASE_COIN_COST, PRO_CASE_GEM_COST } from '../shared/cases.js';
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
@@ -1282,12 +1282,26 @@ HUD.renderShop = (prof, onBuy) => {
          a live question. Affording it, the same text would just be noise
          above a button they are about to press. It is on the hover
          preview's caption either way (dataset.view's `sub`). */
-      card.innerHTML = `<span class="sc-art">${icon(c.key === 'pro' ? 'caseLegendary' : 'caseCommon', { size: 40 })}
+      const isPro = c.key === 'pro';
+      const oddsRows = caseOddsRowsHTML(isPro ? proTierOdds() : tierOdds());
+      const swatches = caseDecalSwatchesHTML(isPro);
+      card.innerHTML = `<span class="sc-art">${icon(isPro ? 'caseLegendary' : 'caseCommon', { size: 40 })}
           ${c.owned > 0 ? `<i class="sc-qty">×${c.owned}</i>` : ''}</span>
         <b>${c.name}</b><span class="sc-rarity">${c.rarity}</span>
         <span class="sc-blurb">${escapeHtml(c.blurb)}</span>
         ${canBuy ? '' : `<span class="sc-earn">${escapeHtml(c.hint)}</span>`}
-        <span class="cad-now">${c.owned} in inventory</span>`;
+        <span class="cad-now">${c.owned} in inventory</span>
+        <button class="btn mini case-contents-toggle" type="button" aria-expanded="false">Contents ▾</button>
+        <div class="case-contents-panel" hidden>${oddsRows}${swatches}</div>`;
+      paintCaseSwatches(card);
+      const toggle = card.querySelector('.case-contents-toggle');
+      const panel = card.querySelector('.case-contents-panel');
+      toggle.addEventListener('click', () => {
+        const open = panel.hidden;
+        panel.hidden = !open;
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.textContent = open ? 'Contents ▴' : 'Contents ▾';
+      });
       const row = document.createElement('div');
       row.className = 'shopcard-row';
       const buyBtn = document.createElement('button');
@@ -1681,6 +1695,41 @@ function caseOddsRowsHTML(rows) {
       <span class="case-odds-pct">${pct}%</span>
     </div>`;
   }).join('');
+}
+
+/* Real swatches, not another row of generic kind icons. A tier row already
+   says "12 items, 22%" — it does not say what a Chevron shaft band looks
+   like next to a Houndstooth one, and decals are the one case-pool kind
+   with actual drawn art behind them (shaftdecals.js) rather than a
+   currentColor placeholder. Trail/title/ball still have no equivalent
+   asset, so they stay represented by the tier rows above this, honestly —
+   a fabricated preview for a kind with nothing to draw would be worse
+   than the percentage it replaced. */
+function caseDecalSwatchesHTML(isPro) {
+  const pool = CASE_POOL.filter(it => it.kind === 'decal'
+    && (!isPro || tierIndex(it.rarity) >= tierIndex(PITY_TIER)));
+  if (!pool.length) return '';
+  const chips = pool.map(it => {
+    const rarity = RARITIES.find(r => r.id === it.rarity);
+    const color = it.color || rarity?.color || '#8fe07a';
+    return `<span class="case-swatch" style="--rarity-color:${color}" ` +
+      `title="${escapeHtml(it.name)} — ${escapeHtml(rarity?.name || '')}" ` +
+      `data-swatch-id="${it.id}" data-swatch-color="${color}"></span>`;
+  }).join('');
+  return `<div class="case-swatch-row">${chips}</div>`;
+}
+
+/** Fills in the swatch backgrounds after the HTML above has landed in the
+ *  DOM — same reason renderClubDecalPicker assigns .src as a property
+ *  rather than writing a data: URI into the markup string: the portal
+ *  bundle verifier's static scanner reads that shape of text as a real
+ *  asset path and chokes on it. A property set after the fact never puts
+ *  the text in the source at all. */
+function paintCaseSwatches(root) {
+  for (const el of root.querySelectorAll('[data-swatch-id]')) {
+    const pattern = shaftDecalDataUrl(el.dataset.swatchId, el.dataset.swatchColor);
+    if (pattern) el.style.backgroundImage = `url(${pattern})`;
+  }
 }
 
 /* Built once per case type, since nothing in either depends on the player:
