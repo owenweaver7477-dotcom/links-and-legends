@@ -71,10 +71,20 @@ export const caseItemKey = idOf;
 export const PITY_TIER = 'pro';
 export const PITY_THRESHOLD = 20;
 
-/* Gem prices for both case types — shared so the Pro Shop's cards and the
+/* Prices for both case types — shared so the Pro Shop's cards and the
    server's ruling can never quote different numbers, the same reason
-   economy.js and crew.js's tables are shared rather than duplicated. */
-export const CASE_GEM_COST = 100;
+   economy.js and crew.js's tables are shared rather than duplicated.
+
+   The standard case (Fairway Supply Crate) moved from a 100-gem price to a
+   500-coin one to match the reference design's entry tier being earnable
+   through ordinary play rather than the premium currency — 500 coins is
+   well under a single level-par round (~7,470, see economy.js), so it's a
+   same-session purchase, not a grind. The top case (Hole-in-One Case)
+   stays at 400 gems: the reference design shows 1200, but login rewards
+   only pay out ~215 gems per 14-day cycle, so a 3x hike there is a real
+   economy call, not a cosmetic one — deliberately left for a dedicated
+   pass rather than guessed at here. */
+export const CASE_COIN_COST = 500;
 export const PRO_CASE_GEM_COST = 400;
 
 /** The odds a player is shown before they open anything — every tier's

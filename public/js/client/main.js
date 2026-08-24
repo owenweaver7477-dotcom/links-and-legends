@@ -2960,7 +2960,7 @@ Net.on('profile', prof => {
     pendingDevTestCase = false;                // one shot, never a loop
     Net.debugTestCase(res => {
       if (res?.ok) {
-        HUD.toast(`Dev: ${res.gems} gems for case testing.`, 'good', 2600);
+        HUD.toast(`Dev: ${res.coins} coins, ${res.gems} gems for case testing.`, 'good', 2600);
         HUD.setShopTab('cases');
         HUD.openClubhouse?.();
         try { HUD.bindClubhouse?.(); HUD.showClubhouseTab('shop'); } catch { /* ignore */ }

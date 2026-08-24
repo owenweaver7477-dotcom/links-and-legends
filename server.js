@@ -2225,7 +2225,7 @@ io.on('connection', socket => {
     const pid = sockets.get(socket.id)?.pid || socket.data.pid;
     if (!pid) return reply({ ok: false, error: 'Still connecting.' });
     const res = devGrantTestGems(pid);
-    console.log(`  [dev] testcase: ${pid} -> gems ${res.gems}`);
+    console.log(`  [dev] testcase: ${pid} -> coins ${res.coins}, gems ${res.gems}`);
     socket.emit('profile', publicProfile(pid));
     reply({ ok: true, ...res });
   });

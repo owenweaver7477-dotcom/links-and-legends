@@ -17,7 +17,7 @@ import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
 import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, PITY_THRESHOLD,
-         CASE_GEM_COST, PRO_CASE_GEM_COST } from '../shared/cases.js';
+         CASE_COIN_COST, PRO_CASE_GEM_COST } from '../shared/cases.js';
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
@@ -1247,41 +1247,45 @@ HUD.renderShop = (prof, onBuy) => {
       grid.appendChild(nc);
     }
   } else if (shopTab === 'cases') {
-    /* Cases are the one category paid for in gems, not coins — everything
-       else in this file checks `coins`, so this reads prof.gems directly
-       rather than threading a second balance through every other branch.
-       Buy and Open are separate actions on the same card: buying adds to
-       an inventory count (prof.cases / prof.proCases), opening spends one
-       and runs the exact reel/reveal flow the daily-rewards panel already
-       uses — onBuy carries both, and main.js's dispatcher tells them apart
-       by the item string, the same way it already tells 'club:tier' from
+    /* Two case types, two currencies: the entry tier is coin-priced (an
+       earn-through-play purchase, same balance as clubs/gear), the top
+       tier stays gem-priced (the premium currency). Buy and Open are
+       separate actions on the same card: buying adds to an inventory
+       count (prof.cases / prof.proCases), opening spends one and runs the
+       exact reel/reveal flow the daily-rewards panel already uses —
+       onBuy carries both, and main.js's dispatcher tells them apart by
+       the item string, the same way it already tells 'club:tier' from
        'caddie:ace' apart. */
+    const coins = prof?.coins || 0;
     const gems = prof?.gems || 0;
     const top = tierOdds().at(-1);
     const proTop = proTierOdds()[0];
     const cases = [
-      { key: 'standard', name: 'Case', owned: prof?.cases || 0, cost: CASE_GEM_COST,
+      { key: 'standard', name: 'Fairway Supply Crate', rarity: 'Common', rarityClass: 'common',
+        owned: prof?.cases || 0, cost: CASE_COIN_COST, currency: 'coin', have: coins,
         blurb: `Every tier in the game, including a ${top.pct.toFixed(1)}% shot at ${top.name}.`,
         buyItem: 'case:buy', openItem: 'case:open' },
-      { key: 'pro', name: 'Pro Case', owned: prof?.proCases || 0, cost: PRO_CASE_GEM_COST,
+      { key: 'pro', name: 'Hole-in-One Case', rarity: 'Legendary', rarityClass: 'legendary',
+        owned: prof?.proCases || 0, cost: PRO_CASE_GEM_COST, currency: 'gem', have: gems,
         blurb: `${proTop.name} or better, guaranteed — no roll below the pity floor.`,
         buyItem: 'case:buyPro', openItem: 'case:openPro' }
     ];
     for (const c of cases) {
       const card = document.createElement('div');
-      card.className = 'shopcard';
-      card.dataset.view = JSON.stringify({ kind: 'case', hex: c.key === 'pro' ? '#ffb84d' : '#8a5a2e', name: c.name, sub: c.blurb });
+      card.className = 'shopcard shopcard-case shopcard-case-' + c.rarityClass;
+      card.dataset.view = JSON.stringify({ kind: 'case', hex: c.key === 'pro' ? '#3fe0ff' : '#6fce8a', name: c.name, sub: c.blurb });
       card.innerHTML = `<span class="sc-art">${icon('case', { size: 40 })}</span>
-        <b>${c.name}</b><span class="sc-blurb">${escapeHtml(c.blurb)}</span>
+        <b>${c.name}</b><span class="sc-rarity">${c.rarity}</span>
+        <span class="sc-blurb">${escapeHtml(c.blurb)}</span>
         <span class="cad-now">${c.owned} in inventory</span>`;
       const row = document.createElement('div');
       row.className = 'shopcard-row';
       const buyBtn = document.createElement('button');
-      const canBuy = gems >= c.cost;
+      const canBuy = c.have >= c.cost;
       buyBtn.className = 'btn' + (canBuy ? ' primary' : '');
       buyBtn.innerHTML = canBuy
-        ? 'Buy · ' + icon('gem') + ' ' + c.cost
-        : `${icon('gem')} ${c.cost} · need ${c.cost - gems} more`;
+        ? 'Buy · ' + icon(c.currency) + ' ' + c.cost
+        : `${icon(c.currency)} ${c.cost} · need ${c.cost - c.have} more`;
       buyBtn.disabled = !canBuy;
       if (canBuy) buyBtn.addEventListener('click', () => onBuy(c.buyItem));
       row.appendChild(buyBtn);
@@ -1613,11 +1617,11 @@ HUD.renderDailyLogin = (profile) => {
   el.rwCases.textContent = profile.cases || 0;
   el.rwCasesS.textContent = profile.cases === 1 ? '' : 's';
   el.btnRewardsOpenCase.disabled = !(profile.cases > 0);
-  el.btnRewardsBuyCase.disabled = (profile.gems || 0) < 100;
+  el.btnRewardsBuyCase.disabled = (profile.coins || 0) < CASE_COIN_COST;
   el.rwProCases.textContent = profile.proCases || 0;
   el.rwProCasesS.textContent = profile.proCases === 1 ? '' : 's';
   el.btnRewardsOpenProCase.disabled = !(profile.proCases > 0);
-  el.btnRewardsBuyProCase.disabled = (profile.gems || 0) < 400;
+  el.btnRewardsBuyProCase.disabled = (profile.gems || 0) < PRO_CASE_GEM_COST;
 };
 
 /* --------------------------------------------------------- case opening */

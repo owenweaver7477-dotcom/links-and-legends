@@ -141,18 +141,19 @@ test('the pity counter climbs on an ordinary below-pity open, so it actually acc
   assert.equal(profiles.getProfile(pid).casesSincePity, 1, 'a below-pity open should have incremented the counter');
 });
 
-test('gems buy a case, and refuse to when there are not enough', async () => {
+test('coins buy the standard case, and refuse to when there are not enough', async () => {
+  const { CASE_COIN_COST } = await import('../public/js/shared/cases.js');
   const profiles = await import('../server/profiles.js');
   const pid = 'reward-buy-' + Math.random().toString(36).slice(2);
   const p = profiles.getProfile(pid);
-  p.gems = 5;
+  p.coins = 5;
   const poor = profiles.buyCase(pid);
-  assert.equal(poor.ok, false, 'a case was bought with too few gems');
-  p.gems = 500;
+  assert.equal(poor.ok, false, 'a case was bought with too few coins');
+  p.coins = CASE_COIN_COST;
   const rich = profiles.buyCase(pid);
   assert.equal(rich.ok, true, JSON.stringify(rich));
   assert.equal(profiles.getProfile(pid).cases, 1);
-  assert.ok(profiles.getProfile(pid).gems < 500, 'gems were never actually spent');
+  assert.equal(profiles.getProfile(pid).coins, 0, 'coins were never actually spent');
 });
 
 /* ------------------------------------------------------------ anti-cheat */
@@ -209,7 +210,7 @@ test('opening a Pro case does not touch the regular case\'s pity counter', async
     'a Pro case open changed the regular case\'s pity progress');
 });
 
-test('buying a Pro case costs gems and only gems, same rule as the regular case', async () => {
+test('buying a Pro case costs gems and only gems — the premium currency, unlike the coin-priced regular case', async () => {
   const profiles = await import('../server/profiles.js');
   const pid = 'reward-procase-buy-' + Math.random().toString(36).slice(2);
   const p = profiles.getProfile(pid);

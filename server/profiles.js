@@ -19,7 +19,7 @@ import { normaliseSkin } from '../public/js/shared/clubskins.js';
 import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js';
 import { planClaim } from '../public/js/shared/loginrewards.js';
 import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD,
-         CASE_GEM_COST, PRO_CASE_GEM_COST } from '../public/js/shared/cases.js';
+         CASE_COIN_COST, PRO_CASE_GEM_COST } from '../public/js/shared/cases.js';
 import { unlocksAt } from '../public/js/shared/unlocks.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
@@ -973,16 +973,16 @@ export function openCase(pid) {
   return { ok: true, ...result, casesLeft: p.cases, casesSincePity: p.casesSincePity };
 }
 
-/* Gems buy an extra case directly — the one thing gems can be spent on
-   right now, and the reason the trickle from login rewards is worth
-   saving up rather than sitting there as a number. */
+/* Coins buy the standard case — the earn-through-play tier, priced against
+   a round's coin payout rather than the gem trickle (see cases.js's
+   CASE_COIN_COST comment for why). */
 export function buyCase(pid) {
   const p = getProfile(pid);
-  if ((p.gems || 0) < CASE_GEM_COST) return { ok: false, error: `Not enough gems (need ${CASE_GEM_COST}).` };
-  p.gems -= CASE_GEM_COST;
+  if ((p.coins || 0) < CASE_COIN_COST) return { ok: false, error: `Not enough coins (need ${CASE_COIN_COST}).` };
+  p.coins -= CASE_COIN_COST;
   p.cases = (p.cases || 0) + 1;
   saveSoon();
-  return { ok: true, gems: p.gems, cases: p.cases };
+  return { ok: true, coins: p.coins, cases: p.cases };
 }
 
 /* The Pro Case — a second, separate case type rather than a second tier
@@ -1024,17 +1024,18 @@ export function devSetLevel(pid, level) {
   return { level: now.level, xp: p.xp };
 }
 
-/* DEV-ONLY. Tops gems up to enough for one of each case, so the Pro Shop's
-   buy-then-open flow can be tested end to end without a grind — the real
-   buyCase/buyProCase calls still run afterwards, gems still get spent, this
-   just removes the "earn 400 gems first" step. Never below what the player
-   already has, so it can't be used to zero anyone out. Same DEV gate as
-   devSetLevel, for the same reason. */
+/* DEV-ONLY. Tops coins and gems up to enough for one of each case, so the
+   Pro Shop's buy-then-open flow can be tested end to end without a grind —
+   the real buyCase/buyProCase calls still run afterwards, both currencies
+   still get spent, this just removes the earn-it-first step. Never below
+   what the player already has, so it can't be used to zero anyone out.
+   Same DEV gate as devSetLevel, for the same reason. */
 export function devGrantTestGems(pid) {
   const p = getProfile(pid);
-  p.gems = Math.max(p.gems || 0, CASE_GEM_COST + PRO_CASE_GEM_COST);
+  p.coins = Math.max(p.coins || 0, CASE_COIN_COST);
+  p.gems = Math.max(p.gems || 0, PRO_CASE_GEM_COST);
   saveSoon();
-  return { gems: p.gems };
+  return { coins: p.coins, gems: p.gems };
 }
 
 export function buyProCase(pid) {
