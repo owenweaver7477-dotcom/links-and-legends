@@ -3073,7 +3073,7 @@ Net.on('connect', () => {
 /* The three-bar read in the corner (§0.5) — same Net.net object gatherContext
    sends with a feedback report, just rendered continuously instead of
    snapshotted once. */
-Net.on('netquality', net => HUD.renderNetQuality(net));
+Net.on('netquality', net => { HUD.renderNetQuality(net); HUD.renderNetDiag(net); });
 
 /* GPU renderer string is the one field here that needs actual work to get:
    WEBGL_debug_renderer_info is only sometimes exposed, and reading it
@@ -3760,6 +3760,12 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      anybody types into their own address bar. */
   pendingDevLevel = Number(q.get('levelup')) || 0;
   pendingDevTestCase = q.get('testcase') != null;
+  // ?net=1 — reveals the full connection-diagnostic panel (net.js's
+  // Net.net, in full) behind the three-bar pill everyone already sees.
+  // Not DEV-gated like the cheats above: this reads state, changes
+  // nothing, and diagnosing "it's choppy on the school wifi" is exactly
+  // as useful in production as it is here.
+  if (q.get('net') === '1' && HUD.el.netDiag) HUD.el.netDiag.hidden = false;
   // Returning players are recognised, not interrogated: the same browser
   // key that pins your career also pins your name, so the front door says
   // hello instead of asking who you are.  "Change" brings the field back.

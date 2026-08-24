@@ -253,6 +253,21 @@
   <span class="nb" data-n="1"></span><span class="nb" data-n="2"></span><span class="nb" data-n="3"></span>
 </div>
 
+<!-- ?net=1 — the full numbers behind netPill's three bars, for diagnosing
+     a specific report ("it's choppy on the school wifi") rather than just
+     confirming the pill agrees. Off by default: this is a debugging view,
+     not something a player should ever see unasked. See HUD.renderNetDiag
+     and net.js's recordRtt for where every number comes from. -->
+<div class="netdiag" id="netDiag" hidden>
+  <b>net diag</b>
+  <span data-k="transport">transport —</span>
+  <span data-k="rtt">rtt —</span>
+  <span data-k="jitter">jitter —</span>
+  <span data-k="pctile">p50/p95 —</span>
+  <span data-k="missed">missed pings —</span>
+  <span data-k="disconnects">disconnects —</span>
+</div>
+
 <!-- The account's coins and gems, top-right, everywhere they're not already
      covered by a round's own HUD (coinHud) or the lobby/shop panels that
      already occupy that corner — see .wallethud's body-state rules in

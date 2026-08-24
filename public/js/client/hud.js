@@ -58,7 +58,7 @@ for (const id of [
   'hoTitle', 'hoSub', 'hoTable', 'hoNote', 'btnNext',
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
-  'coinHud', 'coinHudN', 'netPill', 'walletHud', 'walletCoinsN', 'walletGemsN',
+  'coinHud', 'coinHudN', 'netPill', 'netDiag', 'walletHud', 'walletCoinsN', 'walletGemsN',
   'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal', 'gemBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
@@ -1587,6 +1587,23 @@ HUD.renderNetQuality = (net) => {
   }
   pill.dataset.q = q;
   pill.title = detail;
+};
+
+/* ?net=1 only — see main.js's boot() for where this gets turned on. The
+   numbers netPill's three bars are already summarising, in full: what
+   they're actually built from, for diagnosing a specific report rather
+   than just re-confirming the pill agrees with it. */
+HUD.renderNetDiag = (net) => {
+  const box = el.netDiag;
+  if (!box || box.hidden) return;
+  const set = (k, v) => { const s = box.querySelector(`[data-k="${k}"]`); if (s) s.textContent = v; };
+  set('transport', `transport ${net.transport || '—'}`);
+  set('rtt', `rtt ${net.rtt == null ? '—' : net.rtt + 'ms'}`);
+  set('jitter', `jitter ${net.jitter == null ? '—' : '±' + net.jitter + 'ms'}`);
+  set('pctile', `p50/p95 ${net.p50 == null ? '—' : net.p50 + '/' + net.p95 + 'ms'}`);
+  const missPct = net.pingsSent ? Math.round(100 * net.pingsMissed / net.pingsSent) : 0;
+  set('missed', `missed pings ${net.pingsMissed}/${net.pingsSent} (${missPct}%)`);
+  set('disconnects', `disconnects ${net.disconnects}${net.lastDisconnectReason ? ' — ' + net.lastDisconnectReason : ''}`);
 };
 
 /* ---------------------------------------------------- weekly leaders --- */

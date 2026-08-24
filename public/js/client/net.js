@@ -39,7 +39,8 @@ const fire = (evt, d) => Net.h[evt]?.(d);
    down. Cheap and passive, and it turns "the game is laggy" into something
    with a shape: 40ms on websocket is a different bug than 600ms on polling
    after three reconnects. Read via Net.net; HUD listens on 'netquality'. */
-Net.net = { transport: null, rtt: null, disconnects: 0, reconnects: 0, reconnectAttempts: 0, lastDisconnectReason: null };
+Net.net = { transport: null, rtt: null, disconnects: 0, reconnects: 0, reconnectAttempts: 0, lastDisconnectReason: null,
+  rttHistory: [], jitter: null, p50: null, p95: null, pingsSent: 0, pingsMissed: 0 };
 const netFire = () => fire('netquality', Net.net);
 
 /* A fresh engine.io transport is created on every (re)connect, so this is
@@ -58,6 +59,36 @@ function watchTransport() {
    — the number that actually explains "it works but it's choppy" — and it
    rides the same rate-limit bucket as everything else at one call per 6s,
    nowhere near the limit. */
+/* Rolling window for jitter/percentiles — the single latest RTT above
+   answers "is it slow right now", not "is it CONSISTENT", and choppy-but-
+   fast-on-average is a real, different failure mode from steadily slow.
+   Capped short (20 samples = 2 minutes at this ping rate) so a bad patch
+   ages out rather than dragging the average down for the rest of the
+   session. */
+const RTT_WINDOW = 20;
+function pctile(sorted, p) {
+  if (!sorted.length) return null;
+  const idx = Math.min(sorted.length - 1, Math.floor(p * sorted.length));
+  return sorted[idx];
+}
+function recordRtt(ms) {
+  const h = Net.net.rttHistory;
+  h.push(ms);
+  if (h.length > RTT_WINDOW) h.shift();
+  // jitter, RFC 3550-style: the running mean of the absolute change between
+  // consecutive samples — a connection that alternates 40ms/400ms has the
+  // same AVERAGE rtt as one holding steady at 220ms and is a completely
+  // different problem to diagnose, which a bare average can't tell apart.
+  if (h.length >= 2) {
+    const diffs = [];
+    for (let i = 1; i < h.length; i++) diffs.push(Math.abs(h[i] - h[i - 1]));
+    Net.net.jitter = Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length);
+  }
+  const sorted = [...h].sort((a, b) => a - b);
+  Net.net.p50 = pctile(sorted, 0.5);
+  Net.net.p95 = pctile(sorted, 0.95);
+}
+
 let pingTimer = null;
 function startPing() {
   clearInterval(pingTimer);
@@ -65,12 +96,29 @@ function startPing() {
     if (!Net.socket?.connected) return;
     const t0 = Date.now();
     let answered = false;
+    Net.net.pingsSent++;
     Net.socket.emit('net:ping', t0, () => {
       answered = true;
       Net.net.rtt = Date.now() - t0;
+      recordRtt(Net.net.rtt);
       netFire();
     });
-    setTimeout(() => { if (!answered && Net.socket?.connected) { Net.net.rtt = null; netFire(); } }, 4000);
+    /* A missed ping isn't "packet loss" in the way a raw UDP protocol
+       would report it — this rides Socket.IO over WebSocket or polling,
+       both TCP-based, so nothing is actually dropped silently the way a
+       UDP datagram can be. What CAN happen, and what this counts, is the
+       ack never arriving within a generous window: a stalled connection,
+       a dead transport mid-upgrade, a tab thrown into the background and
+       throttled. Reported as what it is (a missed heartbeat rate) rather
+       than borrowing "packet loss" for a number that means something
+       different on this transport. */
+    setTimeout(() => {
+      if (!answered && Net.socket?.connected) {
+        Net.net.pingsMissed++;
+        Net.net.rtt = null;
+        netFire();
+      }
+    }, 4000);
   }, 6000);
 }
 
@@ -154,6 +202,10 @@ Net.connect = async () => {
     Net.net.disconnects++;
     Net.net.lastDisconnectReason = reason;
     Net.net.rtt = null;
+    // stale samples from the connection that just died would misrepresent
+    // whatever comes next as jittery when it's actually a clean reconnect
+    Net.net.rttHistory = [];
+    Net.net.jitter = null; Net.net.p50 = null; Net.net.p95 = null;
     netFire();
     fire('disconnect');
   });
