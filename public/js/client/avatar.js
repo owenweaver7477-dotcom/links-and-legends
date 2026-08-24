@@ -235,6 +235,15 @@ export class Avatar {
     this.armL = limb(this.mats.shirt, aw, H * 0.30, 0.262, H * 0.775, this.mats.skin, H * 0.06);
     this.armR = limb(this.mats.shirt, aw, H * 0.30, -0.262, H * 0.775, this.mats.skin, H * 0.06);
     this.elbowL = this.armL.joint; this.elbowR = this.armR.joint;
+    /* The hand block at the end of each arm — built by the same limb()
+       helper the legs use, which is why it exists at all, but left
+       unrotated until now: the club is parented straight to armR (see
+       limb()'s own comment on why), so spinning this pivot was never
+       going to move it. It DOES move the hand itself, which the swing
+       below now drives in lockstep with the club's own wrist-hinge
+       rotation — both hands are on the same grip in a real swing, so
+       they hinge together, not independently. */
+    this.wristL = this.armL.end; this.wristR = this.armR.end;
     // legs are free to change: nothing is mounted to them
     const lw = 0.145 * B.limb, lx = 0.105 * B.hipSpread, ll = H * 0.42 * B.legLen;
     this.legL = limb(this.mats.trousers, lw, ll, lx, H * 0.47, this.mats.shoe, H * 0.05);
@@ -941,9 +950,13 @@ export class Avatar {
       // wrists: hinge going back, release through, rehinge over the shoulder
       this.club.rotation.x = 0.25 - 1.15 * b + wristLag
         + (f > 0.55 ? (f - 0.55) * 1.6 : f * 0.5);
+      // the hands themselves, hinging with the club rather than staying
+      // rigid on the forearm while it does all the work
+      this.wristL.rotation.x = this.wristR.rotation.x = this.club.rotation.x;
       if (g.yawLock != null) this._yaw = g.yawLock;
     } else {
       this.club.rotation.x = 0.25;
+      this.wristL.rotation.x = this.wristR.rotation.x = 0.25;
     }
 
     if (this.cel) {

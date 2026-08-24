@@ -288,3 +288,51 @@ test('buying a Vault case costs gems, at its own price — not the Pro Case\'s',
   assert.equal(profiles.getProfile(pid).vaultCases, 1);
   assert.equal(profiles.getProfile(pid).gems, 0, 'gems were not spent for exactly the cost');
 });
+
+/* ------------------------------------------------------- double-spend ---
+   The concern: a double-click, or a client that fires the same socket
+   event twice before the first ack lands, buying (or opening) two cases
+   for the price of one. Node's event loop is single-threaded and neither
+   buyCase/buyVaultCase/buyProCase nor their socket handlers have an
+   `await` anywhere between reading the balance and writing the debit —
+   see profiles.js's own functions — so there is no gap for a second,
+   near-simultaneous request to land IN. Whichever request's handler the
+   event loop picks up first runs to completion, balance and all, before
+   the second one even starts reading it. That's not a defence that could
+   fail under load; it's a property of how the language executes
+   synchronous code. This proves it against the real running server, over
+   real sockets, rather than trusting the reasoning. */
+test('firing two buys at once over the wire never buys two cases for the price of one', async () => {
+  const { CASE_COIN_COST } = await import('../public/js/shared/cases.js');
+  const s = await connect();
+  const pid = 'reward-dblbuy-' + Math.random().toString(36).slice(2);
+  await identify(s, pid, 'Doubler');
+  // exactly enough for ONE crate — funded over the wire via the same
+  // DEV-only hook the ?testcase debug mode uses, not by reaching into the
+  // server's memory from this process (a separate process; see
+  // tools/test-server.mjs)
+  const funded = await ask(s, 'debug:testcase', null);
+  assert.equal(funded?.ok, true, 'debug:testcase is unavailable — is this server running with NODE_ENV=production?');
+  assert.ok(funded.coins >= CASE_COIN_COST);
+
+  const [a, b] = await Promise.all([ask(s, 'case:buy', null), ask(s, 'case:buy', null)]);
+  const oks = [a, b].filter(r => r?.ok).length;
+  assert.equal(oks, 1, `expected exactly one of two simultaneous buys to succeed, got ${oks}. ${JSON.stringify({ a, b })}`);
+  s.disconnect();
+});
+
+test('firing two opens at once over the wire never opens the same single case twice', async () => {
+  const s = await connect();
+  const pid = 'reward-dblopen-' + Math.random().toString(36).slice(2);
+  await identify(s, pid, 'DoubleOpener');
+  const funded = await ask(s, 'debug:testcase', null);
+  assert.equal(funded?.ok, true, 'debug:testcase is unavailable — is this server running with NODE_ENV=production?');
+  const bought = await ask(s, 'case:buy', null);
+  assert.equal(bought?.ok, true, JSON.stringify(bought));
+  assert.equal(bought.cases, 1, 'expected exactly one case in inventory before the double-open attempt');
+
+  const [a, b] = await Promise.all([ask(s, 'case:open', null), ask(s, 'case:open', null)]);
+  const oks = [a, b].filter(r => r?.ok).length;
+  assert.equal(oks, 1, `expected exactly one of two simultaneous opens to succeed, got ${oks}. ${JSON.stringify({ a, b })}`);
+  s.disconnect();
+});
