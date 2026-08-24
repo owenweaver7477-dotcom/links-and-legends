@@ -85,6 +85,7 @@ export const PITY_THRESHOLD = 20;
    economy call, not a cosmetic one — deliberately left for a dedicated
    pass rather than guessed at here. */
 export const CASE_COIN_COST = 500;
+export const VAULT_GEM_COST = 150;
 export const PRO_CASE_GEM_COST = 400;
 
 /** The odds a player is shown before they open anything — every tier's
@@ -105,12 +106,13 @@ export function tierOdds() {
   });
 }
 
-/** The Pro Case's own contents preview — the same tiers a forced-pity roll
- *  can actually land on (PITY_TIER and above), re-weighted so their odds
- *  sum to 100% on their own rather than reading as tiny slices of the full
- *  ladder they no longer share. */
-export function proTierOdds() {
-  const eligible = RARITY_BOUNDS.filter(r => tierIndex(r.id) >= tierIndex(PITY_TIER));
+/** The odds for any forced-floor roll (PITY_TIER and above, or any other
+ *  tier a case wants to guarantee), re-weighted so the eligible tiers sum
+ *  to 100% on their own rather than reading as tiny slices of the full
+ *  ladder they no longer share. Shared by every case type that guarantees
+ *  a floor rather than rolling the whole ladder. */
+function oddsFromFloor(floorId) {
+  const eligible = RARITY_BOUNDS.filter(r => tierIndex(r.id) >= tierIndex(floorId));
   const totalWeight = eligible.reduce((s, r) => s + r.weight, 0);
   return eligible.map(r => {
     const items = CASE_POOL.filter(it => it.rarity === r.id);
@@ -122,6 +124,14 @@ export function proTierOdds() {
     };
   });
 }
+/** The Pro Case's own contents preview — see oddsFromFloor. */
+export function proTierOdds() { return oddsFromFloor(PITY_TIER); }
+/** The Vault's floor is one rung below the Pro Case's: guaranteed Tour or
+ *  better rather than guaranteed Pro or better, so the three cases form an
+ *  actual ladder (natural odds -> Tour+ -> Pro+) instead of two identical
+ *  floors wearing different prices. */
+export const VAULT_TIER = 'tour';
+export function vaultTierOdds() { return oddsFromFloor(VAULT_TIER); }
 
 /**
  * Roll one case. `owned` is a Set of "kind:id" strings — everything this
@@ -138,15 +148,18 @@ export function proTierOdds() {
  * @param {Set<string>} owned
  * @param {() => number} rand  0..1 generator — Math.random by default, or
  *   injected for a test to make deterministic
- * @param {boolean} forcePity  skip the weighted roll and start at
- *   PITY_TIER — the caller (profiles.js's openCase) decides when the
- *   counter has run out, this just knows how to honour it.
+ * @param {boolean|string} forcePity  `false` rolls the whole ladder at its
+ *   natural weights. `true` skips straight to PITY_TIER, same as always —
+ *   the caller (profiles.js's openCase) decides when the counter has run
+ *   out. A tier id (e.g. 'tour') skips straight to THAT tier instead, for
+ *   a case that guarantees a different floor than the Pro Case's (the
+ *   Vault's openVaultCase passes VAULT_TIER here).
  * @returns {{ ok: true, kind: 'item', item: object, rarity: string } |
  *           { ok: true, kind: 'gems', amount: number }}
  */
 export function rollCase(owned, rand = Math.random, forcePity = false) {
-  let startIdx = tierIndex(PITY_TIER);
-  if (!forcePity) {
+  let startIdx;
+  if (forcePity === false) {
     const totalWeight = RARITY_BOUNDS.reduce((s, r) => s + r.weight, 0);
     let roll = rand() * totalWeight;
     startIdx = 0;
@@ -155,6 +168,8 @@ export function rollCase(owned, rand = Math.random, forcePity = false) {
       roll -= RARITY_BOUNDS[i].weight;
       startIdx = i + 1;
     }
+  } else {
+    startIdx = tierIndex(forcePity === true ? PITY_TIER : forcePity);
   }
   // walk upward from the rolled tier through rarer ones until something is
   // actually available — a thin Pro pool should not fail a whole case

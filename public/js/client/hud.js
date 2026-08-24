@@ -16,8 +16,8 @@ import { formChart, scoringChart, dial } from './charts.js';
 import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
-import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, PITY_THRESHOLD,
-         PITY_TIER, tierIndex, CASE_COIN_COST, PRO_CASE_GEM_COST } from '../shared/cases.js';
+import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, vaultTierOdds, PITY_THRESHOLD,
+         PITY_TIER, VAULT_TIER, tierIndex, CASE_COIN_COST, VAULT_GEM_COST, PRO_CASE_GEM_COST } from '../shared/cases.js';
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
@@ -1259,13 +1259,20 @@ HUD.renderShop = (prof, onBuy) => {
     const coins = prof?.coins || 0;
     const gems = prof?.gems || 0;
     const top = tierOdds().at(-1);
+    const vaultTop = vaultTierOdds()[0];
     const proTop = proTierOdds()[0];
+    const CASE_ICON = { standard: 'caseCommon', vault: 'caseVault', pro: 'caseLegendary' };
     const cases = [
       { key: 'standard', name: 'Fairway Supply Crate', rarity: 'Common', rarityClass: 'common',
         owned: prof?.cases || 0, cost: CASE_COIN_COST, currency: 'coin', have: coins,
         blurb: `Every tier in the game, including a ${top.pct.toFixed(1)}% shot at ${top.name}.`,
         hint: 'Coins come from playing — every hole you finish pays, and the round pays again at the end.',
         buyItem: 'case:buy', openItem: 'case:open' },
+      { key: 'vault', name: 'Country Club Vault', rarity: 'Rare', rarityClass: 'rare',
+        owned: prof?.vaultCases || 0, cost: VAULT_GEM_COST, currency: 'gem', have: gems,
+        blurb: `${vaultTop.name} or better, guaranteed — one rung up from the base crate's floor.`,
+        hint: 'Gems come from the daily rewards streak — days 4, 7, 9, 12 and 14 pay them out, and each full cycle pays more than the last.',
+        buyItem: 'case:buyVault', openItem: 'case:openVault' },
       { key: 'pro', name: 'Hole-in-One Case', rarity: 'Legendary', rarityClass: 'legendary',
         owned: prof?.proCases || 0, cost: PRO_CASE_GEM_COST, currency: 'gem', have: gems,
         blurb: `${proTop.name} or better, guaranteed — no roll below the pity floor.`,
@@ -1282,10 +1289,9 @@ HUD.renderShop = (prof, onBuy) => {
          a live question. Affording it, the same text would just be noise
          above a button they are about to press. It is on the hover
          preview's caption either way (dataset.view's `sub`). */
-      const isPro = c.key === 'pro';
-      const oddsRows = caseOddsRowsHTML(isPro ? proTierOdds() : tierOdds());
-      const swatches = caseDecalSwatchesHTML(isPro);
-      card.innerHTML = `<span class="sc-art">${icon(isPro ? 'caseLegendary' : 'caseCommon', { size: 40 })}
+      const oddsRows = caseOddsRowsHTML((CASE_TIERS[c.key] || CASE_TIERS.standard).oddsFn());
+      const swatches = caseDecalSwatchesHTML(c.key);
+      card.innerHTML = `<span class="sc-art">${icon(CASE_ICON[c.key], { size: 40 })}
           ${c.owned > 0 ? `<i class="sc-qty">×${c.owned}</i>` : ''}</span>
         <b>${c.name}</b><span class="sc-rarity">${c.rarity}</span>
         <span class="sc-blurb">${escapeHtml(c.blurb)}</span>
@@ -1656,15 +1662,27 @@ const CASE_KIND_ICON = { decal: 'decal', trail: 'trail', title: 'title', ball: '
  *  to the guaranteed Pro-or-better pull, published rather than hidden, so
  *  a long run of Standard pulls reads as "N left" instead of "is this
  *  rigged". */
-HUD.resetCaseModal = (sincePity = 0, isPro = false) => {
+/* One entry per case type, so the three tiers are three rows in a table
+   rather than three near-identical if/else chains scattered through this
+   file. 'standard' rolls the whole ladder and accrues pity; 'vault' and
+   'pro' each guarantee their own floor and never touch that counter (see
+   profiles.js's openVaultCase/openProCase). */
+const CASE_TIERS = {
+  standard: { pityLabel: null, oddsFn: tierOdds, swatchFloor: null, cssClass: '' },
+  vault: { pityLabel: 'Always Tour or better', oddsFn: vaultTierOdds, swatchFloor: VAULT_TIER, cssClass: 'vault' },
+  pro: { pityLabel: 'Always Pro or better', oddsFn: proTierOdds, swatchFloor: PITY_TIER, cssClass: 'pro' }
+};
+
+HUD.resetCaseModal = (sincePity = 0, kind = 'standard') => {
   el.caseStage.hidden = false;
   el.caseReelWrap.hidden = true;
   el.caseReveal.hidden = true;
   el.btnCaseDone.hidden = true;
-  el.caseBox.className = 'case-box' + (isPro ? ' pro' : '');
+  const cls = CASE_TIERS[kind]?.cssClass;
+  el.caseBox.className = 'case-box' + (cls ? ' ' + cls : '');
   el.caseHint.textContent = 'Tap to open';
-  HUD.renderCasePity(sincePity, isPro);
-  HUD.renderCaseContents(isPro);
+  HUD.renderCasePity(sincePity, kind);
+  HUD.renderCaseContents(kind);
   if (el.caseContents) {
     el.caseContents.hidden = true;
     el.btnCaseContents?.setAttribute('aria-expanded', 'false');
@@ -1672,12 +1690,12 @@ HUD.resetCaseModal = (sincePity = 0, isPro = false) => {
   el.caseReelWrap.closest('.casecard')?.classList.remove('reeling');
 };
 
-/** `isPro` skips the countdown entirely — a Pro Case doesn't accrue pity,
- *  it just always starts there (see profiles.js's openProCase, which reuses
- *  rollCase's forcePity rather than tracking a second counter). */
-HUD.renderCasePity = (sincePity, isPro = false) => {
+/** A guaranteed-floor case (vault/pro) skips the countdown entirely — it
+ *  doesn't accrue pity, it just always starts at its own floor. */
+HUD.renderCasePity = (sincePity, kind = 'standard') => {
   if (!el.casePity) return;
-  if (isPro) { el.casePity.textContent = 'Always Pro or better'; return; }
+  const tier = CASE_TIERS[kind] || CASE_TIERS.standard;
+  if (tier.pityLabel) { el.casePity.textContent = tier.pityLabel; return; }
   const left = Math.max(0, PITY_THRESHOLD - (Number(sincePity) || 0));
   el.casePity.textContent = left <= 0
     ? 'Guaranteed Pro or better — next open'
@@ -1705,9 +1723,10 @@ function caseOddsRowsHTML(rows) {
    asset, so they stay represented by the tier rows above this, honestly —
    a fabricated preview for a kind with nothing to draw would be worse
    than the percentage it replaced. */
-function caseDecalSwatchesHTML(isPro) {
+function caseDecalSwatchesHTML(kind = 'standard') {
+  const floor = CASE_TIERS[kind]?.swatchFloor;
   const pool = CASE_POOL.filter(it => it.kind === 'decal'
-    && (!isPro || tierIndex(it.rarity) >= tierIndex(PITY_TIER)));
+    && (!floor || tierIndex(it.rarity) >= tierIndex(floor)));
   if (!pool.length) return '';
   const chips = pool.map(it => {
     const rarity = RARITIES.find(r => r.id === it.rarity);
@@ -1728,23 +1747,30 @@ function caseDecalSwatchesHTML(isPro) {
 function paintCaseSwatches(root) {
   for (const el of root.querySelectorAll('[data-swatch-id]')) {
     const pattern = shaftDecalDataUrl(el.dataset.swatchId, el.dataset.swatchColor);
-    if (pattern) el.style.backgroundImage = `url(${pattern})`;
+    if (!pattern) continue;
+    // an <img> with its src property set directly, not a CSS background
+    // built from a wrapping helper function around the data URI — the
+    // portal bundle verifier's static scanner reads that wrapped shape of
+    // text as a real asset reference and chokes trying to resolve it,
+    // regardless of the runtime value. Same fix renderClubDecalPicker
+    // already uses for this exact function, just missed here the first
+    // time.
+    const img = document.createElement('img');
+    img.width = 26; img.height = 26; img.alt = '';
+    img.src = pattern;
+    el.appendChild(img);
   }
 }
 
 /* Built once per case type, since nothing in either depends on the player:
    every case of a given type draws from the exact same pool at the exact
-   same odds (see cases.js's tierOdds/proTierOdds). */
-let caseContentsHTML = null, proCaseContentsHTML = null;
-HUD.renderCaseContents = (isPro = false) => {
+   same odds (see cases.js's tierOdds/vaultTierOdds/proTierOdds). */
+const caseContentsCache = {};
+HUD.renderCaseContents = (kind = 'standard') => {
   if (!el.caseContents) return;
-  if (isPro) {
-    if (!proCaseContentsHTML) proCaseContentsHTML = caseOddsRowsHTML(proTierOdds());
-    el.caseContents.innerHTML = proCaseContentsHTML;
-    return;
-  }
-  if (!caseContentsHTML) caseContentsHTML = caseOddsRowsHTML(tierOdds());
-  el.caseContents.innerHTML = caseContentsHTML;
+  const tier = CASE_TIERS[kind] || CASE_TIERS.standard;
+  if (!caseContentsCache[kind]) caseContentsCache[kind] = caseOddsRowsHTML(tier.oddsFn());
+  el.caseContents.innerHTML = caseContentsCache[kind];
 };
 
 HUD.shakeCaseBox = () => { el.caseBox.classList.add('shaking'); };

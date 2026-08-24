@@ -3225,18 +3225,25 @@ const loadLook = () => {
 /* Which case type the modal is currently open on — set by whichever "Open"
    button was pressed (the Pro Shop's Cases tab or the daily-rewards panel,
    which both lead here), read by the case box's own click handler so there
-   is one open flow, not two near-duplicates. */
-let caseModalIsPro = false;
-function openCaseFlow(isPro) {
-  caseModalIsPro = isPro;
+   is one open flow, not two near-duplicates. 'standard' is the only kind
+   that accrues real pity; 'vault' and 'pro' each guarantee their own floor
+   from the moment you own one. */
+const CASE_NET = {
+  standard: { open: () => Net.openCase, buy: () => Net.buyCase, label: 'Case' },
+  vault: { open: () => Net.openVaultCase, buy: () => Net.buyVaultCase, label: 'Vault case' },
+  pro: { open: () => Net.openProCase, buy: () => Net.buyProCase, label: 'Pro case' }
+};
+let caseModalKind = 'standard';
+function openCaseFlow(kind) {
+  caseModalKind = kind;
   HUD.el.modalRewards.hidden = true;
-  HUD.resetCaseModal(isPro ? 0 : (G.profile?.casesSincePity ?? 0), isPro);
+  HUD.resetCaseModal(kind === 'standard' ? (G.profile?.casesSincePity ?? 0) : 0, kind);
   HUD.el.modalCase.hidden = false;
 }
-function buyCaseOfKind(isPro) {
-  (isPro ? Net.buyProCase : Net.buyCase)(res => {
+function buyCaseOfKind(kind) {
+  CASE_NET[kind].buy()(res => {
     if (!res?.ok) { HUD.toast(res?.error || 'Could not buy that.', 'warn', 2200); return; }
-    HUD.toast((isPro ? 'Pro case' : 'Case') + ' bought.', 'good', 1800);
+    HUD.toast(CASE_NET[kind].label + ' bought.', 'good', 1800);
   });
 }
 
@@ -3258,10 +3265,12 @@ function renderClubhouse() {
   HUD.renderBinds();
   Net.ranking(d => HUD.renderWorld(d, G.myPid));
   HUD.renderShop(prof, item => {
-    if (item === 'case:buy') return buyCaseOfKind(false);
-    if (item === 'case:buyPro') return buyCaseOfKind(true);
-    if (item === 'case:open') return openCaseFlow(false);
-    if (item === 'case:openPro') return openCaseFlow(true);
+    if (item === 'case:buy') return buyCaseOfKind('standard');
+    if (item === 'case:buyVault') return buyCaseOfKind('vault');
+    if (item === 'case:buyPro') return buyCaseOfKind('pro');
+    if (item === 'case:open') return openCaseFlow('standard');
+    if (item === 'case:openVault') return openCaseFlow('vault');
+    if (item === 'case:openPro') return openCaseFlow('pro');
     Net.buy(item);
   });
   /* The room player FIRST, then the saved profile, then the default set.
@@ -4544,10 +4553,10 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       else if (res.reset) HUD.toast('The streak reset — back to day 1.', 'warn', 2600);
     });
   });
-  HUD.el.btnRewardsBuyCase?.addEventListener('click', () => buyCaseOfKind(false));
-  HUD.el.btnRewardsBuyProCase?.addEventListener('click', () => buyCaseOfKind(true));
-  HUD.el.btnRewardsOpenCase?.addEventListener('click', () => openCaseFlow(false));
-  HUD.el.btnRewardsOpenProCase?.addEventListener('click', () => openCaseFlow(true));
+  HUD.el.btnRewardsBuyCase?.addEventListener('click', () => buyCaseOfKind('standard'));
+  HUD.el.btnRewardsBuyProCase?.addEventListener('click', () => buyCaseOfKind('pro'));
+  HUD.el.btnRewardsOpenCase?.addEventListener('click', () => openCaseFlow('standard'));
+  HUD.el.btnRewardsOpenProCase?.addEventListener('click', () => openCaseFlow('pro'));
   HUD.el.btnCaseContents?.addEventListener('click', () => {
     const open = HUD.el.caseContents.hidden;
     HUD.el.caseContents.hidden = !open;
@@ -4563,7 +4572,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     Sound.chestOpen?.();
     // the shake plays out before the ack usually even arrives — the
     // network round trip IS the suspense here, not an artificial delay
-    const openFn = caseModalIsPro ? Net.openProCase : Net.openCase;
+    const openFn = CASE_NET[caseModalKind].open();
     openFn(res => {
       caseOpening = false;
       if (!res?.ok) { HUD.toast(res?.error || 'Could not open that.', 'warn', 2000); HUD.el.modalCase.hidden = true; return; }

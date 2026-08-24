@@ -1017,6 +1017,7 @@ h1 em { font-style: normal; color: #7ed492; }
    (caseCommon/caseLegendary), this just colours the rarity label to match. */
 .shopcard-case .sc-rarity { font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
 .shopcard-case-common .sc-rarity { color: #6fce8a; }
+.shopcard-case-rare .sc-rarity { color: #e8a83a; }
 .shopcard-case-legendary .sc-rarity { color: #3fe0ff; }
 /* How to earn the currency you're short of — shown only when you can't
    afford the case, so it reads as an answer rather than a nag. */
@@ -1039,8 +1040,10 @@ h1 em { font-style: normal; color: #7ed492; }
   padding-top: 8px; border-top: 1px solid rgba(255,255,255,.08); }
 .case-swatch-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .case-swatch { width: 26px; height: 26px; border-radius: 6px; flex: 0 0 auto;
-  background-size: cover; border: 1.5px solid var(--rarity-color, #6fce8a);
+  display: block; overflow: hidden; box-sizing: border-box;
+  border: 1.5px solid var(--rarity-color, #6fce8a);
   box-shadow: 0 0 5px color-mix(in srgb, var(--rarity-color, #6fce8a) 55%, transparent); }
+.case-swatch img { display: block; width: 100%; height: 100%; }
 .shopcard.owned { border-color: rgba(111,212,138,.45); border-top-color: var(--rarity-color, rgba(111,212,138,.45));
   box-shadow: 0 0 18px -6px var(--rarity-color, transparent); }
 .shopcard.owned .btn { color: #8fe07a; opacity: 1; }
@@ -3640,6 +3643,7 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
    it as the always-pro-or-better one before a player has even read the
    pity line under it. */
 .case-box.pro { filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)) drop-shadow(0 0 20px rgba(199,125,255,.5)); }
+.case-box.vault { filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)) drop-shadow(0 0 20px rgba(232,168,58,.5)); }
 @keyframes caseShake {
   0%, 100% { transform: rotate(0) scale(1); filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)); }
   15% { transform: rotate(-8deg) scale(1.03); }

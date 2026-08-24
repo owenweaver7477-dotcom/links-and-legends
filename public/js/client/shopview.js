@@ -472,6 +472,45 @@ function buildCaseLegendary() {
   return g;
 }
 
+/* The middle tier, between the crate and the sealed cube: a real wooden
+   chest with a domed lid — the classic silhouette, not a box wearing a
+   different colour. The dome is a cylinder on its side, buried to its
+   centreline in the body so only the curve above the body's top edge is
+   visible; that's the same "hide the geometry you don't want read" trick
+   the crate's open-top rim uses, just in the other direction. */
+function buildCaseVault() {
+  const g = new THREE.Group();
+  const wood = M('#8a5a2e', 0.2), darkWood = M('#5c3a1a', 0.15),
+        gold = M('#ffd76b', 0.9), gem = M('#ff6b9a', 0.95);
+
+  g.add(box(wood, 0.90, 0.52, 0.62, 0, -0.14, 0));             // body
+  const lid = rod(wood, 0.24, 0.24, 0.90, 0, 0.08, 0);
+  lid.rotation.z = Math.PI / 2;                                // a cylinder lying on its side is a dome from the front
+  g.add(lid);
+
+  // gold banding running front-to-back over the dome
+  for (const x of [-0.30, 0, 0.30]) {
+    const band = rod(gold, 0.245, 0.245, 0.05, x, 0.08, 0);
+    band.rotation.z = Math.PI / 2;
+    g.add(band);
+  }
+
+  // corner brackets down each vertical edge of the body
+  for (const x of [-0.43, 0.43]) for (const z of [-0.29, 0.29]) {
+    g.add(box(gold, 0.06, 0.50, 0.06, x, -0.14, z));
+  }
+  g.add(box(darkWood, 0.94, 0.06, 0.66, 0, -0.42, 0));         // base plinth
+
+  // the crest: a cut gem set into the front, standing in for the crown on
+  // the reference art — an octahedron reads as a jewel at this scale in a
+  // way a hand-modelled crown (points, band, arches) would not at 260px
+  const crest = new THREE.Mesh(new THREE.OctahedronGeometry(0.11, 0), gem);
+  crest.position.set(0, -0.10, 0.32);
+  crest.rotation.y = Math.PI / 4;
+  g.add(crest);
+  return g;
+}
+
 /** A generic crate, for anything with no model of its own. */
 function buildGeneric(hex = '#6fce8a') {
   const g = new THREE.Group();
@@ -510,7 +549,9 @@ export function showItem(canvas, what) {
   else if (what?.kind === 'ball') obj = buildBall(what.hex);
   else if (what?.kind === 'caddie') obj = buildCaddie(what.hex);
   else if (what?.kind === 'cart') obj = buildCart(what.hex);
-  else if (what?.kind === 'case') obj = what.key === 'pro' ? buildCaseLegendary() : buildCaseCommon();
+  else if (what?.kind === 'case') {
+    obj = what.key === 'pro' ? buildCaseLegendary() : what.key === 'vault' ? buildCaseVault() : buildCaseCommon();
+  }
   else obj = buildGeneric(what?.hex);
   r.stage.add(obj);
 

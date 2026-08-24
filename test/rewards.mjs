@@ -223,3 +223,68 @@ test('buying a Pro case costs gems and only gems — the premium currency, unlik
   assert.equal(profiles.getProfile(pid).proCases, 1);
   assert.ok(profiles.getProfile(pid).gems < 500, 'gems were not actually spent');
 });
+
+/* -------------------------------------------------------- the Vault Case,
+   the middle rung between the coin-priced crate and the Pro Case's own
+   floor. Same shape of tests as the Pro Case above — it's the same
+   mechanism (rollCase's forcePity, now given a tier id instead of a bare
+   boolean) at a different floor, so it should behave the same way. */
+test('a Vault case can only be opened when one is actually owned', async () => {
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-vault-none-' + Math.random().toString(36).slice(2);
+  const result = profiles.openVaultCase(pid);
+  assert.equal(result.ok, false, 'a Vault case opened out of an empty inventory');
+});
+
+test('opening a Vault case always lands at or above VAULT_TIER', async () => {
+  const { VAULT_TIER, tierIndex } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-vault-open-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.vaultCases = 5;
+  for (let i = 0; i < 5; i++) {
+    const result = profiles.openVaultCase(pid);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    if (result.kind === 'item') {
+      assert.ok(tierIndex(result.rarity) >= tierIndex(VAULT_TIER),
+        `Vault case landed on ${result.rarity}, below its own floor`);
+    }
+  }
+  assert.equal(profiles.getProfile(pid).vaultCases, 0, 'five opens should have consumed all five cases');
+});
+
+test('the Vault\'s floor is genuinely below the Pro Case\'s — a real middle rung, not a relabelled duplicate', async () => {
+  const { VAULT_TIER, PITY_TIER, tierIndex } = await import('../public/js/shared/cases.js');
+  assert.ok(tierIndex(VAULT_TIER) < tierIndex(PITY_TIER),
+    `Vault floor (${VAULT_TIER}) is not below the Pro Case floor (${PITY_TIER})`);
+});
+
+test('opening a Vault case touches neither the regular case\'s pity counter nor Pro case inventory', async () => {
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-vault-pity-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.vaultCases = 1;
+  p.casesSincePity = 7;
+  p.proCases = 3;
+  profiles.openVaultCase(pid);
+  assert.equal(profiles.getProfile(pid).casesSincePity, 7,
+    'a Vault case open changed the regular case\'s pity progress');
+  assert.equal(profiles.getProfile(pid).proCases, 3,
+    'a Vault case open touched the separate Pro case inventory');
+});
+
+test('buying a Vault case costs gems, at its own price — not the Pro Case\'s', async () => {
+  const { VAULT_GEM_COST, PRO_CASE_GEM_COST } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-vault-buy-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  assert.ok(VAULT_GEM_COST < PRO_CASE_GEM_COST, 'the Vault should cost less than the Pro Case, not the same or more');
+  p.gems = VAULT_GEM_COST - 1;
+  const short = profiles.buyVaultCase(pid);
+  assert.equal(short.ok, false, 'a Vault case was bought for fewer gems than it costs');
+  p.gems = VAULT_GEM_COST;
+  const bought = profiles.buyVaultCase(pid);
+  assert.equal(bought.ok, true, JSON.stringify(bought));
+  assert.equal(profiles.getProfile(pid).vaultCases, 1);
+  assert.equal(profiles.getProfile(pid).gems, 0, 'gems were not spent for exactly the cost');
+});

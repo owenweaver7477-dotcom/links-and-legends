@@ -54,6 +54,19 @@ const ICONS = {
     <ellipse cx="12" cy="12.5" rx="7" ry="2" fill="none" stroke="#3fe0ff" stroke-width="1" transform="rotate(-12 12 12.5)"/>
     <circle cx="12" cy="12" r="3.6" fill="#ffd76b" stroke="#c8922f" stroke-width=".8"/>
   `,
+  /* The third tier: a wooden vault between the two above — a treasure
+     chest with gold corner brackets and a crown, not a filter on
+     `case`'s plain lock. */
+  caseVault: `
+    <path d="M3 11q0-6 9-6t9 6" fill="#a9723c" stroke="#5c3a1a" stroke-width="1.1" stroke-linejoin="round"/>
+    <rect x="3" y="11" width="18" height="9" rx="2" fill="#8a5a2e" stroke="#5c3a1a" stroke-width="1.1"/>
+    <rect x="3.3" y="11.3" width="2.2" height="2.2" fill="#ffd76b" opacity=".9"/>
+    <rect x="18.5" y="11.3" width="2.2" height="2.2" fill="#ffd76b" opacity=".9"/>
+    <rect x="3.3" y="17.5" width="2.2" height="2.2" fill="#ffd76b" opacity=".9"/>
+    <rect x="18.5" y="17.5" width="2.2" height="2.2" fill="#ffd76b" opacity=".9"/>
+    <path d="M8.4 15.4 9.6 13 11 14.6 12 13 13 14.6 14.4 13 15.6 15.4Z" fill="#ffd76b" stroke="#5c3a1a" stroke-width=".6" stroke-linejoin="round"/>
+    <rect x="8.4" y="15.2" width="7.2" height="1.4" rx=".4" fill="#ffd76b" stroke="#5c3a1a" stroke-width=".5"/>
+  `,
   /* The next five (gift, decal, trail, title, ball) are the CASE-REVEAL set:
      drawn in currentColor rather than baked-in colours, on purpose. The
      reveal already tints el.caseItemArt to the pulled item's own colour or

@@ -10,7 +10,8 @@
    ========================================================================= */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CASE_POOL, RARITIES, rollCase, caseItemKey, tierIndex, tierOdds, proTierOdds, PITY_TIER, PITY_THRESHOLD } from '../public/js/shared/cases.js';
+import { CASE_POOL, RARITIES, rollCase, caseItemKey, tierIndex, tierOdds, proTierOdds, vaultTierOdds,
+         PITY_TIER, VAULT_TIER, PITY_THRESHOLD } from '../public/js/shared/cases.js';
 
 test('the pool is non-trivial and every item resolves to a real rarity', () => {
   assert.ok(CASE_POOL.length >= 15, `only ${CASE_POOL.length} items in the case pool`);
@@ -101,6 +102,30 @@ test('forcePity still falls through to gems if everything at or above the pity t
   assert.equal(r.kind, 'gems', 'a forced pity roll with nothing left to give should fall back to gems, not fail');
 });
 
+test('forcePity as a tier id forces that exact floor, not the Pro Case\'s PITY_TIER', () => {
+  const floorIdx = tierIndex(VAULT_TIER);
+  assert.ok(floorIdx < tierIndex(PITY_TIER), 'test assumes VAULT_TIER sits below PITY_TIER');
+  for (let i = 0; i < 200; i++) {
+    const r = rollCase(new Set(), () => 0.999, VAULT_TIER);
+    if (r.kind === 'item') assert.ok(tierIndex(r.rarity) >= floorIdx,
+      `floor-forced pull landed on ${r.rarity}, below ${VAULT_TIER}`);
+  }
+});
+
+test('a string floor is not silently treated as truthy-boolean pity — it lands at ITS tier, not PITY_TIER', () => {
+  // if the `forcePity === true` branch mis-widened to `if (forcePity)`,
+  // any truthy string (including VAULT_TIER, which sits below PITY_TIER)
+  // would incorrectly jump all the way to PITY_TIER instead of its own,
+  // lower floor — this proves the two floors are actually distinguishable
+  let sawBelowPityTier = false;
+  for (let i = 0; i < 200; i++) {
+    const r = rollCase(new Set(), Math.random, VAULT_TIER);
+    if (r.kind === 'item' && r.rarity === VAULT_TIER) { sawBelowPityTier = true; break; }
+  }
+  assert.ok(sawBelowPityTier, `200 VAULT_TIER-floored rolls never once landed on ${VAULT_TIER} itself — ` +
+    `looks like it jumped straight to PITY_TIER instead`);
+});
+
 test('tierIndex orders the ladder standard (rarest-last) through mythic (rarest)', () => {
   assert.equal(tierIndex('standard'), 0);
   assert.ok(tierIndex('mythic') > tierIndex('legend'));
@@ -141,4 +166,22 @@ test('every tier at or above PITY_TIER on the full ladder also appears in proTie
   const odds = proTierOdds();
   const ids = new Set(odds.map(t => t.id));
   for (const r of RARITIES) if (tierIndex(r.id) >= tierIndex(PITY_TIER)) assert.ok(ids.has(r.id), `${r.id} missing from the Pro Case table`);
+});
+
+/* ---- the Vault's own odds table — same shape of checks as the Pro Case's,
+   plus one that actually proves it's a DIFFERENT, wider table rather than
+   proTierOdds relabelled: the Vault's floor is lower, so it must cover
+   strictly more tiers than the Pro Case does. */
+test('vaultTierOdds only covers VAULT_TIER and rarer, and sums to 100% on its own', () => {
+  const odds = vaultTierOdds();
+  const full = tierOdds();
+  assert.ok(odds.length < full.length, 'the Vault table should be a strict subset of the full ladder');
+  for (const t of odds) assert.ok(tierIndex(t.id) >= tierIndex(VAULT_TIER), `${t.id} is below the Vault's own floor`);
+  const total = odds.reduce((s, t) => s + t.pct, 0);
+  assert.ok(Math.abs(total - 100) < 0.01, `Vault odds summed to ${total}, expected 100`);
+});
+
+test('the Vault table covers strictly more tiers than the Pro Case table — a real middle rung', () => {
+  assert.ok(vaultTierOdds().length > proTierOdds().length,
+    'the Vault should include at least one tier the Pro Case excludes (its own floor tier)');
 });

@@ -257,6 +257,8 @@ Net.kickPlayer = (targetPid, reason, cb) =>
 Net.claimLogin = cb => ask('login:claim', null, res => cb?.(res));
 Net.openCase = cb => ask('case:open', null, res => cb?.(res));
 Net.buyCase = cb => ask('case:buy', null, res => cb?.(res));
+Net.openVaultCase = cb => ask('case:openVault', null, res => cb?.(res));
+Net.buyVaultCase = cb => ask('case:buyVault', null, res => cb?.(res));
 Net.openProCase = cb => ask('case:openPro', null, res => cb?.(res));
 /** DEV-ONLY: the server refuses this outright in production. */
 Net.debugLevelUp = (level, cb) => ask('debug:levelup', { level }, res => cb?.(res));

@@ -19,7 +19,7 @@ import { normaliseSkin } from '../public/js/shared/clubskins.js';
 import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js';
 import { planClaim } from '../public/js/shared/loginrewards.js';
 import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD,
-         CASE_COIN_COST, PRO_CASE_GEM_COST } from '../public/js/shared/cases.js';
+         CASE_COIN_COST, VAULT_GEM_COST, VAULT_TIER, PRO_CASE_GEM_COST } from '../public/js/shared/cases.js';
 import { unlocksAt } from '../public/js/shared/unlocks.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
@@ -200,7 +200,8 @@ function untouched(p) {
   if (p.crew && Object.values(p.crew).some(v => (v || 0) > 0)) return false;
   // a login streak, a case in the wallet, or gems from either one is a
   // player who came back at least once — every bit as real as a round
-  if ((p.login?.day || 0) > 0 || (p.gems || 0) > 0 || (p.cases || 0) > 0 || (p.caseUnlocks || []).length > 0) return false;
+  if ((p.login?.day || 0) > 0 || (p.gems || 0) > 0 || (p.cases || 0) > 0 ||
+      (p.proCases || 0) > 0 || (p.vaultCases || 0) > 0 || (p.caseUnlocks || []).length > 0) return false;
   return (p.coins || 0) <= STARTING_COINS;      // the welcome purse only
 }
 
@@ -327,7 +328,7 @@ export function publicProfile(pid) {
     rounds: p.rounds, best: p.best, coins: p.coins, rating: Math.round(p.rating),
     xp: p.xp || 0, ...levelFromXp(p.xp || 0),
     gems: p.gems || 0, cases: p.cases || 0, caseUnlocks: p.caseUnlocks || [],
-    casesSincePity: p.casesSincePity || 0, proCases: p.proCases || 0,
+    casesSincePity: p.casesSincePity || 0, proCases: p.proCases || 0, vaultCases: p.vaultCases || 0,
     login: p.login || { day: 0, cycle: 1, freezes: 0, lastClaimDate: null },
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
@@ -1033,9 +1034,43 @@ export function devSetLevel(pid, level) {
 export function devGrantTestGems(pid) {
   const p = getProfile(pid);
   p.coins = Math.max(p.coins || 0, CASE_COIN_COST);
-  p.gems = Math.max(p.gems || 0, PRO_CASE_GEM_COST);
+  // enough for a Vault AND a Pro Case in the same session, not just one —
+  // testing "buy all three tiers" one grant at a time defeats the point
+  p.gems = Math.max(p.gems || 0, VAULT_GEM_COST + PRO_CASE_GEM_COST);
   saveSoon();
   return { coins: p.coins, gems: p.gems };
+}
+
+/* The Vault — the middle rung. Same reuse-not-reinvent approach as the Pro
+   Case: rollCase's forcePity now takes a tier id as well as a boolean (see
+   its own comment), so this is the exact same code path with VAULT_TIER
+   instead of PITY_TIER as the floor. Doesn't touch casesSincePity, same
+   rule the Pro Case follows — it's a separate inventory and a separate
+   guarantee, not a second way to pay down the regular case's counter. */
+export function openVaultCase(pid) {
+  const p = getProfile(pid);
+  if ((p.vaultCases || 0) < 1) return { ok: false, error: 'No Vault cases to open.' };
+  const level = levelFromXp(p.xp || 0).level;
+  const owned = new Set(unlocksAt(level).map(u => u.kind + ':' + u.id));
+  for (const id of (p.caseUnlocks || [])) owned.add(id);
+  const result = rollCase(owned, Math.random, VAULT_TIER);
+  p.vaultCases -= 1;
+  if (result.kind === 'item') {
+    p.caseUnlocks = [...(p.caseUnlocks || []), caseItemKey(result.item)];
+  } else {
+    p.gems = (p.gems || 0) + result.amount;
+  }
+  saveSoon();
+  return { ok: true, ...result, vaultCasesLeft: p.vaultCases };
+}
+
+export function buyVaultCase(pid) {
+  const p = getProfile(pid);
+  if ((p.gems || 0) < VAULT_GEM_COST) return { ok: false, error: `Not enough gems (need ${VAULT_GEM_COST}).` };
+  p.gems -= VAULT_GEM_COST;
+  p.vaultCases = (p.vaultCases || 0) + 1;
+  saveSoon();
+  return { ok: true, gems: p.gems, vaultCases: p.vaultCases };
 }
 
 export function buyProCase(pid) {
