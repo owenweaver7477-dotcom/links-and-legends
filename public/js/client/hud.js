@@ -48,7 +48,7 @@ for (const id of [
   'lpRewardsBtn', 'lpRewardsSub', 'lpRewardsBadge',
   'modalRewards', 'btnRewardsClose', 'rwStreakTxt', 'rwFreezes', 'rwGrid', 'btnRewardsClaim', 'rwErr',
   'rwGems', 'rwCases', 'rwCasesS', 'btnRewardsOpenCase', 'btnRewardsBuyCase',
-  'rwProCases', 'rwProCasesS', 'btnRewardsOpenProCase', 'btnRewardsBuyProCase',
+  'rwProCases', 'rwProCasesS', 'btnRewardsOpenProCase', 'btnRewardsBuyProCase', 'rwCaseArt', 'rwProCaseArt',
   'modalCase', 'caseStage', 'caseOpenCanvas', 'caseHint', 'casePity', 'btnCaseContents', 'caseContents',
   'caseReelWrap', 'caseReelTrack',
   'caseReveal', 'caseBurst', 'caseItemArt',
@@ -1758,7 +1758,7 @@ HUD.renderDailyLogin = (profile) => {
     tile.className = 'rw-tile ' +
       (d === claimableDay ? 'current' : d <= (login.day || 0) ? 'claimed' : 'locked');
     if (reward.cases) tile.classList.add('milestone');
-    const rewardIcon = reward.cases ? icon('case') : reward.gems ? icon('gem') : icon('coin');
+    const rewardIcon = reward.cases ? icon('caseCommon') : reward.gems ? icon('gem') : icon('coin');
     const amt = reward.cases
       ? `${reward.cases}×${reward.gems ? ` +${reward.gems}${icon('gem')}` : ''}`
       : reward.gems ? `+${reward.gems}` : `+${reward.coins}`;
@@ -1769,6 +1769,13 @@ HUD.renderDailyLogin = (profile) => {
   el.btnRewardsClaim.disabled = claimedToday;
   el.btnRewardsClaim.textContent = claimedToday ? 'Come back tomorrow' : `Claim day ${claimableDay}`;
   el.rwGems.textContent = (profile.gems || 0).toLocaleString();
+  // The same two icons everywhere else a case shows up — caseCommon for
+  // the standard tier, caseLegendary for Pro — not a third and fourth
+  // colour scheme invented just for this card. There are only three real
+  // chests in the game (see icons.js/shopview.js); this used to disagree
+  // with both of them.
+  if (el.rwCaseArt && !el.rwCaseArt.firstChild) el.rwCaseArt.innerHTML = icon('caseCommon', { size: 40 });
+  if (el.rwProCaseArt && !el.rwProCaseArt.firstChild) el.rwProCaseArt.innerHTML = icon('caseLegendary', { size: 40 });
   el.rwCases.textContent = profile.cases || 0;
   el.rwCasesS.textContent = profile.cases === 1 ? '' : 's';
   el.btnRewardsOpenCase.disabled = !(profile.cases > 0);

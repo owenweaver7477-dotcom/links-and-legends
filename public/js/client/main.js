@@ -4587,7 +4587,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       const bits = [];
       if (r.coins) bits.push(`${icon('coin')} +${r.coins}`);
       if (r.gems) bits.push(`${icon('gem')} +${r.gems}`);
-      if (r.cases) bits.push(`${icon('case')} +${r.cases}`);
+      if (r.cases) bits.push(`${icon('caseCommon')} +${r.cases}`);
       HUD.toastHTML(`Day ${res.day} claimed — ${bits.join('  ')}`, 'good', 3200);
       if (res.usedFreeze) HUD.toast('A streak freeze covered yesterday.', 'info', 2600);
       else if (res.reset) HUD.toast('The streak reset — back to day 1.', 'warn', 2600);

@@ -32,16 +32,12 @@ const ICONS = {
     <path d="M4 8 12 8 12 22Z" fill="#4a9fce"/>
     <path d="M20 8 12 8 12 22Z" fill="#3f8dbb"/>
   `,
-  // the loot case itself — a small chest, not a shipping box
-  case: `
-    <path d="M3 11q0-6 9-6t9 6" fill="#a9723c" stroke="#5c3a1a" stroke-width="1.1" stroke-linejoin="round"/>
-    <rect x="3" y="11" width="18" height="9" rx="2" fill="#8a5a2e" stroke="#5c3a1a" stroke-width="1.1"/>
-    <rect x="9.6" y="13" width="4.8" height="4.4" rx="1" fill="#ffd76b" stroke="#5c3a1a" stroke-width=".8"/>
-  `,
-  /* Two real shapes for the two case tiers, not a colour filter on the one
-     above — a green-tinted treasure chest reads as a treasure chest with a
-     filter on it, not as a different object. A crate and a glowing cube
-     ARE different objects, so they get their own paths. */
+  /* Exactly three chests in the whole game, one shape each, matching the
+     3D models shopview.js turns on the Cases tab and cracks open on the
+     case-opening page — a green-tinted treasure chest reads as a treasure
+     chest with a filter on it, not as a different object, and there used
+     to be a fourth, undifferentiated "case" icon left over from before
+     the tiers existed, quietly drifted from all three of these. */
   caseCommon: `
     <rect x="2.5" y="6.5" width="19" height="4" rx="1.3" fill="#5fce7a" stroke="#1f6b34" stroke-width="1"/>
     <rect x="3" y="9.5" width="18" height="11.5" rx="1.3" fill="#3fae5a" stroke="#1f6b34" stroke-width="1"/>
