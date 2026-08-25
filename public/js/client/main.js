@@ -3324,7 +3324,7 @@ function renderClubhouse() {
     refreshMenuAvatar();
     showGolferCloseUp();
     Net.setLook(lookDraft);
-    HUD.renderInventory(G.profile, lookDraft, onInventoryPick, onShopBuy, onInventorySell);   // reflect the new equip state immediately
+    HUD.renderInventory(G.profile, lookDraft, onInventoryPick, onShopBuy, onInventorySell, onInventoryList);   // reflect the new equip state immediately
   }
   function onInventorySell(kind, id) {
     Net.sellItem(kind, id, res => {
@@ -3338,7 +3338,39 @@ function renderClubhouse() {
       if (lookKey && lookDraft[lookKey] === id) onInventoryPick(lookKey, null);
     });
   }
-  HUD.renderInventory(prof, lookDraft, onInventoryPick, onShopBuy, onInventorySell);
+  function onInventoryList(kind, id, price) {
+    Net.listItem(kind, id, price, res => {
+      if (!res?.ok) { HUD.toast(res?.error || 'Could not list that.', 'warn', 2200); return; }
+      HUD.toast('Listed for ' + res.listing.price.toLocaleString() + ' gems.', 'good', 1800);
+      // escrowed the instant it lists — same reasoning as a sale, drop an
+      // equipped item back to None rather than pointing at something the
+      // Inventory tab no longer shows as owned
+      const lookKey = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ballFinish' }[kind];
+      if (lookKey && lookDraft[lookKey] === id) onInventoryPick(lookKey, null);
+      else HUD.renderInventory(G.profile, lookDraft, onInventoryPick, onShopBuy, onInventorySell, onInventoryList);
+    });
+  }
+  HUD.renderInventory(prof, lookDraft, onInventoryPick, onShopBuy, onInventorySell, onInventoryList);
+  function onMarketRefresh() {
+    Net.browseMarket(rows => HUD.renderMarket(rows, G.profile?.gems || 0, onMarketBuy));
+    Net.myListings(rows => HUD.renderMyListings(rows, onMarketCancel));
+    if (HUD.el.marketGemBal) HUD.el.marketGemBal.textContent = (G.profile?.gems || 0).toLocaleString() + ' gems';
+  }
+  function onMarketBuy(listingId) {
+    Net.buyListing(listingId, res => {
+      if (!res?.ok) { HUD.toast(res?.error || 'Could not buy that.', 'warn', 2200); onMarketRefresh(); return; }
+      HUD.toast('Bought ' + (res.item?.name || 'item') + ' for ' + res.price.toLocaleString() + ' gems.', 'good', 1800);
+      onMarketRefresh();
+    });
+  }
+  function onMarketCancel(listingId) {
+    Net.cancelListing(listingId, res => {
+      if (!res?.ok) { HUD.toast(res?.error || 'Could not cancel that.', 'warn', 2200); return; }
+      HUD.toast('Listing cancelled.', 'info', 1600);
+      onMarketRefresh();
+    });
+  }
+  HUD.onMarketTab = onMarketRefresh;
   /* The room player FIRST, then the saved profile, then the default set.
      The middle step was missing, and the clubhouse is opened from the front
      page where there is no room — so `me()` was null and the bag screen

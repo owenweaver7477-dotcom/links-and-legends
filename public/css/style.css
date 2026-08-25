@@ -3815,6 +3815,24 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 .inv-card .btn.mini { margin-top: 2px; font-size: 10px; padding: 4px 9px; }
 .inv-btns { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .inv-btns .btn.mini { margin-top: 0; }
+.inv-listrow { display: flex; gap: 4px; width: 100%; }
+.inv-listprice { width: 0; flex: 1 1 auto; min-width: 0; padding: 4px 5px; border-radius: 7px;
+  background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.12); color: #eafbee;
+  font: inherit; font-size: 10px; font-variant-numeric: tabular-nums; }
+.inv-listrow .btn.mini { flex: 0 0 auto; }
+
+/* ═══════════════════════════════════ the Marketplace tab — listings, not
+   live trades. Same card grid the Inventory tab uses (.inv-grid/.inv-card
+   above), so a listing reads as the same kind of card everywhere an item
+   is shown, plus its own small sub-tab strip for Browse / My listings. */
+.mktsub { display: flex; gap: 4px; margin: 0 0 12px; padding: 3px;
+  background: rgba(0,0,0,.22); border-radius: 11px; border: 1px solid rgba(255,255,255,.06);
+  width: fit-content; }
+.mktsubtab { padding: 6px 14px; border: 0; border-radius: 8px; background: transparent;
+  color: #9fb6a4; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  transition: background .14s, color .14s; }
+.mktsubtab:hover { color: #e6f2e8; }
+.mktsubtab.on { background: linear-gradient(180deg, #2f8a4a, #237038); color: #fff; }
 
 /* ═══════════════════════════════════════ §7.1 — daily rewards ═══════════ */
 .rewardscard { width: min(520px, 100%); }

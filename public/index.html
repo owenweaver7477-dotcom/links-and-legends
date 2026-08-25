@@ -724,6 +724,7 @@
       <button class="hktab" data-tab="shop" role="tab">Pro shop</button>
       <button class="hktab" data-tab="bag" role="tab">Your bag</button>
       <button class="hktab" data-tab="inventory" role="tab">Inventory</button>
+      <button class="hktab" data-tab="market" role="tab">Marketplace</button>
     </div>
 
     <!-- NOT hidden in the markup. The script hides the inactive ones once it
@@ -822,6 +823,24 @@
     <div class="section hkpane" data-pane="inventory">
       <h4 class="lbl">Inventory</h4>
       <div id="invSections"></div>
+    </div>
+
+    <!-- MARKETPLACE. Listings, not live trades — a seller lists an item for
+         gems, anyone browsing later buys it (see server/marketplace.js's own
+         header for why). Same card grid the Inventory page uses, so a
+         listing reads as the same kind of card everywhere an item shows up. -->
+    <div class="section hkpane" data-pane="market">
+      <h4 class="lbl">Marketplace <span class="coinbal" id="marketGemBal"></span></h4>
+      <div class="mktsub" id="marketSubTabs" role="tablist">
+        <button class="mktsubtab on" data-msub="browse" role="tab">Browse</button>
+        <button class="mktsubtab" data-msub="mine" role="tab">My listings</button>
+      </div>
+      <div class="mktpane" data-msub="browse">
+        <div id="marketBrowse"></div>
+      </div>
+      <div class="mktpane" data-msub="mine" hidden>
+        <div id="marketMine"></div>
+      </div>
     </div>
   </div>
 </div>

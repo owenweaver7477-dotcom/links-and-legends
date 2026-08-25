@@ -27,6 +27,8 @@ import { loadNames, claimName, checkName, adoptName, nameOf as claimedName,
 import { loadFriends, friendState, friendCode, requestFriend, acceptFriend,
          declineFriend, removeFriend, blockPlayer, unblockPlayer,
          toggleFavourite, friendsOf, areFriends } from './server/friends.js';
+import { loadMarketplace, listItem, cancelListing, buyListing,
+         myListings, allListings } from './server/marketplace.js';
 
 /* Course rating and slope, computed once per course and kept. The geometry
    is a pure function of the seed, so these cannot change while the process
@@ -254,6 +256,7 @@ await loadProfiles();
 await loadRecords();
 await loadFeedback();
 await loadFriends();
+await loadMarketplace();
 await loadNames();
 /* Say it out loud when the board cannot survive a deploy. Without a database
    the records live in a file, and a host with no persistent disk (Render's
@@ -2237,6 +2240,68 @@ io.on('connection', socket => {
     if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
     const result = sellUnlock(pid, String(d?.kind || ''), String(d?.id || ''));
     if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  /* Listings, not live trades — see server/marketplace.js's own header for
+     why. buyListing is the one two-party handler here: it changes the
+     SELLER's gems too, and that player may be connected right now on a
+     completely different socket, so their update has to be pushed the
+     same reverse-lookup way invite:answer already notifies an inviter who
+     isn't the caller. */
+  socket.on('market:browse', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    ack({ ok: true, listings: allListings() });
+  });
+
+  socket.on('market:mine', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return ack({ ok: false, error: 'Still connecting — try again in a second.' });
+    ack({ ok: true, listings: myListings(pid) });
+  });
+
+  socket.on('market:list', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = listItem(pid, String(d?.kind || ''), String(d?.id || ''), d?.price, nameOf(pid));
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('market:cancel', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = cancelListing(pid, d?.listingId);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('market:buy', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const listing = allListings().find(l => l.id === Number(d?.listingId));
+    const sellerPid = listing?.sellerPid;
+    const result = buyListing(pid, d?.listingId);
+    if (result.ok) {
+      socket.emit('profile', publicProfile(pid));
+      // `sockets` only holds players bound to a room — a seller sitting in
+      // the clubhouse (where every listing is browsed and sold from) has
+      // never been bound to it, same gap liveOf's own comment documents.
+      // Scanning every live connection's socket.data.pid instead catches
+      // both cases, room-bound or not.
+      if (sellerPid) {
+        for (const sk of io.sockets.sockets.values()) {
+          if (sk.data?.pid === sellerPid) {
+            sk.emit('profile', publicProfile(sellerPid));
+            sk.emit('toast', { msg: `${nameOf(pid)} bought your ${result.item?.name || 'item'} for ${result.price} gems.`, kind: 'good' });
+          }
+        }
+      }
+    }
     reply(result);
   });
 

@@ -123,6 +123,18 @@ function saveSoon() {
 /** Called by getProfile so saveSoon knows whose row to mark. */
 function marking(pid) { lastTouched = pid; }
 
+/** For a caller (marketplace.js's buyListing) that mutates MORE than one
+ *  profile in a single transaction. `saveSoon`'s own dirty-marking is a
+ *  single slot — the last pid getProfile() was called with — so a
+ *  transaction touching a buyer AND a seller and then calling the plain
+ *  saveSoon() would only ever flag whichever one was fetched last; the
+ *  other party's gems/items would sit correctly mutated in memory but
+ *  never actually reach disk. This marks every pid given explicitly. */
+export function saveProfiles(...pids) {
+  for (const pid of pids) touch(pid);
+  storeSaveSoon(profiles);
+}
+
 export function getProfile(pid) {
   marking(pid);
   let p = profiles.get(pid);

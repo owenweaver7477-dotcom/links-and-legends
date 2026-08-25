@@ -18,7 +18,7 @@ import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
 import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, vaultTierOdds, PITY_THRESHOLD,
          PITY_TIER, VAULT_TIER, tierIndex, CASE_COIN_COST, VAULT_GEM_COST, PRO_CASE_GEM_COST,
-         DIRECT_BUY_GEMS, weeklyItemRotation, weekIndex } from '../shared/cases.js';
+         DIRECT_BUY_GEMS, weeklyItemRotation, weekIndex, priceBounds } from '../shared/cases.js';
 import { ballFinishDataUrl, trailPreviewDataUrl } from './finishpreview.js';
 import { icon } from './icons.js';
 import { purityTier } from '../shared/purity.js';
@@ -66,6 +66,7 @@ for (const id of [
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
   'coinHud', 'coinHudN', 'netPill', 'netDiag', 'walletHud', 'walletCoinsN', 'walletGemsN',
   'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal', 'gemBal', 'invSections',
+  'marketSubTabs', 'marketBrowse', 'marketMine', 'marketGemBal',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -1676,7 +1677,7 @@ HUD.renderLook = (look, onPick, level = 1, caseUnlocks = []) => {
  * celebrations.js's melee cycle) that don't reference these ids at all.
  * Showing a button that would do nothing is worse than not showing one.
  */
-HUD.renderInventory = (prof, look, onPick, onBuy, onSell) => {
+HUD.renderInventory = (prof, look, onPick, onBuy, onSell, onList) => {
   const box = el.invSections;
   if (!box) return;
   const level = prof?.level ?? 1;
@@ -1788,6 +1789,46 @@ HUD.renderInventory = (prof, look, onPick, onBuy, onSell) => {
             onSell(kind, u.id);
           });
           btns.appendChild(sell);
+
+          // Listing an item on the marketplace instead of selling it back —
+          // same eligibility as Sell, since it's the same escrow underneath
+          // (see server/marketplace.js's listItem). Tapping List swaps
+          // itself for a price row seeded at fair value rather than opening
+          // a modal — the whole point of this panel is a grid you can act
+          // on without leaving it.
+          const list = document.createElement('button');
+          list.className = 'btn mini';
+          list.textContent = 'List';
+          list.addEventListener('click', () => {
+            const purity = kind === 'decal' ? (decalPurity[u.id] || 0) : 0;
+            const bounds = priceBounds(kind, u.id, purity);
+            if (!bounds) return;
+            list.remove();
+            const row = document.createElement('div');
+            row.className = 'inv-listrow';
+            const input = document.createElement('input');
+            input.type = 'number'; input.className = 'inv-listprice';
+            input.min = String(bounds.min); input.max = String(bounds.max); input.value = String(bounds.fair);
+            const go = document.createElement('button');
+            go.className = 'btn mini primary';
+            go.textContent = 'List';
+            let armed = 0;
+            go.addEventListener('click', () => {
+              const now = Date.now();
+              if (now - armed > 3000) {
+                armed = now;
+                go.classList.add('confirm'); go.textContent = 'Tap again';
+                setTimeout(() => { go.classList.remove('confirm'); go.textContent = 'List'; }, 3000);
+                return;
+              }
+              const price = Math.round(Number(input.value));
+              onList(kind, u.id, price);
+            });
+            row.appendChild(input);
+            row.appendChild(go);
+            btns.appendChild(row);
+          });
+          btns.appendChild(list);
         }
         card.appendChild(btns);
       } else if (!owned && casePoolItem && rotationKeys.has(kind + ':' + u.id) && gems >= DIRECT_BUY_GEMS[casePoolItem.rarity]) {
@@ -1818,6 +1859,146 @@ HUD.renderInventory = (prof, look, onPick, onBuy, onSell) => {
     section.appendChild(grid);
     box.appendChild(section);
   }
+};
+
+/* ------------------------------------------------------- marketplace --- */
+/** Same preview dispatcher and rarity-scoped art the Items shop tab and
+ *  Inventory page already share (itemPreviewUrl) — a listing has to look
+ *  like the same kind of card everywhere an item is shown, not a fourth
+ *  new visual language for this one screen. */
+function marketCardArt(kind, id, purity) {
+  const art = document.createElement('div');
+  art.className = 'inv-art';
+  const casePoolItem = CASE_POOL.find(it => it.kind === kind && it.id === id);
+  const rarity = casePoolItem ? (RARITIES.find(r => r.id === casePoolItem.rarity) || RARITIES[0]) : null;
+  const preview = casePoolItem ? itemPreviewUrl(casePoolItem, rarity, 40, purity) : null;
+  if (preview) {
+    const img = document.createElement('img');
+    img.width = 40; img.height = 40; img.alt = '';
+    img.src = preview;
+    art.appendChild(img);
+    if (purity) {
+      const tier = purityTier(purity);
+      const badge = document.createElement('b');
+      badge.className = 'decal-purity'; badge.style.setProperty('--pc', tier.color);
+      badge.textContent = purity;
+      art.appendChild(badge);
+    }
+  } else {
+    art.innerHTML = icon(['decal', 'trail', 'title', 'ball'].includes(kind) ? kind : 'gift', { size: 20 });
+  }
+  return { art, item: casePoolItem };
+}
+
+function emptyMarketNote(box, text) {
+  box.innerHTML = '';
+  const p = document.createElement('p');
+  p.className = 'tiny';
+  p.textContent = text;
+  box.appendChild(p);
+}
+
+/** Browse: every active listing, newest first (as the server already
+ *  sorts it), Buy behind the same two-tap confirm every real-currency
+ *  action in this game uses. */
+HUD.renderMarket = (listings, gems, onBuy) => {
+  const box = el.marketBrowse;
+  if (!box) return;
+  if (!listings.length) return emptyMarketNote(box, 'Nothing listed right now — check back soon, or list something of your own from the Inventory tab.');
+  box.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'inv-grid';
+  for (const l of listings) {
+    const { art, item } = marketCardArt(l.kind, l.itemId, l.purity);
+    const card = document.createElement('div');
+    card.className = 'inv-card owned';
+    card.appendChild(art);
+    const name = document.createElement('b');
+    name.textContent = item?.name || l.itemId;
+    card.appendChild(name);
+    const status = document.createElement('span');
+    status.className = 'inv-status';
+    status.textContent = `${l.sellerName} · ${l.price.toLocaleString()} gems`;
+    card.appendChild(status);
+    const btns = document.createElement('div');
+    btns.className = 'inv-btns';
+    const buy = document.createElement('button');
+    buy.className = 'btn mini primary';
+    buy.textContent = 'Buy';
+    buy.disabled = gems < l.price;
+    let armed = 0;
+    buy.addEventListener('click', () => {
+      const now = Date.now();
+      if (now - armed > 3000) {
+        armed = now;
+        buy.classList.add('confirm'); buy.textContent = 'Tap again';
+        setTimeout(() => { buy.classList.remove('confirm'); buy.textContent = 'Buy'; }, 3000);
+        return;
+      }
+      onBuy(l.id);
+    });
+    btns.appendChild(buy);
+    card.appendChild(btns);
+    grid.appendChild(card);
+  }
+  box.appendChild(grid);
+};
+
+/** My listings: what's currently escrowed and waiting for a buyer, with a
+ *  way to take it back. */
+HUD.renderMyListings = (listings, onCancel) => {
+  const box = el.marketMine;
+  if (!box) return;
+  if (!listings.length) return emptyMarketNote(box, 'You don’t have anything listed. List a case-only item from the Inventory tab.');
+  box.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.className = 'inv-grid';
+  for (const l of listings) {
+    const { art, item } = marketCardArt(l.kind, l.itemId, l.purity);
+    const card = document.createElement('div');
+    card.className = 'inv-card owned';
+    card.appendChild(art);
+    const name = document.createElement('b');
+    name.textContent = item?.name || l.itemId;
+    card.appendChild(name);
+    const status = document.createElement('span');
+    status.className = 'inv-status';
+    status.textContent = `${l.price.toLocaleString()} gems`;
+    card.appendChild(status);
+    const btns = document.createElement('div');
+    btns.className = 'inv-btns';
+    const cancel = document.createElement('button');
+    cancel.className = 'btn mini';
+    cancel.textContent = 'Cancel';
+    let armed = 0;
+    cancel.addEventListener('click', () => {
+      const now = Date.now();
+      if (now - armed > 3000) {
+        armed = now;
+        cancel.classList.add('confirm'); cancel.textContent = 'Tap again';
+        setTimeout(() => { cancel.classList.remove('confirm'); cancel.textContent = 'Cancel'; }, 3000);
+        return;
+      }
+      onCancel(l.id);
+    });
+    btns.appendChild(cancel);
+    card.appendChild(btns);
+    grid.appendChild(card);
+  }
+  box.appendChild(grid);
+};
+
+HUD.bindMarketSubTabs = () => {
+  const bar = el.marketSubTabs;
+  if (!bar || bar.dataset.bound) return;
+  bar.dataset.bound = '1';
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('.mktsubtab');
+    if (!b) return;
+    const name = b.dataset.msub;
+    for (const t of bar.querySelectorAll('.mktsubtab')) t.classList.toggle('on', t === b);
+    for (const p of document.querySelectorAll('.mktpane')) p.hidden = p.dataset.msub !== name;
+  });
 };
 
 /** The nudge telling you to go and stand by your ball. */
@@ -2634,6 +2815,7 @@ HUD.showClubhouseTab = (name) => {
   if (name === 'ranks') HUD.onBoards?.(null);
   if (name === 'world') HUD.onWorldTab?.();
   if (name === 'rewards') HUD.bindLevelTrack?.();
+  if (name === 'market') { HUD.bindMarketSubTabs(); HUD.onMarketTab?.(); }
   /* The turntable starts on the first thing in the list rather than empty —
      an empty stage next to a full list reads as broken, not as waiting. */
   if (name === 'shop') {

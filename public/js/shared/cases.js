@@ -98,6 +98,33 @@ export const PRO_CASE_GEM_COST = 400;
    an item back pays half of this (see sellUnlock in server/profiles.js). */
 export const DIRECT_BUY_GEMS = { standard: 400, tour: 900, pro: 2000, legend: 5000, mythic: 12000 };
 
+/* What an item is worth on the marketplace right now — shared rather than
+   living only in server/marketplace.js, because the Inventory page's own
+   listing price control needs the exact same number the server will
+   actually enforce, not a second guess at it that could drift. Only
+   decals carry a real, tracked grade; every other kind keeps the same
+   flat half-price sellUnlock already pays, rather than inventing a purity
+   nobody records for them. */
+export function marketValue(kind, id, purity = 0) {
+  const item = CASE_POOL.find(it => it.kind === kind && it.id === id);
+  if (!item) return null;
+  const base = DIRECT_BUY_GEMS[item.rarity];
+  if (kind !== 'decal') return Math.round(base * 0.5);
+  // Raw (0) bottoms out at 40% of a fresh buy — never worthless, a real
+  // item is still a real item — Flawless (100) is worth what buying it
+  // new costs. The grade is genuinely most of the price in between.
+  return Math.round(base * (0.4 + 0.6 * Math.max(0, Math.min(100, purity)) / 100));
+}
+
+/** A seller can ask a bit above fair value or take a quick sale below it
+ *  — real marketplace behaviour — but not list for 1 gem or price a Raw
+ *  decal like a Flawless one. */
+export function priceBounds(kind, id, purity = 0) {
+  const fair = marketValue(kind, id, purity);
+  if (fair == null) return null;
+  return { min: Math.max(1, Math.round(fair * 0.5)), max: Math.round(fair * 1.5), fair };
+}
+
 /* The Items shop doesn't offer the whole pool at once — a rotating
    selection, refreshed weekly, so it's a real "what's on this week"
    decision rather than a static catalog. `weekIndex` is a plain count of
