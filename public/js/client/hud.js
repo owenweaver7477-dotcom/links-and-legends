@@ -9,7 +9,7 @@ import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
 import { EMOTES, EMOTE_SLOTS } from './celebrations.js';
-import { UNLOCKS, unlocksAt, unlocksOfKind, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
+import { UNLOCKS, unlocksAt, unlocksOfKind, ownedOfKind, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { ACTIONS, keysFor, bindKey, resetBinds, keyLabel, RESERVED } from './binds.js';
 import { clubSvg, caddieSvg, statSvg, finishName } from './clubart.js';
 import { formChart, scoringChart, dial } from './charts.js';
@@ -687,8 +687,8 @@ HUD.renderClubDecalPicker = (look, level, caseUnlocks = []) => {
   const grid = document.getElementById('inspectDecalGrid');
   if (!grid) return;
   const decals = UNLOCKS.filter(u => u.kind === 'decal');
-  const owned = id => (Number(level) || 1) >= 0 &&
-    (decals.find(u => u.id === id)?.at <= (Number(level) || 1) || caseUnlocks.includes('decal:' + id));
+  const ownedIds = new Set(ownedOfKind(level, 'decal', caseUnlocks).map(u => u.id));
+  const owned = id => ownedIds.has(id);
   const cur = look?.decal || null;
   const none = `<button class="none${!cur ? ' on' : ''}" data-decal="" title="No shaft decal">None</button>`;
   const cells = decals.map(u => {
@@ -1456,7 +1456,7 @@ HUD.renderCharacter = (prof, name) => {
  * until now they were data with nowhere to equip them from, which is the
  * same as not existing.
  */
-HUD.renderLook = (look, onPick, level = 1) => {
+HUD.renderLook = (look, onPick, level = 1, caseUnlocks = []) => {
   el.lookPicker.innerHTML = '';
 
   /* Rewards you have NOT earned get one line between them, at the bottom —
@@ -1466,11 +1466,11 @@ HUD.renderLook = (look, onPick, level = 1) => {
      single thing they could actually change. Four rows of no. The ladder
      belongs in the clubhouse, where it is a whole screen and reads as a
      promise; here it should be one sentence and out of the way. */
-  const earnedGroups = EARNED_GROUPS.filter(g => unlocksOfKind(level, g.kind).length);
-  const pending = EARNED_GROUPS.filter(g => !unlocksOfKind(level, g.kind).length);
+  const earnedGroups = EARNED_GROUPS.filter(g => ownedOfKind(level, g.kind, caseUnlocks).length);
+  const pending = EARNED_GROUPS.filter(g => !ownedOfKind(level, g.kind, caseUnlocks).length);
 
   for (const grp of earnedGroups) {
-    const owned = unlocksOfKind(level, grp.kind);
+    const owned = ownedOfKind(level, grp.kind, caseUnlocks);
     const g = document.createElement('div');
     g.className = 'lookgrp style earned';
     const h = document.createElement('h5'); h.textContent = grp.title;

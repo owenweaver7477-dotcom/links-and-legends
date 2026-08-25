@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { holeXp, roundXp, xpForLevel, levelFromXp, maxLevel } from '../public/js/shared/economy.js';
-import { UNLOCKS, unlocksAt, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../public/js/shared/unlocks.js';
+import { UNLOCKS, unlocksAt, unlocksOfKind, ownedOfKind, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../public/js/shared/unlocks.js';
 import { EMOTES, EMOTE_CLIPS, emotesAt, POSE_KEYS, blankPose } from '../public/js/client/celebrations.js';
 import { io } from 'socket.io-client';
 
@@ -349,6 +349,44 @@ test('there is always something to look forward to until the very top', () => {
     }
   }
   assert.equal(nextUnlock(100), null, 'the ceiling must not dangle a carrot');
+});
+
+/* ------------------------------------------------------- case ownership,
+   on the wardrobe screen. The bug this covers: renderLook read only
+   unlocksOfKind (level), never caseUnlocks, so a decal/trail/title/ball
+   won from a case above the player's actual level was really owned
+   (caseUnlocks had it, looksEarnedAt already trusted it) but had no
+   control anywhere that would let a player equip it. It "wasn't
+   equipping or showing up" because there was nothing to click. */
+test('ownedOfKind includes a case-won item even when the player is well below the level it would normally unlock at', () => {
+  const highLevelItem = UNLOCKS.filter(u => u.kind === 'decal').sort((a, b) => b.at - a.at)[0];
+  assert.ok(highLevelItem, 'no decal unlocks to test against');
+  const lowLevel = Math.max(1, highLevelItem.at - 5);
+  assert.equal(unlocksOfKind(lowLevel, 'decal').some(u => u.id === highLevelItem.id), false,
+    'test setup: the level-only ladder should NOT already include this item');
+
+  const withoutCase = ownedOfKind(lowLevel, 'decal', []);
+  assert.equal(withoutCase.some(u => u.id === highLevelItem.id), false,
+    'without a case win, the high-level item should still be locked');
+
+  const withCase = ownedOfKind(lowLevel, 'decal', ['decal:' + highLevelItem.id]);
+  assert.ok(withCase.some(u => u.id === highLevelItem.id),
+    'a case-won item did not appear in ownedOfKind even though caseUnlocks has it');
+});
+
+test('ownedOfKind never lists the same item twice when both the level and a case would grant it', () => {
+  const item = UNLOCKS.find(u => u.kind === 'trail');
+  assert.ok(item, 'no trail unlocks to test against');
+  const owned = ownedOfKind(item.at, 'trail', ['trail:' + item.id]);
+  assert.equal(owned.filter(u => u.id === item.id).length, 1,
+    'an item already owned by level got duplicated when a case also "granted" it');
+});
+
+test('ownedOfKind ignores a caseUnlocks entry of the wrong kind — a decal id cannot smuggle in as a trail', () => {
+  const decal = UNLOCKS.find(u => u.kind === 'decal');
+  const owned = ownedOfKind(1, 'trail', ['decal:' + decal.id]);
+  assert.equal(owned.some(u => u.id === decal.id), false,
+    'a decal-kind case entry granted something in the trail list');
 });
 
 test('levels buy identity, never power', () => {

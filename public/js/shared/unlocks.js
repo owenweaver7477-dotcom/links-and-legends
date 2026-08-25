@@ -91,3 +91,21 @@ export const nextUnlock = level =>
 /** Only the ones of a given kind, for the wardrobe and the shop. */
 export const unlocksOfKind = (level, kind) =>
   unlocksAt(level).filter(u => u.kind === kind);
+
+/** Everything of one kind a player can actually equip: the level-gated
+ *  ladder PLUS whatever a case has handed them early. This used to be
+ *  level-only wherever the wardrobe read it, which meant a decal/trail/
+ *  title/ball won from a case above the player's own level had no way
+ *  onto the equip screen at all — the item really was owned (caseUnlocks
+ *  already had it, and looksEarnedAt already trusted it, see test/
+ *  rewards.mjs), there was just never a control that would let you pick
+ *  it. Same rule renderClubDecalPicker already applied to decals only;
+ *  this is that rule for all four kinds, in the one place both the
+ *  wardrobe and the decal picker can share it from. */
+export const ownedOfKind = (level, kind, caseUnlocks = []) => {
+  const levelOwned = unlocksOfKind(level, kind);
+  const levelIds = new Set(levelOwned.map(u => u.id));
+  const cased = UNLOCKS.filter(u => u.kind === kind && !levelIds.has(u.id)
+    && caseUnlocks.includes(u.kind + ':' + u.id));
+  return [...levelOwned, ...cased];
+};

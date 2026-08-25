@@ -3218,7 +3218,7 @@ function drawLookPicker() {
     refreshMenuAvatar();             // the golfer on the tee changes NOW
     showGolferCloseUp();             // ...and you are close enough to see it
     Net.setLook(lookDraft);   // the wardrobe is outside any room — see line ~611
-  }, G.profile?.level ?? 1);
+  }, G.profile?.level ?? 1, G.profile?.caseUnlocks || []);
 }
 drawLookSafe = drawLookPicker;
 
