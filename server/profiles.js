@@ -20,7 +20,7 @@ import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js
 import { planClaim } from '../public/js/shared/loginrewards.js';
 import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD,
          CASE_COIN_COST, VAULT_GEM_COST, VAULT_TIER, PRO_CASE_GEM_COST,
-         CASE_POOL, DIRECT_BUY_GEMS } from '../public/js/shared/cases.js';
+         CASE_POOL, DIRECT_BUY_GEMS, weeklyItemRotation } from '../public/js/shared/cases.js';
 import { unlocksAt } from '../public/js/shared/unlocks.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
@@ -1096,6 +1096,13 @@ export function buyVaultCase(pid) {
 export function buyUnlockDirect(pid, kind, id) {
   const item = CASE_POOL.find(it => it.kind === kind && it.id === id);
   if (!item) return { ok: false, error: 'No such item.' };
+  // Not just unowned and affordable — has to actually be one of this
+  // week's items. Recomputed from the same seeded weeklyItemRotation()
+  // the client shows, not trusted from the client — a stale or hand-
+  // crafted request naming a real item from a PAST rotation must still
+  // fail here even if everything else about it checks out.
+  const inRotation = weeklyItemRotation().some(it => it.kind === kind && it.id === id);
+  if (!inRotation) return { ok: false, error: 'Not in this week\'s rotation.' };
   const p = getProfile(pid);
   const level = levelFromXp(p.xp || 0).level;
   const alreadyOwned = unlocksAt(level).some(u => u.kind === kind && u.id === id)

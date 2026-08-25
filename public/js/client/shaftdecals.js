@@ -130,6 +130,46 @@ const DRAW = {
       }
       g.stroke();
     }
+  },
+  spiral(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.strokeStyle = b; g.lineWidth = PX * 0.07; g.lineCap = 'round';
+    const cx = PX / 2, cy = PX / 2;
+    g.beginPath();
+    for (let t = 0; t <= 1; t += 0.01) {
+      const ang = t * Math.PI * 5, r = t * PX * 0.62;
+      const x = cx + Math.cos(ang) * r, y = cy + Math.sin(ang) * r;
+      if (t === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.stroke();
+  },
+  // Sharp points, not chevron's smooth rounded-join V's and not
+  // lightning's single bolt — a proper W/M zigzag, tight and repeated.
+  zigzag(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.strokeStyle = b; g.lineWidth = PX * 0.11; g.lineJoin = 'miter'; g.miterLimit = 4;
+    const step = PX * 0.22;
+    for (let y = -step; y < PX + step; y += step * 2) {
+      g.beginPath();
+      for (let x = -step; x <= PX + step; x += step) {
+        const i = Math.round((x + step) / step);
+        const yy = y + (i % 2 === 0 ? 0 : step);
+        if (x === -step) g.moveTo(x, yy); else g.lineTo(x, yy);
+      }
+      g.stroke();
+    }
+  },
+  // Concentric rings, off-centre — the one pattern here with no straight
+  // line in it at all.
+  ripple(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.strokeStyle = b; g.lineWidth = PX * 0.045;
+    const cx = PX * 0.38, cy = PX * 0.62;
+    for (let r = PX * 0.1; r < PX * 1.05; r += PX * 0.16) {
+      g.beginPath();
+      g.arc(cx, cy, r, 0, Math.PI * 2);
+      g.stroke();
+    }
   }
 };
 
@@ -174,18 +214,48 @@ export function shaftDecalTexture(id, color, purity = 0) {
   return tex;
 }
 
+/** A radial vignette (darker at the rim, a touch brighter at the centre) —
+ *  layered on top of a pattern that's otherwise flat colour throughout, it
+ *  reads as "lit from the front" rather than as a texture pasted flat.
+ *  Only worth the extra draw at a size someone's actually looking closely
+ *  at (see the `size` param below); at 20-24px in a picker grid it would
+ *  just be noise. */
+function applyVignette(g, size) {
+  const grad = g.createRadialGradient(size * 0.42, size * 0.4, size * 0.05, size * 0.5, size * 0.5, size * 0.72);
+  grad.addColorStop(0, 'rgba(255,255,255,.16)');
+  grad.addColorStop(0.55, 'rgba(255,255,255,0)');
+  grad.addColorStop(1, 'rgba(0,0,0,.28)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+}
+
 /** The same pattern as a data URL, for flat UI (the shaft-decal picker,
- *  the case reveal) that wants an <img>/background-image rather than a
- *  THREE texture. */
-export function shaftDecalDataUrl(id, color, purity = 0) {
+ *  the case reveal, the Inventory page, the Items shop) that wants an
+ *  <img>/background-image rather than a THREE texture. `size` defaults to
+ *  the pattern's own native 48px for the small spots this always rendered
+ *  at; a caller showing it bigger (a detail card, not a 20px swatch) can
+ *  ask for e.g. 96 and get the vignette pass too — drawn at native
+ *  resolution and scaled up rather than re-run at `size`, since every
+ *  DRAW function is written against the fixed PX constant, and a flat
+ *  geometric pattern scales cleanly (nothing here is fine text or a photo
+ *  that would need re-rendering to stay sharp). */
+export function shaftDecalDataUrl(id, color, purity = 0, size = PX) {
   const draw = DRAW[id];
   if (!draw) return null;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = PX;
-  const g = canvas.getContext('2d');
-  draw(g, shade(color, -0.35), shade(color, 0.35));
-  applySheen(g, purity);
-  return canvas.toDataURL('image/png');
+  const native = document.createElement('canvas');
+  native.width = native.height = PX;
+  const ng = native.getContext('2d');
+  draw(ng, shade(color, -0.35), shade(color, 0.35));
+  applySheen(ng, purity);
+  if (size === PX) return native.toDataURL('image/png');
+
+  const out = document.createElement('canvas');
+  out.width = out.height = size;
+  const og = out.getContext('2d');
+  og.imageSmoothingEnabled = true;
+  og.drawImage(native, 0, 0, size, size);
+  applyVignette(og, size);
+  return out.toDataURL('image/png');
 }
 
 export const SHAFT_DECAL_IDS = Object.keys(DRAW);

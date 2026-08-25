@@ -98,6 +98,58 @@ export const PRO_CASE_GEM_COST = 400;
    an item back pays half of this (see sellUnlock in server/profiles.js). */
 export const DIRECT_BUY_GEMS = { standard: 400, tour: 900, pro: 2000, legend: 5000, mythic: 12000 };
 
+/* The Items shop doesn't offer the whole pool at once — a rotating
+   selection, refreshed weekly, so it's a real "what's on this week"
+   decision rather than a static catalog. `weekIndex` is a plain count of
+   7-day blocks since the epoch, not a calendar week number — real ISO
+   week-of-year math has year-boundary edge cases this doesn't need to
+   take on for something that only has to be stable and to change once a
+   week. Deterministic and seeded by that index (not Math.random) so
+   every player sees the SAME rotation without any server round-trip to
+   ask for it, and the server can independently recompute and verify
+   the exact same list when buyUnlockDirect checks a purchase against it. */
+export const weekIndex = (ms = Date.now()) => Math.floor(ms / (7 * 86400000));
+
+/** Tiny deterministic PRNG (mulberry32) — Math.random() isn't seedable,
+ *  and this needs the same sequence on every machine for the same seed. */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Real Fisher-Yates — `array.sort(() => rand() - 0.5)` is a well-known
+ *  biased "shuffle" (it doesn't visit permutations with equal
+ *  probability), wrong for anything that has to look fair across weeks. */
+function seededShuffle(arr, rand) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** This week's Items-shop selection: 2 picks from Standard and Tour (the
+ *  two biggest pools), 1 from each of Pro/Legend/Mythic — so there's
+ *  always something to buy at every budget, not just whatever the dice
+ *  happened to favour that week. */
+export function weeklyItemRotation(idx = weekIndex()) {
+  const rand = mulberry32(idx);
+  const picks = [];
+  for (const tier of RARITY_BOUNDS) {
+    const pool = CASE_POOL.filter(it => it.rarity === tier.id);
+    if (!pool.length) continue;
+    const count = (tier.id === 'standard' || tier.id === 'tour') ? 2 : 1;
+    picks.push(...seededShuffle(pool, rand).slice(0, count));
+  }
+  return picks;
+}
+
 /** The odds a player is shown before they open anything — every tier's
  *  real share of the roll (not rounded away to nothing for Mythic), which
  *  kinds of item can come from it, and how many items are actually in that

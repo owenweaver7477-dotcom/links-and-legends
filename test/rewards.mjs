@@ -405,9 +405,12 @@ test('firing two opens at once over the wire never opens the same single case tw
 /* ---- buying and selling a specific item outright, rather than rolling
    for it — the Items shop tab and the Inventory page's Sell action. ---- */
 test('buyUnlockDirect refuses when gems are short, and never charges a failed attempt', async () => {
-  const { CASE_POOL, DIRECT_BUY_GEMS } = await import('../public/js/shared/cases.js');
+  const { DIRECT_BUY_GEMS, weeklyItemRotation } = await import('../public/js/shared/cases.js');
   const profiles = await import('../server/profiles.js');
-  const item = CASE_POOL.find(i => i.kind === 'decal');
+  // an in-rotation item specifically, so this actually exercises the gems
+  // check rather than failing earlier on "not in rotation" for an
+  // arbitrary CASE_POOL item that just isn't offered this particular week
+  const item = weeklyItemRotation()[0];
   const pid = 'reward-directbuy-poor-' + Math.random().toString(36).slice(2);
   const p = profiles.getProfile(pid);
   p.gems = DIRECT_BUY_GEMS[item.rarity] - 1;
@@ -418,9 +421,9 @@ test('buyUnlockDirect refuses when gems are short, and never charges a failed at
 });
 
 test('buyUnlockDirect refuses an item the player already owns, whether by level or by a previous case', async () => {
-  const { CASE_POOL, DIRECT_BUY_GEMS, caseItemKey } = await import('../public/js/shared/cases.js');
+  const { DIRECT_BUY_GEMS, caseItemKey, weeklyItemRotation } = await import('../public/js/shared/cases.js');
   const profiles = await import('../server/profiles.js');
-  const item = CASE_POOL.find(i => i.kind === 'decal');
+  const item = weeklyItemRotation()[0];   // in-rotation, so this exercises the ownership check specifically
 
   const byLevel = 'reward-directbuy-lvl-' + Math.random().toString(36).slice(2);
   const p1 = profiles.getProfile(byLevel);
@@ -438,9 +441,13 @@ test('buyUnlockDirect refuses an item the player already owns, whether by level 
 });
 
 test('buyUnlockDirect succeeds, deducts the exact rarity-scaled price, and writes caseUnlocks', async () => {
-  const { CASE_POOL, DIRECT_BUY_GEMS, caseItemKey } = await import('../public/js/shared/cases.js');
+  const { DIRECT_BUY_GEMS, caseItemKey, weeklyItemRotation } = await import('../public/js/shared/cases.js');
   const profiles = await import('../server/profiles.js');
-  const item = CASE_POOL.find(i => i.kind === 'decal');
+  // MUST come from the actual current rotation — buyUnlockDirect checks
+  // against weeklyItemRotation() with no week override, so an arbitrary
+  // CASE_POOL item would only pass on whichever weeks it happens to be
+  // selected, which is exactly the flakiness a real test can't have.
+  const item = weeklyItemRotation()[0];
   const cost = DIRECT_BUY_GEMS[item.rarity];
   const pid = 'reward-directbuy-ok-' + Math.random().toString(36).slice(2);
   const p = profiles.getProfile(pid);
@@ -451,6 +458,20 @@ test('buyUnlockDirect succeeds, deducts the exact rarity-scaled price, and write
   const after = profiles.getProfile(pid);
   assert.equal(after.gems, 500);
   assert.ok(after.caseUnlocks.includes(caseItemKey(item)));
+});
+
+test('buyUnlockDirect refuses a real, unowned, affordable item that just isn\'t in this week\'s rotation', async () => {
+  const { CASE_POOL, weeklyItemRotation } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const inRotation = new Set(weeklyItemRotation().map(it => it.kind + ':' + it.id));
+  const outOfRotation = CASE_POOL.find(it => !inRotation.has(it.kind + ':' + it.id));
+  assert.ok(outOfRotation, 'test assumes the pool is bigger than one week\'s rotation');
+  const pid = 'reward-directbuy-offweek-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.gems = 999999;
+  const result = profiles.buyUnlockDirect(pid, outOfRotation.kind, outOfRotation.id);
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.equal(profiles.getProfile(pid).gems, 999999, 'a refused buy must not touch gems');
 });
 
 test('sellUnlock refuses an item not owned, and one the player\'s own level already grants', async () => {

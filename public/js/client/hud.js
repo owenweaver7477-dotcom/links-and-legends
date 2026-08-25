@@ -18,7 +18,8 @@ import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
 import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, vaultTierOdds, PITY_THRESHOLD,
          PITY_TIER, VAULT_TIER, tierIndex, CASE_COIN_COST, VAULT_GEM_COST, PRO_CASE_GEM_COST,
-         DIRECT_BUY_GEMS } from '../shared/cases.js';
+         DIRECT_BUY_GEMS, weeklyItemRotation, weekIndex } from '../shared/cases.js';
+import { ballFinishDataUrl, trailPreviewDataUrl } from './finishpreview.js';
 import { icon } from './icons.js';
 import { purityTier } from '../shared/purity.js';
 
@@ -1419,16 +1420,22 @@ HUD.renderShop = (prof, onBuy) => {
   } else if (shopTab === 'items') {
     /* Naming the exact thing you want rather than rolling for it — the
        expensive way to shop, on purpose (see DIRECT_BUY_GEMS's own
-       comment). Same CASE_POOL the Cases tab's contents preview already
-       reads, so this list can never drift from what a case can actually
-       give — there's only one catalog of "the four case-eligible kinds",
-       not a second one invented for direct sale. */
+       comment). A rotating slice of CASE_POOL now, not the whole pool —
+       see weeklyItemRotation's own comment in cases.js — so this list can
+       never drift from either what a case can actually give OR what the
+       server will actually accept: same seeded function decides both. */
     const level = prof?.level ?? 1;
     const ownedIds = new Set([
       ...unlocksAt(level).map(u => u.kind + ':' + u.id),
       ...(prof?.caseUnlocks || [])
     ]);
-    for (const item of CASE_POOL) {
+    const resetsMs = (weekIndex() + 1) * 7 * 86400000 - Date.now();
+    const resetsD = Math.floor(resetsMs / 86400000), resetsH = Math.floor((resetsMs % 86400000) / 3600000);
+    const note = document.createElement('p');
+    note.className = 'tiny shop-items-note';
+    note.textContent = `This week's selection — resets in ${resetsD}d ${resetsH}h.`;
+    grid.appendChild(note);
+    for (const item of weeklyItemRotation()) {
       const key = item.kind + ':' + item.id;
       const has = ownedIds.has(key);
       const cost = DIRECT_BUY_GEMS[item.rarity];
@@ -1436,18 +1443,19 @@ HUD.renderShop = (prof, onBuy) => {
       const card = document.createElement('div');
       card.className = 'shopcard shopcard-item' + (has ? ' owned' : '');
       card.style.setProperty('--rarity-color', rarity.color);
-      const preview = item.kind === 'decal'
-        ? `<img class="sc-decal-preview" width="40" height="40" alt="">` : '';
+      const hasPreview = ['decal', 'ball', 'trail'].includes(item.kind);
+      const preview = hasPreview
+        ? `<img class="sc-decal-preview" width="64" height="64" alt="">` : '';
       card.innerHTML = `${preview}<b>${escapeHtml(item.name)}</b>` +
         `<span class="sc-rarity" style="color:${rarity.color}">${rarity.name}</span>` +
         `<span class="sc-blurb">${escapeHtml(UNLOCK_KINDS[item.kind]?.name || item.kind)}</span>`;
-      if (preview) {
+      if (hasPreview) {
         // .src as a property, never in the HTML string above — see
         // renderClubDecalPicker's own comment on why (portal-bundle
         // verifier reads a literal data-URI-shaped src="..." as a real
         // asset path).
         const img = card.querySelector('.sc-decal-preview');
-        img.src = shaftDecalDataUrl(item.id, item.color || rarity.color) || '';
+        img.src = itemPreviewUrl(item, rarity, 64) || '';
       }
       const row = document.createElement('div');
       row.className = 'shopcard-row';
@@ -1676,6 +1684,10 @@ HUD.renderInventory = (prof, look, onPick, onBuy, onSell) => {
   const decalPurity = prof?.decalPurity || {};
   const gems = prof?.gems || 0;
   const equippedEmotes = new Set(prof?.equippedEmotes || []);
+  // Only this week's rotation is actually buyable — same set the Items
+  // shop tab shows, same set the server will actually accept (see
+  // weeklyItemRotation's own comment in cases.js).
+  const rotationKeys = new Set(weeklyItemRotation().map(it => it.kind + ':' + it.id));
 
   box.innerHTML = '';
   for (const [kind, kindMeta] of Object.entries(UNLOCK_KINDS)) {
@@ -1697,27 +1709,26 @@ HUD.renderInventory = (prof, look, onPick, onBuy, onSell) => {
       const card = document.createElement('div');
       card.className = 'inv-card' + (owned ? ' owned' : '');
 
-      // preview art
+      // preview art — a real rendered preview for the 3 kinds a 2D canvas
+      // can fake convincingly (see itemPreviewUrl); title has no visual
+      // beyond its own name, emote/hat/melee fall back to a generic icon
       const art = document.createElement('div');
       art.className = 'inv-art';
-      if (kind === 'decal') {
-        const purity = decalPurity[u.id] || 0;
-        const pattern = shaftDecalDataUrl(u.id, u.color || '#8fe07a', purity);
-        if (pattern) {
-          const img = document.createElement('img');
-          img.width = 40; img.height = 40; img.alt = '';
-          img.src = pattern;   // property, not a src="..." string — see renderClubDecalPicker's comment
-          art.appendChild(img);
-          if (purity) {
-            const tier = purityTier(purity);
-            const badge = document.createElement('b');
-            badge.className = 'decal-purity'; badge.style.setProperty('--pc', tier.color);
-            badge.textContent = purity;
-            art.appendChild(badge);
-          }
+      const purity = kind === 'decal' ? (decalPurity[u.id] || 0) : 0;
+      const previewRarity = casePoolItem ? (RARITIES.find(r => r.id === casePoolItem.rarity) || RARITIES[0]) : { color: u.color || '#8fe07a' };
+      const preview = casePoolItem ? itemPreviewUrl(casePoolItem, previewRarity, 40, purity) : null;
+      if (preview) {
+        const img = document.createElement('img');
+        img.width = 40; img.height = 40; img.alt = '';
+        img.src = preview;   // property, not a src="..." string — see renderClubDecalPicker's comment
+        art.appendChild(img);
+        if (purity) {
+          const tier = purityTier(purity);
+          const badge = document.createElement('b');
+          badge.className = 'decal-purity'; badge.style.setProperty('--pc', tier.color);
+          badge.textContent = purity;
+          art.appendChild(badge);
         }
-      } else if (u.color) {
-        art.innerHTML = `<i style="background:${u.color}"></i>`;
       } else {
         // decal/trail/title/ball each have their own icon; emote/hat/melee
         // don't (see icons.js) — a generic gift box stands in rather than
@@ -1735,9 +1746,9 @@ HUD.renderInventory = (prof, look, onPick, onBuy, onSell) => {
       if (owned) {
         status.textContent = kind === 'emote' ? (equippedEmotes.has(u.id) ? 'in your emote wheel' : 'owned')
           : grp && look?.[grp.key] === u.id ? 'equipped' : 'owned';
-      } else if (casePoolItem) {
+      } else if (casePoolItem && rotationKeys.has(kind + ':' + u.id)) {
         const cost = DIRECT_BUY_GEMS[casePoolItem.rarity];
-        status.textContent = `level ${u.at}, or ${cost.toLocaleString()} gems`;
+        status.textContent = `level ${u.at}, or ${cost.toLocaleString()} gems this week`;
       } else {
         status.textContent = `level ${u.at}`;
       }
@@ -1779,7 +1790,7 @@ HUD.renderInventory = (prof, look, onPick, onBuy, onSell) => {
           btns.appendChild(sell);
         }
         card.appendChild(btns);
-      } else if (!owned && casePoolItem && gems >= DIRECT_BUY_GEMS[casePoolItem.rarity]) {
+      } else if (!owned && casePoolItem && rotationKeys.has(kind + ':' + u.id) && gems >= DIRECT_BUY_GEMS[casePoolItem.rarity]) {
         const btn = document.createElement('button');
         btn.className = 'btn mini primary';
         btn.textContent = 'Buy';
@@ -2021,6 +2032,22 @@ HUD.renderDailyLogin = (profile) => {
 
 /* --------------------------------------------------------- case opening */
 const CASE_KIND_ICON = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ball' };
+
+/** A real preview for the 3 kinds a 2D canvas can fake convincingly — a
+ *  shaft decal, a lit-sphere ball finish, a fading particle trail — used
+ *  by both the Items shop tab and the Inventory page so the two surfaces
+ *  can't drift into showing different art for the same item. `size` > 48
+ *  only matters for the decal path (see shaftDecalDataUrl's own note);
+ *  the finish/trail previews are drawn at whatever size is asked for.
+ *  title/emote/hat/melee have nothing worth building a preview for (text,
+ *  or a system with no equip path at all) and return null. */
+function itemPreviewUrl(item, rarity, size = 64, purity = 0) {
+  const color = item.color || rarity.color;
+  if (item.kind === 'decal') return shaftDecalDataUrl(item.id, color, purity, size);
+  if (item.kind === 'ball') return ballFinishDataUrl(color, item.id, size);
+  if (item.kind === 'trail') return trailPreviewDataUrl(color, size);
+  return null;
+}
 
 /** Back to "tap to open", for the moment the modal is shown.
  *  `sincePity` is the profile's own casesSincePity — shown as a countdown

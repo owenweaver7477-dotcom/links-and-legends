@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CASE_POOL, RARITIES, rollCase, caseItemKey, tierIndex, tierOdds, proTierOdds, vaultTierOdds,
-         PITY_TIER, VAULT_TIER, PITY_THRESHOLD } from '../public/js/shared/cases.js';
+         PITY_TIER, VAULT_TIER, PITY_THRESHOLD, weeklyItemRotation, weekIndex } from '../public/js/shared/cases.js';
 
 test('the pool is non-trivial and every item resolves to a real rarity', () => {
   assert.ok(CASE_POOL.length >= 15, `only ${CASE_POOL.length} items in the case pool`);
@@ -230,4 +230,48 @@ test('vaultTierOdds only covers VAULT_TIER and rarer, and sums to 100% on its ow
 test('the Vault table covers strictly more tiers than the Pro Case table — a real middle rung', () => {
   assert.ok(vaultTierOdds().length > proTierOdds().length,
     'the Vault should include at least one tier the Pro Case excludes (its own floor tier)');
+});
+
+/* ---- the Items shop's weekly rotation — has to be stable within a week,
+   different across weeks, cover every tier that has anything in it, and
+   never invent or drop an item along the way. ---- */
+test('weeklyItemRotation is exactly stable for the same week index', () => {
+  const a = weeklyItemRotation(500).map(caseItemKey);
+  const b = weeklyItemRotation(500).map(caseItemKey);
+  assert.deepEqual(a, b, 'the same week index produced two different rotations');
+});
+
+test('weeklyItemRotation changes across week indices — it is not just always the same list', () => {
+  const weeks = new Set();
+  for (let i = 0; i < 20; i++) weeks.add(JSON.stringify(weeklyItemRotation(i).map(caseItemKey)));
+  assert.ok(weeks.size > 1, '20 different week indices all produced the identical rotation');
+});
+
+test('weeklyItemRotation includes at least one item from every tier that actually has any', () => {
+  const rotation = weeklyItemRotation(123);
+  const rotationRarities = new Set(rotation.map(it => it.rarity));
+  for (const tier of RARITIES) {
+    const poolHasAny = CASE_POOL.some(it => it.rarity === tier.id);
+    if (poolHasAny) assert.ok(rotationRarities.has(tier.id), `${tier.id} has pool items but none made this week's rotation`);
+  }
+});
+
+test('weeklyItemRotation never returns a duplicate or an item outside CASE_POOL', () => {
+  for (let i = 0; i < 10; i++) {
+    const rotation = weeklyItemRotation(i);
+    const keys = rotation.map(caseItemKey);
+    assert.equal(new Set(keys).size, keys.length, `week ${i} rotation had a duplicate`);
+    for (const it of rotation) assert.ok(CASE_POOL.includes(it), `week ${i} rotation included something not in CASE_POOL`);
+  }
+});
+
+test('weekIndex advances by exactly one every 7 days, and stays flat within the same week', () => {
+  const day = 86400000;
+  // an exact week BOUNDARY, not an arbitrary timestamp — 1000*day could
+  // already be any number of days into its own week, which is exactly
+  // what made this test's first version wrong rather than weekIndex itself
+  const boundary = 142 * 7 * day;
+  const start = weekIndex(boundary);
+  assert.equal(weekIndex(boundary + 6 * day), start, 'still the same week, 6 days later');
+  assert.equal(weekIndex(boundary + 7 * day), start + 1, 'a full week later should be the next index');
 });

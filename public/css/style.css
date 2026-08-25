@@ -1072,8 +1072,11 @@ h1 em { font-style: normal; color: #7ed492; }
    already reads, so a card doesn't need its own colour system. */
 .shopcard-item { border-top: 2px solid var(--rarity-color, transparent); }
 .shopcard-item .sc-rarity { font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
-.sc-decal-preview { width: 40px; height: 40px; border-radius: 8px; object-fit: cover;
+.sc-decal-preview { width: 64px; height: 64px; border-radius: 10px; object-fit: cover;
   border: 1px solid rgba(255,255,255,.15); }
+/* The Items tab lives inside .shop's own grid — this note has to span
+   every column rather than sit in the grid as if it were a card. */
+.shop-items-note { grid-column: 1 / -1; margin: 0 0 2px; color: #8fa694; }
 /* How to earn the currency you're short of — shown only when you can't
    afford the case, so it reads as an answer rather than a nag. */
 .shopcard-case .sc-earn { font-size: 10.5px; line-height: 1.45; color: #e8c15a;
