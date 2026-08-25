@@ -22,6 +22,10 @@ const _fwd = new THREE.Vector3();
 // whole round, so they must not allocate — reuse these instead
 const _m4 = new THREE.Matrix4();
 const _scl = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _pos = new THREE.Vector3();
+const _one = new THREE.Vector3(1, 1, 1);   // never mutated — a bird's scale is always 1
 
 /* Three real budgets. `scenery` scales the decorative instancing, `water`
    drops the fine chop, and pixelRatio is the one that decides whether a weak
@@ -2491,23 +2495,21 @@ export class GolfScene {
   _tickFlock(dt) {
     const f = this._flock;
     if (!f) return;
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion();
-    const e = new THREE.Euler(), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
     const birds = f.userData.birds;
     for (let i = 0; i < birds.length; i++) {
       const b = birds[i];
       b.a += b.sp * dt;
       const x = b.cx + Math.cos(b.a) * b.r;
       const z = b.cz + Math.sin(b.a) * b.r;
-      pos.set(x, b.y + Math.sin(b.a * 3) * 2.5, z);
+      _pos.set(x, b.y + Math.sin(b.a * 3) * 2.5, z);
       /* Facing along the tangent of its own circle, banked into the turn —
          which is the whole of what makes it read as flying rather than as
          being dragged around a track. */
-      e.set(0, Math.atan2(-Math.sin(b.a) * b.sp, Math.cos(b.a) * b.sp) + Math.PI / 2,
+      _e.set(0, Math.atan2(-Math.sin(b.a) * b.sp, Math.cos(b.a) * b.sp) + Math.PI / 2,
             b.sp > 0 ? -0.35 : 0.35);
-      q.setFromEuler(e);
-      m4.compose(pos, q, one);
-      f.setMatrixAt(i, m4);
+      _q.setFromEuler(_e);
+      _m4.compose(_pos, _q, _one);
+      f.setMatrixAt(i, _m4);
     }
     f.instanceMatrix.needsUpdate = true;
   }
@@ -2989,7 +2991,13 @@ class EffectPool {
     const rises = kind === 'smoke';
     const size = kind === 'splash' ? 0.09 : kind === 'smoke' ? 0.30 : kind === 'fire' ? 0.13
       : kind === 'trail' ? 0.045 : kind === 'confetti' ? 0.07 : 0.06;
-    const geo = new THREE.SphereGeometry(size, 5, 4);
+    // Every burst of the same kind wants the identical sphere — cache it
+    // like every other decoration in this file (see `cached`, above)
+    // instead of paying for a fresh geometry + GPU upload on every splash,
+    // divot and puff of cart smoke. The material still varies per burst
+    // (colorOverride rides the shooter's own cosmetic) so it stays
+    // per-instance, disposed in update() same as before.
+    const geo = cached('burst-sphere-' + size, () => new THREE.SphereGeometry(size, 5, 4));
     const mat = new THREE.MeshBasicMaterial({
       color: colorOverride ?? (colors[kind] || 0xffffff), transparent: true,
       opacity: rises ? 0.55 : 1, depthWrite: false
@@ -3031,7 +3039,8 @@ class EffectPool {
       const k = it.age / it.life;
       if (k >= 1) {
         this.parent.remove(it.inst);
-        it.inst.geometry.dispose(); it.mat.dispose();
+        if (!it.inst.geometry.userData.shared) it.inst.geometry.dispose();
+        it.mat.dispose();
         this.items.splice(i, 1);
         continue;
       }
