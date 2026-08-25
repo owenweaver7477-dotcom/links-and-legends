@@ -3287,6 +3287,7 @@ function renderClubhouse() {
   HUD.renderDifficulty(G.profile?.difficulty || DEFAULT_DIFFICULTY, pickDifficulty);
 
   const prof = G.profile;
+  HUD.renderClubhouseHeader(prof, Net.lastName || document.getElementById('inpName')?.value);
   HUD.renderCareer(prof);
   /* The record board. Asked for rather than pushed: it is global data that
      changes rarely, and the clubhouse is the only place that wants all of it

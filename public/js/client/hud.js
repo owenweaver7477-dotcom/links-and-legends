@@ -35,6 +35,7 @@ for (const id of [
   'wdRandom', 'wdCustom', 'wdDone',
   'wdInfo', 'wdInfoName', 'wdInfoRarity', 'wdInfoEffect', 'wdInfoPct',
   'btnClubhouse', 'btnShopBack', 'homeCoins',
+  'hkAvatar', 'hkLevelBadge', 'hkProfileName', 'hkRankName', 'hkXpInto', 'hkXpNeed', 'hkXpFill',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
   'btnPrivacy', 'optPrivate',
@@ -1414,6 +1415,29 @@ HUD.renderShop = (prof, onBuy) => {
  * belongs in front of you, next to the player who earned it, not filed away
  * under statistics.
  */
+/** The clubhouse header's profile block — avatar, level, name, rank and
+    the XP bar toward the next one. `rankTitle`/`levelFromXp` are already
+    computed server-side onto every profile push (see publicProfile), so
+    this only has to lay the numbers out, not derive them. */
+HUD.renderClubhouseHeader = (prof, name) => {
+  if (!el.hkAvatar) return;
+  const shown = name || 'Golfer';
+  el.hkAvatar.textContent = shown[0].toUpperCase();
+  el.hkAvatar.style.background = avatarColor(shown);
+  el.hkLevelBadge.textContent = prof?.level ?? 1;
+  el.hkProfileName.textContent = shown;
+  el.hkRankName.textContent = rankTitle(prof?.level ?? 1);
+  if (prof?.maxed) {
+    el.hkXpInto.textContent = 'MAX';
+    el.hkXpNeed.textContent = '';
+    el.hkXpFill.style.width = '100%';
+  } else {
+    el.hkXpInto.textContent = Math.round(prof?.into ?? 0).toLocaleString();
+    el.hkXpNeed.textContent = Math.round(prof?.need ?? 0).toLocaleString();
+    el.hkXpFill.style.width = Math.round((prof?.progress ?? 0) * 100) + '%';
+  }
+};
+
 HUD.renderCharacter = (prof, name) => {
   const box = document.getElementById('charCard');
   if (!box) return;
@@ -3404,7 +3428,7 @@ HUD.setWeather = w => {
    Requests at the top, then favourites, then whoever is online. Somebody
    waiting on an answer from you outranks everything else on the panel —
    they are the only row that needs a decision. */
-import { handicapText as hcpText, rankTier as rTier } from '../shared/handicap.js';
+import { handicapText as hcpText, rankTier as rTier, rankTitle } from '../shared/handicap.js';
 
 HUD.onFriendAct = () => {};
 

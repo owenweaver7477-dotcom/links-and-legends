@@ -672,8 +672,26 @@
 <!-- ══════════════ CLUBHOUSE — career, pro shop and your bag ══════════════ -->
 <div class="screen" id="screenShop" hidden>
   <div class="card wide">
-    <div class="hk-head">
-      <h2>Clubhouse</h2>
+    <!-- The clubhouse header, restructured to match the reference: who you
+         are (avatar, level, name, rank) and how close to the next level,
+         both visible before you've clicked into any tab. The avatar is a
+         hashed-colour initial, same "no photo" language as every avatar in
+         this game (the 3D golfer has no face either, and nothing here is
+         loaded from a file — see icons.js's own header on why). -->
+    <div class="hk-head hk-head-profile">
+      <div class="hk-brand"><h2>Clubhouse</h2></div>
+      <div class="hk-profile">
+        <span class="hk-avatar" id="hkAvatar">?</span>
+        <span class="hk-lvlbadge" id="hkLevelBadge">1</span>
+        <div class="hk-profile-txt">
+          <b id="hkProfileName">—</b>
+          <span class="hk-rank"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V5Z" fill="#8fd0a2" stroke="#5a9a6e" stroke-width="1"/></svg><span id="hkRankName">Novice</span></span>
+        </div>
+      </div>
+      <div class="hk-xp">
+        <span class="hk-xp-label">XP PROGRESS: <b id="hkXpInto">0</b> / <span id="hkXpNeed">0</span></span>
+        <div class="hk-xp-bar"><i id="hkXpFill" style="width:0%"></i></div>
+      </div>
       <button class="btn" id="btnShopBack">← Back</button>
     </div>
 

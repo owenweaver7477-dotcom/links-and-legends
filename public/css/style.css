@@ -463,6 +463,35 @@ html.touch .fsbtn { display: grid; }
 .hk-head h2 { margin: 0; }
 .hk-head .lbl { margin: 0; }
 
+/* The profile header — who you are and how close to the next level, both
+   readable before touching any tab. Four flex children (brand, profile,
+   xp, back), wrapping on narrow widths rather than the columns fighting
+   for room they don't have. */
+.hk-head-profile { flex-wrap: wrap; }
+.hk-brand { flex: 0 0 auto; }
+.hk-profile { display: flex; align-items: center; gap: 8px; position: relative; }
+.hk-avatar { width: 40px; height: 40px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 15px; font-weight: 800; color: #fff;
+  border: 2px solid rgba(255,255,255,.18); }
+.hk-lvlbadge { position: absolute; left: 26px; top: 24px; min-width: 18px; height: 18px;
+  padding: 0 3px; border-radius: 999px; background: #ffd76b; color: #241c0a;
+  font-size: 10px; font-weight: 800; display: grid; place-items: center;
+  border: 2px solid #14201a; }
+.hk-profile-txt { display: flex; flex-direction: column; gap: 2px; }
+.hk-profile-txt b { font-size: 14px; }
+.hk-rank { display: flex; align-items: center; gap: 4px; font-size: 10.5px;
+  color: #8fd0a2; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.hk-xp { flex: 1 1 220px; min-width: 180px; max-width: 320px; display: flex;
+  flex-direction: column; gap: 5px; }
+.hk-xp-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+  color: #8fa596; font-weight: 700; }
+.hk-xp-label b { color: #eaf3ec; }
+.hk-xp-bar { height: 6px; border-radius: 4px; background: rgba(255,255,255,.08);
+  overflow: hidden; }
+.hk-xp-bar i { display: block; height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, #4a9b5e, #6fce8a); transition: width .3s ease; }
+@media (max-width: 760px) { .hk-xp { display: none; } }
+
 /* ─────────────────────────────────────────── tees · ball · bag (lobby) */
 .tees { display: flex; gap: 8px; flex-wrap: wrap; }
 .teebtn { flex: 1 1 150px; text-align: left; padding: 9px 12px; border-radius: 11px; cursor: pointer;
