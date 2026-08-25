@@ -263,8 +263,10 @@ export class Avatar {
     /* --- the club: grip, shaft and an interchangeable head ---------------
        The same five boxes serve every club in the bag; setClub() reshapes
        them, so a driver, a 7 iron and the putter are the same draw calls
-       with different proportions.  Visible only while addressing or
-       swinging, so the cost is nothing for anyone just walking about. */
+       with different proportions. Hidden only while actually walking (see
+       the visibility line in update()) — a standing golfer, on the tee or
+       in a preview panel, shows it the whole time, since that's the only
+       moment anyone is actually looking to check their own decal. */
     this.mats.chrome = M('#c9ccd2');
     this.mats.headDark = M('#3a3d42');
     this.club = new THREE.Group();
@@ -871,7 +873,15 @@ export class Avatar {
     // while the golfer is standing still.  A celebration still wins below —
     // holing out mid-follow-through should cut straight to the arms-up.
     const g = this.golf;
-    this.club.visible = !!g;
+    // Was `!!g` alone — visible only for the swing itself, which meant a
+    // standing, idle golfer (waiting on the tee, shown off in the "Your
+    // Golfer" panel, anywhere a player would actually look to check their
+    // own decal) never showed the club at all. The decal comment right
+    // above this class's club setup already says the point: "a reward you
+    // cannot see is not a reward." Still hidden while WALKING specifically
+    // — that pose was never built with a held club in mind, and this find
+    // only asked for it to show while standing still.
+    this.club.visible = !!g || !moving;
     if (g && !moving) {
       // The swing is described by one phase value φ:
       //   -1..0  backswing (φ = -k, straight off the power meter)

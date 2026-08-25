@@ -38,23 +38,40 @@ export const QUALITY = {
 };
 
 /* The earned ball finishes. A finish is how the ball catches the light, not
-   what colour it is — the colour is the player's own and picking one should
-   never take that away from them. So each of these only moves the specular
-   terms, which is also why they cost nothing: no textures, no new material,
-   four numbers on the one that already exists. */
+   a replacement for the player's own colour — so `tint` NUDGES that colour
+   toward the finish's own character (chrome cools it toward silver, lava
+   warms it toward ember) rather than overriding it outright. Two players
+   who both picked white still read as "different finish", not "their
+   colour choice got taken away from them". matte has no tint at all — a
+   flat finish shouldn't look recoloured, just less shiny. Was specular-
+   only for a while, which was too subtle to actually read as different
+   finishes under real lighting on a small, fast-moving ball — the exact
+   "can't tell the difference" a finish exists to prevent. Also missing
+   two of the six finishes entirely (opal, lava — added after this table
+   was last touched), silently falling back to BALL_PLAIN, i.e. no visual
+   effect at all despite being real, earnable, paid-for rewards. */
 const BALL_FINISH = {
   matte:  { shininess: 4,   specular: 0x0d0d0d, emissive: 0x000000 },
-  pearl:  { shininess: 90,  specular: 0x9fa8c0, emissive: 0x0a0c14 },
-  chrome: { shininess: 220, specular: 0xdddddd, emissive: 0x000000 },
-  prism:  { shininess: 180, specular: 0xc8a8ff, emissive: 0x140a1e }
+  pearl:  { shininess: 100, specular: 0xb8bfd8, emissive: 0x120f1a, tint: '#f0e6f0' },
+  chrome: { shininess: 240, specular: 0xf2f2f2, emissive: 0x000000, tint: '#e8ecf0' },
+  opal:   { shininess: 110, specular: 0xd8b8d0, emissive: 0x1c1018, tint: '#f4d8ec' },
+  prism:  { shininess: 200, specular: 0xd0b8ff, emissive: 0x1c1028, tint: '#d8e8ff' },
+  lava:   { shininess: 55,  specular: 0xff9060, emissive: 0x3a0e06, tint: '#ff6b3d' }
 };
 const BALL_PLAIN = { shininess: 60, specular: 0x555555, emissive: 0x000000 };
 
-function applyBallFinish(mat, id, _color) {
+function applyBallFinish(mat, id, color) {
   const f = BALL_FINISH[id] || BALL_PLAIN;
   mat.shininess = f.shininess;
   mat.specular.setHex(f.specular);
   mat.emissive.setHex(f.emissive);
+  // Re-set from `color` first rather than trusting whatever's already on
+  // the material — the caller (syncBalls) already does this before
+  // calling in, but doing it here too makes the lerp below idempotent
+  // regardless of call order, so a second call can never nudge the tint
+  // further than the first one did.
+  if (color) mat.color.set(color);
+  if (f.tint) mat.color.lerp(new THREE.Color(f.tint), 0.22);
   mat.needsUpdate = true;
 }
 
