@@ -316,6 +316,8 @@ Net.openProCase = cb => ask('case:openPro', null, res => cb?.(res));
 Net.debugLevelUp = (level, cb) => ask('debug:levelup', { level }, res => cb?.(res));
 Net.debugTestCase = cb => ask('debug:testcase', null, res => cb?.(res));
 Net.buyProCase = cb => ask('case:buyPro', null, res => cb?.(res));
+Net.buyItem = (kind, id, cb) => ask('item:buy', { kind, id }, res => cb?.(res));
+Net.sellItem = (kind, id, cb) => ask('item:sell', { kind, id }, res => cb?.(res));
 Net.prefs = p => Net.socket?.emit('player:prefs', p);
 Net.setLook = look => Net.socket?.emit('player:look', { look });
 Net.move = (x, z, rot, moving, cart) => Net.socket?.emit('player:move', { x, z, rot, moving, cart });

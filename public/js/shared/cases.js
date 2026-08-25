@@ -89,6 +89,15 @@ export const CASE_COIN_COST = 2500;
 export const VAULT_GEM_COST = 150;
 export const PRO_CASE_GEM_COST = 400;
 
+/* A specific item, bought outright rather than rolled for. Deliberately
+   priced well above what the case that could have given it costs — a case
+   is a CHANCE at any tier for 2,500 coins or a guaranteed floor for a few
+   hundred gems; naming the exact item you want and skipping the roll
+   entirely is the expensive way to shop, on purpose, so cases stay the
+   smart move for anyone not just trying to fill one specific gap. Selling
+   an item back pays half of this (see sellUnlock in server/profiles.js). */
+export const DIRECT_BUY_GEMS = { standard: 400, tour: 900, pro: 2000, legend: 5000, mythic: 12000 };
+
 /** The odds a player is shown before they open anything — every tier's
  *  real share of the roll (not rounded away to nothing for Mythic), which
  *  kinds of item can come from it, and how many items are actually in that

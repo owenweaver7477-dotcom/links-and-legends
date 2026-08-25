@@ -723,6 +723,7 @@
       <button class="hktab" data-tab="rewards" role="tab">Rewards</button>
       <button class="hktab" data-tab="shop" role="tab">Pro shop</button>
       <button class="hktab" data-tab="bag" role="tab">Your bag</button>
+      <button class="hktab" data-tab="inventory" role="tab">Inventory</button>
     </div>
 
     <!-- NOT hidden in the markup. The script hides the inactive ones once it
@@ -812,6 +813,15 @@
           </select>
         </label>
       </div>
+    </div>
+
+    <!-- INVENTORY. Everything the ladder and the cases have ever handed
+         out, in one place, at last — the quick-change panel only ever
+         showed four of the seven kinds, as plain text pills with no
+         preview. See HUD.renderInventory. -->
+    <div class="section hkpane" data-pane="inventory">
+      <h4 class="lbl">Inventory</h4>
+      <div id="invSections"></div>
     </div>
   </div>
 </div>

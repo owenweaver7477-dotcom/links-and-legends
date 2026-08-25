@@ -401,3 +401,90 @@ test('firing two opens at once over the wire never opens the same single case tw
   assert.equal(oks, 1, `expected exactly one of two simultaneous opens to succeed, got ${oks}. ${JSON.stringify({ a, b })}`);
   s.disconnect();
 });
+
+/* ---- buying and selling a specific item outright, rather than rolling
+   for it — the Items shop tab and the Inventory page's Sell action. ---- */
+test('buyUnlockDirect refuses when gems are short, and never charges a failed attempt', async () => {
+  const { CASE_POOL, DIRECT_BUY_GEMS } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const item = CASE_POOL.find(i => i.kind === 'decal');
+  const pid = 'reward-directbuy-poor-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.gems = DIRECT_BUY_GEMS[item.rarity] - 1;
+  const result = profiles.buyUnlockDirect(pid, item.kind, item.id);
+  assert.equal(result.ok, false);
+  assert.equal(profiles.getProfile(pid).gems, DIRECT_BUY_GEMS[item.rarity] - 1, 'a failed buy should not touch gems');
+  assert.equal((profiles.getProfile(pid).caseUnlocks || []).length, 0);
+});
+
+test('buyUnlockDirect refuses an item the player already owns, whether by level or by a previous case', async () => {
+  const { CASE_POOL, DIRECT_BUY_GEMS, caseItemKey } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const item = CASE_POOL.find(i => i.kind === 'decal');
+
+  const byLevel = 'reward-directbuy-lvl-' + Math.random().toString(36).slice(2);
+  const p1 = profiles.getProfile(byLevel);
+  p1.xp = 999999999;   // max level — owns everything the ladder grants
+  p1.gems = 999999;
+  const r1 = profiles.buyUnlockDirect(byLevel, item.kind, item.id);
+  assert.equal(r1.ok, false, JSON.stringify(r1));
+
+  const byCase = 'reward-directbuy-case-' + Math.random().toString(36).slice(2);
+  const p2 = profiles.getProfile(byCase);
+  p2.gems = 999999;
+  p2.caseUnlocks = [caseItemKey(item)];
+  const r2 = profiles.buyUnlockDirect(byCase, item.kind, item.id);
+  assert.equal(r2.ok, false, JSON.stringify(r2));
+});
+
+test('buyUnlockDirect succeeds, deducts the exact rarity-scaled price, and writes caseUnlocks', async () => {
+  const { CASE_POOL, DIRECT_BUY_GEMS, caseItemKey } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const item = CASE_POOL.find(i => i.kind === 'decal');
+  const cost = DIRECT_BUY_GEMS[item.rarity];
+  const pid = 'reward-directbuy-ok-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.gems = cost + 500;
+  const result = profiles.buyUnlockDirect(pid, item.kind, item.id);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.cost, cost);
+  const after = profiles.getProfile(pid);
+  assert.equal(after.gems, 500);
+  assert.ok(after.caseUnlocks.includes(caseItemKey(item)));
+});
+
+test('sellUnlock refuses an item not owned, and one the player\'s own level already grants', async () => {
+  const { CASE_POOL, caseItemKey } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const item = CASE_POOL.find(i => i.kind === 'decal');
+
+  const notOwned = 'reward-sell-none-' + Math.random().toString(36).slice(2);
+  profiles.getProfile(notOwned);
+  const r1 = profiles.sellUnlock(notOwned, item.kind, item.id);
+  assert.equal(r1.ok, false, JSON.stringify(r1));
+
+  const grantedByLevel = 'reward-sell-lvl-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(grantedByLevel);
+  p.xp = 999999999;
+  p.caseUnlocks = [caseItemKey(item)];   // also happens to be in caseUnlocks, e.g. levelled past a case win
+  const r2 = profiles.sellUnlock(grantedByLevel, item.kind, item.id);
+  assert.equal(r2.ok, false, JSON.stringify(r2), 'selling something the player keeps regardless via level is a free-money exploit');
+  assert.ok(profiles.getProfile(grantedByLevel).caseUnlocks.includes(caseItemKey(item)), 'a refused sell must not remove the item');
+});
+
+test('sellUnlock succeeds for a case-only item, removes it and credits half the buy price', async () => {
+  const { CASE_POOL, DIRECT_BUY_GEMS, caseItemKey } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const item = CASE_POOL.find(i => i.kind === 'decal');
+  const pid = 'reward-sell-ok-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.gems = 0;
+  p.caseUnlocks = [caseItemKey(item)];
+  const result = profiles.sellUnlock(pid, item.kind, item.id);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const expectedPayout = Math.round(DIRECT_BUY_GEMS[item.rarity] / 2);
+  assert.equal(result.payout, expectedPayout);
+  const after = profiles.getProfile(pid);
+  assert.equal(after.gems, expectedPayout);
+  assert.ok(!after.caseUnlocks.includes(caseItemKey(item)));
+});

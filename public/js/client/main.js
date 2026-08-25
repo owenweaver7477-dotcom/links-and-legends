@@ -3298,15 +3298,47 @@ function renderClubhouse() {
   HUD.renderRewards(prof);
   HUD.renderBinds();
   Net.ranking(d => HUD.renderWorld(d, G.myPid));
-  HUD.renderShop(prof, item => {
+  // Shared between the Pro Shop's own tabs AND the Inventory page's Buy
+  // buttons (see HUD.renderInventory's onBuy param) — one purchase
+  // dispatcher, not two.
+  function onShopBuy(item) {
     if (item === 'case:buy') return buyCaseOfKind('standard');
     if (item === 'case:buyVault') return buyCaseOfKind('vault');
     if (item === 'case:buyPro') return buyCaseOfKind('pro');
     if (item === 'case:open') return openCaseFlow('standard');
     if (item === 'case:openVault') return openCaseFlow('vault');
     if (item === 'case:openPro') return openCaseFlow('pro');
+    if (item.startsWith('item:buy:')) {
+      const [, , kind, id] = item.split(':');
+      return Net.buyItem(kind, id, res => {
+        if (!res?.ok) { HUD.toast(res?.error || 'Could not buy that.', 'warn', 2200); return; }
+        HUD.toast(res.item.name + ' bought.', 'good', 1800);
+      });
+    }
     Net.buy(item);
-  });
+  }
+  HUD.renderShop(prof, onShopBuy);
+  function onInventoryPick(key, value) {
+    lookDraft = normaliseLook({ ...lookDraft, [key]: value });
+    saveLook(lookDraft);
+    refreshMenuAvatar();
+    showGolferCloseUp();
+    Net.setLook(lookDraft);
+    HUD.renderInventory(G.profile, lookDraft, onInventoryPick, onShopBuy, onInventorySell);   // reflect the new equip state immediately
+  }
+  function onInventorySell(kind, id) {
+    Net.sellItem(kind, id, res => {
+      if (!res?.ok) { HUD.toast(res?.error || 'Could not sell that.', 'warn', 2200); return; }
+      HUD.toast(res.item.name + ' sold — +' + res.payout.toLocaleString() + ' gems.', 'good', 1800);
+      // the item might have been equipped — drop it back to None locally
+      // rather than leaving lookDraft pointing at something no longer
+      // owned. Same kind->look-field mapping HUD's EARNED_GROUPS uses
+      // (ball's own look field is called ballFinish, not ball).
+      const lookKey = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ballFinish' }[kind];
+      if (lookKey && lookDraft[lookKey] === id) onInventoryPick(lookKey, null);
+    });
+  }
+  HUD.renderInventory(prof, lookDraft, onInventoryPick, onShopBuy, onInventorySell);
   /* The room player FIRST, then the saved profile, then the default set.
      The middle step was missing, and the clubhouse is opened from the front
      page where there is no room — so `me()` was null and the bag screen

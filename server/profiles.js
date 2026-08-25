@@ -19,7 +19,8 @@ import { normaliseSkin } from '../public/js/shared/clubskins.js';
 import { normaliseDifficulty, earnRate } from '../public/js/shared/difficulty.js';
 import { planClaim } from '../public/js/shared/loginrewards.js';
 import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD,
-         CASE_COIN_COST, VAULT_GEM_COST, VAULT_TIER, PRO_CASE_GEM_COST } from '../public/js/shared/cases.js';
+         CASE_COIN_COST, VAULT_GEM_COST, VAULT_TIER, PRO_CASE_GEM_COST,
+         CASE_POOL, DIRECT_BUY_GEMS } from '../public/js/shared/cases.js';
 import { unlocksAt } from '../public/js/shared/unlocks.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
@@ -1084,6 +1085,49 @@ export function buyVaultCase(pid) {
   p.vaultCases = (p.vaultCases || 0) + 1;
   saveSoon();
   return { ok: true, gems: p.gems, vaultCases: p.vaultCases };
+}
+
+/* Naming the exact item rather than rolling for it — CASE_POOL is already
+   the right lookup table (it's every decal/trail/title/ball tagged with
+   its rarity, see cases.js), so this reuses it rather than a second
+   catalog. Writes into caseUnlocks exactly the way a case pull does — the
+   ownership check, the wardrobe, the reveal-style rendering, all of it
+   already understands that array and needed zero changes for this. */
+export function buyUnlockDirect(pid, kind, id) {
+  const item = CASE_POOL.find(it => it.kind === kind && it.id === id);
+  if (!item) return { ok: false, error: 'No such item.' };
+  const p = getProfile(pid);
+  const level = levelFromXp(p.xp || 0).level;
+  const alreadyOwned = unlocksAt(level).some(u => u.kind === kind && u.id === id)
+    || (p.caseUnlocks || []).includes(caseItemKey(item));
+  if (alreadyOwned) return { ok: false, error: 'Already owned.' };
+  const cost = DIRECT_BUY_GEMS[item.rarity];
+  if ((p.gems || 0) < cost) return { ok: false, error: `Not enough gems (need ${cost}).` };
+  p.gems -= cost;
+  p.caseUnlocks = [...(p.caseUnlocks || []), caseItemKey(item)];
+  saveSoon();
+  return { ok: true, item, cost, gems: p.gems };
+}
+
+/* Only for something owned PURELY through a case — an item the player's
+   own level also grants gets no Sell action at all, server-side, not just
+   hidden client-side: paying out gems for something they keep regardless
+   of the sale is a free-money exploit, not a trade. */
+export function sellUnlock(pid, kind, id) {
+  const item = CASE_POOL.find(it => it.kind === kind && it.id === id);
+  if (!item) return { ok: false, error: 'No such item.' };
+  const p = getProfile(pid);
+  const key = caseItemKey(item);
+  if (!(p.caseUnlocks || []).includes(key)) return { ok: false, error: 'Not owned.' };
+  const level = levelFromXp(p.xp || 0).level;
+  if (unlocksAt(level).some(u => u.kind === kind && u.id === id)) {
+    return { ok: false, error: 'Your level already grants this — nothing to sell.' };
+  }
+  p.caseUnlocks = p.caseUnlocks.filter(k => k !== key);
+  const payout = Math.round(DIRECT_BUY_GEMS[item.rarity] / 2);
+  p.gems = (p.gems || 0) + payout;
+  saveSoon();
+  return { ok: true, item, payout, gems: p.gems };
 }
 
 export function buyProCase(pid) {

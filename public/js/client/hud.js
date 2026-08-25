@@ -17,7 +17,8 @@ import { toYards, clamp } from '../shared/rng.js';
 import { ShotSim, makeFlatRange } from '../shared/ballistics.js';
 import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
 import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, vaultTierOdds, PITY_THRESHOLD,
-         PITY_TIER, VAULT_TIER, tierIndex, CASE_COIN_COST, VAULT_GEM_COST, PRO_CASE_GEM_COST } from '../shared/cases.js';
+         PITY_TIER, VAULT_TIER, tierIndex, CASE_COIN_COST, VAULT_GEM_COST, PRO_CASE_GEM_COST,
+         DIRECT_BUY_GEMS } from '../shared/cases.js';
 import { icon } from './icons.js';
 import { purityTier } from '../shared/purity.js';
 
@@ -63,7 +64,7 @@ for (const id of [
   'teeList', 'ballColours', 'bagList', 'bagCount', 'btnBagReset', 'optMetres',
   'cartKmh', 'dialFill', 'dialNeedle', 'cartDamage', 'cartDamageTxt', 'mFace', 'touchPad',
   'coinHud', 'coinHudN', 'netPill', 'netDiag', 'walletHud', 'walletCoinsN', 'walletGemsN',
-  'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal', 'gemBal',
+  'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal', 'gemBal', 'invSections',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -1134,7 +1135,7 @@ HUD.renderShop = (prof, onBuy) => {
      instead of one grid a filter would have to invent boundaries inside. */
   const tabs = document.createElement('div');
   tabs.className = 'shoptabs';
-  for (const [id, label] of [['clubs', 'Clubs'], ['gear', 'Gear'], ['crew', 'Caddie Crew'], ['cases', 'Cases']]) {
+  for (const [id, label] of [['clubs', 'Clubs'], ['gear', 'Gear'], ['crew', 'Caddie Crew'], ['cases', 'Cases'], ['items', 'Items']]) {
     const t = document.createElement('button');
     t.className = 'shoptab' + (shopTab === id ? ' on' : '');
     t.textContent = label;
@@ -1415,6 +1416,75 @@ HUD.renderShop = (prof, onBuy) => {
       card.appendChild(btn);
       grid.appendChild(card);
     }
+  } else if (shopTab === 'items') {
+    /* Naming the exact thing you want rather than rolling for it — the
+       expensive way to shop, on purpose (see DIRECT_BUY_GEMS's own
+       comment). Same CASE_POOL the Cases tab's contents preview already
+       reads, so this list can never drift from what a case can actually
+       give — there's only one catalog of "the four case-eligible kinds",
+       not a second one invented for direct sale. */
+    const level = prof?.level ?? 1;
+    const ownedIds = new Set([
+      ...unlocksAt(level).map(u => u.kind + ':' + u.id),
+      ...(prof?.caseUnlocks || [])
+    ]);
+    for (const item of CASE_POOL) {
+      const key = item.kind + ':' + item.id;
+      const has = ownedIds.has(key);
+      const cost = DIRECT_BUY_GEMS[item.rarity];
+      const rarity = RARITIES.find(r => r.id === item.rarity) || RARITIES[0];
+      const card = document.createElement('div');
+      card.className = 'shopcard shopcard-item' + (has ? ' owned' : '');
+      card.style.setProperty('--rarity-color', rarity.color);
+      const preview = item.kind === 'decal'
+        ? `<img class="sc-decal-preview" width="40" height="40" alt="">` : '';
+      card.innerHTML = `${preview}<b>${escapeHtml(item.name)}</b>` +
+        `<span class="sc-rarity" style="color:${rarity.color}">${rarity.name}</span>` +
+        `<span class="sc-blurb">${escapeHtml(UNLOCK_KINDS[item.kind]?.name || item.kind)}</span>`;
+      if (preview) {
+        // .src as a property, never in the HTML string above — see
+        // renderClubDecalPicker's own comment on why (portal-bundle
+        // verifier reads a literal data-URI-shaped src="..." as a real
+        // asset path).
+        const img = card.querySelector('.sc-decal-preview');
+        img.src = shaftDecalDataUrl(item.id, item.color || rarity.color) || '';
+      }
+      const row = document.createElement('div');
+      row.className = 'shopcard-row';
+      const buyBtn = document.createElement('button');
+      if (has) {
+        buyBtn.className = 'btn'; buyBtn.disabled = true;
+        buyBtn.innerHTML = 'Owned ' + icon('check');
+      } else {
+        const canBuy = (prof?.gems || 0) >= cost;
+        buyBtn.className = 'btn' + (canBuy ? ' primary' : '');
+        buyBtn.disabled = !canBuy;
+        buyBtn.innerHTML = canBuy ? 'Buy · ' + icon('gem') + ' ' + cost
+          : `${icon('gem')} ${cost} · need ${cost - (prof?.gems || 0)} more`;
+        // same two-tap arm/confirm as the Cases tab's own buy buttons —
+        // appropriate here too given the price, arguably more so
+        if (canBuy) {
+          const buyLabel = buyBtn.innerHTML;
+          let armed = 0;
+          buyBtn.addEventListener('click', () => {
+            const now = Date.now();
+            if (now - armed > 3000) {
+              armed = now;
+              buyBtn.classList.add('confirm');
+              buyBtn.textContent = 'Tap again to buy';
+              setTimeout(() => { buyBtn.classList.remove('confirm'); buyBtn.innerHTML = buyLabel; }, 3000);
+              return;
+            }
+            buyBtn.classList.remove('confirm');
+            buyBtn.innerHTML = buyLabel;
+            onBuy('item:buy:' + item.kind + ':' + item.id);
+          });
+        }
+      }
+      row.appendChild(buyBtn);
+      card.appendChild(row);
+      grid.appendChild(card);
+    }
   }
 };
 
@@ -1579,6 +1649,163 @@ HUD.renderLook = (look, onPick, level = 1, caseUnlocks = []) => {
       ? `${pending.map(g => g.title.toLowerCase()).join(', ')} — the first arrives at level ${next.at}.`
       : '';
     el.lookPicker.appendChild(p);
+  }
+};
+
+/**
+ * Everything the level ladder and cases have ever handed out, in one
+ * place — the quick-change panel only ever covered 4 of the 7 unlock
+ * kinds (decal/trail/title/ball), as plain text pills with no preview.
+ * `onPick` is the exact same (key, id) equip callback renderLook already
+ * uses; `onBuy` is the exact same buy-string dispatcher renderShop
+ * already uses ('item:buy:kind:id') — reusing both rather than inventing
+ * a second equip/purchase path. `onSell(kind, id)` is new here — there's
+ * no other surface a Sell action could live on.
+ *
+ * hat and melee get no equip action here: unlocks.js defines them, but
+ * nothing else in the game currently reads them — the real hat and melee
+ * systems are separate catalogs (wardrobe.js's LOOK_GROUPS.hat,
+ * celebrations.js's melee cycle) that don't reference these ids at all.
+ * Showing a button that would do nothing is worse than not showing one.
+ */
+HUD.renderInventory = (prof, look, onPick, onBuy, onSell) => {
+  const box = el.invSections;
+  if (!box) return;
+  const level = prof?.level ?? 1;
+  const caseUnlocks = prof?.caseUnlocks || [];
+  const decalPurity = prof?.decalPurity || {};
+  const gems = prof?.gems || 0;
+  const equippedEmotes = new Set(prof?.equippedEmotes || []);
+
+  box.innerHTML = '';
+  for (const [kind, kindMeta] of Object.entries(UNLOCK_KINDS)) {
+    const items = UNLOCKS.filter(u => u.kind === kind).sort((a, b) => a.at - b.at);
+    if (!items.length) continue;
+    const grp = EARNED_GROUPS.find(g => g.kind === kind) || null;   // null for emote/hat/melee
+
+    const section = document.createElement('div');
+    section.className = 'inv-section';
+    const h = document.createElement('h5');
+    h.textContent = kindMeta.name;
+    section.appendChild(h);
+    const grid = document.createElement('div');
+    grid.className = 'inv-grid';
+
+    for (const u of items) {
+      const casePoolItem = CASE_POOL.find(it => it.kind === kind && it.id === u.id);   // undefined for emote/hat/melee
+      const owned = level >= u.at || caseUnlocks.includes(kind + ':' + u.id);
+      const card = document.createElement('div');
+      card.className = 'inv-card' + (owned ? ' owned' : '');
+
+      // preview art
+      const art = document.createElement('div');
+      art.className = 'inv-art';
+      if (kind === 'decal') {
+        const purity = decalPurity[u.id] || 0;
+        const pattern = shaftDecalDataUrl(u.id, u.color || '#8fe07a', purity);
+        if (pattern) {
+          const img = document.createElement('img');
+          img.width = 40; img.height = 40; img.alt = '';
+          img.src = pattern;   // property, not a src="..." string — see renderClubDecalPicker's comment
+          art.appendChild(img);
+          if (purity) {
+            const tier = purityTier(purity);
+            const badge = document.createElement('b');
+            badge.className = 'decal-purity'; badge.style.setProperty('--pc', tier.color);
+            badge.textContent = purity;
+            art.appendChild(badge);
+          }
+        }
+      } else if (u.color) {
+        art.innerHTML = `<i style="background:${u.color}"></i>`;
+      } else {
+        // decal/trail/title/ball each have their own icon; emote/hat/melee
+        // don't (see icons.js) — a generic gift box stands in rather than
+        // an empty box, since icon() silently returns '' for an unknown name
+        art.innerHTML = icon(['decal', 'trail', 'title', 'ball'].includes(kind) ? kind : 'gift', { size: 20 });
+      }
+      card.appendChild(art);
+
+      const name = document.createElement('b');
+      name.textContent = u.name;
+      card.appendChild(name);
+
+      const status = document.createElement('span');
+      status.className = 'inv-status';
+      if (owned) {
+        status.textContent = kind === 'emote' ? (equippedEmotes.has(u.id) ? 'in your emote wheel' : 'owned')
+          : grp && look?.[grp.key] === u.id ? 'equipped' : 'owned';
+      } else if (casePoolItem) {
+        const cost = DIRECT_BUY_GEMS[casePoolItem.rarity];
+        status.textContent = `level ${u.at}, or ${cost.toLocaleString()} gems`;
+      } else {
+        status.textContent = `level ${u.at}`;
+      }
+      card.appendChild(status);
+
+      if (owned && grp) {
+        const btns = document.createElement('div');
+        btns.className = 'inv-btns';
+        const eq = document.createElement('button');
+        eq.className = 'btn mini';
+        const isOn = look?.[grp.key] === u.id;
+        eq.textContent = isOn ? 'Equipped' : 'Equip';
+        eq.disabled = isOn;
+        if (!isOn) eq.addEventListener('click', () => onPick(grp.key, u.id));
+        btns.appendChild(eq);
+
+        // Sellable only if it's owned PURELY through a case — one the
+        // player's own level also grants gets no Sell button at all, same
+        // rule sellUnlock enforces server-side (see its own comment):
+        // paying out gems for something they keep regardless is a
+        // free-money exploit, not a trade.
+        if (casePoolItem && caseUnlocks.includes(kind + ':' + u.id) && level < u.at) {
+          const sell = document.createElement('button');
+          sell.className = 'btn mini';
+          const payout = Math.round(DIRECT_BUY_GEMS[casePoolItem.rarity] / 2);
+          sell.textContent = 'Sell · ' + payout.toLocaleString();
+          let armed = 0;
+          sell.addEventListener('click', () => {
+            const now = Date.now();
+            if (now - armed > 3000) {
+              armed = now;
+              sell.classList.add('confirm');
+              sell.textContent = 'Tap again';
+              setTimeout(() => { sell.classList.remove('confirm'); sell.textContent = 'Sell · ' + payout.toLocaleString(); }, 3000);
+              return;
+            }
+            onSell(kind, u.id);
+          });
+          btns.appendChild(sell);
+        }
+        card.appendChild(btns);
+      } else if (!owned && casePoolItem && gems >= DIRECT_BUY_GEMS[casePoolItem.rarity]) {
+        const btn = document.createElement('button');
+        btn.className = 'btn mini primary';
+        btn.textContent = 'Buy';
+        // same two-tap arm/confirm the Items shop tab's own buy buttons
+        // use — a steep, real-currency spend deserves the same misclick
+        // protection everywhere it's offered, not just on one of the two
+        // surfaces that offer it.
+        let armed = 0;
+        btn.addEventListener('click', () => {
+          const now = Date.now();
+          if (now - armed > 3000) {
+            armed = now;
+            btn.classList.add('confirm');
+            btn.textContent = 'Tap again';
+            setTimeout(() => { btn.classList.remove('confirm'); btn.textContent = 'Buy'; }, 3000);
+            return;
+          }
+          onBuy('item:buy:' + kind + ':' + u.id);
+        });
+        card.appendChild(btn);
+      }
+
+      grid.appendChild(card);
+    }
+    section.appendChild(grid);
+    box.appendChild(section);
   }
 };
 

@@ -1066,6 +1066,14 @@ h1 em { font-style: normal; color: #7ed492; }
 .shopcard-case-common .sc-rarity { color: #6fce8a; }
 .shopcard-case-rare .sc-rarity { color: #e8a83a; }
 .shopcard-case-legendary .sc-rarity { color: #3fe0ff; }
+/* The Items tab — buying a specific decal/trail/title/ball outright
+   instead of rolling a case for it. Top border and rarity label both take
+   --rarity-color straight from RARITIES, same variable .shopcard.owned
+   already reads, so a card doesn't need its own colour system. */
+.shopcard-item { border-top: 2px solid var(--rarity-color, transparent); }
+.shopcard-item .sc-rarity { font-size: 10px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; }
+.sc-decal-preview { width: 40px; height: 40px; border-radius: 8px; object-fit: cover;
+  border: 1px solid rgba(255,255,255,.15); }
 /* How to earn the currency you're short of — shown only when you can't
    afford the case, so it reads as an answer rather than a nag. */
 .shopcard-case .sc-earn { font-size: 10.5px; line-height: 1.45; color: #e8c15a;
@@ -3767,6 +3775,27 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
   padding: 0 2px; border-radius: 999px; background: #141f18; border: 1px solid var(--pc, #9fb0a6);
   color: var(--pc, #9fb0a6); font-size: 7.5px; font-weight: 800; line-height: 13px; text-align: center;
   font-variant-numeric: tabular-nums; }
+
+/* ═════════════════════════════════ the Inventory tab — everything the
+   ladder and the cases have ever handed out, at last in one place. */
+.inv-section { margin: 0 0 20px; }
+.inv-section:last-child { margin-bottom: 0; }
+.inv-section h5 { margin: 0 0 8px; font-size: 11px; font-weight: 800; letter-spacing: .8px;
+  text-transform: uppercase; color: #8fd0a2; }
+.inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(98px, 1fr)); gap: 8px; }
+.inv-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px 9px;
+  border-radius: 12px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
+  text-align: center; }
+.inv-card.owned { border-color: rgba(111,206,138,.28); }
+.inv-card:not(.owned) { opacity: .5; }
+.inv-art { position: relative; width: 40px; height: 40px; display: grid; place-items: center; color: #cfe4d3; }
+.inv-art img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; }
+.inv-art i { display: block; width: 24px; height: 24px; border-radius: 50%; }
+.inv-card b { font-size: 11px; font-weight: 700; line-height: 1.25; }
+.inv-status { font-size: 9.5px; color: #8fa694; }
+.inv-card .btn.mini { margin-top: 2px; font-size: 10px; padding: 4px 9px; }
+.inv-btns { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.inv-btns .btn.mini { margin-top: 0; }
 
 /* ═══════════════════════════════════════ §7.1 — daily rewards ═══════════ */
 .rewardscard { width: min(520px, 100%); }

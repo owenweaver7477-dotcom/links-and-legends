@@ -213,6 +213,7 @@ import { crewPurchase, cartBoost } from './public/js/shared/crew.js';
 import { settleRound, setDifficulty, difficultyOf,
          setLook, setBallColor, setBag, setEquippedEmotes, kitOf, markSeen,
          flushProfiles, claimLogin, openCase, buyCase, openVaultCase, buyVaultCase, openProCase, buyProCase,
+         buyUnlockDirect, sellUnlock,
          devSetLevel, devGrantTestGems } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
@@ -2210,6 +2211,31 @@ io.on('connection', socket => {
     const pid = sockets.get(socket.id)?.pid || socket.data.pid;
     if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
     const result = buyProCase(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  /* Naming the exact item rather than rolling for it, and selling one
+     back — both take {kind, id} straight from the client, but neither
+     trusts it beyond a lookup key: buyUnlockDirect/sellUnlock re-derive
+     everything real (the item, its rarity, its price, whether it's
+     actually ownable/sellable) from CASE_POOL and the player's own real
+     profile server-side, the same discipline every other case handler
+     here already follows. */
+  socket.on('item:buy', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = buyUnlockDirect(pid, String(d?.kind || ''), String(d?.id || ''));
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('item:sell', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = sellUnlock(pid, String(d?.kind || ''), String(d?.id || ''));
     if (result.ok) socket.emit('profile', publicProfile(pid));
     reply(result);
   });
