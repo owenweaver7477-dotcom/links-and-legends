@@ -63,12 +63,17 @@ export const UNLOCKS = [
   { at: 55, kind: 'decal', id: 'tartan',      name: 'Tartan',         color: '#7d2f42' },
   { at: 58, kind: 'emote', id: 'flex',        name: 'Flex' },
   { at: 60, kind: 'ball',  id: 'chrome',      name: 'Chrome' },
+  { at: 62, kind: 'decal', id: 'diamond',     name: 'Diamond lattice', color: '#3fe0ff' },
 
   /* -- the long tail: rarer, and each one obviously expensive -- */
   { at: 66, kind: 'trail', id: 'violet',      name: 'Violet plume',   color: '#c77dff' },
+  { at: 68, kind: 'trail', id: 'copper',      name: 'Copper trail',   color: '#c8804a' },
   { at: 70, kind: 'emote', id: 'tip',         name: 'Cap tip' },
   { at: 72, kind: 'decal', id: 'goldleaf',    name: 'Gold leaf',      color: '#ffd94a' },
+  { at: 74, kind: 'ball',  id: 'opal',        name: 'Opal' },
   { at: 78, kind: 'title', id: 'veteran',     name: 'Veteran' },
+  { at: 80, kind: 'decal', id: 'wave',        name: 'Wave',           color: '#2f9e8a' },
+  { at: 82, kind: 'title', id: 'oldhand',     name: 'Old Hand' },
   { at: 84, kind: 'trail', id: 'aurora',      name: 'Aurora',         color: '#8fe07a' },
   { at: 88, kind: 'emote', id: 'sleep',       name: 'Slow play' },
   { at: 90, kind: 'ball',  id: 'prism',       name: 'Prism' },

@@ -138,7 +138,7 @@ export function getProfile(pid) {
          worked at all.  This buys the first real upgrade immediately, which
          is the moment the whole progression makes sense. */
       coins: STARTING_COINS, rating: 20, xp: 0,
-      gems: 0, cases: 0, caseUnlocks: [],
+      gems: 0, cases: 0, caseUnlocks: [], decalPurity: {},
       login: { day: 0, cycle: 1, freezes: 0, lastClaimDate: null },
       gear: { ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 },
       crew: { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
@@ -328,6 +328,7 @@ export function publicProfile(pid) {
     rounds: p.rounds, best: p.best, coins: p.coins, rating: Math.round(p.rating),
     xp: p.xp || 0, ...levelFromXp(p.xp || 0),
     gems: p.gems || 0, cases: p.cases || 0, caseUnlocks: p.caseUnlocks || [],
+    decalPurity: p.decalPurity || {},
     casesSincePity: p.casesSincePity || 0, proCases: p.proCases || 0, vaultCases: p.vaultCases || 0,
     login: p.login || { day: 0, cycle: 1, freezes: 0, lastClaimDate: null },
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
@@ -960,13 +961,21 @@ export function openCase(pid) {
      this open, not only when it happens to land on an item. */
   const sincePity = p.casesSincePity || 0;
   const forcePity = sincePity >= PITY_THRESHOLD - 1;
-  const result = rollCase(owned, Math.random, forcePity);
+  const result = rollCase(owned, Math.random, forcePity, p.decalPurity || {});
+  // A purity result counts the same as gems for this counter, deliberately
+  // — not "not honoured", just not grounds to reset it early on a natural
+  // (unforced) roll. A FORCED roll always resets regardless, via forcePity
+  // below, whatever kind it lands on — a purity result there still means
+  // every Pro-and-above item is already owned, the pity floor's intent
+  // honoured via an upgrade instead of a new item.
   const metPityNaturally = result.kind === 'item' && tierIndex(result.rarity) >= tierIndex(PITY_TIER);
   p.casesSincePity = (forcePity || metPityNaturally) ? 0 : sincePity + 1;
 
   p.cases -= 1;
   if (result.kind === 'item') {
     p.caseUnlocks = [...(p.caseUnlocks || []), caseItemKey(result.item)];
+  } else if (result.kind === 'purity') {
+    p.decalPurity = { ...(p.decalPurity || {}), [result.item.id]: result.newPurity };
   } else {
     p.gems = (p.gems || 0) + result.amount;
   }
@@ -1001,10 +1010,12 @@ export function openProCase(pid) {
   const level = levelFromXp(p.xp || 0).level;
   const owned = new Set(unlocksAt(level).map(u => u.kind + ':' + u.id));
   for (const id of (p.caseUnlocks || [])) owned.add(id);
-  const result = rollCase(owned, Math.random, true);
+  const result = rollCase(owned, Math.random, true, p.decalPurity || {});
   p.proCases -= 1;
   if (result.kind === 'item') {
     p.caseUnlocks = [...(p.caseUnlocks || []), caseItemKey(result.item)];
+  } else if (result.kind === 'purity') {
+    p.decalPurity = { ...(p.decalPurity || {}), [result.item.id]: result.newPurity };
   } else {
     p.gems = (p.gems || 0) + result.amount;
   }
@@ -1053,10 +1064,12 @@ export function openVaultCase(pid) {
   const level = levelFromXp(p.xp || 0).level;
   const owned = new Set(unlocksAt(level).map(u => u.kind + ':' + u.id));
   for (const id of (p.caseUnlocks || [])) owned.add(id);
-  const result = rollCase(owned, Math.random, VAULT_TIER);
+  const result = rollCase(owned, Math.random, VAULT_TIER, p.decalPurity || {});
   p.vaultCases -= 1;
   if (result.kind === 'item') {
     p.caseUnlocks = [...(p.caseUnlocks || []), caseItemKey(result.item)];
+  } else if (result.kind === 'purity') {
+    p.decalPurity = { ...(p.decalPurity || {}), [result.item.id]: result.newPurity };
   } else {
     p.gems = (p.gems || 0) + result.amount;
   }

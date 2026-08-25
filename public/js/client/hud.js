@@ -19,6 +19,7 @@ import { rewardFor, utcDateKey, CYCLE_LENGTH } from '../shared/loginrewards.js';
 import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, vaultTierOdds, PITY_THRESHOLD,
          PITY_TIER, VAULT_TIER, tierIndex, CASE_COIN_COST, VAULT_GEM_COST, PRO_CASE_GEM_COST } from '../shared/cases.js';
 import { icon } from './icons.js';
+import { purityTier } from '../shared/purity.js';
 
 const $ = id => document.getElementById(id);
 const el = {};
@@ -690,7 +691,7 @@ HUD.orbitInspect = (yaw, pitch) => {
  * club finishes already do: owned ones are pressable, others show the
  * level that unlocks them so there is always a next one to want.
  */
-HUD.renderClubDecalPicker = (look, level, caseUnlocks = []) => {
+HUD.renderClubDecalPicker = (look, level, caseUnlocks = [], decalPurity = {}) => {
   const grid = document.getElementById('inspectDecalGrid');
   if (!grid) return;
   const decals = UNLOCKS.filter(u => u.kind === 'decal');
@@ -701,11 +702,16 @@ HUD.renderClubDecalPicker = (look, level, caseUnlocks = []) => {
   const cells = decals.map(u => {
     const has = owned(u.id);
     const color = u.color || '#8fe07a';
+    const purity = decalPurity[u.id] || 0;
+    const tier = purity ? purityTier(purity) : null;
+    const title = has
+      ? `${escapeHtml(u.name)}${tier ? ` — ${tier.name} (${purity}%)` : ''}`
+      : `${escapeHtml(u.name)} — level ${u.at}`;
     return `<button class="${!has ? 'locked' : ''}${u.id === cur ? ' on' : ''}"
-      data-decal="${has ? u.id : ''}" data-pattern-id="${has ? u.id : ''}" data-pattern-color="${color}"
+      data-decal="${has ? u.id : ''}" data-pattern-id="${has ? u.id : ''}" data-pattern-color="${color}" data-pattern-purity="${purity}"
       ${has ? '' : 'disabled'}
-      title="${escapeHtml(u.name)}${has ? '' : ` — level ${u.at}`}">
-      ${has ? `<i style="background:${color}"></i>` : u.at}
+      title="${title}">
+      ${has ? `<i style="background:${color}"></i>${tier ? `<b class="decal-purity" style="--pc:${tier.color}">${purity}</b>` : ''}` : u.at}
     </button>`;
   }).join('');
   grid.innerHTML = none + cells;
@@ -718,7 +724,7 @@ HUD.renderClubDecalPicker = (look, level, caseUnlocks = []) => {
   for (const btn of grid.querySelectorAll('[data-pattern-id]')) {
     const id = btn.dataset.patternId;
     if (!id) continue;
-    const pattern = shaftDecalDataUrl(id, btn.dataset.patternColor);
+    const pattern = shaftDecalDataUrl(id, btn.dataset.patternColor, Number(btn.dataset.patternPurity) || 0);
     if (!pattern) continue;
     const img = document.createElement('img');
     img.width = 20; img.height = 20; img.alt = '';
@@ -1972,8 +1978,13 @@ HUD.playCaseReel = (result, { onTick, onSettle } = {}) => {
   el.caseReelWrap.hidden = false;
   el.caseReelWrap.closest('.casecard')?.classList.add('reeling');
 
-  const isItem = result.kind === 'item';
-  const rarity = isItem ? (RARITIES.find(r => r.id === result.rarity) || RARITIES[0])
+  // A purity result still landed on a real pool item (the decal it just
+  // polished) — the reel treats it exactly like an item pull, right down
+  // to the near-miss weighting, using that decal's own native rarity
+  // (CASE_POOL already tags every entry with one) rather than anything
+  // about the purity gain itself, which the reel has no use for.
+  const isItem = result.kind === 'item' || result.kind === 'purity';
+  const rarity = isItem ? (RARITIES.find(r => r.id === (result.rarity || result.item?.rarity)) || RARITIES[0])
                          : { id: null, color: GEMS_CHIP_COLOR };
   const targetIdx = REEL_LEN - 4 + Math.floor(Math.random() * 3);   // land near, not at, the very end
 
@@ -2040,11 +2051,20 @@ HUD.revealCase = (result) => {
   el.caseReveal.hidden = false;
   el.btnCaseDone.hidden = false;
   const isItem = result.kind === 'item';
-  const rarity = isItem ? (RARITIES.find(r => r.id === result.rarity) || RARITIES[0]) : { name: 'Bonus', color: '#8fe07a' };
+  const isPurity = result.kind === 'purity';
+  // A purity result still has a real item (the decal it just polished) —
+  // its OWN rarity badge shows the resulting purity tier instead of the
+  // item's already-known rarity, since "Polished" is the actual news this
+  // pull delivered, not the fact that it's a decal the player has owned
+  // for ages.
+  const pTier = isPurity ? purityTier(result.newPurity) : null;
+  const rarity = isItem ? (RARITIES.find(r => r.id === result.rarity) || RARITIES[0])
+    : isPurity ? { name: pTier.name, color: pTier.color }
+    : { name: 'Bonus', color: '#8fe07a' };
   el.caseReveal.style.setProperty('--rarity-color', rarity.color);
   el.caseRarity.textContent = rarity.name;
   el.caseRarity.style.color = rarity.color;
-  if (isItem) {
+  if (isItem || isPurity) {
     // A decal pull gets its own actual pattern, not a generic silhouette —
     // the shaft decal system draws real art now (shaftdecals.js), so there
     // is a real thing to show. Everything else (trail/title/ball) still
@@ -2053,7 +2073,8 @@ HUD.revealCase = (result) => {
     // the switch off emoji, still true for the kinds with nothing else to
     // draw.
     const itemColor = result.item.color || rarity.color;
-    const pattern = result.item.kind === 'decal' ? shaftDecalDataUrl(result.item.id, itemColor) : null;
+    const purityNow = isPurity ? result.newPurity : 0;
+    const pattern = result.item.kind === 'decal' ? shaftDecalDataUrl(result.item.id, itemColor, purityNow) : null;
     if (pattern) {
       // The pattern is set as an <img>.src PROPERTY, never written into an
       // HTML string as src="..." — see renderClubDecalPicker's comment on
@@ -2076,8 +2097,13 @@ HUD.revealCase = (result) => {
       el.caseItemArt.style.borderRadius = el.caseItemArt.style.border = '';
       el.caseItemArt.style.color = itemColor;
     }
-    el.caseItemName.textContent = result.item.name;
-    el.caseItemKind.textContent = UNLOCK_KINDS[result.item.kind]?.name || result.item.kind;
+    if (isPurity) {
+      el.caseItemName.textContent = `${result.item.name} — +${result.gain} purity`;
+      el.caseItemKind.textContent = `now ${pTier.name} (${result.newPurity}%)`;
+    } else {
+      el.caseItemName.textContent = result.item.name;
+      el.caseItemKind.textContent = UNLOCK_KINDS[result.item.kind]?.name || result.item.kind;
+    }
   } else {
     el.caseItemArt.innerHTML = icon('gem', { size: 64 });
     el.caseItemArt.style.width = el.caseItemArt.style.height = '';

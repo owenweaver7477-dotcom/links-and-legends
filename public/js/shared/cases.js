@@ -155,10 +155,14 @@ export function vaultTierOdds() { return oddsFromFloor(VAULT_TIER); }
  *   out. A tier id (e.g. 'tour') skips straight to THAT tier instead, for
  *   a case that guarantees a different floor than the Pro Case's (the
  *   Vault's openVaultCase passes VAULT_TIER here).
+ * @param {{ [decalId: string]: number }} purity  each owned decal's current
+ *   0-100 purity, so a fully-exhausted roll can polish one instead of
+ *   handing back nothing — see the fallback below.
  * @returns {{ ok: true, kind: 'item', item: object, rarity: string } |
+ *           { ok: true, kind: 'purity', item: object, gain: number, newPurity: number } |
  *           { ok: true, kind: 'gems', amount: number }}
  */
-export function rollCase(owned, rand = Math.random, forcePity = false) {
+export function rollCase(owned, rand = Math.random, forcePity = false, purity = {}) {
   let startIdx;
   if (forcePity === false) {
     const totalWeight = RARITY_BOUNDS.reduce((s, r) => s + r.weight, 0);
@@ -182,6 +186,21 @@ export function rollCase(owned, rand = Math.random, forcePity = false) {
       return { ok: true, kind: 'item', item, rarity: tier.id };
     }
   }
-  // every tier exhausted — a maxed-out collector still gets something
+  // Every tier exhausted — genuinely nothing new left to hand out. Rather
+  // than a flat, dead payout every single time from here on (the exact
+  // thing that makes a maxed-out account's cases feel pointless to open),
+  // an owned decal that isn't already Flawless gets polished instead —
+  // see purity.js for what the resulting number means on screen. Only
+  // decals: trail/title/ball have no equivalent "getting purer" visual, so
+  // those still fall straight to gems once exhausted, same as always.
+  const upgradeable = CASE_POOL.filter(it =>
+    it.kind === 'decal' && owned.has(idOf(it)) && (purity[it.id] || 0) < 100);
+  if (upgradeable.length) {
+    const item = upgradeable[Math.floor(rand() * upgradeable.length)];
+    const from = purity[item.id] || 0;
+    const gain = Math.min(100 - from, 6 + Math.floor(rand() * 9));   // +6..14
+    return { ok: true, kind: 'purity', item, gain, newPurity: from + gain };
+  }
+  // a maxed-out collector — every item AND every decal's purity — still gets something
   return { ok: true, kind: 'gems', amount: 60 };
 }

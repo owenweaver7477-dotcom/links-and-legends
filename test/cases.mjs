@@ -35,12 +35,47 @@ test('a roll never hands back something already in the owned set', () => {
   }
 });
 
-test('owning the entire pool converts the case to gems instead of failing', () => {
+test('owning the entire pool polishes an owned decal instead of a flat gem payout', () => {
   const owned = new Set(CASE_POOL.map(caseItemKey));
-  const r = rollCase(owned);
+  // no purity map passed — every owned decal reads as 0/100, so there is
+  // always room to polish one before this ever needs to fall back further
+  const r = rollCase(owned, Math.random, false, {});
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, 'purity');
+  assert.equal(r.item.kind, 'decal');
+  assert.ok(r.gain > 0 && r.gain <= 14, `gain ${r.gain} outside the expected 1-14 range`);
+  assert.equal(r.newPurity, r.gain, 'starting from 0, newPurity should equal the gain exactly');
+});
+
+test('owning the entire pool AND every decal already Flawless converts the case to gems instead of failing', () => {
+  const owned = new Set(CASE_POOL.map(caseItemKey));
+  const purity = Object.fromEntries(CASE_POOL.filter(i => i.kind === 'decal').map(i => [i.id, 100]));
+  const r = rollCase(owned, Math.random, false, purity);
   assert.equal(r.ok, true);
   assert.equal(r.kind, 'gems');
   assert.ok(r.amount > 0);
+});
+
+test('a purity gain never pushes a decal past 100', () => {
+  const owned = new Set(CASE_POOL.map(caseItemKey));
+  const purity = Object.fromEntries(CASE_POOL.filter(i => i.kind === 'decal').map(i => [i.id, 95]));
+  for (let i = 0; i < 50; i++) {
+    const r = rollCase(owned, Math.random, false, purity);
+    assert.equal(r.kind, 'purity', 'still one decal short of maxed, should never fall to gems yet');
+    assert.ok(r.newPurity <= 100, `newPurity ${r.newPurity} exceeds 100`);
+    assert.equal(r.gain, r.newPurity - 95);
+  }
+});
+
+test('a purity roll never touches a kind other than decal — trail/title/ball just fall to gems once exhausted', () => {
+  const owned = new Set(CASE_POOL.map(caseItemKey));
+  // every decal already maxed, so any remaining "exhausted" roll (trail/
+  // title/ball, which have no purity concept at all) must land on gems
+  const purity = Object.fromEntries(CASE_POOL.filter(i => i.kind === 'decal').map(i => [i.id, 100]));
+  for (let i = 0; i < 50; i++) {
+    const r = rollCase(owned, Math.random, false, purity);
+    assert.equal(r.kind, 'gems');
+  }
 });
 
 test('a thin tier falls through to a rarer one rather than handing out nothing', () => {
@@ -95,9 +130,20 @@ test('forcePity always lands at or above the pity tier, even on a roll that woul
   }
 });
 
-test('forcePity still falls through to gems if everything at or above the pity tier is owned', () => {
-  const owned = new Set(CASE_POOL.filter(i => tierIndex(i.rarity) >= tierIndex(PITY_TIER)).map(caseItemKey));
-  const r = rollCase(owned, Math.random, true);
+test('forcePity polishes an at-or-above-pity decal instead of gems, if one is not yet maxed', () => {
+  const relevant = CASE_POOL.filter(i => tierIndex(i.rarity) >= tierIndex(PITY_TIER));
+  assert.ok(relevant.some(i => i.kind === 'decal'), 'test assumes at least one decal sits at/above the pity tier');
+  const owned = new Set(relevant.map(caseItemKey));
+  const r = rollCase(owned, Math.random, true, {});
+  assert.equal(r.ok, true);
+  assert.equal(r.kind, 'purity', 'a forced pity roll with an unmaxed decal in reach should polish it, not fall to gems');
+});
+
+test('forcePity still falls through to gems if everything at or above the pity tier is owned AND maxed', () => {
+  const relevant = CASE_POOL.filter(i => tierIndex(i.rarity) >= tierIndex(PITY_TIER));
+  const owned = new Set(relevant.map(caseItemKey));
+  const purity = Object.fromEntries(relevant.filter(i => i.kind === 'decal').map(i => [i.id, 100]));
+  const r = rollCase(owned, Math.random, true, purity);
   assert.equal(r.ok, true);
   assert.equal(r.kind, 'gems', 'a forced pity roll with nothing left to give should fall back to gems, not fail');
 });

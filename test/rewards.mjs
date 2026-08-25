@@ -98,6 +98,71 @@ test('opening an owned case updates the inventory and grants something real', as
   }
 });
 
+test('opening a fully-owned case polishes a decal instead of paying out gems, and never touches caseUnlocks', async () => {
+  const { CASE_POOL, caseItemKey } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-purity-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  p.cases = 1;
+  p.caseUnlocks = CASE_POOL.map(caseItemKey);   // own literally everything
+  const before = profiles.publicProfile(pid);
+  const result = profiles.openCase(pid);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.kind, 'purity', JSON.stringify(result));
+  const after = profiles.publicProfile(pid);
+  assert.equal(after.caseUnlocks.length, before.caseUnlocks.length, 'a purity result should never add a caseUnlocks entry');
+  assert.equal(after.decalPurity[result.item.id], result.newPurity);
+  assert.equal(after.gems, before.gems, 'a purity result should not also pay out gems');
+});
+
+test('a second purity roll on the same decal adds to its existing purity rather than restarting it', async () => {
+  const { CASE_POOL, caseItemKey } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const pid = 'reward-purity-stack-' + Math.random().toString(36).slice(2);
+  const p = profiles.getProfile(pid);
+  const decals = CASE_POOL.filter(i => i.kind === 'decal');
+  p.cases = 2;
+  p.caseUnlocks = CASE_POOL.map(caseItemKey);
+  // every decal but one already maxed, so both rolls are forced onto the
+  // one left over — deterministic, not "whichever one happens to roll"
+  p.decalPurity = Object.fromEntries(decals.slice(1).map(d => [d.id, 100]));
+  const target = decals[0].id;
+
+  const first = profiles.openCase(pid);
+  assert.equal(first.kind, 'purity', JSON.stringify(first));
+  assert.equal(first.item.id, target);
+  const afterFirst = profiles.getProfile(pid).decalPurity[target];
+  assert.equal(afterFirst, first.newPurity);
+
+  const second = profiles.openCase(pid);
+  assert.equal(second.kind, 'purity', JSON.stringify(second));
+  assert.equal(second.item.id, target);
+  assert.equal(profiles.getProfile(pid).decalPurity[target], second.newPurity);
+  assert.ok(second.newPurity > afterFirst, 'a second roll on the same decal should have added to it, not reset it');
+});
+
+test('the Pro Case and the Vault also polish decals through the same fallback, once fully owned', async () => {
+  const { CASE_POOL, caseItemKey } = await import('../public/js/shared/cases.js');
+  const profiles = await import('../server/profiles.js');
+  const allOwned = CASE_POOL.map(caseItemKey);
+
+  const proPid = 'reward-purity-pro-' + Math.random().toString(36).slice(2);
+  const proP = profiles.getProfile(proPid);
+  proP.proCases = 1;
+  proP.caseUnlocks = allOwned;
+  const proResult = profiles.openProCase(proPid);
+  assert.equal(proResult.kind, 'purity', JSON.stringify(proResult));
+  assert.equal(profiles.getProfile(proPid).decalPurity[proResult.item.id], proResult.newPurity);
+
+  const vaultPid = 'reward-purity-vault-' + Math.random().toString(36).slice(2);
+  const vaultP = profiles.getProfile(vaultPid);
+  vaultP.vaultCases = 1;
+  vaultP.caseUnlocks = allOwned;
+  const vaultResult = profiles.openVaultCase(vaultPid);
+  assert.equal(vaultResult.kind, 'purity', JSON.stringify(vaultResult));
+  assert.equal(profiles.getProfile(vaultPid).decalPurity[vaultResult.item.id], vaultResult.newPurity);
+});
+
 test('the pity counter climbs on ordinary opens and forces a Pro-or-better pull at the threshold', async () => {
   const { PITY_TIER, PITY_THRESHOLD, tierIndex } = await import('../public/js/shared/cases.js');
   const profiles = await import('../server/profiles.js');

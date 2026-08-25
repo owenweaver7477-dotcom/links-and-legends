@@ -754,7 +754,7 @@ function applyWardrobe(patch) {
   // the inspect modal has its own grid outside HUD.renderWardrobe's tree —
   // keep its "on" state honest if a club decal changed while it was open
   if (!document.getElementById('modalClubInspect')?.hidden) {
-    HUD.renderClubDecalPicker(lookDraft, G.profile?.level ?? 1, G.profile?.caseUnlocks || []);
+    HUD.renderClubDecalPicker(lookDraft, G.profile?.level ?? 1, G.profile?.caseUnlocks || [], G.profile?.decalPurity || {});
   }
   /* ALWAYS, not only in a room. The wardrobe is reached from the front page,
      where `G.joined` is false — so this sent nothing at all in exactly the
@@ -4630,7 +4630,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
       HUD.playCaseReel(res, {
         onTick: strength => Sound.reelTick?.(strength),
         onSettle: () => {
-          const rarity = res.kind === 'item' ? res.rarity : 'gems';
+          const rarity = res.kind === 'item' ? res.rarity : res.kind === 'purity' ? res.item.rarity : 'gems';
           // the thunk resolves the tension the ticks built, THEN the reveal
           // card appears and the reward arpeggio plays over it — three
           // beats, not one sound doing all the work
@@ -4664,7 +4664,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   /* ------------------------------------------------------- club inspect */
   document.getElementById('btnBagInspect')?.addEventListener('click', () => {
     HUD.openClubInspect();
-    HUD.renderClubDecalPicker(lookDraft, G.profile?.level ?? 1, G.profile?.caseUnlocks || []);
+    HUD.renderClubDecalPicker(lookDraft, G.profile?.level ?? 1, G.profile?.caseUnlocks || [], G.profile?.decalPurity || {});
   });
   document.getElementById('btnInspectClose')?.addEventListener('click', () => {
     document.getElementById('modalClubInspect').hidden = true;

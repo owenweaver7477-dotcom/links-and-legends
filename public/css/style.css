@@ -3759,6 +3759,14 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 .inspect-decal-grid button.on { border-color: #8fe07a; }
 .inspect-decal-grid button.locked { opacity: .35; cursor: default; }
 .inspect-decal-grid button:not(.locked):hover { background: rgba(255,255,255,.1); }
+/* How pure a duplicate pull has polished this decal — see shared/purity.js.
+   A number, not a bar: at 40px there's no room for a meaningful bar, and
+   the number is exactly what a case-reveal card just told the player to
+   watch climb. */
+.decal-purity { position: absolute; bottom: -3px; right: -3px; min-width: 15px; height: 13px;
+  padding: 0 2px; border-radius: 999px; background: #141f18; border: 1px solid var(--pc, #9fb0a6);
+  color: var(--pc, #9fb0a6); font-size: 7.5px; font-weight: 800; line-height: 13px; text-align: center;
+  font-variant-numeric: tabular-nums; }
 
 /* ═══════════════════════════════════════ §7.1 — daily rewards ═══════════ */
 .rewardscard { width: min(520px, 100%); }
