@@ -955,14 +955,36 @@
     <p class="err tiny" id="rwErr"></p>
     <div class="rw-wallet">
       <span class="rw-bal"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-0.15em" aria-hidden="true"><path d="M12 2 20 8 12 22 4 8Z" fill="#57b8e6"/><path d="M12 2 20 8 12 8Z" fill="#a6e6ff"/><path d="M12 2 4 8 12 8Z" fill="#8fdfff"/><path d="M4 8 12 8 12 22Z" fill="#4a9fce"/><path d="M20 8 12 8 12 22Z" fill="#3f8dbb"/></svg> <b id="rwGems">0</b></span>
-      <span class="rw-bal" id="rwCasesWrap"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-0.15em" aria-hidden="true"><path d="M3 11q0-6 9-6t9 6" fill="#a9723c" stroke="#5c3a1a" stroke-width="1.1" stroke-linejoin="round"/><rect x="3" y="11" width="18" height="9" rx="2" fill="#8a5a2e" stroke="#5c3a1a" stroke-width="1.1"/><rect x="9.6" y="13" width="4.8" height="4.4" rx="1" fill="#ffd76b" stroke="#5c3a1a" stroke-width=".8"/></svg> <b id="rwCases">0</b> case<span id="rwCasesS">s</span></span>
-      <button class="btn" id="btnRewardsOpenCase" disabled>Open a case</button>
-      <button class="btn" id="btnRewardsBuyCase">Buy a case — 2,500<svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-0.1em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="#ffd76b" stroke="#a9822f" stroke-width="1.4"/><circle cx="12" cy="12" r="6.2" fill="none" stroke="#a9822f" stroke-width="1.1" opacity=".55"/><circle cx="12" cy="12" r="1.8" fill="#a9822f" opacity=".55"/></svg></button>
+    </div>
+    <!-- Cases as cards, not a text row — the same box-with-a-glow language
+         .case-box uses in the opening modal itself, just smaller, so a case
+         reads as a real thing you own before you've even opened one. -->
+    <div class="rw-cases">
+      <div class="rw-case-card">
+        <div class="rw-case-art"><svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path d="M3 11q0-6 9-6t9 6" fill="#a9723c" stroke="#5c3a1a" stroke-width="1.1" stroke-linejoin="round"/><rect x="3" y="11" width="18" height="9" rx="2" fill="#8a5a2e" stroke="#5c3a1a" stroke-width="1.1"/><rect x="9.6" y="13" width="4.8" height="4.4" rx="1" fill="#ffd76b" stroke="#5c3a1a" stroke-width=".8"/></svg></div>
+        <div class="rw-case-txt">
+          <b>Case</b>
+          <span class="rw-case-own"><b id="rwCases">0</b> case<span id="rwCasesS">s</span> owned</span>
+        </div>
+        <div class="rw-case-btns">
+          <button class="btn mini" id="btnRewardsOpenCase" disabled>Open</button>
+          <button class="btn mini" id="btnRewardsBuyCase">2,500<svg viewBox="0 0 24 24" width="11" height="11" style="vertical-align:-0.1em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="#ffd76b" stroke="#a9822f" stroke-width="1.4"/><circle cx="12" cy="12" r="6.2" fill="none" stroke="#a9822f" stroke-width="1.1" opacity=".55"/><circle cx="12" cy="12" r="1.8" fill="#a9822f" opacity=".55"/></svg></button>
+        </div>
+      </div>
       <!-- The Pro Case — a separate, always-Pro-or-better case, not a
            second tier carved out of the one above. Same gem-only rule. -->
-      <span class="rw-bal" id="rwProCasesWrap"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-0.15em" aria-hidden="true"><path d="M3 11q0-6 9-6t9 6" fill="#8a5ec2" stroke="#3d235c" stroke-width="1.1" stroke-linejoin="round"/><rect x="3" y="11" width="18" height="9" rx="2" fill="#6b3fa0" stroke="#3d235c" stroke-width="1.1"/><rect x="9.6" y="13" width="4.8" height="4.4" rx="1" fill="#e2b8ff" stroke="#3d235c" stroke-width=".8"/></svg> <b id="rwProCases">0</b> Pro case<span id="rwProCasesS">s</span></span>
-      <button class="btn" id="btnRewardsOpenProCase" disabled>Open a Pro case</button>
-      <button class="btn" id="btnRewardsBuyProCase">Buy a Pro case — 400<svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-0.1em" aria-hidden="true"><path d="M12 2 20 8 12 22 4 8Z" fill="#57b8e6"/><path d="M12 2 20 8 12 8Z" fill="#a6e6ff"/><path d="M12 2 4 8 12 8Z" fill="#8fdfff"/><path d="M4 8 12 8 12 22Z" fill="#4a9fce"/><path d="M20 8 12 8 12 22Z" fill="#3f8dbb"/></svg></button>
+      <div class="rw-case-card pro">
+        <div class="rw-case-art"><svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path d="M3 11q0-6 9-6t9 6" fill="#8a5ec2" stroke="#3d235c" stroke-width="1.1" stroke-linejoin="round"/><rect x="3" y="11" width="18" height="9" rx="2" fill="#6b3fa0" stroke="#3d235c" stroke-width="1.1"/><rect x="9.6" y="13" width="4.8" height="4.4" rx="1" fill="#e2b8ff" stroke="#3d235c" stroke-width=".8"/></svg></div>
+        <div class="rw-case-txt">
+          <b>Pro Case</b>
+          <span class="rw-case-tag">Always Pro or better</span>
+          <span class="rw-case-own"><b id="rwProCases">0</b> Pro case<span id="rwProCasesS">s</span> owned</span>
+        </div>
+        <div class="rw-case-btns">
+          <button class="btn mini" id="btnRewardsOpenProCase" disabled>Open</button>
+          <button class="btn mini" id="btnRewardsBuyProCase">400<svg viewBox="0 0 24 24" width="11" height="11" style="vertical-align:-0.1em" aria-hidden="true"><path d="M12 2 20 8 12 22 4 8Z" fill="#57b8e6"/><path d="M12 2 20 8 12 8Z" fill="#a6e6ff"/><path d="M12 2 4 8 12 8Z" fill="#8fdfff"/><path d="M4 8 12 8 12 22Z" fill="#4a9fce"/><path d="M20 8 12 8 12 22Z" fill="#3f8dbb"/></svg></button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
