@@ -2084,8 +2084,14 @@ body.hktabbed .nojs-only { display: none; }
    The whole panel is transparent on purpose: `.screen` ships a near-opaque
    radial and a blur, and inheriting those would hide the course, which is
    the only thing on this page doing any selling. */
+/* Was flex-start: correct for the old design, a narrow column deliberately
+   pinned left so the course scenery showed through on the right. The
+   three-card layout is meant to read as a centred dashboard, not a
+   sidebar, so it centres now — on a wide viewport that means scenery
+   visible (and the veil gradient below still reads) on both sides rather
+   than only the right. */
 .screen.landing { background: none; backdrop-filter: none; -webkit-backdrop-filter: none;
-  align-items: stretch; justify-content: flex-start; padding: 0; overflow: hidden; }
+  align-items: stretch; justify-content: center; padding: 0; overflow: hidden; }
 
 /* A veil, not a scrim: just enough to hold white text over a bright sky,
    weighted to the left where the legends sit. */
@@ -2101,12 +2107,22 @@ body.hktabbed .nojs-only { display: none; }
   justify-content: center; gap: 22px; width: min(1180px, 100%);
   padding: 40px clamp(22px, 5vw, 62px); height: 100%; overflow-y: auto; }
 
+/* The brand block centres its own text now that .lp-inner itself is
+   centred on the page (see .screen.landing) — a centred block with
+   left-aligned text inside it still reads as off-centre. Scoped to just
+   the title/eyebrow/tagline: the cards below stay left-aligned, since a
+   centred "Daily rewards / come back tomorrow for more" row is harder to
+   read, not more balanced. */
+.lp-brand { text-align: center; }
 .lp-eyebrow { font-size: 11px; letter-spacing: 2.4px; text-transform: uppercase;
   color: #8fd0a2; font-weight: 700; display: block; margin-bottom: 12px; }
 .lp-title { font-size: clamp(40px, 7.4vw, 74px); line-height: .96; letter-spacing: -2.4px;
   font-weight: 800; text-shadow: 0 6px 40px rgba(0,0,0,.6); }
 .lp-title em { font-style: normal; color: #6fce8a; font-weight: 400; }
-.lp-tag { margin-top: 14px; font-size: 15.5px; color: #cfe0d4; max-width: 34ch; line-height: 1.5; }
+/* margin-inline:auto, not just text-align on the parent — max-width caps
+   this at 34ch, and a narrower block still sits flush-left inside a
+   centred parent unless its OWN box is centred too. */
+.lp-tag { margin: 14px auto 0; font-size: 15.5px; color: #cfe0d4; max-width: 34ch; line-height: 1.5; }
 
 /* ── the legends.  Rows, not a menu bar: a row can carry the line of text
       that says what is behind it, and an icon on its own cannot. */
