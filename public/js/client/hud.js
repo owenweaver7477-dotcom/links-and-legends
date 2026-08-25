@@ -2302,6 +2302,9 @@ HUD.bindClubhouse = () => {
     const b = e.target.closest('.hktab');
     if (b) HUD.showClubhouseTab(b.dataset.tab);
   });
+  // Controls lives behind the gear icon in the header now, not a tab in
+  // this bar — see the button's own comment in index.html.
+  document.getElementById('hkSettingsBtn')?.addEventListener('click', () => HUD.showClubhouseTab('keys'));
   /* The bar reveals itself, and the panes are hidden only from here. Until
      this line runs the clubhouse is one scrolling page with everything on
      it — which is a worse layout and a working one. */
@@ -2319,6 +2322,7 @@ HUD.showClubhouseTab = (name) => {
   for (const p of document.querySelectorAll('.hkpane')) {
     p.hidden = p.dataset.pane !== name;
   }
+  document.getElementById('hkSettingsBtn')?.classList.toggle('on', name === 'keys');
   // a tab switch should start you at the top of the room you just walked into
   document.querySelector('#screenShop .card')?.scrollTo?.({ top: 0 });
   /* The two tabs whose contents live on the server rather than in the

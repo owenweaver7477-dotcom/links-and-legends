@@ -492,6 +492,13 @@ html.touch .fsbtn { display: grid; }
 .hk-wallet svg { margin-right: 5px; }
 .hk-wallet .wh-coins { color: #ffd94a; }
 .hk-wallet .wh-gems { color: #8fdfff; }
+.hk-settings-btn { display: grid; place-items: center; width: 26px; height: 26px;
+  margin-left: 2px; padding: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
+  color: #b9cabd; transition: background .14s, color .14s; }
+.hk-settings-btn:hover { background: rgba(255,255,255,.12); color: #eaf3ec; }
+.hk-settings-btn.on { background: linear-gradient(180deg, #2f8a4a, #237038);
+  border-color: transparent; color: #fff; }
 .hk-xp { flex: 1 1 220px; min-width: 180px; max-width: 320px; display: flex;
   flex-direction: column; gap: 5px; }
 .hk-xp-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
