@@ -481,6 +481,17 @@ html.touch .fsbtn { display: grid; }
 .hk-profile-txt b { font-size: 14px; }
 .hk-rank { display: flex; align-items: center; gap: 4px; font-size: 10.5px;
   color: #8fd0a2; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+/* Same pill language as the floating .wallethud it replaces on this
+   screen (see body.inshop), just living inside the header flow instead of
+   pinned to the viewport — so it wraps with the rest of the row instead
+   of sitting on top of whatever ends up underneath it. */
+.hk-wallet { display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+  padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 800;
+  background: rgba(10,18,15,.6); border: 1px solid rgba(255,255,255,.1);
+  font-variant-numeric: tabular-nums; }
+.hk-wallet svg { margin-right: 5px; }
+.hk-wallet .wh-coins { color: #ffd94a; }
+.hk-wallet .wh-gems { color: #8fdfff; }
 .hk-xp { flex: 1 1 220px; min-width: 180px; max-width: 320px; display: flex;
   flex-direction: column; gap: 5px; }
 .hk-xp-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
@@ -1478,7 +1489,7 @@ body.playing .coinhud { display: block; }
   box-shadow: 0 8px 24px rgba(0,0,0,.4); font-variant-numeric: tabular-nums;
   pointer-events: none; }
 body:not(.playing) .wallethud { display: flex; }
-body.side-open .wallethud, body.playing .wallethud { display: none; }
+body.side-open .wallethud, body.playing .wallethud, body.inshop .wallethud { display: none; }
 .wallethud svg { margin-right: 5px; }
 .wallethud .wh-coins { color: #ffd94a; }
 .wallethud .wh-gems { color: #8fdfff; }

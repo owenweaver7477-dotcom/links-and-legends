@@ -36,6 +36,7 @@ for (const id of [
   'wdInfo', 'wdInfoName', 'wdInfoRarity', 'wdInfoEffect', 'wdInfoPct',
   'btnClubhouse', 'btnShopBack', 'homeCoins',
   'hkAvatar', 'hkLevelBadge', 'hkProfileName', 'hkRankName', 'hkXpInto', 'hkXpNeed', 'hkXpFill',
+  'hkWalletCoinsN', 'hkWalletGemsN',
   'homeErr', 'inpName', 'inpCode', 'loadMsg',
   'lobbyCode', 'lobbyLink', 'lobbyPlayers', 'lobbyCount', 'lobbyNote', 'btnStart', 'courseList',
   'btnPrivacy', 'optPrivate',
@@ -125,6 +126,12 @@ HUD.show = which => {
   // the backdrop hole's own scorecard and minimap through itself.
   document.body.classList.toggle('playing', which == null);
   document.body.classList.toggle('landed', landing);
+  // The clubhouse header carries its own coin/gem readout now (see
+  // renderClubhouseHeader) — showing the floating .wallethud on top of it
+  // too just duplicated the same numbers in a second, disconnected corner,
+  // which is what actually broke on a narrow screen: the header wraps
+  // there, and the fixed badge doesn't wrap with it.
+  document.body.classList.toggle('inshop', which === 'shop');
 };
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
 HUD.setHomeCoins = n => { el.homeCoins.innerHTML = icon('coin') + ' ' + (n || 0).toLocaleString(); };
@@ -1427,6 +1434,8 @@ HUD.renderClubhouseHeader = (prof, name) => {
   el.hkLevelBadge.textContent = prof?.level ?? 1;
   el.hkProfileName.textContent = shown;
   el.hkRankName.textContent = rankTitle(prof?.level ?? 1);
+  if (el.hkWalletCoinsN) el.hkWalletCoinsN.textContent = (prof?.coins || 0).toLocaleString();
+  if (el.hkWalletGemsN) el.hkWalletGemsN.textContent = (prof?.gems || 0).toLocaleString();
   if (prof?.maxed) {
     el.hkXpInto.textContent = 'MAX';
     el.hkXpNeed.textContent = '';
