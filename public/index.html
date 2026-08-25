@@ -308,73 +308,92 @@
     <!-- Who you are. One line, not a form: the name is the only thing the
          game needs before it can let you play, and the chip replaces it the
          moment it knows. -->
-    <div class="lp-who">
-      <div class="identity" id="identityChip" hidden>
-        <div class="id-face"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><line x1="6" y1="21" x2="6" y2="4" stroke="#5c3a1a" stroke-width="1.6" stroke-linecap="round"/><path d="M6 4 17 8 6 12Z" fill="#e8443a"/><ellipse cx="6" cy="21" rx="4.5" ry="1.4" fill="#6f8f5c" opacity=".55"/></svg></div>
-        <div class="id-txt"><b>Playing as <span id="idName">—</span></b></div>
-        <button class="btn mini" id="btnNotYou">Change</button>
+    <!-- THREE ROOMS, not a corridor. Everything below used to be one long
+         vertical list of eleven controls; grouping it by WHAT IT'S FOR
+         (you, playing, other people) is the actual restructure — the cards
+         are the point, not a colour change over the same list. Every
+         button below kept its exact id/data-go/data-panel, so the click
+         delegation on #lpLegend (see main.js) needed zero changes; only
+         which card a button physically sits in, and how it's drawn, moved. -->
+    <nav class="lp-legend lp-legend-grid" id="lpLegend" aria-label="Main">
+      <div class="lp-card">
+        <h3 class="lp-card-h">Profile &amp; Achievements</h3>
+        <!-- Who you are. One line, not a form: the name is the only thing
+             the game needs before it can let you play, and the chip
+             replaces it the moment it knows. -->
+        <div class="lp-who">
+          <div class="identity" id="identityChip" hidden>
+            <div class="id-face"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><line x1="6" y1="21" x2="6" y2="4" stroke="#5c3a1a" stroke-width="1.6" stroke-linecap="round"/><path d="M6 4 17 8 6 12Z" fill="#e8443a"/><ellipse cx="6" cy="21" rx="4.5" ry="1.4" fill="#6f8f5c" opacity=".55"/></svg></div>
+            <div class="id-txt"><b>Playing as <span id="idName">—</span></b></div>
+            <button class="btn mini" id="btnNotYou">Change</button>
+          </div>
+          <label class="field lp-name" id="nameField"><span>Your name</span>
+            <input id="inpName" type="text" maxlength="20" placeholder="e.g. Owen" autocomplete="off" spellcheck="false">
+            <!-- Checked as you type. A name is claimed for good, so finding
+                 out it was taken AFTER pressing play is the wrong moment. -->
+            <span class="nm-state" id="nameState"></span>
+            <span class="nm-suggest" id="nameSuggest"></span></label>
+        </div>
+        <button class="lp-item lp-row" id="lpRewardsBtn">
+          <span class="lp-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="1.5" fill="currentColor"/><rect x="4" y="7" width="16" height="4" rx="1" fill="currentColor" opacity=".82"/><rect x="11" y="7" width="2" height="14" fill="#000" opacity=".16"/><path d="M12 7c-1-3-5-3-5 0M12 7c1-3 5-3 5 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+          <span class="lp-txt"><b>Daily rewards</b><small id="lpRewardsSub">come back tomorrow for more</small></span>
+          <span class="lp-count claim" id="lpRewardsBadge" hidden>!</span>
+        </button>
+        <div class="lp-stat-row"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" fill="#ffd76b" stroke="#a9822f" stroke-width="1"/><path d="M7 5H4a3 3 0 0 0 3 3M17 5h3a3 3 0 0 1-3 3" fill="none" stroke="#a9822f" stroke-width="1.3" stroke-linecap="round"/></svg><b>Total Rounds:</b> <span id="lpTotalRounds">0</span></div>
       </div>
-      <label class="field lp-name" id="nameField"><span>Your name</span>
-        <input id="inpName" type="text" maxlength="20" placeholder="e.g. Owen" autocomplete="off" spellcheck="false">
-        <!-- Checked as you type. A name is claimed for good, so finding out
-             it was taken AFTER pressing play is the wrong moment. -->
-        <span class="nm-state" id="nameState"></span>
-        <span class="nm-suggest" id="nameSuggest"></span></label>
-    </div>
 
-    <!-- TOP THIS WEEK. A taste of the leaderboards from the front door: three
-         names and how much XP they've gained since Monday, so a returning
-         player sees there's a race going on before ever opening the boards
-         screen. Hidden until it has rows — an empty leaderboard reads as
-         broken, not as "nobody's played yet". -->
-    <button class="lp-weektop" id="lpWeekTop" hidden>
-      <span class="lp-wt-label"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" fill="#ffd76b" stroke="#a9822f" stroke-width="1"/><path d="M7 5H4a3 3 0 0 0 3 3M17 5h3a3 3 0 0 1-3 3" fill="none" stroke="#a9822f" stroke-width="1.3" stroke-linecap="round"/></svg> Top this week<span class="lp-wt-arrow" aria-hidden="true">→</span></span>
-      <div class="lp-wt-rows" id="lpWeekTopRows"></div>
-    </button>
+      <div class="lp-card">
+        <h3 class="lp-card-h">Play &amp; Course</h3>
+        <button class="lp-item lp-primary" data-go="play">
+          <span class="lp-txt"><b>Play now</b><small id="lpCourseSub">straight onto the first tee</small></span>
+        </button>
+        <button class="lp-item lp-row" data-panel="course">
+          <span class="lp-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 4v14M15 6v14" stroke="currentColor" stroke-width="1.3"/></svg></span>
+          <span class="lp-txt"><b>Choose course</b><small id="lpCourseName">Claude National</small></span>
+        </button>
+      </div>
 
-    <!-- The legends. Each one either GOES somewhere or opens the panel on
-         the right — nothing here dumps a wall of controls into this column,
-         which is the whole reason this page reads better than the one it
-         replaced. -->
-    <nav class="lp-legend" id="lpLegend" aria-label="Main">
-      <button class="lp-item lp-primary" data-go="play">
-        <span class="lp-ico"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="9" cy="5" r="2.4" fill="currentColor"/><path d="M9 7.5v6l-3 7M9 13.5l5 2M12 9l7-2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <span class="lp-txt"><b>Play now</b><small id="lpCourseSub">straight onto the first tee</small></span>
-        <span class="lp-arrow" aria-hidden="true">→</span>
-      </button>
-      <button class="lp-item" id="lpRewardsBtn">
-        <span class="lp-ico"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="1.5" fill="currentColor"/><rect x="4" y="7" width="16" height="4" rx="1" fill="currentColor" opacity=".82"/><rect x="11" y="7" width="2" height="14" fill="#000" opacity=".16"/><path d="M12 7c-1-3-5-3-5 0M12 7c1-3 5-3 5 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-        <span class="lp-txt"><b>Daily rewards</b><small id="lpRewardsSub">come back tomorrow for more</small></span>
-        <span class="lp-count claim" id="lpRewardsBadge" hidden>!</span>
-        <span class="lp-arrow" aria-hidden="true">→</span>
-      </button>
-      <button class="lp-item" data-panel="friends">
-        <span class="lp-ico"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="8.2" cy="8" r="3.1" fill="currentColor"/><path d="M2 20.5c0-4.4 3-7 6.2-7s6.2 2.6 6.2 7Z" fill="currentColor"/><circle cx="16.8" cy="8.6" r="2.6" fill="currentColor" opacity=".55"/><path d="M13.4 20.5c.3-3.6 2.3-6 4.8-6s4.6 2.3 4.8 6Z" fill="currentColor" opacity=".55"/></svg></span>
-        <span class="lp-txt"><b>Friends &amp; players online</b><small id="lpFriendSub">join a round, or host one</small></span>
-        <span class="lp-count" id="lpOnlineCount" hidden>0</span>
-        <span class="lp-arrow" aria-hidden="true">→</span>
-      </button>
-      <button class="lp-item" data-panel="course">
-        <span class="lp-ico"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M9 4v14M15 6v14" stroke="currentColor" stroke-width="1.3"/></svg></span>
-        <span class="lp-txt"><b>Choose a course</b><small id="lpCourseName">Claude National</small></span>
-        <span class="lp-arrow" aria-hidden="true">→</span>
-      </button>
-      <button class="lp-item" data-panel="golfer">
-        <span class="lp-ico"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8.5 3.5 4 6.5l1.6 3.4L8 9v11.5h8V9l2.4.9L20 6.5l-4.5-3-1 1.6a3 3 0 0 1-5 0Z" fill="currentColor"/></svg></span>
-        <span class="lp-txt"><b>Your golfer</b><small>appearance, outfits and decals</small></span>
-        <span class="lp-arrow" aria-hidden="true">→</span>
-      </button>
-      <button class="lp-item" data-go="clubhouse">
-        <span class="lp-ico"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 21V11L12 4l8 7v10Z" fill="currentColor"/><rect x="9.4" y="13.6" width="5.2" height="7.4" fill="#000" opacity=".28"/><line x1="12" y1="4" x2="12" y2="1" stroke="currentColor" stroke-width="1.3"/><path d="M12 1.4 16.5 3.2 12 5Z" fill="#e8443a"/></svg></span>
-        <span class="lp-txt"><b>Clubhouse</b><small>your golfer, career and pro shop</small></span>
-        <span class="lp-coins" id="homeCoins"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-0.15em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="#ffd76b" stroke="#a9822f" stroke-width="1.4"/><circle cx="12" cy="12" r="6.2" fill="none" stroke="#a9822f" stroke-width="1.1" opacity=".55"/><circle cx="12" cy="12" r="1.8" fill="#a9822f" opacity=".55"/></svg> 0</span>
-      </button>
-      <button class="lp-item" data-go="leaderboards">
-        <span class="lp-ico"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" fill="#ffd76b" stroke="#a9822f" stroke-width="1"/><path d="M7 5H4a3 3 0 0 0 3 3M17 5h3a3 3 0 0 1-3 3" fill="none" stroke="#a9822f" stroke-width="1.3" stroke-linecap="round"/><rect x="10" y="13" width="4" height="4" fill="#a9822f"/><rect x="7" y="19" width="10" height="2" rx="1" fill="#a9822f"/></svg></span>
-        <span class="lp-txt"><b>Leaderboards</b><small>records, handicaps and rankings</small></span>
-        <span class="lp-arrow" aria-hidden="true">→</span>
-      </button>
+      <div class="lp-card">
+        <h3 class="lp-card-h">Social &amp; Clubhouse</h3>
+        <button class="lp-item lp-row lp-row-tall" data-panel="friends">
+          <span class="lp-txt-top"><b>Friends &amp; players online</b><span class="lp-count" id="lpOnlineCount" hidden>0</span></span>
+          <div class="lp-avatars" id="lpFriendAvatars" hidden></div>
+        </button>
+        <button class="lp-item lp-row" data-panel="golfer">
+          <span class="lp-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8.5 3.5 4 6.5l1.6 3.4L8 9v11.5h8V9l2.4.9L20 6.5l-4.5-3-1 1.6a3 3 0 0 1-5 0Z" fill="currentColor"/></svg></span>
+          <span class="lp-txt"><b>Your Golfer</b></span>
+        </button>
+        <button class="lp-item lp-row" data-go="clubhouse">
+          <span class="lp-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 21V11L12 4l8 7v10Z" fill="currentColor"/><rect x="9.4" y="13.6" width="5.2" height="7.4" fill="#000" opacity=".28"/><line x1="12" y1="4" x2="12" y2="1" stroke="currentColor" stroke-width="1.3"/><path d="M12 1.4 16.5 3.2 12 5Z" fill="#e8443a"/></svg></span>
+          <span class="lp-txt"><b>Clubhouse</b></span>
+          <span class="lp-coins" id="homeCoins"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-0.15em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="#ffd76b" stroke="#a9822f" stroke-width="1.4"/><circle cx="12" cy="12" r="6.2" fill="none" stroke="#a9822f" stroke-width="1.1" opacity=".55"/><circle cx="12" cy="12" r="1.8" fill="#a9822f" opacity=".55"/></svg> 0</span>
+        </button>
+      </div>
     </nav>
+
+    <!-- LEADERBOARDS. A permanent fixture of the front door now rather than
+         a "top this week" preview hidden until it has rows — the empty
+         state is a dash, same as the reference, not the whole section
+         disappearing. Left column is the existing weekly-XP preview
+         (unchanged data, restyled container); right is new: a live top-3
+         off the same world:ranking call the full boards screen uses. -->
+    <div class="lp-boards">
+      <h3 class="lp-card-h">Leaderboards</h3>
+      <div class="lp-boards-grid">
+        <div class="lp-board-col">
+          <h4>Top this week (XP)</h4>
+          <button class="lp-weektop" id="lpWeekTop" hidden>
+            <div class="lp-wt-rows" id="lpWeekTopRows"></div>
+          </button>
+          <p class="tiny lp-board-empty" id="lpWeekTopEmpty">—</p>
+        </div>
+        <div class="lp-board-col">
+          <h4>Global Rankings <button class="lp-item lp-seeall" data-go="leaderboards">See all →</button></h4>
+          <div class="lp-wt-rows" id="lpGlobalRankRows"></div>
+          <p class="tiny lp-board-empty" id="lpGlobalRankEmpty">—</p>
+        </div>
+      </div>
+    </div>
 
     <p class="err" id="homeErr"></p>
     <p class="lp-foot"><span id="lpLive">Twelve courses · nine holes each · play solo or with up to eight</span></p>

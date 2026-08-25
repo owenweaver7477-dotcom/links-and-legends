@@ -2065,9 +2065,12 @@ body.hktabbed .nojs-only { display: none; }
     linear-gradient(100deg, rgba(4,12,9,.86) 0%, rgba(4,12,9,.62) 34%, rgba(4,12,9,.12) 62%, rgba(4,12,9,.30) 100%),
     linear-gradient(to top, rgba(4,12,9,.55), rgba(4,12,9,0) 42%); }
 
+/* Widened from 560px: a single-column list fit a narrow left rail over the
+   background photo, but a three-card grid needs the room a rail doesn't
+   have. The veil below is weighted to cover exactly this shape now. */
 .lp-inner { position: relative; z-index: 2; display: flex; flex-direction: column;
-  justify-content: center; gap: 30px; width: min(560px, 100%);
-  padding: 40px clamp(22px, 5vw, 62px); height: 100%; }
+  justify-content: center; gap: 22px; width: min(1180px, 100%);
+  padding: 40px clamp(22px, 5vw, 62px); height: 100%; overflow-y: auto; }
 
 .lp-eyebrow { font-size: 11px; letter-spacing: 2.4px; text-transform: uppercase;
   color: #8fd0a2; font-weight: 700; display: block; margin-bottom: 12px; }
@@ -2121,6 +2124,64 @@ body.hktabbed .nojs-only { display: none; }
 .lp-item.lp-primary .lp-txt b { font-size: 17px; }
 .lp-item.lp-primary .lp-arrow { opacity: .55; transform: none; }
 .lp-item.lp-primary:hover { background: linear-gradient(100deg, rgba(52,124,74,.88), rgba(18,44,30,.7)); }
+
+/* ═══════════════════ THE THREE-CARD LAYOUT ═══════════════════════════
+   The restructure: three rooms (you, playing, other people) instead of
+   one long list of eleven controls. .lp-inner widens to fit them — the
+   narrow left column the single-list version needed no longer applies
+   once the content is a grid, not a stack (see .lp-inner's own width). */
+.lp-legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+@media (max-width: 900px) { .lp-legend-grid { grid-template-columns: 1fr; } }
+
+.lp-card { display: flex; flex-direction: column; gap: 8px; padding: 16px;
+  border-radius: 16px; background: rgba(9,18,14,.5); border: 1px solid rgba(255,255,255,.10);
+  backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); }
+.lp-card-h { font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase;
+  color: #8fd0a2; font-weight: 700; margin-bottom: 2px; }
+
+/* A compact row — icon, one line of text, nothing else — for every card
+   entry except Play Now itself. Same .lp-item interactivity (hover glow,
+   click delegation) as the old full-size rows, just far less padding: a
+   card holds two or three of these, not one big row each. */
+.lp-item.lp-row { padding: 9px 11px; gap: 10px; border-radius: 11px; }
+.lp-item.lp-row:hover, .lp-item.lp-row:focus-visible { transform: none; }
+.lp-item.lp-row .lp-ico { width: 30px; height: 30px; border-radius: 9px; }
+.lp-item.lp-row .lp-txt b { font-size: 13px; }
+.lp-item.lp-row .lp-coins { margin-left: auto; }
+.lp-item.lp-primary { width: 100%; }
+
+/* The friends row is two lines tall: the row itself, then the avatar
+   strip underneath, both still inside the one clickable .lp-item. */
+.lp-item.lp-row-tall { flex-direction: column; align-items: stretch; gap: 6px; }
+.lp-txt-top { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.lp-txt-top b { font-size: 13px; }
+.lp-avatars { display: flex; gap: -6px; }
+.lp-avatar { width: 24px; height: 24px; border-radius: 50%; margin-left: -6px;
+  display: grid; place-items: center; font-size: 10.5px; font-weight: 800; color: #fff;
+  border: 1.5px solid rgba(10,18,15,.9); }
+.lp-avatar:first-child { margin-left: 0; }
+
+.lp-stat-row { display: flex; align-items: center; gap: 8px; padding: 8px 11px;
+  border-radius: 11px; background: rgba(255,255,255,.035); font-size: 12.5px; color: #cfe0d4; }
+.lp-stat-row b { font-weight: 700; color: #eaf3ec; }
+.lp-stat-row span { color: #ffd76b; font-weight: 700; }
+
+/* ── the leaderboards strip, a permanent fixture rather than a hidden-
+   until-populated preview — an empty column reads as a dash, same as the
+   reference, not as the section vanishing. ── */
+.lp-boards { margin-top: 18px; display: flex; flex-direction: column; gap: 8px;
+  padding: 16px; border-radius: 16px; background: rgba(9,18,14,.44);
+  border: 1px solid rgba(255,255,255,.08); }
+.lp-boards-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 700px) { .lp-boards-grid { grid-template-columns: 1fr; } }
+.lp-board-col h4 { display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #9fbaa6;
+  font-weight: 700; margin-bottom: 6px; }
+.lp-item.lp-seeall { display: inline; padding: 0; background: none; border: none;
+  color: #6fce8a; font-size: 10.5px; font-weight: 700; text-transform: none;
+  letter-spacing: 0; backdrop-filter: none; }
+.lp-item.lp-seeall:hover { transform: none; background: none; }
+.lp-board-empty { color: #7a9584; font-size: 13px; }
 
 /* The weekly-leaders preview. A smaller, quieter cousin of .lp-item — it
    sits above Play now but must not compete with it, so no glow sweep and no

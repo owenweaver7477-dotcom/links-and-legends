@@ -3006,10 +3006,21 @@ Net.on('profile', prof => {
     saveLook(lookDraft);
     refreshMenuAvatar();
   }
+  /* The landing page's global-ranking preview and friend-avatar row —
+     fetched once, on the first profile of the session (identity is what
+     gates these calls being meaningful at all), not on every later push.
+     A purchase or a level-up re-fires this whole handler; re-asking the
+     world ranking or the friends list every time would just be chatter
+     for content that changes on the order of minutes, not per-click. */
+  if (!before) {
+    Net.ranking(d => HUD.renderLpGlobalRank(d));
+    Net.friends('state', {}, res => HUD.renderLpFriendAvatars(res?.people));
+  }
   renderClubhouse();
   // the front page carries the level and the rating, and the wardrobe's
   // earned rows depend on the level, so both are redrawn when it lands
   HUD.renderCharacter(prof, Net.lastName || document.getElementById('inpName')?.value);
+  HUD.setLpRounds(prof.rounds);
   if (lookDraft) drawLookPicker();
   previewKey = '';                     // gear may have changed the flight
   if (G.room?.state === 'lobby') renderLobbyAll(G.room);

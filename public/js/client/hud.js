@@ -27,7 +27,8 @@ for (const id of [
   'screenBoards', 'bdTabs', 'bdBack',
   'screenLanding', 'introCanvas', 'lpLegend', 'lpLive', 'lpSide', 'lpSideTitle',
   'lpSideClose', 'lpOnlineCount', 'lpCourseName', 'lpCourseSub', 'lpFriendSub',
-  'lpWeekTop', 'lpWeekTopRows',
+  'lpWeekTop', 'lpWeekTopRows', 'lpWeekTopEmpty', 'lpGlobalRankRows', 'lpGlobalRankEmpty',
+  'lpTotalRounds', 'lpFriendAvatars',
   'nameState', 'nameSuggest',
   'screenWardrobe', 'wdCarousel', 'wdCourseName', 'wdCourseWhere', 'wdDots', 'wdPrev', 'wdNext',
   'wdAuto', 'wdCats', 'wdFits', 'wdRTabs', 'wdRBody', 'wdName', 'wdFit', 'wdStats',
@@ -1636,14 +1637,64 @@ HUD.renderNetDiag = (net) => {
     a Monday morning) there is nothing to brag about yet. */
 HUD.renderWeeklyTop = rows => {
   if (!el.lpWeekTop) return;
-  if (!rows?.length) { el.lpWeekTop.hidden = true; return; }
+  if (!rows?.length) {
+    el.lpWeekTop.hidden = true;
+    if (el.lpWeekTopEmpty) el.lpWeekTopEmpty.hidden = false;
+    return;
+  }
   el.lpWeekTop.hidden = false;
+  if (el.lpWeekTopEmpty) el.lpWeekTopEmpty.hidden = true;
   el.lpWeekTopRows.innerHTML = rows.map(r => `
     <div class="lp-wt-row">
       <span class="lp-wt-rank">${r.rank}</span>
       <span class="lp-wt-name">${escapeHtml(r.name)}</span>
       <span class="lp-wt-gain">+${r.gained.toLocaleString()} XP</span>
     </div>`).join('');
+};
+
+/** The landing page's live top-3 world ranking, the same shape as the weekly
+    preview beside it (rank/name/a number), just off world:ranking instead
+    of the weekly-gain feed. */
+HUD.renderLpGlobalRank = data => {
+  if (!el.lpGlobalRankRows) return;
+  const top = (data?.top || []).slice(0, 3);
+  if (!top.length) {
+    el.lpGlobalRankRows.innerHTML = '';
+    if (el.lpGlobalRankEmpty) el.lpGlobalRankEmpty.hidden = false;
+    return;
+  }
+  if (el.lpGlobalRankEmpty) el.lpGlobalRankEmpty.hidden = true;
+  el.lpGlobalRankRows.innerHTML = top.map(r => `
+    <div class="lp-wt-row">
+      <span class="lp-wt-rank">${r.rank}</span>
+      <span class="lp-wt-name">${escapeHtml(r.name)}</span>
+      <span class="lp-wt-gain">${r.rating}</span>
+    </div>`).join('');
+};
+
+/** Total rounds, on the front door — the one career number the reference
+    design wants visible before the clubhouse's own, fuller stat block. */
+HUD.setLpRounds = n => { if (el.lpTotalRounds) el.lpTotalRounds.textContent = (n || 0).toLocaleString(); };
+
+/** A handful of small circles standing in for "there are people online" —
+    initials on a colour hashed from the name, the same no-photo language
+    every avatar in this game already uses (the 3D golfer has no face
+    either). Not a fabricated roster: real names, from the same friends
+    list the side panel shows, filtered to whoever is actually online right
+    now, capped at 5 so a busy list doesn't overflow the card. */
+function avatarColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360} 55% 42%)`;
+}
+HUD.renderLpFriendAvatars = people => {
+  if (!el.lpFriendAvatars) return;
+  const online = (people || []).filter(p => p.online).slice(0, 5);
+  if (!online.length) { el.lpFriendAvatars.hidden = true; el.lpFriendAvatars.innerHTML = ''; return; }
+  el.lpFriendAvatars.hidden = false;
+  el.lpFriendAvatars.innerHTML = online.map(p =>
+    `<span class="lp-avatar" style="background:${avatarColor(p.name || '?')}" title="${escapeHtml(p.name || 'A golfer')}">` +
+    `${escapeHtml((p.name || '?')[0].toUpperCase())}</span>`).join('');
 };
 
 /* ------------------------------------------------------ daily rewards --- */
