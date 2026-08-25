@@ -627,6 +627,11 @@ export function mountCaseOpener(canvas, kind) {
   r.onFrame = null;
   r.userControlled = false;
   r.spin = 0;
+  // A leftover tilt from the PREVIOUS mount's idle spin (frame()'s default
+  // auto-spin nods the stage, not just turns it) would otherwise skew the
+  // world-space bounding box below — and with it, the top/bottom split,
+  // which reads each child's Y in that same skewed space.
+  r.stage.rotation.set(0, 0, 0);
 
   const bb = new THREE.Box3().setFromObject(obj);
   const size = bb.getSize(new THREE.Vector3());
@@ -650,20 +655,54 @@ export function mountCaseOpener(canvas, kind) {
 
   function playUnbox({ onCrack, onDone } = {}) {
     r.userControlled = true;
-    const SHAKE_MS = 1800, CRACK_MS = 750;
+    const ZOOM_MS = 450, SHAKE_MS = 1800, CRACK_MS = 750;
+    // The tap itself throws the camera back out, then rushes it in fast —
+    // the case arriving at you, rather than just sitting there shaking.
+    // Scaled off the SAME lookAt/offset the resting frame already uses
+    // (see the camera.position.set above), so "far" is relative to
+    // whatever this particular case's own size already put "near" at.
+    const lookAt = new THREE.Vector3(0, mid.y, 0);
+    const camNear = r.camera.position.clone();
+    const camFar = lookAt.clone().add(camNear.clone().sub(lookAt).multiplyScalar(3.4));
+    r.camera.position.copy(camFar);
+    r.camera.lookAt(lookAt);
     const t0 = performance.now();
-    let cracked = false;
+    let cracked = false, finished = false;
+    // Same discipline HUD.playCaseReel already follows for its own
+    // transitionend: a backgrounded tab throttles rAF, sometimes to a
+    // dead stop (confirmed in this project's own dev sandbox — a bare
+    // self-rescheduling rAF loop that never fires at all while hidden).
+    // Without this, a player who alt-tabs mid-shake gets a case that
+    // never finishes opening — worse, main.js's click guard doesn't
+    // reset until onDone fires, so it would never open again either.
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (r.flash) { r.scene.remove(r.flash); r.flash = null; }
+      r.onFrame = () => {};
+      onDone?.();
+    };
+    setTimeout(finish, ZOOM_MS + SHAKE_MS + CRACK_MS + 1500);
     r.onFrame = () => {
       const t = performance.now() - t0;
-      if (t < SHAKE_MS) {
+      if (t < ZOOM_MS) {
+        // Fast start, settling into place — a rush in, not an ease that
+        // reads as floaty at the one moment this should feel committed.
+        const ease = 1 - Math.pow(1 - t / ZOOM_MS, 3);
+        r.camera.position.lerpVectors(camFar, camNear, ease);
+        r.camera.lookAt(lookAt);
+        return;
+      }
+      const st = t - ZOOM_MS;
+      if (st < SHAKE_MS) {
         // Amplitude and frequency both climb across the shake — a small
         // early wobble that builds into something urgent right before it
         // cracks, not one fixed shake held for a fixed duration.
-        const k = t / SHAKE_MS;
+        const k = st / SHAKE_MS;
         const amp = 0.025 + k * k * 0.11, freq = 0.012 + k * 0.022;
-        obj.rotation.z = Math.sin(t * freq) * amp;
-        obj.rotation.x = Math.cos(t * freq * 0.7) * amp * 0.6;
-        obj.position.y = Math.sin(t * freq * 1.4) * amp * 0.18;
+        obj.rotation.z = Math.sin(st * freq) * amp;
+        obj.rotation.x = Math.cos(st * freq * 0.7) * amp * 0.6;
+        obj.position.y = Math.sin(st * freq * 1.4) * amp * 0.18;
         return;
       }
       if (!cracked) {
@@ -674,7 +713,7 @@ export function mountCaseOpener(canvas, kind) {
         r.scene.add(r.flash);
         onCrack?.();
       }
-      const ck = Math.min(1, (t - SHAKE_MS) / CRACK_MS);
+      const ck = Math.min(1, (st - SHAKE_MS) / CRACK_MS);
       // The light punches in fast and fades out slower — a strike, not a
       // fade-in — while the two halves lift/sink apart and dissolve.
       r.flash.intensity = ck < 0.2 ? (ck / 0.2) * 6.5 : 6.5 * (1 - (ck - 0.2) / 0.8);
@@ -689,13 +728,7 @@ export function mountCaseOpener(canvas, kind) {
           m.material.opacity = fade;
         }
       }
-      if (ck >= 1) {
-        r.scene.remove(r.flash);
-        r.flash = null;
-        r.onFrame = () => {};   // hold the emptied stage — never fall back
-                                 // to the stale userControlled branch below
-        onDone?.();
-      }
+      if (ck >= 1) finish();
     };
   }
 
@@ -733,7 +766,11 @@ function frame() {
       // mountCaseOpener. Still rendered through this same shared loop, so
       // it gets the same resize handling for free and never needs a
       // second rAF loop of its own.
-      R.onFrame();
+      // Caught, not left to propagate: one view throwing (a bad sound
+      // call, anything) would otherwise abort this whole tick partway
+      // through the for-of, skipping the render call for every OTHER
+      // view still left to process this frame too.
+      try { R.onFrame(); } catch (e) { console.error('shopview onFrame:', e); }
     } else if (R.userControlled) {
       // a hand has touched this one: hold exactly where it was left,
       // permanently off the auto-spin until a fresh item resets it
