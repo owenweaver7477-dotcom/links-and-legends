@@ -3788,8 +3788,8 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
   padding-top: 13px; border-top: 1px solid rgba(255,255,255,.08); }
 .rw-bal { font-size: 13px; font-weight: 700; color: #eaf4ec; font-variant-numeric: tabular-nums; }
 
-/* Two case cards, side by side — same box-and-glow language as the case-
-   opening modal (.case-box), just at a size that fits next to the streak
+/* Two case cards, side by side — a flat-icon echo of the case-opening
+   page's own 3D model and drop-shadow glow, sized for next to the streak
    grid instead of taking the whole screen. Was a single text row with an
    icon and two buttons crammed in; nothing there said "this is a thing
    you own" the way a card with real art does. */
@@ -3832,30 +3832,22 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 .rmap-state { flex: 0 0 auto; color: #8fa694; }
 .rmap-row.earned .rmap-state { color: #6fce8a; }
 
-/* ═══════════════════════════════════════ §6 — case opening ══════════════ */
-.casecard { width: min(380px, 100%); text-align: center; padding: 32px 22px 26px; }
-.case-stage { display: flex; flex-direction: column; align-items: center; gap: 14px; }
-.case-box { font-size: 84px; line-height: 1; cursor: pointer; user-select: none;
-  filter: drop-shadow(0 10px 24px rgba(0,0,0,.5));
-  transition: transform .15s ease; }
-.case-box:hover { transform: scale(1.06); }
-.case-box.shaking { animation: caseShake .5s ease-in-out; }
-/* The Pro Case's own chest is the same SVG, tinted — a purple glow marks
-   it as the always-pro-or-better one before a player has even read the
-   pity line under it. */
-.case-box.pro { filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)) drop-shadow(0 0 20px rgba(199,125,255,.5)); }
-.case-box.vault { filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)) drop-shadow(0 0 20px rgba(232,168,58,.5)); }
-@keyframes caseShake {
-  0%, 100% { transform: rotate(0) scale(1); filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)); }
-  15% { transform: rotate(-8deg) scale(1.03); }
-  30% { transform: rotate(7deg) scale(1.03); }
-  45% { transform: rotate(-9deg) scale(1.05); filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)) drop-shadow(0 0 22px rgba(255,217,74,.6)); }
-  60% { transform: rotate(8deg) scale(1.05); filter: drop-shadow(0 10px 24px rgba(0,0,0,.5)) drop-shadow(0 0 26px rgba(255,217,74,.7)); }
-  75% { transform: rotate(-5deg) scale(1.03); }
-  90% { transform: rotate(3deg) scale(1.01); }
-}
-.case-hint { font-size: 12px; color: #8fa694; }
-.case-pity { font-size: 11px; color: #c77dff; font-weight: 700; margin-top: -6px; }
+/* ═══════════════════════════════════════ §6 — case opening ══════════════
+   Its own full page rather than a dialog: a case turning in real light,
+   cracking open, is the moment this whole economy is selling, and a 380px
+   card was undersizing the one payoff moment that's supposed to feel big.
+   Not part of the .screen router — see the HTML comment above #modalCase
+   for why it stays a full-bleed overlay instead. */
+.case-open-page { position: fixed; inset: 0; z-index: 45; display: flex;
+  align-items: center; justify-content: center; padding: 22px;
+  background: radial-gradient(ellipse at 50% 38%, rgba(36,54,42,.97), rgba(6,11,9,.99) 72%); }
+.case-open-page[hidden] { display: none; }
+.casecard { width: min(640px, 100%); text-align: center;
+  display: flex; flex-direction: column; align-items: center; }
+.case-stage { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+.case-3d { width: min(420px, 78vw); height: min(420px, 78vw, 52vh); cursor: pointer; touch-action: none; }
+.case-hint { font-size: 13px; color: #8fa694; margin-top: -4px; }
+.case-pity { font-size: 11.5px; color: #c77dff; font-weight: 700; margin-top: -6px; }
 
 /* The contents preview. Collapsed by default, one row per rarity tier —
    its own colour, which item kinds it can hand out, how many items are in
@@ -3874,9 +3866,6 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 .case-odds-count { margin-left: auto; color: #8fa694; font-size: 10.5px; }
 .case-odds-pct { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
 
-/* the reel — a wider card just for this phase, so it reads as a CS:GO-style
-   strip rather than five chips crammed into a 380px column */
-.casecard.reeling { width: min(560px, 100%); transition: width .25s ease; }
 .case-reel-wrap { position: relative; width: 100%; height: 118px; overflow: hidden;
   border-radius: 10px; background: rgba(0,0,0,.28); margin: 4px 0 6px; }
 .case-reel-track { position: absolute; top: 0; left: 50%; height: 100%;

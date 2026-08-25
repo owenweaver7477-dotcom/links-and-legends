@@ -49,7 +49,7 @@ for (const id of [
   'modalRewards', 'btnRewardsClose', 'rwStreakTxt', 'rwFreezes', 'rwGrid', 'btnRewardsClaim', 'rwErr',
   'rwGems', 'rwCases', 'rwCasesS', 'btnRewardsOpenCase', 'btnRewardsBuyCase',
   'rwProCases', 'rwProCasesS', 'btnRewardsOpenProCase', 'btnRewardsBuyProCase',
-  'modalCase', 'caseStage', 'caseBox', 'caseHint', 'casePity', 'btnCaseContents', 'caseContents',
+  'modalCase', 'caseStage', 'caseOpenCanvas', 'caseHint', 'casePity', 'btnCaseContents', 'caseContents',
   'caseReelWrap', 'caseReelTrack',
   'caseReveal', 'caseBurst', 'caseItemArt',
   'caseRarity', 'caseItemName', 'caseItemKind', 'btnCaseDone',
@@ -1793,18 +1793,22 @@ const CASE_KIND_ICON = { decal: 'decal', trail: 'trail', title: 'title', ball: '
    'pro' each guarantee their own floor and never touch that counter (see
    profiles.js's openVaultCase/openProCase). */
 const CASE_TIERS = {
-  standard: { pityLabel: null, oddsFn: tierOdds, swatchFloor: null, cssClass: '' },
-  vault: { pityLabel: 'Always Tour or better', oddsFn: vaultTierOdds, swatchFloor: VAULT_TIER, cssClass: 'vault' },
-  pro: { pityLabel: 'Always Pro or better', oddsFn: proTierOdds, swatchFloor: PITY_TIER, cssClass: 'pro' }
+  standard: { pityLabel: null, oddsFn: tierOdds, swatchFloor: null },
+  vault: { pityLabel: 'Always Tour or better', oddsFn: vaultTierOdds, swatchFloor: VAULT_TIER },
+  pro: { pityLabel: 'Always Pro or better', oddsFn: proTierOdds, swatchFloor: PITY_TIER }
 };
 
+/* The 3D case-opening view — one live controller at a time, matching the
+   one modal it drives. mountCaseOpener disposes and rebuilds the previous
+   case's geometry itself (see shopview.js), so a fresh HUD.resetCaseModal
+   call is always safe to fire even if the last open never finished. */
+let caseOpener = null;
 HUD.resetCaseModal = (sincePity = 0, kind = 'standard') => {
   el.caseStage.hidden = false;
   el.caseReelWrap.hidden = true;
   el.caseReveal.hidden = true;
   el.btnCaseDone.hidden = true;
-  const cls = CASE_TIERS[kind]?.cssClass;
-  el.caseBox.className = 'case-box' + (cls ? ' ' + cls : '');
+  caseOpener = mountCaseOpener(el.caseOpenCanvas, kind);
   el.caseHint.textContent = 'Tap to open';
   HUD.renderCasePity(sincePity, kind);
   HUD.renderCaseContents(kind);
@@ -1898,7 +1902,18 @@ HUD.renderCaseContents = (kind = 'standard') => {
   el.caseContents.innerHTML = caseContentsCache[kind];
 };
 
-HUD.shakeCaseBox = () => { el.caseBox.classList.add('shaking'); };
+/** Starts the 3D crack-open animation on the case mounted by the last
+ *  HUD.resetCaseModal call. `onCrack` fires at the flash's peak — a cue for
+ *  a sound, nothing more, since HIDING case-stage this early would cut the
+ *  animation off mid-flight. `onDone` fires once both halves have fully
+ *  dissolved, which is when the caller should actually switch to the reel. */
+HUD.playCaseUnbox = ({ onCrack, onDone } = {}) => {
+  caseOpener?.playUnbox({ onCrack, onDone });
+};
+/** Frees the 3D case's geometry/light — called when the case-opening page
+ *  closes, same discipline every other three.js teardown in this game
+ *  follows (see scene.js's own dispose-on-rebuild). */
+HUD.disposeCaseOpener = () => { caseOpener?.dispose(); caseOpener = null; };
 
 /* One chip's markup: an icon tinted and bordered to a colour, the way the
    reveal card's own art already works (see CASE_KIND_ICON / icons.js's
@@ -2879,7 +2894,7 @@ import {
 } from '../shared/wardrobe.js';
 import { decalTexture } from './decals.js';
 import { shaftDecalDataUrl } from './shaftdecals.js';
-import { showItem as showShopItem, setUserOrbit as setShopOrbit, releaseUserOrbit as releaseShopOrbit } from './shopview.js';
+import { showItem as showShopItem, setUserOrbit as setShopOrbit, releaseUserOrbit as releaseShopOrbit, mountCaseOpener } from './shopview.js';
 import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress, TIER_ACCENT } from '../shared/clubskins.js';
 import { DIFFICULTIES, difficultyById } from '../shared/difficulty.js';
 import { weatherEffects, clockText } from '../shared/weather.js';

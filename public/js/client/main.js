@@ -4605,21 +4605,27 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
   /* -------------------------------------------------------- case opening */
   let caseOpening = false;
-  HUD.el.caseBox?.addEventListener('click', () => {
+  HUD.el.caseOpenCanvas?.addEventListener('click', () => {
     if (caseOpening) return;
     caseOpening = true;
-    HUD.shakeCaseBox();
-    Sound.chestOpen?.();
-    // the shake plays out before the ack usually even arrives — the
-    // network round trip IS the suspense here, not an artificial delay
-    const openFn = CASE_NET[caseModalKind].open();
-    openFn(res => {
+
+    // The 3D crack-open animation and the network round trip run
+    // concurrently — same reasoning the old instant shake had ("the round
+    // trip IS the suspense"), just resolved by whichever finishes LAST now
+    // that the animation itself takes over two seconds. Whichever of these
+    // two flips second is the one that actually starts the reel; hiding
+    // case-stage (which HUD.playCaseReel does first thing) before the
+    // animation has actually finished would cut the crack off mid-flight.
+    let animDone = false, netResult = null, netFailed = false;
+    const proceed = () => {
+      if (!animDone || (!netResult && !netFailed)) return;
       caseOpening = false;
-      if (!res?.ok) { HUD.toast(res?.error || 'Could not open that.', 'warn', 2000); HUD.el.modalCase.hidden = true; return; }
-      // The item is already committed server-side in `res` — the reel is
-      // pure presentation, deciding nothing. onSettle only fires once the
-      // strip has actually stopped, so the reveal never appears before the
-      // spin does.
+      if (netFailed) { HUD.el.modalCase.hidden = true; HUD.disposeCaseOpener(); return; }
+      // The item is already committed server-side in `netResult` — the
+      // reel is pure presentation, deciding nothing. onSettle only fires
+      // once the strip has actually stopped, so the reveal never appears
+      // before the spin does.
+      const res = netResult;
       Sound.reelStart?.();
       HUD.playCaseReel(res, {
         onTick: strength => Sound.reelTick?.(strength),
@@ -4639,9 +4645,21 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
           if (res.kind === 'gems') HUD.toast(`+${res.amount} gems — already own everything in that tier`, 'good', 3200, 'gem');
         }
       });
+    };
+
+    HUD.playCaseUnbox({
+      onCrack: () => Sound.chestOpen?.(),   // synced to the flash, not the tap
+      onDone: () => { animDone = true; proceed(); }
+    });
+
+    const openFn = CASE_NET[caseModalKind].open();
+    openFn(res => {
+      if (!res?.ok) { netFailed = true; HUD.toast(res?.error || 'Could not open that.', 'warn', 2000); }
+      else netResult = res;
+      proceed();
     });
   });
-  HUD.el.btnCaseDone?.addEventListener('click', () => { HUD.el.modalCase.hidden = true; });
+  HUD.el.btnCaseDone?.addEventListener('click', () => { HUD.el.modalCase.hidden = true; HUD.disposeCaseOpener(); });
 
   /* ------------------------------------------------------- club inspect */
   document.getElementById('btnBagInspect')?.addEventListener('click', () => {

@@ -956,9 +956,10 @@
     <div class="rw-wallet">
       <span class="rw-bal"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-0.15em" aria-hidden="true"><path d="M12 2 20 8 12 22 4 8Z" fill="#57b8e6"/><path d="M12 2 20 8 12 8Z" fill="#a6e6ff"/><path d="M12 2 4 8 12 8Z" fill="#8fdfff"/><path d="M4 8 12 8 12 22Z" fill="#4a9fce"/><path d="M20 8 12 8 12 22Z" fill="#3f8dbb"/></svg> <b id="rwGems">0</b></span>
     </div>
-    <!-- Cases as cards, not a text row — the same box-with-a-glow language
-         .case-box uses in the opening modal itself, just smaller, so a case
-         reads as a real thing you own before you've even opened one. -->
+    <!-- Cases as cards, not a text row — a box-with-a-glow language similar
+         to the 3D case's own drop-shadow in the opening page, just as a
+         flat icon at this size, so a case reads as a real thing you own
+         before you've even opened one. -->
     <div class="rw-cases">
       <div class="rw-case-card">
         <div class="rw-case-art"><svg viewBox="0 0 24 24" width="40" height="40" aria-hidden="true"><path d="M3 11q0-6 9-6t9 6" fill="#a9723c" stroke="#5c3a1a" stroke-width="1.1" stroke-linejoin="round"/><rect x="3" y="11" width="18" height="9" rx="2" fill="#8a5a2e" stroke="#5c3a1a" stroke-width="1.1"/><rect x="9.6" y="13" width="4.8" height="4.4" rx="1" fill="#ffd76b" stroke="#5c3a1a" stroke-width=".8"/></svg></div>
@@ -989,11 +990,25 @@
   </div>
 </div>
 
-<!-- CASE OPENING — the payoff. Shake, crack, reveal, coloured by rarity. -->
-<div class="modal" id="modalCase" hidden>
-  <div class="modal-card casecard">
+<!-- CASE OPENING — the payoff, and its own full page rather than a dialog
+     floating over everything else, since a case turning in real light is
+     the moment this economy is selling and a 380px card undersold it.
+     Still not part of the screen-router (see HUD.show/route in main.js):
+     it's an overlay on top of whatever screen was already open (Pro Shop's
+     Cases tab, or the Daily Rewards modal), and closing it just reveals
+     that screen again unchanged — routing through G.screen/route() would
+     mean re-deriving where to send the player back to, which isn't
+     something route() actually tracks. -->
+<div class="case-open-page" id="modalCase" hidden>
+  <div class="casecard">
     <div class="case-stage" id="caseStage">
-      <div class="case-box" id="caseBox"><svg viewBox="0 0 24 24" width="84" height="84" aria-hidden="true"><path d="M3 11q0-6 9-6t9 6" fill="#a9723c" stroke="#5c3a1a" stroke-width="1.1" stroke-linejoin="round"/><rect x="3" y="11" width="18" height="9" rx="2" fill="#8a5a2e" stroke="#5c3a1a" stroke-width="1.1"/><rect x="9.6" y="13" width="4.8" height="4.4" rx="1" fill="#ffd76b" stroke="#5c3a1a" stroke-width=".8"/></svg></div>
+      <!-- The case itself, in three.js — same model shopview.js's Pro Shop
+           preview already builds (buildCaseCommon/Legendary/Vault), turned
+           into a real crack-open animation by mountCaseOpener instead of
+           the flat icon's one-shot CSS shake. See main.js's case-open
+           click handler for where playUnbox()/onCrack/onDone are wired
+           into the network call and the reel below. -->
+      <canvas class="case-3d" id="caseOpenCanvas"></canvas>
       <p class="case-hint" id="caseHint">Tap to open</p>
       <!-- The pity counter — a published floor on how unlucky a run can
            get, not just a psychological trick. Always visible, never just

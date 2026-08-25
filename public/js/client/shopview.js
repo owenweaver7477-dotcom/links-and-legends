@@ -394,7 +394,7 @@ function buildCart(hex = '#7fb6dd') {
    caddie above, at the same 260px-preview level of detail: enough to read
    as a slatted supply crate and a sealed hard case from across the panel,
    not a prop anybody inspects up close. */
-function buildCaseCommon() {
+export function buildCaseCommon() {
   const g = new THREE.Group();
   const shell = M('#3fae5a', 0.25), inset = M('#2e8a48', 0.15),
         rim = M('#5fce7a', 0.3), band = M('#eef4ea', 0.2), dark = M('#1f6b34'),
@@ -438,16 +438,23 @@ function buildCaseCommon() {
   return g;
 }
 
-function buildCaseLegendary() {
+export function buildCaseLegendary() {
   const g = new THREE.Group();
   const shell = M('#14161c', 0.5), inset = M('#1c1f27', 0.6),
         edge = M('#3fe0ff', 0.9), rivet = M('#2a3542', 0.7),
         gold = M('#ffd76b', 0.95), moon = M('#c98f4a', 0.4);
 
-  g.add(box(shell, 0.82, 0.82, 0.72, 0, 0, 0));                // the sealed cube
+  // The sealed cube and its front panel are each built as two stacked
+  // half-height boxes rather than one — reads identical to a single box
+  // when closed, but gives the case-opening cutscene a real seam to crack
+  // along (see mountCaseOpener's top/bottom split, which needs SOME child
+  // to sit unambiguously above vs below the case's own centre).
+  g.add(box(shell, 0.82, 0.41, 0.72, 0, 0.205, 0));
+  g.add(box(shell, 0.82, 0.41, 0.72, 0, -0.205, 0));
   // a recessed front panel — same trick as the crate above, so the face
   // the planet sits on reads as a panel set INTO the case, not painted on
-  g.add(box(inset, 0.62, 0.62, 0.02, 0, 0, 0.365));
+  g.add(box(inset, 0.62, 0.31, 0.02, 0, 0.155, 0.365));
+  g.add(box(inset, 0.62, 0.31, 0.02, 0, -0.155, 0.365));
 
   // cyan edge strips — the accent that makes it read as the premium tier
   for (const y of [-0.42, 0.42]) for (const z of [-0.37, 0.37]) {
@@ -478,7 +485,7 @@ function buildCaseLegendary() {
    centreline in the body so only the curve above the body's top edge is
    visible; that's the same "hide the geometry you don't want read" trick
    the crate's open-top rim uses, just in the other direction. */
-function buildCaseVault() {
+export function buildCaseVault() {
   const g = new THREE.Group();
   const wood = M('#8a5a2e', 0.2), darkWood = M('#5c3a1a', 0.15),
         gold = M('#ffd76b', 0.9), gem = M('#ff6b9a', 0.95);
@@ -591,6 +598,120 @@ export function showItem(canvas, what) {
   start();
 }
 
+/**
+ * The case-opening cutscene's own view. Same renderer/frame-loop
+ * infrastructure as the turntable above (`build`, the shared `frame()`
+ * loop) so it gets correct resize handling and rendering for free — but
+ * driven by its own `onFrame` hook instead of the passive auto-spin, since
+ * cracking a case open is choreographed timing, not a lazy susan turn.
+ *
+ * Returns a controller: call `playUnbox({ onCrack, onDone })` once the
+ * player taps, and `dispose()` when the case-opening page closes.
+ */
+export function mountCaseOpener(canvas, kind) {
+  const r = build(canvas);
+  start();
+
+  // A previous mount's flash light lives on the SCENE, not the stage, so
+  // the stage-only clear below wouldn't catch one left behind by an
+  // interrupted animation (closed before it finished cracking).
+  if (r.flash) { r.scene.remove(r.flash); r.flash = null; }
+  for (const c of [...r.stage.children]) {
+    r.stage.remove(c);
+    c.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (!o.material.map) o.material.dispose(); } });
+  }
+
+  const obj = kind === 'pro' ? buildCaseLegendary() : kind === 'vault' ? buildCaseVault() : buildCaseCommon();
+  r.stage.add(obj);
+  r.current = null;
+  r.onFrame = null;
+  r.userControlled = false;
+  r.spin = 0;
+
+  const bb = new THREE.Box3().setFromObject(obj);
+  const size = bb.getSize(new THREE.Vector3());
+  const mid = bb.getCenter(new THREE.Vector3());
+  const reach = Math.max(size.y, Math.hypot(size.x, size.z)) * 0.5;
+  const fovR = r.camera.fov * Math.PI / 180;
+  r.camera.position.set(0, mid.y + reach * 0.25, (reach * 2.4) / Math.tan(fovR / 2));
+  r.camera.lookAt(0, mid.y, 0);
+  r.camera.updateProjectionMatrix();
+
+  // Split into a top half and a bottom half by Y, so the crack has a real
+  // seam to open along regardless of which case model this is — every
+  // child mesh goes wherever its own centre already sits relative to the
+  // whole case's centre. See buildCaseLegendary's own note on why its
+  // shell is two boxes, not one: a single mesh straddling the seam can't
+  // be split this way, so anything that needs a clean crack has to be
+  // built in two pieces already.
+  const topHalf = new THREE.Group(), bottomHalf = new THREE.Group();
+  for (const child of [...obj.children]) (child.position.y >= mid.y ? topHalf : bottomHalf).add(child);
+  obj.add(topHalf, bottomHalf);
+
+  function playUnbox({ onCrack, onDone } = {}) {
+    r.userControlled = true;
+    const SHAKE_MS = 1800, CRACK_MS = 750;
+    const t0 = performance.now();
+    let cracked = false;
+    r.onFrame = () => {
+      const t = performance.now() - t0;
+      if (t < SHAKE_MS) {
+        // Amplitude and frequency both climb across the shake — a small
+        // early wobble that builds into something urgent right before it
+        // cracks, not one fixed shake held for a fixed duration.
+        const k = t / SHAKE_MS;
+        const amp = 0.025 + k * k * 0.11, freq = 0.012 + k * 0.022;
+        obj.rotation.z = Math.sin(t * freq) * amp;
+        obj.rotation.x = Math.cos(t * freq * 0.7) * amp * 0.6;
+        obj.position.y = Math.sin(t * freq * 1.4) * amp * 0.18;
+        return;
+      }
+      if (!cracked) {
+        cracked = true;
+        obj.rotation.set(0, obj.rotation.y, 0);
+        r.flash = new THREE.PointLight(0xfff6d8, 0, 3.4, 2);
+        r.flash.position.set(0, mid.y, size.z * 0.55 + 0.25);
+        r.scene.add(r.flash);
+        onCrack?.();
+      }
+      const ck = Math.min(1, (t - SHAKE_MS) / CRACK_MS);
+      // The light punches in fast and fades out slower — a strike, not a
+      // fade-in — while the two halves lift/sink apart and dissolve.
+      r.flash.intensity = ck < 0.2 ? (ck / 0.2) * 6.5 : 6.5 * (1 - (ck - 0.2) / 0.8);
+      topHalf.position.y = ck * (0.85 + ck * 0.5);
+      topHalf.rotation.x = -ck * 0.85;
+      bottomHalf.position.y = -ck * 0.45;
+      const fade = ck < 0.4 ? 1 : 1 - (ck - 0.4) / 0.6;
+      for (const half of [topHalf, bottomHalf]) {
+        for (const m of half.children) {
+          if (!m.material) continue;
+          m.material.transparent = true;
+          m.material.opacity = fade;
+        }
+      }
+      if (ck >= 1) {
+        r.scene.remove(r.flash);
+        r.flash = null;
+        r.onFrame = () => {};   // hold the emptied stage — never fall back
+                                 // to the stale userControlled branch below
+        onDone?.();
+      }
+    };
+  }
+
+  function dispose() {
+    r.onFrame = null;
+    r.userControlled = false;
+    if (r.flash) { r.scene.remove(r.flash); r.flash = null; }
+    for (const c of [...r.stage.children]) {
+      r.stage.remove(c);
+      c.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (!o.material.map) o.material.dispose(); } });
+    }
+  }
+
+  return { playUnbox, dispose };
+}
+
 function frame() {
   raf = requestAnimationFrame(frame);
   /* Every live turntable, not just the last one asked for. Both are cheap —
@@ -606,7 +727,14 @@ function frame() {
       R.camera.aspect = w / h;
       R.camera.updateProjectionMatrix();
     }
-    if (R.userControlled) {
+    if (R.onFrame) {
+      // A view with its own choreography (the case-opening cutscene) drives
+      // itself instead of the passive turntable spin below — see
+      // mountCaseOpener. Still rendered through this same shared loop, so
+      // it gets the same resize handling for free and never needs a
+      // second rAF loop of its own.
+      R.onFrame();
+    } else if (R.userControlled) {
       // a hand has touched this one: hold exactly where it was left,
       // permanently off the auto-spin until a fresh item resets it
       R.stage.rotation.y = R.userYaw;
