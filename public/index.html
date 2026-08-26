@@ -822,7 +822,16 @@
          preview. See HUD.renderInventory. -->
     <div class="section hkpane" data-pane="inventory">
       <h4 class="lbl">Inventory</h4>
-      <div id="invSections"></div>
+      <!-- One stage for the whole grid, driven on hover — NOT a canvas per
+           card. The grid shows ~35 items at once and each would be its own
+           WebGL context. Same shape as the Pro Shop's turntable. -->
+      <div class="shopwrap">
+        <div class="shopview">
+          <canvas id="invCanvas"></canvas>
+          <div class="shopview-cap" id="invCap"></div>
+        </div>
+        <div id="invSections"></div>
+      </div>
     </div>
 
     <!-- MARKETPLACE. Listings, not live trades — a seller lists an item for
@@ -835,11 +844,19 @@
         <button class="mktsubtab on" data-msub="browse" role="tab">Browse</button>
         <button class="mktsubtab" data-msub="mine" role="tab">My listings</button>
       </div>
-      <div class="mktpane" data-msub="browse">
-        <div id="marketBrowse"></div>
-      </div>
-      <div class="mktpane" data-msub="mine" hidden>
-        <div id="marketMine"></div>
+      <div class="shopwrap">
+        <div class="shopview">
+          <canvas id="mktCanvas"></canvas>
+          <div class="shopview-cap" id="mktCap"></div>
+        </div>
+        <div>
+          <div class="mktpane" data-msub="browse">
+            <div id="marketBrowse"></div>
+          </div>
+          <div class="mktpane" data-msub="mine" hidden>
+            <div id="marketMine"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

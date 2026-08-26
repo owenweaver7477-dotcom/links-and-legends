@@ -69,6 +69,7 @@ for (const id of [
   'coinHud', 'coinHudN', 'netPill', 'netDiag', 'walletHud', 'walletCoinsN', 'walletGemsN',
   'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal', 'gemBal', 'invSections',
   'marketSubTabs', 'marketBrowse', 'marketMine', 'marketGemBal',
+  'invCanvas', 'invCap', 'mktCanvas', 'mktCap',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -1925,11 +1926,173 @@ HUD.renderInventory = (prof, look, onPick, onBuy, onSell, onList) => {
         card.appendChild(btn);
       }
 
+      /* What this card is, for the preview stage. Stamped as data rather
+         than closed over, so ONE delegated listener on the grid serves
+         every card — the same shape the Pro Shop's own grid uses. */
+      card.dataset.prev = JSON.stringify({
+        kind, id: u.id, name: u.name,
+        color: u.color || previewRarity.color,
+        rarity: casePoolItem?.rarity || null,
+        purity,
+        sub: owned ? status.textContent : `Locked — ${status.textContent}`
+      });
+
       grid.appendChild(card);
     }
     section.appendChild(grid);
     box.appendChild(section);
   }
+
+  if (!box.dataset.prevWired) {
+    box.dataset.prevWired = '1';
+    const show = e => {
+      const card = e.target.closest('[data-prev]');
+      if (!card) return;
+      try {
+        const d = JSON.parse(card.dataset.prev);
+        HUD.previewOwnedItem('invCanvas', 'invCap', d.kind, d.id, {
+          name: d.name, sub: d.sub, color: d.color, purity: d.purity,
+          rarity: RARITIES.find(r => r.id === d.rarity) || RARITIES[0],
+          clubSet: HUD.mySet || STARTER_SET, clubSkin: HUD.mySkin || 'stock'
+        });
+      } catch { /* ignore a malformed card */ }
+    };
+    box.addEventListener('pointerover', show);
+    box.addEventListener('focusin', show);
+    box.addEventListener('click', show);      // touch, where there is no hover
+  }
+};
+
+
+/* ------------------------------------------------- the preview stages ---
+   One stage per tab, hovered rather than clicked — the pattern the Pro
+   Shop grid, the bag and the skin picker already use. NOT one canvas per
+   card: the Inventory grid shows ~35 items at once, and finishpreview.js's
+   own header explains why the small thumbnails are 2D in the first place.
+
+   The golfer is mounted lazily and only for the kinds that need one, so a
+   player who never hovers an emote never pays for a second avatar. */
+const avStages = new Map();
+function avatarStage(canvasId) {
+  let st = avStages.get(canvasId);
+  if (!st) {
+    const cv = document.getElementById(canvasId);
+    if (!cv) return null;
+    st = mountAvatarStage(cv, HUD.previewLook || null);
+    avStages.set(canvasId, st);
+  }
+  return st;
+}
+
+/** Drop whatever golfer a stage is holding, so the next non-emote hover
+ *  gets a clean turntable rather than a club floating beside a torso. */
+function clearAvatarStage(canvasId) {
+  const st = avStages.get(canvasId);
+  if (st) { st.dispose(); avStages.delete(canvasId); }
+}
+
+/**
+ * Preview one owned/listed item on a tab's stage.
+ * `kind` is an UNLOCK_KINDS key; `id` the item's own id.
+ */
+/* A flat card laid over the stage, for the kinds with nothing to model.
+   Created lazily beside the canvas rather than added to index.html for
+   every stage that might one day want one. */
+function flatPlateFor(canvasId) {
+  const cv = document.getElementById(canvasId);
+  if (!cv) return null;
+  const host = cv.parentElement;
+  let el = host.querySelector('.sv-plate');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'sv-plate';
+    el.hidden = true;
+    host.appendChild(el);
+  }
+  return el;
+}
+function showFlatPlate(canvasId, { art, color, name, kindName, icon: ico }) {
+  const el = flatPlateFor(canvasId);
+  if (!el) return;
+  const cv = document.getElementById(canvasId);
+  if (cv) cv.style.visibility = 'hidden';
+  el.hidden = false;
+  el.style.setProperty('--pc', color);
+  el.innerHTML = (art
+      ? `<img class="sv-plate-art" width="128" height="128" alt="">`
+      : `<span class="sv-plate-ico">${icon(ico, { size: 64 })}</span>`) +
+    `<b>${escapeHtml(name)}</b><small>${escapeHtml(kindName)}</small>`;
+  // property, not a src="..." string — see renderClubDecalPicker's comment
+  if (art) el.querySelector('.sv-plate-art').src = art;
+}
+function hideFlatPlate(canvasId) {
+  const cv = document.getElementById(canvasId);
+  if (cv) cv.style.visibility = '';
+  const el = document.getElementById(canvasId)?.parentElement?.querySelector('.sv-plate');
+  if (el) el.hidden = true;
+}
+
+HUD.previewOwnedItem = (canvasId, capId, kind, id, opts = {}) => {
+  const cv = document.getElementById(canvasId);
+  if (!cv) return;
+  const cap = document.getElementById(capId);
+  const setCap = (name, sub) => {
+    if (cap) cap.innerHTML = `<b>${escapeHtml(name || '')}</b>` + (sub ? `<small>${escapeHtml(sub)}</small>` : '');
+  };
+
+  if (kind === 'emote') {
+    hideFlatPlate(canvasId);
+    // the card IS the preview — the golfer standing there plays the pose
+    // live, exactly as the wardrobe already does rather than looping a
+    // canned clip in the card
+    const st = avatarStage(canvasId);
+    if (st) st.play(id);
+    setCap(opts.name || id, 'Playing it now');
+    return;
+  }
+
+  clearAvatarStage(canvasId);
+  const rarity = opts.rarity || RARITIES[0];
+  const color = opts.color || rarity.color;
+
+  /* Three kinds have no model and never will: a title is words beside your
+     name, and hat/melee have no equip path anywhere in the game. A trail
+     has no model either, but it DOES have real 2D art. Spinning a grey cube
+     at any of them is worse than showing nothing — so they get a flat
+     plate over the canvas instead, which is an honest picture of a thing
+     that is not a 3D object. */
+  const FLAT = { title: null, hat: null, melee: null, trail: 'art' };
+  if (kind in FLAT) {
+    const art = FLAT[kind] === 'art' ? trailPreviewDataUrl(color, 128) : null;
+    showFlatPlate(canvasId, {
+      art, color, name: opts.name || id,
+      kindName: UNLOCK_KINDS[kind]?.name || kind,
+      icon: CASE_KIND_ICON[kind] || 'gift'
+    });
+    setCap(opts.name || id, opts.sub || (UNLOCK_KINDS[kind]?.name || ''));
+    return;
+  }
+  hideFlatPlate(canvasId);
+
+  if (kind === 'decal') {
+    // the decal on an actual club, which is the only place it is ever
+    // really seen — a 40px flat tile is a swatch, not the thing
+    showShopItem(cv, { kind: 'club', key: 'DR', set: opts.clubSet || STARTER_SET,
+      skin: opts.clubSkin || 'stock',
+      decal: { id, color, purity: opts.purity || 0 },
+      name: opts.name, sub: opts.sub });
+  } else if (kind === 'clubset') {
+    showShopItem(cv, { kind: 'club', key: 'DR', set: id, skin: opts.clubSkin || 'stock',
+      name: opts.name, sub: opts.sub });
+  } else if (kind === 'ball') {
+    showShopItem(cv, { kind: 'ball', hex: color, name: opts.name, sub: opts.sub });
+  } else {
+    /* trail/title/hat/melee have no 3D model anywhere in the game. Rather
+       than spin a coloured cube at somebody, the caption carries it and
+       the stage shows the item's own colour. */
+    showShopItem(cv, { kind: 'item', hex: color, name: opts.name, sub: opts.sub });
+  }
+  setCap(opts.name || id, opts.sub || (UNLOCK_KINDS[kind]?.name || ''));
 };
 
 /* ------------------------------------------------------- marketplace --- */
@@ -1983,6 +2146,7 @@ HUD.renderMarket = (listings, gems, onBuy) => {
     const { art, item } = marketCardArt(l.kind, l.itemId, l.purity);
     const card = document.createElement('div');
     card.className = 'inv-card owned';
+    card.dataset.prev = marketPrevData(l, item);
     card.appendChild(art);
     const name = document.createElement('b');
     name.textContent = item?.name || l.itemId;
@@ -2028,6 +2192,7 @@ HUD.renderMyListings = (listings, onCancel) => {
     const { art, item } = marketCardArt(l.kind, l.itemId, l.purity);
     const card = document.createElement('div');
     card.className = 'inv-card owned';
+    card.dataset.prev = marketPrevData(l, item);
     card.appendChild(art);
     const name = document.createElement('b');
     name.textContent = item?.name || l.itemId;
@@ -2059,10 +2224,44 @@ HUD.renderMyListings = (listings, onCancel) => {
   box.appendChild(grid);
 };
 
+/** What a listing is, for the preview stage — the same payload shape the
+ *  Inventory grid stamps, so one dispatcher serves both surfaces. */
+function marketPrevData(l, item) {
+  return JSON.stringify({
+    kind: l.kind, id: l.itemId, name: item?.name || l.itemId,
+    color: item?.color || null, rarity: item?.rarity || null,
+    purity: l.purity || 0,
+    sub: `${l.price.toLocaleString()} gems`
+  });
+}
+
+/** Bound once on a persistent ancestor, so it covers Browse and My
+ *  listings without rebinding on every re-render. */
+function wireMarketPreview() {
+  const pane = document.querySelector('.hkpane[data-pane="market"]');
+  if (!pane || pane.dataset.prevWired) return;
+  pane.dataset.prevWired = '1';
+  const show = e => {
+    const card = e.target.closest('[data-prev]');
+    if (!card) return;
+    try {
+      const d = JSON.parse(card.dataset.prev);
+      HUD.previewOwnedItem('mktCanvas', 'mktCap', d.kind, d.id, {
+        name: d.name, sub: d.sub, color: d.color, purity: d.purity,
+        rarity: RARITIES.find(r => r.id === d.rarity) || RARITIES[0]
+      });
+    } catch { /* ignore */ }
+  };
+  pane.addEventListener('pointerover', show);
+  pane.addEventListener('focusin', show);
+  pane.addEventListener('click', show);
+}
+
 HUD.bindMarketSubTabs = () => {
   const bar = el.marketSubTabs;
   if (!bar || bar.dataset.bound) return;
   bar.dataset.bound = '1';
+  wireMarketPreview();
   bar.addEventListener('click', e => {
     const b = e.target.closest('.mktsubtab');
     if (!b) return;
@@ -2902,6 +3101,14 @@ HUD.showClubhouseTab = (name) => {
   if (name === 'world') HUD.onWorldTab?.();
   if (name === 'rewards') HUD.bindLevelTrack?.();
   if (name === 'market') { HUD.bindMarketSubTabs(); HUD.onMarketTab?.(); }
+  /* Open on the first thing in the grid rather than an empty stage — an
+     empty stage beside a full list reads as broken, not as waiting. Same
+     reasoning as the shop tab's own seed just below. */
+  if (name === 'inventory' || name === 'market') {
+    const sel = name === 'inventory' ? '#invSections [data-prev]' : '.hkpane[data-pane="market"] [data-prev]';
+    const first = document.querySelector(sel);
+    first?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+  }
   /* The turntable starts on the first thing in the list rather than empty —
      an empty stage next to a full list reads as broken, not as waiting. */
   if (name === 'shop') {
@@ -3449,7 +3656,8 @@ import {
 } from '../shared/wardrobe.js';
 import { decalTexture } from './decals.js';
 import { shaftDecalDataUrl } from './shaftdecals.js';
-import { showItem as showShopItem, setUserOrbit as setShopOrbit, releaseUserOrbit as releaseShopOrbit, mountCaseOpener } from './shopview.js';
+import { showItem as showShopItem, setUserOrbit as setShopOrbit, releaseUserOrbit as releaseShopOrbit,
+         mountCaseOpener, mountAvatarStage } from './shopview.js';
 import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress, RARITY_ACCENT } from '../shared/clubskins.js';
 import { DIFFICULTIES, difficultyById } from '../shared/difficulty.js';
 import { weatherEffects, clockText } from '../shared/weather.js';

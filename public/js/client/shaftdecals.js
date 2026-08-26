@@ -239,15 +239,30 @@ function applyVignette(g, size) {
  *  DRAW function is written against the fixed PX constant, and a flat
  *  geometric pattern scales cleanly (nothing here is fine text or a photo
  *  that would need re-rendering to stay sharp). */
+const urlCache = new Map();
+
 export function shaftDecalDataUrl(id, color, purity = 0, size = PX) {
   const draw = DRAW[id];
   if (!draw) return null;
+  /* Cached like shaftDecalTexture above and like both of finishpreview.js's
+     helpers — this was the one preview function in the client that redrew
+     and re-encoded a PNG on EVERY call, and at any size but the native 48
+     it did it across two canvases. The Inventory grid alone asks for ~35 of
+     these every time it renders, and it re-renders on every equip. */
+  const key = id + '|' + color + '|' + purity + '|' + size;
+  const hit = urlCache.get(key);
+  if (hit) return hit;
+
   const native = document.createElement('canvas');
   native.width = native.height = PX;
   const ng = native.getContext('2d');
   draw(ng, shade(color, -0.35), shade(color, 0.35));
   applySheen(ng, purity);
-  if (size === PX) return native.toDataURL('image/png');
+  if (size === PX) {
+    const url = native.toDataURL('image/png');
+    urlCache.set(key, url);
+    return url;
+  }
 
   const out = document.createElement('canvas');
   out.width = out.height = size;
@@ -255,7 +270,9 @@ export function shaftDecalDataUrl(id, color, purity = 0, size = PX) {
   og.imageSmoothingEnabled = true;
   og.drawImage(native, 0, 0, size, size);
   applyVignette(og, size);
-  return out.toDataURL('image/png');
+  const url = out.toDataURL('image/png');
+  urlCache.set(key, url);
+  return url;
 }
 
 export const SHAFT_DECAL_IDS = Object.keys(DRAW);

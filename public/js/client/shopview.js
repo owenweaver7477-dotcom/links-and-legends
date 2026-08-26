@@ -24,6 +24,9 @@ import { decalTexture } from './decals.js';
 import { DECALS } from '../shared/wardrobe.js';
 import { skinById } from '../shared/clubskins.js';
 import { setById, rarityRank, STARTER_SET } from '../shared/clubsets.js';
+import { shaftDecalTexture } from './shaftdecals.js';
+import { Avatar } from './avatar.js';
+import { normaliseLook } from '../shared/avatars.js';
 
 /* ONE RENDERER PER CANVAS. The shop and the bag are two different canvases
    on two different panes, and a single module-level renderer bound to
@@ -98,7 +101,7 @@ function rod(mat, rTop, rBot, h, x, y, z) {
   return m;
 }
 
-function buildClub(key, setId = STARTER_SET, skinId = 'stock') {
+function buildClub(key, setId = STARTER_SET, skinId = 'stock', decal = null) {
   const club = CLUB_BY_KEY[key] || CLUBS[0];
   const g = new THREE.Group();
 
@@ -138,6 +141,20 @@ function buildClub(key, setId = STARTER_SET, skinId = 'stock') {
   g.add(rod(M(gripCol), club.putter ? 0.045 : 0.040, 0.030,
             gripLen, 0, top + gripLen / 2 - 0.02, 0));
   g.add(rod(M(shaftCol, shine), 0.017, 0.024, shaftLen, 0, 0, 0));
+
+  /* The decal band. A club decal has only ever been visible on the golfer's
+     own club in-round (avatar.js paints this same texture onto a band mesh),
+     so browsing a wardrobe full of them meant reading flat 40px squares and
+     guessing. Same texture source, same wrap — this is the decal actually
+     on a club, which is the whole thing a player is buying. */
+  if (decal) {
+    const tex = shaftDecalTexture(decal.id, decal.color, decal.purity || 0);
+    if (tex) {
+      const band = rod(new THREE.MeshLambertMaterial({ map: tex }),
+                       0.0185, 0.0255, shaftLen * 0.42, 0, shaftLen * 0.10, 0);
+      g.add(band);
+    }
+  }
 
   const headY = -top;
   const head = new THREE.Group();
@@ -282,7 +299,12 @@ function buildClub(key, setId = STARTER_SET, skinId = 'stock') {
      Tilted, too: a club stood straight up is a pole. Leaning it puts the
      sole, the face and the topline all in one view. */
   g.rotation.z = 0.30;
-  g.userData.focus = head;
+  /* The shop frames on the HEAD, because the head is what differs between
+     a 7 iron and a driver and it is what the shop exists to show. A decal
+     preview is the exact opposite: the decal is a band on the SHAFT, and
+     framing the head puts it off-screen entirely. So a club wearing one
+     frames on the whole club instead. */
+  if (!decal) g.userData.focus = head;
   return g;
 }
 
@@ -560,7 +582,7 @@ export function showItem(canvas, what) {
   }
 
   let obj;
-  if (what?.kind === 'club') obj = buildClub(what.key || 'DR', what.set || STARTER_SET, what.skin || 'stock');
+  if (what?.kind === 'club') obj = buildClub(what.key || 'DR', what.set || STARTER_SET, what.skin || 'stock', what.decal || null);
   else if (what?.kind === 'decal') obj = buildDecal(what.key);
   else if (what?.kind === 'ball') obj = buildBall(what.hex);
   else if (what?.kind === 'caddie') obj = buildCaddie(what.hex);
@@ -804,6 +826,75 @@ function frame() {
  * where released rather than drifting back into the auto-spin, the way a
  * real turntable you've grabbed does not start moving on its own again.
  */
+/* ------------------------------------------------------- the golfer ---
+   An Avatar standing on its own, in a shopview canvas, so an emote can be
+   PLAYED rather than described.
+
+   There has only ever been one Avatar instance in the client (main.js's
+   `menu.av`, living in the live course scene and looked at by two
+   cameras), and the wardrobe already previews emotes on it — but the
+   Inventory tab is a different screen with no golfer on it, and pointing
+   a third camera at the course scene to see one would mean rendering a
+   whole golf hole behind a 260px card.
+
+   Avatar needs remarkably little to stand somewhere else: it builds its
+   own THREE.Group, adds itself to nothing, and only wants lights — which
+   build() already hangs in every view. Its terrain is optional (update()
+   guards the foot-planting), so a terrain-less golfer just skips it.
+   Driven from the same `onFrame` hook mountCaseOpener established for a
+   view with its own choreography. */
+export function mountAvatarStage(canvas, look) {
+  if (!canvas) return null;
+  const r = build(canvas);
+  // tear down whatever the stage was showing, including a previous golfer
+  if (r.avatar) { r.stage.remove(r.avatar.root); r.avatar.dispose(); r.avatar = null; }
+  for (const c of [...r.stage.children]) {
+    r.stage.remove(c);
+    c.traverse(o => {
+      if (o.isMesh && !o.geometry?.userData?.shared) {
+        o.geometry.dispose();
+        if (!o.material.map && !o.material.userData?.shared) o.material.dispose();
+      }
+    });
+  }
+  r.current = null;                       // showItem's dedupe must not skip a re-mount
+
+  const av = new Avatar(look || normaliseLook(null), '#f6f9f4');
+  r.avatar = av;
+  av.place(0, 0, 0, 0);
+  r.stage.add(av.root);
+
+  /* Framed on the torso rather than the whole bounding box: a golfer is
+     nearly two metres of mostly legs, and framing all of it puts the face
+     — the thing an emote happens on — in the top eighth of the card. */
+  r.camera.position.set(0, 1.15, 3.15);
+  r.camera.lookAt(0, 0.95, 0);
+  r.camera.updateProjectionMatrix();
+  r.stage.rotation.set(0, 0, 0);
+
+  let last = performance.now();
+  r.onFrame = () => {
+    const now = performance.now();
+    // clamped: a backgrounded tab resumes with a huge gap, and feeding
+    // that straight in fast-forwards an emote past its own end
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    av.update(dt, 0);
+  };
+  start();
+
+  return {
+    play: id => av.play(id),
+    setLook: l => { av.look = l; },
+    dispose: () => {
+      r.onFrame = null;
+      r.stage.remove(av.root);
+      av.dispose();
+      r.avatar = null;
+    }
+  };
+}
+
 export function setUserOrbit(canvas, yaw, pitch) {
   const R = views.get(canvas);
   if (!R) return;
