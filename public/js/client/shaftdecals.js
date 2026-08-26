@@ -170,6 +170,128 @@ const DRAW = {
       g.arc(cx, cy, r, 0, Math.PI * 2);
       g.stroke();
     }
+  },
+
+  /* ---- the second wave. Same rules as everything above: two tones, no
+     fine detail (this is 48px wrapped round a shaft you see from twenty
+     metres), and every pattern has to still read as ITSELF at that size —
+     which is why none of these are line art. ---- */
+  pinstripe(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.strokeStyle = b; g.lineWidth = PX * 0.05;
+    for (let x = PX * 0.12; x < PX; x += PX * 0.25) {
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x, PX); g.stroke();
+    }
+  },
+  dots(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.fillStyle = b;
+    const s = PX / 4;
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
+      // offset every other row, or it reads as a grid rather than a spot
+      const ox = (y % 2) * s * 0.5;
+      g.beginPath();
+      g.arc(x * s + s * 0.5 + ox, y * s + s * 0.5, s * 0.24, 0, Math.PI * 2);
+      g.fill();
+    }
+  },
+  crosshatch(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.strokeStyle = b; g.lineWidth = PX * 0.045;
+    for (let i = -PX; i < PX * 2; i += PX * 0.22) {
+      g.beginPath(); g.moveTo(i, 0); g.lineTo(i + PX, PX); g.stroke();
+      g.beginPath(); g.moveTo(i + PX, 0); g.lineTo(i, PX); g.stroke();
+    }
+  },
+  scales(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.strokeStyle = b; g.lineWidth = PX * 0.05;
+    const s = PX / 4;
+    for (let y = 0; y <= 4; y++) for (let x = -1; x <= 4; x++) {
+      const ox = (y % 2) * s * 0.5;
+      g.beginPath();
+      g.arc(x * s + ox, y * s, s * 0.5, Math.PI, 0);
+      g.stroke();
+    }
+  },
+  bolt(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.strokeStyle = b; g.lineWidth = PX * 0.10; g.lineCap = 'round';
+    // two offset arrows, so the wrap has something happening on both sides
+    for (const ox of [0, PX * 0.5]) {
+      g.beginPath();
+      g.moveTo(ox + PX * 0.10, PX * 0.80);
+      g.lineTo(ox + PX * 0.26, PX * 0.46);
+      g.lineTo(ox + PX * 0.14, PX * 0.42);
+      g.lineTo(ox + PX * 0.32, PX * 0.14);
+      g.stroke();
+    }
+    g.lineCap = 'butt';
+  },
+  weave(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.fillStyle = b;
+    const s = PX / 6;
+    // a basket weave: alternating horizontal and vertical pairs
+    for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) {
+      if ((Math.floor(x / 2) + Math.floor(y / 2)) % 2) continue;
+      g.fillRect(x * s, y * s, s, s);
+    }
+  },
+  arrows(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.fillStyle = b;
+    const s = PX / 3;
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) {
+      const cx = x * s + s * 0.5, cy = y * s + s * 0.5;
+      g.beginPath();
+      g.moveTo(cx, cy - s * 0.30);
+      g.lineTo(cx + s * 0.28, cy + s * 0.22);
+      g.lineTo(cx, cy + s * 0.06);
+      g.lineTo(cx - s * 0.28, cy + s * 0.22);
+      g.closePath(); g.fill();
+    }
+  },
+  marble(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.strokeStyle = b; g.lineWidth = PX * 0.035; g.lineCap = 'round';
+    /* Seeded, not Math.random — the same decal must look the same on every
+       machine and on every redraw, the same rule goldleaf's speckles follow. */
+    let seed = 7;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let i = 0; i < 7; i++) {
+      const y = rnd() * PX;
+      g.beginPath();
+      g.moveTo(0, y);
+      g.bezierCurveTo(PX * 0.3, y - PX * 0.18 * rnd(), PX * 0.7, y + PX * 0.18 * rnd(), PX, y);
+      g.stroke();
+    }
+    g.lineCap = 'butt';
+  },
+  circuit(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.strokeStyle = b; g.lineWidth = PX * 0.05;
+    g.fillStyle = b;
+    const s = PX / 4;
+    for (let i = 0; i < 4; i++) {
+      const y = i * s + s * 0.5;
+      g.beginPath();
+      g.moveTo(0, y); g.lineTo(PX * 0.42, y);
+      g.lineTo(PX * 0.42, y + (i % 2 ? -s * 0.5 : s * 0.5));
+      g.lineTo(PX, y + (i % 2 ? -s * 0.5 : s * 0.5));
+      g.stroke();
+      g.beginPath(); g.arc(PX * 0.42, y, PX * 0.055, 0, Math.PI * 2); g.fill();
+    }
+  },
+  starfield(g, a, b) {
+    g.fillStyle = a; g.fillRect(0, 0, PX, PX);
+    g.fillStyle = b;
+    let seed = 991;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let i = 0; i < 26; i++) {
+      const x = rnd() * PX, y = rnd() * PX, r = PX * (0.012 + rnd() * 0.030);
+      g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    }
   }
 };
 
