@@ -29,6 +29,7 @@ import { loadFriends, friendState, friendCode, requestFriend, acceptFriend,
          toggleFavourite, friendsOf, areFriends } from './server/friends.js';
 import { loadMarketplace, listItem, cancelListing, buyListing,
          myListings, allListings } from './server/marketplace.js';
+import { STARTER_SET } from './public/js/shared/clubsets.js';
 
 /* Course rating and slope, computed once per course and kept. The geometry
    is a pure function of the seed, so these cannot change while the process
@@ -216,6 +217,7 @@ import { settleRound, setDifficulty, difficultyOf,
          setLook, setBallColor, setBag, setEquippedEmotes, kitOf, markSeen,
          flushProfiles, claimLogin, openCase, buyCase, openVaultCase, buyVaultCase, openProCase, buyProCase,
          buyUnlockDirect, sellUnlock,
+         buyClubCase, openClubCase, equipClubSet,
          devSetLevel, devGrantTestGems } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
@@ -1008,7 +1010,9 @@ function snapshot(room) {
       // players:pos channel for the same reason walking positions do: this
       // snapshot goes to everyone on every state change.
       cart: inCart(p) ? (p.cart.s === 'd' ? { s: 'd', r: p.cart.r } : { s: 'p', o: p.cart.o }) : null,
-      clubTier: getProfile(p.pid).clubTier ?? 0,
+      // cosmetic: which set an opponent is swinging, so their club renders
+      // in its own colours rather than everyone holding the same one
+      clubSet: getProfile(p.pid).clubSet || STARTER_SET,
       connected: p.connected, spectator: p.spectator
     }))
   };
@@ -2218,6 +2222,38 @@ io.on('connection', socket => {
     reply(result);
   });
 
+  /* The Club Case and the set it hands out. Same shape as every case
+     handler above, and the same discipline: the client names nothing that
+     matters — which set drops is rolled here, and equipping one re-checks
+     ownership server-side, because a set IS a stat line and claiming one
+     you never pulled would be claiming distance you never earned. */
+  socket.on('case:buyClub', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = buyClubCase(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('case:openClub', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = openClubCase(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('set:equip', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = equipClubSet(pid, d?.id);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
   /* Naming the exact item rather than rolling for it, and selling one
      back — both take {kind, id} straight from the client, but neither
      trusts it beyond a lookup key: buyUnlockDirect/sellUnlock re-derive
@@ -2378,8 +2414,8 @@ io.on('connection', socket => {
       x: p.x, z: p.z,                                  // the server's ball, not theirs
       gear: prof.gear || null,                         // what WE have on file
       crew: prof.crew || null,
-      clubTier: prof.clubTier ?? 0,
-      refine: prof.refine ?? 0,
+      clubSet: prof.clubSet || STARTER_SET,
+      setLevel: (prof.clubSets || {})[prof.clubSet] || 0,
       afterBadHole: !!p.afterBad,                      // Grit's moment
       clubKey: club.key,
       power: clamp(Number(data.power) || 0, 0, 1.12),

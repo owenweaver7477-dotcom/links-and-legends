@@ -12,6 +12,8 @@ import assert from 'node:assert/strict';
 import { holeXp, roundXp, xpForLevel, levelFromXp, maxLevel } from '../public/js/shared/economy.js';
 import { UNLOCKS, unlocksAt, unlocksOfKind, ownedOfKind, unlockedBetween, nextUnlock, UNLOCK_KINDS } from '../public/js/shared/unlocks.js';
 import { EMOTES, EMOTE_CLIPS, emotesAt, POSE_KEYS, blankPose } from '../public/js/client/celebrations.js';
+import { CASE_POOL } from '../public/js/shared/cases.js';
+import { CLUB_SETS, setStats } from '../public/js/shared/clubsets.js';
 import { io } from 'socket.io-client';
 
 /* Point the socket tests at a server on another port with GOLF_URL, so a
@@ -389,13 +391,49 @@ test('ownedOfKind ignores a caseUnlocks entry of the wrong kind — a decal id c
     'a decal-kind case entry granted something in the trail list');
 });
 
+const POWER_KEYS = ['speed', 'power', 'carry', 'accuracy', 'spin', 'faceDamp'];
+
 test('levels buy identity, never power', () => {
-  /* The whole separation: coins buy distance, levels buy looks. An unlock
-     that changed a stat would make grinding mandatory. */
+  /* The original separation: coins buy distance, levels buy looks. An
+     unlock that changed a stat would make grinding mandatory.
+
+     STILL TRUE OF EVERY LEVEL UNLOCK. Club sets became the one thing in
+     the game where rarity really does buy distance (see clubsets.js's
+     header for why that was a deliberate call), but they are NOT in this
+     table — they are not levelled into, they drop from the Club Case. So
+     this assertion holds exactly as written: nothing you unlock by
+     levelling up has ever granted a stat, and nothing here may start. */
   for (const u of UNLOCKS) {
-    for (const banned of ['speed', 'power', 'carry', 'accuracy', 'spin', 'faceDamp']) {
+    for (const banned of POWER_KEYS) {
       assert.equal(u[banned], undefined,
         `unlock "${u.id}" grants ${banned} — levels must not sell power`);
+    }
+  }
+});
+
+test('cosmetic case items never grant power either — sets are the only exception', () => {
+  /* The mirror of the rule above, and the one that would actually catch a
+     mistake now that power CAN come from a case. Every kind a cosmetic
+     case can hand out must stay inert; if somebody ever gives a decal a
+     speed field because "sets have one", this fails. */
+  for (const item of CASE_POOL) {
+    for (const banned of POWER_KEYS) {
+      assert.equal(item[banned], undefined,
+        `case item "${item.kind}:${item.id}" grants ${banned} — only club sets may carry stats`);
+    }
+  }
+});
+
+test('a club set carries stats, and they come from its rarity alone', () => {
+  // the deliberate exception, asserted so it stays deliberate
+  for (const set of CLUB_SETS) {
+    const base = setStats(set.id, 0);
+    assert.ok(Number.isFinite(base.speed) && Number.isFinite(base.faceDamp),
+      `set "${set.id}" resolves to a non-finite stat line`);
+    for (const banned of POWER_KEYS) {
+      assert.equal(set[banned], undefined,
+        `set "${set.id}" hardcodes ${banned} — a set's stats must come from SET_TIERS, ` +
+        'so two sets of the same rarity can never drift apart');
     }
   }
 });

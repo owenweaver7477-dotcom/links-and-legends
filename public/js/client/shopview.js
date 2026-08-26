@@ -23,6 +23,7 @@ import { CLUBS, CLUB_BY_KEY } from '../shared/clubs.js';
 import { decalTexture } from './decals.js';
 import { DECALS } from '../shared/wardrobe.js';
 import { skinById } from '../shared/clubskins.js';
+import { setById, rarityRank, STARTER_SET } from '../shared/clubsets.js';
 
 /* ONE RENDERER PER CANVAS. The shop and the bag are two different canvases
    on two different panes, and a single module-level renderer bound to
@@ -97,19 +98,27 @@ function rod(mat, rTop, rBot, h, x, y, z) {
   return m;
 }
 
-function buildClub(key, tier = 0, skinId = 'stock') {
+function buildClub(key, setId = STARTER_SET, skinId = 'stock') {
   const club = CLUB_BY_KEY[key] || CLUBS[0];
   const g = new THREE.Group();
 
-  /* Tiers are the SET — what you bought, and what it does. A skin is the
-     finish over the top, earned rather than bought, and it changes nothing
-     but the colour. Where a skin says nothing the tier's own look shows
-     through, which is why 'stock' is null rather than a colour. */
+  /* The SET is what you pulled and what it does; a skin is the finish over
+     the top, earned rather than bought, and it changes nothing but the
+     colour. Where a skin says nothing the set's own colours show through,
+     which is why 'stock' is null rather than a colour.
+
+     Colours come from the set table (clubsets.js), which is what fixes a
+     real bug this line used to carry: these were three FOUR-entry arrays
+     indexed by a tier that ran 0-6, so the top three sets all fell through
+     to the same plain silver default. Tour Pro, Titanium Elite and
+     Signature were visually identical on this turntable — three of the
+     most expensive things in the game, indistinguishable. */
   const sk = skinById(skinId);
-  const shaftCol = sk.shaft || ['#c9ccd2', '#d8dbe0', '#8f9298', '#2e3136'][tier] || '#c9ccd2';
-  const headCol = sk.head || ['#c9ccd2', '#e2e5ea', '#5a5f66', '#22252a'][tier] || '#c9ccd2';
-  const gripCol = sk.grip || ['#2b2b2f', '#2b2b2f', '#1c1c20', '#101014'][tier] || '#2b2b2f';
-  const shine = sk.sheen ?? (0.6 + tier * 0.1);
+  const set = setById(setId) || setById(STARTER_SET);
+  const shaftCol = sk.shaft || set?.shaft || '#c9ccd2';
+  const headCol = sk.head || set?.head || '#c9ccd2';
+  const gripCol = sk.grip || set?.grip || '#2b2b2f';
+  const shine = sk.sheen ?? (0.6 + Math.max(0, rarityRank(set?.rarity)) * 0.1);
 
   /* SHAFT LENGTH IS A CLUB'S MOST VISIBLE PROPERTY and the preview did not
      have it: every club stood exactly 1.5 units of shaft tall, so a driver
@@ -280,8 +289,8 @@ function buildClub(key, tier = 0, skinId = 'stock') {
 /* The head geometry is the thing the shop exists to show, so it is worth
    asserting rather than eyeballing — twelve irons that differ by a number
    nobody checked is how they ended up identical in the first place. */
-export const __buildClubForTest = (key, tier = 0, skin = 'stock') =>
-  buildClub(key, tier, skin);
+export const __buildClubForTest = (key, setId = STARTER_SET, skin = 'stock') =>
+  buildClub(key, setId, skin);
 export const __buildCartForTest = (hex) => buildCart(hex);
 
 /* -------------------------------------------------------------- decals ---
@@ -551,7 +560,7 @@ export function showItem(canvas, what) {
   }
 
   let obj;
-  if (what?.kind === 'club') obj = buildClub(what.key || 'DR', what.tier || 0, what.skin || 'stock');
+  if (what?.kind === 'club') obj = buildClub(what.key || 'DR', what.set || STARTER_SET, what.skin || 'stock');
   else if (what?.kind === 'decal') obj = buildDecal(what.key);
   else if (what?.kind === 'ball') obj = buildBall(what.hex);
   else if (what?.kind === 'caddie') obj = buildCaddie(what.hex);

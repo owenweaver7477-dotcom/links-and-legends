@@ -418,13 +418,20 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
 {
   const { roundCoins, roundXp, xpForLevel, maxLevel } =
     await import('../public/js/shared/economy.js');
-  const { CADDIE_COSTS, CADDIE_KEYS, CLUB_TIERS, REFINE_COSTS, crewEffect } =
+  const { CADDIE_COSTS, CADDIE_KEYS, crewEffect } =
     await import('../public/js/shared/crew.js');
   const { SHOP } = await import('../public/js/shared/gear.js');
+  const { UPGRADE_COSTS, CLUB_SETS, STARTER_SET, setStats, upgradeCount } =
+    await import('../public/js/shared/clubsets.js');
 
-  const toMax = CADDIE_COSTS.reduce((a, b) => a + b, 0) * CADDIE_KEYS.length
-    + CLUB_TIERS.reduce((a, t) => a + t.cost, 0)
-    + REFINE_COSTS(6).reduce((a, b) => a + b, 0)          // only the top tier survives
+  const sum = a => a.reduce((x, y) => x + y, 0);
+  /* "Everything" is every caddie, every gear item, and fully upgrading a set
+     of each rarity. Club SETS themselves are no longer a coin purchase — they
+     drop from the Club Case — so what coins actually buy is the upgrade path,
+     and the sum of all five paths is the club-shaped part of this total. */
+  const allSetPaths = sum(Object.values(UPGRADE_COSTS).map(sum));
+  const toMax = sum(CADDIE_COSTS) * CADDIE_KEYS.length
+    + allSetPaths
     + Object.values(SHOP).reduce((a, i) => a + i.cost, 0);
 
   const perRound = roundCoins(Array(9).fill({ strokes: 4, par: 4 })).total;
@@ -444,14 +451,15 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
      built in for a pace nobody measured — moved by raising economy.js's
      PAYOUT_SCALE rather than touching any of the prices below, which is
      exactly what that constant is for. */
-  const early = CLUB_TIERS.slice(0, 4).reduce((a, t) => a + t.cost, 0);
+  const early = sum(UPGRADE_COSTS.standard) + sum(UPGRADE_COSTS.tour);
   const earlyRounds = Math.ceil(early / perRound);
-  ok('the first four club sets are a normal progression', earlyRounds <= 12,
-     earlyRounds + ' rounds for the first four sets');
-  ok('the last three cost far more than the first four',
-     CLUB_TIERS.slice(4).reduce((a, t) => a + t.cost, 0) > early * 5,
-     'top three ' + CLUB_TIERS.slice(4).reduce((a, t) => a + t.cost, 0) +
-     ' vs first four ' + early);
+  ok('maxing a Standard and a Tour set is a normal early progression', earlyRounds <= 12,
+     earlyRounds + ' rounds for both lower paths');
+  /* The whole point of "mythics take longer": the top two paths must dwarf
+     the bottom two, or rarity costs nothing to live up to. */
+  const top = sum(UPGRADE_COSTS.legend) + sum(UPGRADE_COSTS.mythic);
+  ok('the top two paths cost far more than the bottom two', top > early * 5,
+     'top two ' + top + ' vs bottom two ' + early);
 
   ok('owning everything takes 200-250 rounds, not 300+', rounds >= 200 && rounds <= 250,
      `${rounds} rounds = ${(rounds * 10 / 60).toFixed(0)}-${(rounds * 15 / 60).toFixed(0)} h`);
@@ -477,18 +485,38 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
      `${perRound} vs ${CADDIE_COSTS[9]}`);
 
   // the distance arc is the point of the ladder: a beginner must be short
-  const mult = (tier, refine, bruiser) => crewEffect(
+  const mult = (setId, level, bruiser) => crewEffect(
     bruiser ? { ace: 0, bruiser: 10, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 } : null,
-    tier, refine, { power: 1 }).speed;
+    setStats(setId, level), { power: 1 }).speed;
+  const anyOf = r => CLUB_SETS.find(x => x.rarity === r).id;
+  const starter = STARTER_SET, mythic = anyOf('mythic');
+
   ok('an unnamed bag is the reference the club table is calibrated to',
-     crewEffect(null, null, 0, { power: 1 }).speed === 1);
-  ok('the starter set is genuinely short', mult(0, 0, false) < 0.9,
-     'x' + mult(0, 0, false).toFixed(3));
-  ok('the ladder reaches reference length at the Tour Pro Set',
-     Math.abs(mult(4, 0, false) - 1) < 1e-9);
+     crewEffect(null, null, { power: 1 }).speed === 1);
+  ok('the starter set is genuinely short', mult(starter, 0, false) < 0.9,
+     'x' + mult(starter, 0, false).toFixed(3));
+  ok('a maxed Mythic set lands exactly where the old top set did',
+     Math.abs(mult(mythic, 8, false) - 1.065) < 1e-9,
+     'x' + mult(mythic, 8, false).toFixed(3));
   ok('and a maxed player hits it a third further than a beginner',
-     mult(6, 3, true) / mult(0, 0, false) > 1.3,
-     'x' + (mult(6, 3, true) / mult(0, 0, false)).toFixed(2));
+     mult(mythic, 8, true) / mult(starter, 0, false) > 1.3,
+     'x' + (mult(mythic, 8, true) / mult(starter, 0, false)).toFixed(2));
+
+  /* The property the whole rework rests on: upgrading what you actually
+     pulled is never wasted. A maxed set of any rarity must out-hit a fresh
+     set of the NEXT rarity up, or a bad-luck player's coins buy nothing. */
+  const order = ['standard', 'tour', 'pro', 'legend', 'mythic'];
+  let overlapHolds = true, overlapDetail = '';
+  for (let i = 0; i < order.length - 1; i++) {
+    const lo = anyOf(order[i]), hi = anyOf(order[i + 1]);
+    const loMax = mult(lo, upgradeCount(order[i]), false);
+    const hiBase = mult(hi, 0, false);
+    if (!(loMax > hiBase)) {
+      overlapHolds = false;
+      overlapDetail = `${order[i]} maxed ${loMax.toFixed(3)} <= fresh ${order[i + 1]} ${hiBase.toFixed(3)}`;
+    }
+  }
+  ok('a maxed set always beats a fresh set one rarity up', overlapHolds, overlapDetail);
 }
 
 /* ===================================== fifty rounds of a real, uneven player */
@@ -505,9 +533,11 @@ head('progression — what fifty rounds of actual golf, not idealised par, buys'
      the ladder still is not. */
   const { roundCoins } = await import('../public/js/shared/economy.js');
   const { mulberry32 } = await import('../public/js/shared/rng.js');
-  const { CADDIE_COSTS, CADDIE_KEYS, CLUB_TIERS, REFINE_COSTS } =
+  const { CADDIE_COSTS, CADDIE_KEYS } =
     await import('../public/js/shared/crew.js');
   const { SHOP } = await import('../public/js/shared/gear.js');
+  const { UPGRADE_COSTS } = await import('../public/js/shared/clubsets.js');
+  const sum = a => a.reduce((x, y) => x + y, 0);
 
   // relative-to-par distribution for a mixed-skill player: eagle, birdie,
   // par, bogey, double, triple — bogey the single most likely outcome,
@@ -532,13 +562,12 @@ head('progression — what fifty rounds of actual golf, not idealised par, buys'
      realAvg > idealPerRound * 0.5 && realAvg <= idealPerRound,
      `${Math.round(realAvg)} vs ${idealPerRound} idealised (${Math.round(realAvg / idealPerRound * 100)}%)`);
 
-  const early4 = CLUB_TIERS.slice(0, 4).reduce((a, t) => a + t.cost, 0);
-  ok('the first four club sets are affordable well within fifty rounds', earned >= early4 * 2,
-     `${earned} earned vs ${early4} for the first four sets`);
+  const earlyPaths = sum(UPGRADE_COSTS.standard) + sum(UPGRADE_COSTS.tour);
+  ok('the lower club-set paths are affordable well within fifty rounds', earned >= earlyPaths * 2,
+     `${earned} earned vs ${earlyPaths} to max a Standard and a Tour set`);
 
-  const everything = CADDIE_COSTS.reduce((a, b) => a + b, 0) * CADDIE_KEYS.length
-    + CLUB_TIERS.reduce((a, t) => a + t.cost, 0)
-    + REFINE_COSTS(6).reduce((a, b) => a + b, 0)
+  const everything = sum(CADDIE_COSTS) * CADDIE_KEYS.length
+    + sum(Object.values(UPGRADE_COSTS).map(sum))
     + Object.values(SHOP).reduce((a, i) => a + i.cost, 0);
   ok('but the whole shop is nowhere close after fifty rounds', earned < everything * 0.3,
      `${earned} of ${everything}`);
@@ -548,20 +577,23 @@ head('progression — what fifty rounds of actual golf, not idealised par, buys'
 head('the caddie crew — hired stats that actually do things');
 {
   const { crewEffect, crewPurchase, cartBoost, NO_CREW, CADDIE_COSTS } = await import('../public/js/shared/crew.js');
+  const { setStats, STARTER_SET, CLUB_SETS, UPGRADE_COSTS, upgradeCount } =
+    await import('../public/js/shared/clubsets.js');
   // no crew AND no bag named: the reference ball, exactly 1s and 0s.  This is
   // the configuration the physics suite and calibrateCarries() run in.
-  const none = crewEffect(null, null, 0, { power: 1 });
+  const none = crewEffect(null, null, { power: 1 });
   ok('nothing equipped at all: exact identity',
      none.speed === 1 && none.faceDamp === 0 && none.windDamp === 0 && none.cupBonus === 0);
-  const ace10 = crewEffect({ ...NO_CREW, ace: 10 }, null, 0, {});
+  const ace10 = crewEffect({ ...NO_CREW, ace: 10 }, null, {});
   ok('Ace at Legend damps 40% of mishit drift', Math.abs(ace10.faceDamp - 0.40) < 1e-9);
-  const br = crewEffect({ ...NO_CREW, bruiser: 10 }, null, 0, { power: 1 });
-  const brSoft = crewEffect({ ...NO_CREW, bruiser: 10 }, null, 0, { power: 0.7 });
+  const br = crewEffect({ ...NO_CREW, bruiser: 10 }, null, { power: 1 });
+  const brSoft = crewEffect({ ...NO_CREW, bruiser: 10 }, null, { power: 0.7 });
   ok('Bruiser only fires on full swings', br.speed > 1.09 && brSoft.speed === 1,
      `full x${br.speed.toFixed(3)}, soft x${brSoft.speed.toFixed(3)}`);
-  const sig = crewEffect(null, 6, 3, {});
-  ok('the Signature Set fully refined is +7.9% ball speed',
-     Math.abs(sig.speed - 1.079) < 1e-9, 'x' + sig.speed.toFixed(3));
+  const topSet = CLUB_SETS.find(x => x.rarity === 'mythic');
+  const sig = crewEffect(null, setStats(topSet.id, upgradeCount('mythic')), {});
+  ok('a fully upgraded Mythic set is +6.5% ball speed, exactly where the old top set sat',
+     Math.abs(sig.speed - 1.065) < 1e-9, 'x' + sig.speed.toFixed(3));
   // Pitstop tops up a cart that is already usable rather than unlocking one:
   // the stock cart does the full base speed, so the cap here is deliberate.
   ok('Pitstop at Legend tops the cart up by the capped amount',
@@ -574,15 +606,30 @@ head('the caddie crew — hired stats that actually do things');
   ok('and 500 is exactly enough', rich.cost === 500 && !rich.blocked);
   ok('maxing one caddie costs 39,500 total',
      CADDIE_COSTS.reduce((a, b) => a + b, 0) === 39500);
-  const tier = crewPurchase('club:tier', { coins: 1500, clubTier: 0, crew: { ...NO_CREW } });
-  ok('the Rusty Iron Set costs 1,500', tier.cost === 1500);
-  const p = { coins: 5000, clubTier: 1, refine: 3, crew: { ...NO_CREW } };
-  crewPurchase('club:tier', p).apply(p);
-  ok('tier-up resets refinement, as designed', p.clubTier === 2 && p.refine === 0);
+  const base = { clubSet: STARTER_SET, clubSets: { [STARTER_SET]: 0 }, crew: { ...NO_CREW } };
+  const up = crewPurchase('set:upgrade', { ...base, coins: 999999 });
+  ok('the first upgrade on the starter set costs what the table says',
+     up.cost === UPGRADE_COSTS.standard[0], String(up.cost));
+  const poor = crewPurchase('set:upgrade', { ...base, coins: UPGRADE_COSTS.standard[0] - 1 });
+  ok('and one coin short is refused', !!poor.blocked);
+  const p = { coins: 999999, clubSet: STARTER_SET, clubSets: { [STARTER_SET]: 0 }, crew: { ...NO_CREW } };
+  crewPurchase('set:upgrade', p).apply(p);
+  ok('upgrading raises only the equipped set', p.clubSets[STARTER_SET] === 1);
+  const maxed = { coins: 999999, clubSet: STARTER_SET,
+                  clubSets: { [STARTER_SET]: upgradeCount('standard') }, crew: { ...NO_CREW } };
+  ok('a fully upgraded set has nothing left to sell',
+     !!crewPurchase('set:upgrade', maxed).blocked);
+  /* You cannot pour coins into a set sitting in a cupboard — only the one
+     you actually carry. The client hides the button; this is the server
+     side of the same rule. */
+  const notCarried = { coins: 999999, clubSet: 'nocturne',
+                       clubSets: { [STARTER_SET]: 0 }, crew: { ...NO_CREW } };
+  ok('upgrading a set you do not own is refused',
+     !!crewPurchase('set:upgrade', notCarried).blocked);
 
   // a partial crew object (older save, hand-edited file, or a future ninth
   // caddie) must behave as zeros, never as NaN — NaN here is a NaN ball
-  const partial = crewEffect({ ace: 2 }, 0, 0, { power: 1, isPutt: true, afterBadHole: true });
+  const partial = crewEffect({ ace: 2 }, setStats(STARTER_SET, 0), { power: 1, isPutt: true, afterBadHole: true });
   ok('a partial crew object never NaNs the shot',
      [partial.speed, partial.faceDamp, partial.windDamp, partial.cupBonus, partial.lieMercy]
        .every(Number.isFinite),

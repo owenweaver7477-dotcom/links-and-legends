@@ -45,7 +45,7 @@ console.log(`\n  ${entries.length} profiles in ${FILE}`);
    are a lot of them; carrying them over costs storage and buys nothing. */
 const played = entries.filter(([, p]) =>
   (p?.rounds || 0) > 0 || (p?.holes || 0) > 0 || (p?.xp || 0) > 0 ||
-  (p?.clubTier || 0) > 0 || Object.values(p?.gear || {}).some(v => v > 0));
+  Object.keys(p?.clubSets || {}).length > 0 || Object.values(p?.gear || {}).some(v => v > 0));
 console.log(`  ${played.length} of them have actually played — migrating those`);
 
 /* The boards, listed the same way whether this is a rehearsal or the real

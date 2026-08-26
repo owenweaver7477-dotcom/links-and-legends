@@ -1,22 +1,28 @@
 /* =========================================================================
-   crew.js — the Caddie Crew and the club-tier ladder
+   crew.js — the Caddie Crew, and what the equipment room does to a shot
    -------------------------------------------------------------------------
    Every upgrade in the game is a PERSON: eight caddies, each governing one
-   stat, hired and levelled 1-10 with coins.  Clubs climb a seven-tier ladder
-   from the Wooden Starter Set to the Signature Set, refined in place between
-   tier jumps.
+   stat, hired and levelled 1-10 with coins.
+
+   CLUB SETS USED TO LIVE HERE. They were a seven-rung coin ladder (Wooden
+   Starter -> Signature Set, refined in place between jumps); they are now
+   dropped by the Club Case and upgraded individually — see clubsets.js,
+   whose header explains why that is the one place power may come from a
+   case. CLUB_TIERS and REFINE_COSTS survive below for a single caller, the
+   refund migration that pays back what players spent on the old ladder.
 
    Numbers here are the game's honest interpretation of the design document:
-   the document's headline percentages (+65% distance at the top tier) are
-   treated as POSITIONS ON THE LADDER, not literal physics — a +65% driver
+   the document's headline percentages (+65% distance at the top) are
+   treated as POSITIONS ON A LADDER, not literal physics — a +65% driver
    would carry 440 yards and stop being golf.  The real multipliers keep the
-   fantasy (a Signature Set with a Legend crew plays visibly, measurably
+   fantasy (a Mythic set with a Legend crew plays visibly, measurably
    better) without breaking the sport underneath.
 
    Shared by server and client: the server APPLIES these effects inside its
    own simulation; the client uses the same tables to preview and to render
    the shop.  No DOM, no Three.js.
    ========================================================================= */
+import { setById, upgradeCost, STARTER_SET } from './clubsets.js';
 
 /* ------------------------------------------------------------ the crew --- */
 export const CADDIES = {
@@ -144,20 +150,21 @@ export const CLUB_TIERS = [
 
 /* A shot that names no bag at all is the REFERENCE ball: exactly the club
    table, which is what calibrateCarries() measures and the physics suite
-   asserts against.  A real profile always names its tier, so this is never
+   asserts against.  A real profile always names its set, so this is never
    what a player swings — it is the yardstick the ladder is measured with. */
 const REFERENCE_SET = { speed: 1, faceDamp: 0 };
 
-/** Refinements: three sub-levels inside a tier, lost on tier-up (by design).
+/** LEGACY, and kept alive for exactly one caller: the refund migration in
+    server/profiles.js, which pays back what a player spent on the old
+    coin-bought ladder before club sets replaced it (see clubsets.js). No
+    live code path prices anything from these any more — do not add one.
     `?? 1500`, not `||` — the Wooden Starter Set's cost is a real 0, and `||`
-    treated that as "missing" and silently priced refining a FREE set the
-    same as refining the 1,500-cost tier above it. Only a genuinely
-    out-of-range tierIdx should ever hit the fallback. */
+    treated that as "missing", pricing a refund on a FREE set as if it were
+    the 1,500-cost tier above it. */
 export const REFINE_COSTS = tierIdx => {
   const c = CLUB_TIERS[tierIdx]?.cost ?? 1500;
   return [Math.round(c * 0.2), Math.round(c * 0.35), Math.round(c * 0.5)];
 };
-export const REFINE_SPEED = [0.004, 0.008, 0.014];   // cumulative extra ball speed
 
 /* --------------------------------------------------- what it all DOES ---- */
 /**
@@ -166,24 +173,31 @@ export const REFINE_SPEED = [0.004, 0.008, 0.014];   // cumulative extra ball sp
  * suite runs entirely in that configuration.
  *
  * @param crew      caddie levels, e.g. { ace: 3, bruiser: 0, ... }
- * @param clubTier  0-6 index into CLUB_TIERS
- * @param refine    0-3 refinement level within the tier
+ * @param set       the equipped club set's resolved stats, `{ speed,
+ *                  faceDamp }` from clubsets.js's setStats(id, level), or
+ *                  null for the reference ball. Already-resolved rather
+ *                  than an id+level pair, so this function stays the pure
+ *                  arithmetic it always was and never needs the set table.
  * @param ctx       { power, isPutt, afterBadHole }
  */
-export function crewEffect(crew, clubTier = null, refine = 0, ctx = {}) {
+export function crewEffect(crew, set = null, ctx = {}) {
   // Merge over NO_CREW rather than trusting the shape: a profile written by
   // an older build (or a hand-edited save) may miss keys, and one undefined
   // level would NaN the whole shot — ball position included.
   const c = crew ? { ...NO_CREW, ...crew } : NO_CREW;
-  // No tier named at all means the reference ball (see REFERENCE_SET); tier 0
-  // is a real, and deliberately poor, Wooden Starter Set.
-  const tier = clubTier == null
-    ? REFERENCE_SET
-    : (CLUB_TIERS[Math.max(0, Math.min(6, clubTier))] || CLUB_TIERS[0]);
-  const ref = REFINE_SPEED[Math.max(0, Math.min(3, refine)) - 1] || 0;
+  /* No set named at all means the reference ball (see REFERENCE_SET). A real
+     set always names both numbers, and Number.isFinite guards a malformed
+     one — a NaN speed here would move the ball to NaN and lose it entirely.
+     Note the old signature took a tier INDEX plus a separate refine level,
+     and added the refinement speed even on the reference path, so
+     crewEffect(null, null, 3) quietly returned 1.014 instead of 1. Folding
+     upgrades into the resolved stats removes that seam. */
+  const tier = (set && Number.isFinite(set.speed) && Number.isFinite(set.faceDamp))
+    ? set
+    : REFERENCE_SET;
 
-  // ball speed: the club set, its refinement, and Bruiser on full swings
-  let speed = tier.speed + ref;
+  // ball speed: the club set and Bruiser on full swings
+  let speed = tier.speed;
   if ((ctx.power ?? 0) > 0.92 && c.bruiser > 0) speed *= 1 + c.bruiser * 0.010;
 
   // face drift damping: the set's forgiveness, Ace always, Steady only on
@@ -212,7 +226,7 @@ export const cartBoost = crew =>
 /* ----------------------------------------------------------- the till ---- */
 /**
  * What may be bought right now, and for how much.  Returns { cost } or
- * { blocked: reason }.  item forms: 'caddie:ace' | 'club:tier' | 'club:refine'
+ * { blocked: reason }.  item forms: 'caddie:ace' | 'set:upgrade'
  */
 export function crewPurchase(item, profile) {
   const coins = profile.coins || 0;
@@ -228,21 +242,24 @@ export function crewPurchase(item, profile) {
     return { cost, apply: p => { p.crew[which] = lvl + 1; } };
   }
 
-  if (kind === 'club' && which === 'tier') {
-    const t = (profile.clubTier ?? 0) + 1;
-    if (t > 6) return { blocked: 'You already carry the Signature Set.' };
-    const cost = CLUB_TIERS[t].cost;
+  /* Upgrading the set you actually carry, which replaced buying your way up
+     a fixed ladder. Everything real is re-derived from the profile — which
+     set is equipped, what level it is at, what that rarity's next rung
+     costs — so the client naming 'set:upgrade' can only ever mean "one
+     more rung on the thing I am holding", never a set or a price of its
+     choosing. */
+  if (kind === 'set' && which === 'upgrade') {
+    const id = profile.clubSet || STARTER_SET;
+    const set = setById(id);
+    if (!set) return { blocked: 'No such set.' };
+    if (!(profile.clubSets && id in profile.clubSets)) {
+      return { blocked: 'You do not own that set.' };
+    }
+    const level = profile.clubSets[id] || 0;
+    const cost = upgradeCost(set.rarity, level);
+    if (cost == null) return { blocked: `Your ${set.name} is fully upgraded.` };
     if (coins < cost) return { blocked: `Costs ${cost} coins — you have ${coins}.` };
-    // refinements are lost on tier-up, deliberately: a new set starts raw
-    return { cost, apply: p => { p.clubTier = t; p.refine = 0; } };
-  }
-
-  if (kind === 'club' && which === 'refine') {
-    const r = profile.refine ?? 0;
-    if (r >= 3) return { blocked: 'This set is fully refined.' };
-    const cost = REFINE_COSTS(profile.clubTier ?? 0)[r];
-    if (coins < cost) return { blocked: `Costs ${cost} coins — you have ${coins}.` };
-    return { cost, apply: p => { p.refine = r + 1; } };
+    return { cost, apply: p => { p.clubSets = { ...p.clubSets, [id]: level + 1 }; } };
   }
 
   return { blocked: 'No such item.' };

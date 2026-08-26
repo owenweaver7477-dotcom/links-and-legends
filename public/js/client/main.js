@@ -10,7 +10,8 @@ import { CartManager } from './carts.js';
 import { reactionFor, REACTION_TIER } from './celebrations.js';
 import { rarityForLevel, RARITIES } from '../shared/cases.js';
 import { BOARD_RADIUS, KMH, TOP_SPEED_KMH, MAX_BOOST } from '../shared/cart.js';
-import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost, CLUB_TIERS, REFINE_COSTS } from '../shared/crew.js';
+import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost } from '../shared/crew.js';
+import { setStats, setById, STARTER_SET } from '../shared/clubsets.js';
 import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
@@ -268,7 +269,7 @@ function refreshMenuAvatar() {
   _liveKey = '';                       // a fresh avatar needs the ground now
   scene.actorGroup.add(av.root);
   av.place(spot.x, G.T.heightAt(spot.x, spot.z), spot.z, aim);
-  av.setClub('DR', G.profile?.clubTier ?? 0);
+  av.setClub('DR', G.profile?.clubSet || STARTER_SET);
   av.setAddress(true, aim - Math.PI / 2);   // right-handed, as in the round
   av.update(0.016, 0);
 }
@@ -849,10 +850,16 @@ const myBag = () => me()?.bag?.length ? me().bag : normaliseBag(DEFAULT_BAG);
  * number under the club name has to promise what the upgraded bag will
  * actually deliver — for a fresh profile every factor is exactly 1.
  */
+/* The equipped set's resolved stats, for every client-side preview sim.
+   One helper rather than the same three-line lookup at six call sites —
+   the server derives this once in its swing handler, and the client's
+   marker MUST agree with it or every power preview lies. */
+const mySetStats = () => setStats(G.profile?.clubSet,
+  (G.profile?.clubSets || {})[G.profile?.clubSet] || 0);
+
 function carryMult(club) {
   const fx = gearEffect(G.profile?.gear || null, club);
-  const cfx = crewEffect(G.profile?.crew || null, G.profile?.clubTier ?? 0,
-    G.profile?.refine ?? 0, { power: 1 });
+  const cfx = crewEffect(G.profile?.crew || null, mySetStats(), { power: 1 });
   /* The outfit is a real, small factor and it goes HERE — through the same
      function the carry number under the club name is computed from. That is
      the whole reason it is in this function rather than applied at the
@@ -868,8 +875,8 @@ function carryMult(club) {
 }
 
 /** The same figure without a club in hand, for choosing one in the first place. */
-const reachMult = () => crewEffect(G.profile?.crew || null, G.profile?.clubTier ?? 0,
-  G.profile?.refine ?? 0, { power: 1 }).speed * outfitEffect(lookDraft).speed;
+const reachMult = () => crewEffect(G.profile?.crew || null, mySetStats(), { power: 1 }).speed
+  * outfitEffect(lookDraft).speed;
 
 /** Where this club sits in the bag, so the arrows can grey out at the ends. */
 function bagEnds() {
@@ -983,9 +990,9 @@ function refreshAimPreview(force) {
   const toPinD = G.T.toPin(b.x, b.z);
   const myGear = G.profile?.gear || null;
   const myCrew = G.profile?.crew || null;
-  const myTier = G.profile?.clubTier ?? 0;
-  const myRefine = G.profile?.refine ?? 0;
-  const myKit = { crew: myCrew, clubTier: myTier, refine: myRefine };
+  const mySet = G.profile?.clubSet || STARTER_SET;
+  const mySetLevel = (G.profile?.clubSets || {})[mySet] || 0;
+  const myKit = { crew: myCrew, clubSet: mySet, setLevel: mySetLevel };
   const previewPower = isPutt
     ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45, myGear, myKit) ?? 1)
     : (dragging ? Math.max(0.06, swing.power) : 1);
@@ -996,7 +1003,7 @@ function refreshAimPreview(force) {
   const sim = new ShotSim(G.T, {
     x: b.x, z: b.z, clubKey, power: Math.min(previewPower, 1.12), aim: swing.aim,
     faceDeg: 0, attackDeg: 0, wind: G.wind, weather: G.weather, ignoreCup: showRunOut, gear: myGear,
-    crew: myCrew, clubTier: myTier, refine: myRefine
+    crew: myCrew, clubSet: mySet, setLevel: mySetLevel
   });
   const r = sim.runToEnd();
 
@@ -1202,7 +1209,7 @@ function updateAvatars(dt) {
       // back exactly as far as the meter says — the swing you see IS the
       // number you are about to play
       if (mode() === 'swing') {
-        av.setClub(clubKey, G.profile?.clubTier ?? 0);   // your club, your set
+        av.setClub(clubKey, G.profile?.clubSet || STARTER_SET);   // your club, your set
         // A RIGHT-handed golfer stands with the target off their LEFT
         // shoulder.  In this frame heading h+90° points along h's left hand,
         // so the stance that puts the target to the left is aim-90°; the
@@ -1273,7 +1280,8 @@ function updateLandingDot(now) {
     power: Math.min(m.power, 1.12), aim: swing.aim,
     faceDeg: m.face || 0, attackDeg: 0, wind: G.wind, weather: G.weather,
     gear: G.profile?.gear || null, crew: G.profile?.crew || null,
-    clubTier: G.profile?.clubTier ?? 0, refine: G.profile?.refine ?? 0
+    clubSet: G.profile?.clubSet || STARTER_SET,
+    setLevel: (G.profile?.clubSets || {})[G.profile?.clubSet] || 0
   }).runToEnd();
   scene.setLanding(r.x, G.T.heightAt(r.x, r.z), r.z, Math.min(1, Math.abs(m.face || 0) / 7));
   G.landingOn = true;
@@ -1453,7 +1461,7 @@ function beginShot(msg) {
   G.balls[msg.pid] = { x: sim.p.x, y: sim.p.y, z: sim.p.z };
   // the golfer swings on every screen, timed so the ball leaves at the hit
   const swingAv = G.avatars.get(msg.pid);
-  if (swingAv) { swingAv.setClub(msg.shot.clubKey, player(msg.pid)?.clubTier ?? 0); swingAv.strike(msg.shot.aim); }
+  if (swingAv) { swingAv.setClub(msg.shot.clubKey, player(msg.pid)?.clubSet || STARTER_SET); swingAv.strike(msg.shot.aim); }
   /* The trail is a LEVEL reward, so it wins over the ball colour when the
      player has one equipped. That is the point of it: the line your shot
      draws in the air is the most-watched three seconds in the game, and it
@@ -3242,7 +3250,8 @@ const loadLook = () => {
 const CASE_NET = {
   standard: { open: () => Net.openCase, buy: () => Net.buyCase, label: 'Case' },
   vault: { open: () => Net.openVaultCase, buy: () => Net.buyVaultCase, label: 'Vault case' },
-  pro: { open: () => Net.openProCase, buy: () => Net.buyProCase, label: 'Pro case' }
+  pro: { open: () => Net.openProCase, buy: () => Net.buyProCase, label: 'Pro case' },
+  club: { open: () => Net.openClubCase, buy: () => Net.buyClubCase, label: 'Club case' }
 };
 let caseModalKind = 'standard';
 function openCaseFlow(kind) {
@@ -3305,9 +3314,22 @@ function renderClubhouse() {
     if (item === 'case:buy') return buyCaseOfKind('standard');
     if (item === 'case:buyVault') return buyCaseOfKind('vault');
     if (item === 'case:buyPro') return buyCaseOfKind('pro');
+    if (item === 'case:buyClub') return buyCaseOfKind('club');
     if (item === 'case:open') return openCaseFlow('standard');
     if (item === 'case:openVault') return openCaseFlow('vault');
     if (item === 'case:openPro') return openCaseFlow('pro');
+    if (item === 'case:openClub') return openCaseFlow('club');
+    /* Equipping a set goes through its own socket call rather than the
+       coin till — nothing is spent, so routing it through Net.buy would
+       mean the shop's purchase path handling something that is not a
+       purchase. The server re-checks ownership either way. */
+    if (item.startsWith('set:equip:')) {
+      const id = item.slice('set:equip:'.length);
+      return Net.equipSet(id, res => {
+        if (!res?.ok) { HUD.toast(res?.error || 'Could not equip that set.', 'warn', 2200); return; }
+        HUD.toast((setById(id)?.name || 'Set') + ' is in the bag.', 'good', 1800);
+      });
+    }
     if (item.startsWith('item:buy:')) {
       const [, , kind, id] = item.split(':');
       return Net.buyItem(kind, id, res => {
@@ -3380,12 +3402,12 @@ function renderClubhouse() {
   bagDraft = me()?.bag?.length ? me().bag.slice()
     : (prof?.bag?.length ? prof.bag.slice()
       : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true })));
-  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, G.profile?.clubSkin || 'stock');
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, G.profile?.clubSkin || 'stock');
   HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
     if (res?.error) return HUD.toast(res.error, 'warn', 3000);
     if (G.profile) G.profile.clubSkin = res.skin;
     HUD.renderClubSkins(G.profile, () => {});
-    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, res.skin);
+    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, res.skin);
   }));
   HUD.setHomeCoins(prof?.coins ?? 0);
   HUD.setCoins(prof?.coins ?? 0);
@@ -3398,9 +3420,15 @@ function renderClubhouse() {
      ever uses it to seed a profile it has never seen. */
   if (prof) {
     try {
+      /* v2 carries club SETS; v1 carried the retired clubTier/refine ladder.
+         seedProfile still accepts both — v1 snapshots are sitting in real
+         players' browser storage right now, and refusing them would mean a
+         returning player on a wiped host loses the career this exists to
+         protect. It translates them through the same coin refund the
+         server-side migration performs. */
       storeSet('lg_save', JSON.stringify({
-        v: 1, coins: prof.coins, rating: prof.rating, crew: prof.crew,
-        gear: prof.gear, clubTier: prof.clubTier, refine: prof.refine,
+        v: 2, coins: prof.coins, rating: prof.rating, crew: prof.crew,
+        gear: prof.gear, clubSets: prof.clubSets, clubSet: prof.clubSet,
         stars: prof.stars, rounds: prof.rounds, best: prof.best,
         xp: prof.xp                       // or a wiped host eats every unlock
       }));
@@ -3439,24 +3467,24 @@ function toggleClubInBag(key) {
     set.add(key);
   }
   bagDraft = normaliseBag([...set]);   // optimistic; the server echo confirms it
-  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, G.profile?.clubSkin || 'stock');
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, G.profile?.clubSkin || 'stock');
   HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
     if (res?.error) return HUD.toast(res.error, 'warn', 3000);
     if (G.profile) G.profile.clubSkin = res.skin;
     HUD.renderClubSkins(G.profile, () => {});
-    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, res.skin);
+    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, res.skin);
   }));
   Net.prefs({ bag: bagDraft });
 }
 
 document.getElementById('btnBagReset').addEventListener('click', () => {
   bagDraft = normaliseBag(DEFAULT_BAG, { pad: true });
-  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, G.profile?.clubSkin || 'stock');
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, G.profile?.clubSkin || 'stock');
   HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
     if (res?.error) return HUD.toast(res.error, 'warn', 3000);
     if (G.profile) G.profile.clubSkin = res.skin;
     HUD.renderClubSkins(G.profile, () => {});
-    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubTier ?? 0, res.skin);
+    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, res.skin);
   }));
   Net.prefs({ bag: bagDraft });
 });
@@ -4707,6 +4735,13 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
           // what makes it register as "you got something," not "nothing
           // happened," on the one pull in the game that isn't a new item.
           if (res.kind === 'gems') HUD.toast(`+${res.amount} gems — already own everything in that tier`, 'good', 3200, 'gem');
+          /* A duplicate set upgraded the one already in the bag rather than
+             handing back a second copy. The reveal card shows the set, so
+             the toast is what says which of the two things just happened —
+             otherwise a duplicate reads as a pull the player already had. */
+          if (res.upgraded) {
+            HUD.toast(`${res.item.name} upgraded to ${res.upgraded}/${res.steps}`, 'good', 3200);
+          }
         }
       });
     };

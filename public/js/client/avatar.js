@@ -17,6 +17,7 @@ import { FABRICS, GLOVES, WATCHES, CUTS, SHOE_TYPES, DECAL_SLOTS } from '../shar
 import { makeLife, blankLayer, breathe, footPlant, walkKnees, swingLayers } from './anim.js';
 import { shirtMaterial, decalMaterial, decalHalo } from './decals.js';
 import { shaftDecalTexture } from './shaftdecals.js';
+import { setById, rarityRank, STARTER_SET } from '../shared/clubsets.js';
 
 /* One unit box, reused by every part of every avatar.
    `userData.shared` is what stops GolfScene.dispose() from freeing these on
@@ -290,8 +291,8 @@ export class Avatar {
     this.club.visible = false;
     this.armR.add(this.club);
     this.clubKey = null;
-    this.clubTierIdx = -1;
-    this.setClub('I7', 0);
+    this.clubSetId = null;
+    this.setClub('I7', STARTER_SET);
 
     /* Its own phase, its own breath rate, its own fidget timer. Eight
        players breathing in unison is worse than eight not breathing. */
@@ -655,38 +656,40 @@ export class Avatar {
     this.clubDecal.material.needsUpdate = true;
   }
 
-  setClub(key, tier = 0) {
-    if (key === this.clubKey && tier === this.clubTierIdx) return;
+  setClub(key, setId = STARTER_SET) {
+    if (key === this.clubKey && setId === this.clubSetId) return;
     const c = CLUB_BY_KEY[key];
     if (!c) return;
     this.clubKey = key;
 
-    // The set's visual identity: rope-gripped wood up to the holographic
-    // Signature finish.  Two materials repainted — no new meshes.
-    if (tier !== this.clubTierIdx) {
-      this.clubTierIdx = tier;
-      /* The club you are actually holding for a whole round. The top three
-         sets cost 26k, 58k and 120k coins, and until now the only thing that
-         bought was a different hex value — no sheen, no glow, nothing you
-         could see at the distance you play from. `shine` drives specular
-         highlight, so a Tour Pro catches the sun and a Wooden Starter Set
-         does not. */
-      const looks = [
-        { shaft: 0x8a6a42, head: 0x6e5432, glow: 0,        shine: 0 },    // wooden
-        { shaft: 0x7a6a5c, head: 0x8a5a42, glow: 0,        shine: 0.08 }, // rusty iron
-        { shaft: 0xc9ccd2, head: 0x3a3d42, glow: 0,        shine: 0.35 }, // polished steel
-        { shaft: 0x2e3136, head: 0x1d1f24, glow: 0,        shine: 0.22 }, // carbon
-        { shaft: 0xf2f5f8, head: 0x22242a, glow: 0x141821, shine: 0.72 }, // tour pro
-        { shaft: 0xcdd9e2, head: 0x4a5058, glow: 0x2f5060, shine: 0.88 }, // titanium
-        { shaft: 0xe6d8ff, head: 0x2a2438, glow: 0x6a34a0, shine: 1.0 }   // signature
-      ];
-      const L = looks[Math.max(0, Math.min(6, tier))];
+    // The set's visual identity — two materials repainted, no new meshes.
+    if (setId !== this.clubSetId) {
+      this.clubSetId = setId;
+      /* The club you are actually holding for a whole round. Colours come
+         from the set table itself (clubsets.js) rather than a look-up array
+         here, so a new branded set is visually distinct the moment it is
+         added and there is no second list to keep in step.
+
+         `shine` is still derived rather than authored: it tracks RARITY, so
+         a Mythic set catches the sun and the free starter does not. That is
+         the one visual cue that reads at the distance you actually play
+         from, which is why it is worth computing rather than eyeballing. */
+      const set = setById(setId) || setById(STARTER_SET);
+      const hex = s => parseInt(String(s || '#c9ccd2').slice(1), 16);
+      const rank = Math.max(0, rarityRank(set?.rarity));
+      const L = {
+        shaft: hex(set?.shaft),
+        head: hex(set?.head),
+        // only the top two rarities glow, same as the old top-two sets did
+        glow: rank >= 3 ? hex(set?.head) : 0,
+        shine: rank * 0.25
+      };
       this.mats.chrome.color.setHex(L.shaft);
       this.mats.headDark.color.setHex(L.head);
       this.mats.chrome.emissive.setHex(L.glow);
       this.mats.headDark.emissive.setHex(L.glow);
       /* Lambert has no specular, so a shiny set needs a material that does.
-         Swapped rather than tweaked, and only once per tier change. */
+         Swapped rather than tweaked, and only once per set change. */
       if (L.shine > 0.3 && !this.mats.chrome.isMeshPhongMaterial) {
         const up = m => {
           const n = new THREE.MeshPhongMaterial({ color: m.color, emissive: m.emissive });

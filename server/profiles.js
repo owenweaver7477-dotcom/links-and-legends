@@ -22,6 +22,9 @@ import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD,
          CASE_COIN_COST, VAULT_GEM_COST, VAULT_TIER, PRO_CASE_GEM_COST,
          CASE_POOL, DIRECT_BUY_GEMS, weeklyItemRotation } from '../public/js/shared/cases.js';
 import { unlocksAt } from '../public/js/shared/unlocks.js';
+import { CLUB_TIERS, REFINE_COSTS } from '../public/js/shared/crew.js';
+import { CLUB_SETS, setById, STARTER_SET, upgradeCount, isMaxed,
+         rollClubCase, CLUB_CASE_GEM_COST } from '../public/js/shared/clubsets.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
    moment a player opens it rather than after several rounds. */
@@ -38,7 +41,25 @@ export const STARTING_COINS = 900;
  * shape change ships costs finding out which profiles are which shape from
  * their contents alone, on a live store, with players in it.
  */
-export const PROFILE_SCHEMA_VERSION = 2;
+export const PROFILE_SCHEMA_VERSION = 3;
+
+/* What the old coin-bought club ladder cost, so a migrating profile can be
+   paid back exactly what it spent. Lives here rather than being derived at
+   the call site because it is the ONLY thing CLUB_TIERS is still for. */
+export function ladderRefund(clubTier = 0, refine = 0) {
+  const t = Math.max(0, Math.min(6, Math.floor(Number(clubTier) || 0)));
+  const r = Math.max(0, Math.min(3, Math.floor(Number(refine) || 0)));
+  let coins = 0;
+  // every rung actually climbed to reach tier t (tier 0 was free)
+  for (let i = 1; i <= t; i++) coins += CLUB_TIERS[i]?.cost || 0;
+  /* Only the CURRENT tier's refinements can be repaid: refinements were
+     wiped on every tier-up by design and the profile never recorded how
+     many were bought before that, so earlier ones are genuinely
+     unknowable. Repaying the ones still standing is the honest maximum. */
+  const refineCosts = REFINE_COSTS(t);
+  for (let i = 0; i < r; i++) coins += refineCosts[i] || 0;
+  return coins;
+}
 
 /**
  * Bring a loaded profile up to PROFILE_SCHEMA_VERSION. Idempotent — safe to
@@ -67,6 +88,25 @@ export function migrateProfile(p) {
     p.caseUnlocks = [];
     p.login = { day: 0, cycle: 1, freezes: 0, lastClaimDate: null };
     p.schemaVersion = 2;
+  }
+  if (p.schemaVersion < 3) {
+    /* Club sets replaced the coin-bought tier ladder (see clubsets.js).
+       Nobody loses what they paid: every coin spent on tiers and on the
+       refinements still standing is handed straight back, and the old
+       fields are deleted so nothing can read a value that no longer means
+       anything. Everyone lands on the free starter set and re-earns from
+       there, which was the explicit call — a clean slate for a system
+       where the good sets now come out of a case rather than a till.
+
+       Own object per profile, never a shared literal — the same trap the
+       v2 block above documents. */
+    p.coins = (p.coins || 0) + ladderRefund(p.clubTier, p.refine);
+    delete p.clubTier;
+    delete p.refine;
+    p.clubSets = { [STARTER_SET]: 0 };
+    p.clubSet = STARTER_SET;
+    p.clubCases = 0;
+    p.schemaVersion = 3;
   }
   return p;
 }
@@ -155,7 +195,11 @@ export function getProfile(pid) {
       login: { day: 0, cycle: 1, freezes: 0, lastClaimDate: null },
       gear: { ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 },
       crew: { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
-      clubTier: 0, refine: 0, cleared: [],
+      /* The free starter set, so nobody is ever bagless. Its own object
+         per profile — a shared literal here would be one inventory for
+         every player at once. `clubSets` is setId -> upgrade level. */
+      clubSets: { [STARTER_SET]: 0 }, clubSet: STARTER_SET, clubCases: 0,
+      cleared: [],
       clubSkin: 'stock',        // earned finish, never bought — see clubskins.js
       stars: {},                // courseId -> full rounds finished there
 
@@ -192,8 +236,11 @@ export function getProfile(pid) {
  * Returns true if it actually seeded.
  */
 const CLAMP = {
-  coins: 400000, rating: 98, clubTier: 6, refine: 3, rounds: 2000, crewLevel: 10,
-  xp: 4000000
+  coins: 400000, rating: 98, rounds: 2000, crewLevel: 10,
+  xp: 4000000,
+  // the deepest a restored set may be upgraded — the longest ladder any
+  // rarity has, so a snapshot can never seed a set beyond its own cap
+  setLevel: 8
 };
 const num = (v, max, dflt = 0) => {
   const n = Number(v);
@@ -208,7 +255,10 @@ const num = (v, max, dflt = 0) => {
 function untouched(p) {
   if (!p) return true;
   if ((p.rounds || 0) > 0 || (p.holes || 0) > 0 || (p.xp || 0) > 0) return false;
-  if ((p.clubTier || 0) > 0 || (p.refine || 0) > 0) return false;
+  /* Any club set beyond the free starter, or any upgrade bought on it, is
+     real progress — the same thing the old clubTier/refine check meant. */
+  if (p.clubSets && Object.entries(p.clubSets)
+        .some(([id, lvl]) => id !== STARTER_SET || (lvl || 0) > 0)) return false;
   if (p.gear && Object.values(p.gear).some(v => (v || 0) > 0)) return false;
   if (p.crew && Object.values(p.crew).some(v => (v || 0) > 0)) return false;
   // a login streak, a case in the wallet, or gems from either one is a
@@ -267,7 +317,13 @@ export function seedProfile(pid, snap) {
   if (profiles.has(pid) && !untouched(profiles.get(pid))) return false;
   let d = snap;
   if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return false; } }
-  if (!d || typeof d !== 'object' || d.v !== 1) return false;
+  /* BOTH snapshot versions are accepted, deliberately. v1 snapshots carry
+     the retired clubTier/refine ladder and are already sitting in real
+     players' browser storage right now — refusing them would mean a
+     returning player on a wiped host loses their whole career, which is
+     the exact failure this function exists to prevent. v1 is translated
+     below through the same refund the server-side migration performs. */
+  if (!d || typeof d !== 'object' || (d.v !== 1 && d.v !== 2)) return false;
 
   const p = getProfile(pid);                 // creates the blank profile
   p.coins = num(d.coins, CLAMP.coins);
@@ -275,8 +331,20 @@ export function seedProfile(pid, snap) {
      the same failure coins already had, and the reason this list is checked. */
   p.xp = num(d.xp, CLAMP.xp);
   p.rating = Math.max(2, num(d.rating, CLAMP.rating, 20));
-  p.clubTier = num(d.clubTier, CLAMP.clubTier);
-  p.refine = num(d.refine, CLAMP.refine);
+  if (d.v === 1) {
+    // pay the old ladder back rather than restoring a field nothing reads
+    p.coins = Math.min(CLAMP.coins, p.coins + ladderRefund(d.clubTier, d.refine));
+  } else if (d.clubSets && typeof d.clubSets === 'object') {
+    // only sets that really exist, only to their own rarity's cap
+    const sets = {};
+    for (const [id, lvl] of Object.entries(d.clubSets)) {
+      const set = setById(id);
+      if (set) sets[id] = Math.min(num(lvl, CLAMP.setLevel), upgradeCount(set.rarity));
+    }
+    if (Object.keys(sets).length) sets[STARTER_SET] ??= 0;
+    p.clubSets = Object.keys(sets).length ? sets : { [STARTER_SET]: 0 };
+    p.clubSet = p.clubSets[d.clubSet] != null ? d.clubSet : STARTER_SET;
+  }
   p.rounds = num(d.rounds, CLAMP.rounds);
   if (Number.isFinite(Number(d.best))) p.best = Number(d.best);
   if (d.crew && typeof d.crew === 'object') {
@@ -347,7 +415,8 @@ export function publicProfile(pid) {
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
     crew: p.crew || { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
-    clubTier: p.clubTier ?? 0, refine: p.refine ?? 0, cleared: (p.cleared || []).length,
+    clubSets: p.clubSets || { [STARTER_SET]: 0 }, clubSet: p.clubSet || STARTER_SET,
+    clubCases: p.clubCases || 0, cleared: (p.cleared || []).length,
     clubSkin: p.clubSkin || 'stock',
     /* What they look like, so a browser with an empty localStorage — a new
        device, a cleared store, a private window — gets the golfer back
@@ -403,9 +472,9 @@ export function buyItem(pid, item, SHOP, purchaseBlocked, crewPurchase) {
   const p = getProfile(pid);
   if (!p.gear) p.gear = { ball: 0, irons: 0, woods: 0, putter: 0 };
   if (!p.crew) p.crew = { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 };
-  if (p.clubTier == null) { p.clubTier = 0; p.refine = 0; }
+  if (!p.clubSets) { p.clubSets = { [STARTER_SET]: 0 }; p.clubSet = STARTER_SET; }
 
-  // the Caddie Crew and the club ladder go through the shared till
+  // the Caddie Crew and club-set upgrades go through the shared till
   if (String(item).includes(':')) {
     const res = crewPurchase(item, p);
     if (res.blocked) return res.blocked;
@@ -1058,9 +1127,10 @@ export function devSetLevel(pid, level) {
 export function devGrantTestGems(pid) {
   const p = getProfile(pid);
   p.coins = Math.max(p.coins || 0, CASE_COIN_COST);
-  // enough for a Vault AND a Pro Case in the same session, not just one —
-  // testing "buy all three tiers" one grant at a time defeats the point
-  p.gems = Math.max(p.gems || 0, VAULT_GEM_COST + PRO_CASE_GEM_COST);
+  // enough for a Vault, a Pro Case AND a Club Case in the same session, not
+  // just one — testing "buy every tier" one grant at a time defeats the
+  // point, and the Club Case is the only way to get a set to test with
+  p.gems = Math.max(p.gems || 0, VAULT_GEM_COST + PRO_CASE_GEM_COST + CLUB_CASE_GEM_COST);
   saveSoon();
   return { coins: p.coins, gems: p.gems };
 }
@@ -1156,4 +1226,64 @@ export function buyProCase(pid) {
   p.proCases = (p.proCases || 0) + 1;
   saveSoon();
   return { ok: true, gems: p.gems, proCases: p.proCases };
+}
+
+/* ------------------------------------------------------------ club sets */
+/* The Club Case is the only place a club set comes from. Gems only, like
+   every other case here — an earned currency, never a direct-cash store.
+   It rolls on its OWN odds table (see clubsets.js) rather than the
+   cosmetic one, so adding fifteen sets does not make decals rarer and a
+   Mythic set is not a 1-in-1000 lottery. */
+export function buyClubCase(pid) {
+  const p = getProfile(pid);
+  if ((p.gems || 0) < CLUB_CASE_GEM_COST) return { ok: false, error: `Not enough gems (need ${CLUB_CASE_GEM_COST}).` };
+  p.gems -= CLUB_CASE_GEM_COST;
+  p.clubCases = (p.clubCases || 0) + 1;
+  saveSoon();
+  return { ok: true, gems: p.gems, clubCases: p.clubCases };
+}
+
+export function openClubCase(pid) {
+  const p = getProfile(pid);
+  if ((p.clubCases || 0) < 1) return { ok: false, error: 'No Club cases to open.' };
+  if (!p.clubSets) { p.clubSets = { [STARTER_SET]: 0 }; p.clubSet = STARTER_SET; }
+  const result = rollClubCase(p.clubSets, Math.random);
+  p.clubCases -= 1;
+  if (result.kind === 'gems') {
+    p.gems = (p.gems || 0) + result.amount;
+    saveSoon();
+    return { ok: true, kind: 'gems', amount: result.amount, clubCasesLeft: p.clubCases };
+  }
+  // a duplicate is worth a rung rather than nothing — same move rollCase
+  // makes when it polishes an owned decal instead of paying flat gems
+  const level = result.kind === 'upgrade' ? result.level : 0;
+  p.clubSets = { ...p.clubSets, [result.set.id]: level };
+  saveSoon();
+  /* Reported in the SAME shape a cosmetic case reports an item pull, so the
+     whole reel/reveal presentation (HUD.playCaseReel, HUD.revealCase) works
+     on a club set with no special-casing — exactly how rollCase's own
+     purity result already rides the item path. `upgraded` is the only extra:
+     it is what lets the client say "upgraded to 3/8" rather than pretending
+     a duplicate was a fresh pull. */
+  return {
+    ok: true, kind: 'item',
+    item: { ...result.set, kind: 'clubset' },
+    rarity: result.set.rarity,
+    upgraded: result.kind === 'upgrade' ? level : 0,
+    steps: upgradeCount(result.set.rarity),
+    clubCasesLeft: p.clubCases
+  };
+}
+
+/** Equip a set. Ownership is re-checked here, never trusted from the
+ *  client — the set IS the stat line, so claiming one you never pulled
+ *  would be claiming distance you never earned. */
+export function equipClubSet(pid, id) {
+  const p = getProfile(pid);
+  const set = setById(String(id || ''));
+  if (!set) return { ok: false, error: 'No such set.' };
+  if (!(p.clubSets && set.id in p.clubSets)) return { ok: false, error: 'You do not own that set.' };
+  p.clubSet = set.id;
+  saveSoon();
+  return { ok: true, clubSet: p.clubSet };
 }

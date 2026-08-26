@@ -1,11 +1,10 @@
 /* =========================================================================
    clubskins.js — what your clubs LOOK like, separately from what they do
    -------------------------------------------------------------------------
-   The club set has always been one axis: six tiers, each one strictly better
-   and strictly more expensive than the last, and each one looking however
-   the tier decided. So a player at the top of the ladder has the same clubs
-   as every other player at the top of the ladder, and a player at the bottom
-   has no way to make theirs theirs.
+   The club set is one axis: which set you pulled from a Club Case, what
+   rarity it is, and how far you have upgraded it (see clubsets.js). Two
+   players carrying the same Mythic set carry the same-looking clubs, and a
+   player still on the starter set has no way to make theirs theirs.
 
    A finish is the other axis. It changes nothing about the ball — that is
    the whole point, and it is why these can be given away for things like a
@@ -26,6 +25,7 @@
    player who has not had a hole in one would be playing a worse game for a
    reason they cannot fix by practising.
    ========================================================================= */
+import { setById, rarityRank } from './clubsets.js';
 
 /* `need` is how the finish is earned:
      { level: n }         reach that level
@@ -34,18 +34,19 @@
      { birdies: n }
      { records: n }       n course or hole records held
      { rounds: n }        n complete rounds
-     { clubTier: n }      own that set — a finish only the top set can wear
+     { setRarity: id }    own a club set of that rarity or better — a
+                          finish only a serious bag can wear
    `shaft`, `head` and `grip` are what shopview and the avatar draw. */
-/* One accent colour per SET TIER (not a skin) — the same seven colours
-   avatar.js's setClub() paints the actual club with, duplicated here on
-   purpose rather than imported: avatar.js pulls in the whole THREE.js
-   client stack, and this is presentation data for a 2D shop card, not a
-   3D model. The top three tiers use their real glow colour so a Titanium
-   or Signature card looks like what you're actually holding; the bottom
-   four have no glow in-game, so their head colour stands in instead. */
-export const TIER_ACCENT = [
-  '#6e5432', '#8a5a42', '#3a3d42', '#1d1f24', '#141821', '#2f5060', '#6a34a0'
-];
+/* One accent colour per RARITY, for the border of a set's shop card. These
+   are the same five colours the case system already uses for every other
+   rarity badge in the game (see RARITIES in cases.js) — a Mythic club set
+   and a Mythic decal should read as the same word, in the same colour,
+   everywhere. Duplicated as literals rather than imported because cases.js
+   pulls in the whole unlock table for something that is four hex values. */
+export const RARITY_ACCENT = {
+  standard: '#9fb0a6', tour: '#5ab8ff', pro: '#c77dff',
+  legend: '#ffd94a', mythic: '#ff3864'
+};
 
 export const CLUB_SKINS = [
   { id: 'stock', name: 'Stock', blurb: 'However the set came.',
@@ -88,8 +89,8 @@ export const CLUB_SKINS = [
   { id: 'veteran', name: 'Veteran', blurb: 'Two hundred rounds.',
     need: { rounds: 200 }, shaft: '#9c8f76', head: '#b3a48c', grip: '#2a241c',
     feat: true },
-  { id: 'tour-issue', name: 'Tour issue', blurb: 'Only on the top set.',
-    need: { clubTier: 5 }, shaft: '#22252a', head: '#c8382f', grip: '#0d0d10',
+  { id: 'tour-issue', name: 'Tour issue', blurb: 'Only on a serious bag.',
+    need: { setRarity: 'legend' }, shaft: '#22252a', head: '#c8382f', grip: '#0d0d10',
     sheen: 1, feat: true }
 ];
 
@@ -110,7 +111,7 @@ export function skinEarned(skin, p) {
   if (n.birdies != null) return (p?.birdies ?? 0) >= n.birdies;
   if (n.rounds != null) return (p?.rounds ?? 0) >= n.rounds;
   if (n.records != null) return (p?.records ?? 0) >= n.records;
-  if (n.clubTier != null) return (p?.clubTier ?? 0) >= n.clubTier;
+  if (n.setRarity != null) return bestSetRank(p) >= rarityRank(n.setRarity);
   return false;
 }
 
@@ -124,7 +125,7 @@ export function skinRequirement(skin) {
   if (n.birdies != null) return `${n.birdies} birdies`;
   if (n.rounds != null) return `${n.rounds} rounds`;
   if (n.records != null) return 'Hold a course record';
-  if (n.clubTier != null) return 'Own the top club set';
+  if (n.setRarity != null) return `Own a ${n.setRarity[0].toUpperCase()}${n.setRarity.slice(1)} club set`;
   return '';
 }
 
@@ -132,13 +133,33 @@ export function skinRequirement(skin) {
 export function skinProgress(skin, p) {
   const n = skin?.need;
   if (!n) return null;
+  /* A rarity gate has no progress bar. "2 of 3" would be counting rarity
+     ranks, which is not a thing anybody is collecting — you either have a
+     set that good or you don't, and skinRequirement already says which.
+     Returning null here is also what keeps hud.js from drawing a bar. */
+  if (n.setRarity != null) return null;
   const pairs = [['level', p?.level ?? 1], ['aces', p?.aces ?? 0], ['eagles', p?.eagles ?? 0],
                  ['birdies', p?.birdies ?? 0], ['rounds', p?.rounds ?? 0],
-                 ['records', p?.records ?? 0], ['clubTier', p?.clubTier ?? 0]];
+                 ['records', p?.records ?? 0]];
   for (const [k, have] of pairs) {
     if (n[k] != null) return { have, want: n[k], pct: Math.min(1, have / n[k]) };
   }
   return null;
+}
+
+/** The rarity rank of the best set a profile actually owns, standard=0
+ *  through mythic=4. Reads what they OWN rather than what they have
+ *  equipped — pulling a Mythic set and then choosing to swing something
+ *  prettier should not lock a finish back up. -1 when they own nothing. */
+export function bestSetRank(p) {
+  const owned = p?.clubSets;
+  if (!owned) return -1;
+  let best = -1;
+  for (const id of Object.keys(owned)) {
+    const set = setById(id);
+    if (set) best = Math.max(best, rarityRank(set.rarity));
+  }
+  return best;
 }
 
 /** Everything a profile has earned, for the picker. */

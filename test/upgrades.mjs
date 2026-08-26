@@ -20,13 +20,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
 import { holeCoins } from '../public/js/shared/economy.js';
-import { getProfile, seedProfile, STARTING_COINS } from '../server/profiles.js';
+import { getProfile, seedProfile, STARTING_COINS, ladderRefund } from '../server/profiles.js';
 import { SHOP, gearEffect } from '../public/js/shared/gear.js';
 import { CLUB_BY_KEY } from '../public/js/shared/clubs.js';
 import { ShotSim, calibrateCarries } from '../public/js/shared/ballistics.js';
 import { allCourses, getCourse } from '../public/js/shared/coursegen.js';
 import { terrainFor } from '../public/js/shared/terrain.js';
 import { BIOMES } from '../public/js/shared/biomes.js';
+import { CLUB_SETS, STARTER_SET, upgradeCount } from '../public/js/shared/clubsets.js';
 
 calibrateCarries();
 
@@ -81,11 +82,11 @@ test('each upgrade changes the ball the server actually simulates', () => {
   }).runToEnd().carry;
 
   const NONE = { ball: 0, irons: 0, woods: 0, putter: 0 };
-  const base = k => carry(k, { gear: NONE, crew: null, clubTier: 0, refine: 0 });
+  const base = k => carry(k, { gear: NONE, crew: null, clubSet: STARTER_SET, setLevel: 0 });
 
   // A wood upgrade must show up on a wood, an iron upgrade on an iron.
   const withGear = (k, slot, tier) =>
-    carry(k, { gear: { ...NONE, [slot]: tier }, crew: null, clubTier: 0, refine: 0 });
+    carry(k, { gear: { ...NONE, [slot]: tier }, crew: null, clubSet: STARTER_SET, setLevel: 0 });
 
   assert.ok(withGear('DR', 'woods', 1) - base('DR') > 2,
     'Carbon woods must add real distance off the tee');
@@ -100,13 +101,33 @@ test('each upgrade changes the ball the server actually simulates', () => {
   assert.equal(withGear('DR', 'irons', 1), base('DR'), 'irons must not lengthen a driver');
   assert.equal(withGear('I7', 'woods', 1), base('I7'), 'woods must not lengthen an iron');
 
-  // The club ladder is the big one, and must climb monotonically.
-  const ladder = [0, 1, 2, 3].map(t =>
-    carry('DR', { gear: NONE, crew: null, clubTier: t, refine: 0 }));
+  /* The club ladder is the big one, and must climb monotonically.
+
+     Scoped to RARITY BASES, not to individual upgrades. Stepping up a
+     rarity is the ~0.03 speed jump the old tier ladder made and must stay
+     felt in metres; a single upgrade WITHIN a rarity is deliberately
+     finer than that (a Standard set spreads 0.045 over three rungs), so
+     asserting >2 m on those would be asserting the design is wrong. */
+  const RARITIES = ['standard', 'tour', 'pro', 'legend', 'mythic'];
+  const oneOf = r => CLUB_SETS.find(x => x.rarity === r).id;
+  const ladder = RARITIES.map(r =>
+    carry('DR', { gear: NONE, crew: null, clubSet: oneOf(r), setLevel: 0 }));
   for (let i = 1; i < ladder.length; i++) {
     assert.ok(ladder[i] > ladder[i - 1] + 2,
-      `club tier ${i} must beat tier ${i - 1} by a felt margin ` +
+      `a fresh ${RARITIES[i]} set must beat a fresh ${RARITIES[i - 1]} one by a felt margin ` +
       `(${ladder[i - 1].toFixed(1)}m -> ${ladder[i].toFixed(1)}m)`);
+  }
+
+  /* And upgrading must be felt too, just over the whole path rather than
+     per rung — otherwise the coins that now go into upgrades buy nothing
+     a player can see. */
+  for (const r of RARITIES) {
+    const id = oneOf(r);
+    const fresh = carry('DR', { gear: NONE, crew: null, clubSet: id, setLevel: 0 });
+    const maxed = carry('DR', { gear: NONE, crew: null, clubSet: id, setLevel: upgradeCount(r) });
+    assert.ok(maxed > fresh + 2,
+      `fully upgrading a ${r} set must be worth real distance ` +
+      `(${fresh.toFixed(1)}m -> ${maxed.toFixed(1)}m)`);
   }
 });
 
@@ -153,7 +174,8 @@ test('buying an item is recorded and reported back to the client', async () => {
   assert.ok(profile.gear && typeof profile.gear === 'object',
     'profile must expose gear, or the shop cannot show what is owned');
   assert.ok('coins' in profile, 'profile must expose coins');
-  assert.ok('clubTier' in profile, 'profile must expose the club ladder tier');
+  assert.ok('clubSets' in profile, 'profile must expose the club sets it owns');
+  assert.ok('clubSet' in profile, 'profile must expose which set is equipped');
 
   s.disconnect();
 });
@@ -250,10 +272,10 @@ test('a wiped server restores a career from the player\'s own snapshot', () => {
      was blocked forever and the career was gone. */
   const pid = 'restore-' + Math.random().toString(36).slice(2, 8);
   const snap = JSON.stringify({
-    v: 1, coins: 12000, rating: 61, rounds: 24, best: -3,
+    v: 2, coins: 12000, rating: 61, rounds: 24, best: -3,
     crew: { ace: 4, bruiser: 3, steady: 2, roller: 1, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
     gear: { ball: 2, irons: 1, woods: 1, putter: 1, cart: 1 },
-    clubTier: 3, refine: 2, stars: {}
+    clubSets: { [STARTER_SET]: 2, vantage: 1 }, clubSet: 'vantage', stars: {}
   });
 
   // something touches the profile FIRST — this is what used to kill it
@@ -262,23 +284,48 @@ test('a wiped server restores a career from the player\'s own snapshot', () => {
 
   const p = getProfile(pid);
   assert.equal(p.coins, 12000, 'coins were not restored');
-  assert.equal(p.clubTier, 3, 'club set was not restored');
-  assert.equal(p.refine, 2);
+  assert.equal(p.clubSets.vantage, 1, 'club sets were not restored');
+  assert.equal(p.clubSet, 'vantage', 'the equipped set was not restored');
   assert.equal(p.rounds, 24);
   assert.equal(p.crew.ace, 4, 'crew was not restored');
   assert.equal(p.gear.ball, 2, 'gear was not restored');
 });
 
+/* v1 snapshots are still sitting in real players' browser storage — they
+   were written by every build before club sets shipped. Refusing them would
+   mean a returning player on a wiped host loses the career seedProfile
+   exists to protect, so they are accepted and translated through the same
+   coin refund the server-side migration performs. */
+test('a v1 snapshot still restores, paying back the retired club ladder', () => {
+  const pid = 'restore-v1-' + Math.random().toString(36).slice(2, 8);
+  const snap = JSON.stringify({
+    v: 1, coins: 12000, rating: 61, rounds: 24, best: -3,
+    crew: { ace: 4, bruiser: 3, steady: 2, roller: 1, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
+    gear: { ball: 2, irons: 1, woods: 1, putter: 1, cart: 1 },
+    clubTier: 3, refine: 2, stars: {}
+  });
+  getProfile(pid);
+  assert.equal(seedProfile(pid, snap), true, 'a v1 snapshot was refused');
+
+  const p = getProfile(pid);
+  assert.equal(p.coins, 12000 + ladderRefund(3, 2),
+    'the old ladder was not paid back on restore');
+  assert.equal(p.clubTier, undefined, 'a retired field was resurrected');
+  assert.equal(p.clubSet, STARTER_SET, 'a restored v1 profile should carry the starter set');
+  assert.equal(p.crew.ace, 4, 'crew was not restored');
+});
+
 test('a live career is never overwritten by a snapshot', () => {
   const pid = 'live-' + Math.random().toString(36).slice(2, 8);
   const p = getProfile(pid);
-  p.rounds = 9; p.coins = 300; p.clubTier = 5;
+  p.rounds = 9; p.coins = 300; p.clubSets = { [STARTER_SET]: 0, vantage: 3 };
 
-  const fat = JSON.stringify({ v: 1, coins: 999999, rating: 90, rounds: 500,
-    crew: {}, gear: {}, clubTier: 6, refine: 3, stars: {} });
+  const fat = JSON.stringify({ v: 2, coins: 999999, rating: 90, rounds: 500,
+    crew: {}, gear: {}, clubSets: { nocturne: 8 }, clubSet: 'nocturne', stars: {} });
   assert.equal(seedProfile(pid, fat), false, 'a played profile was seeded over');
   assert.equal(p.coins, 300, 'coins were overwritten');
-  assert.equal(p.clubTier, 5, 'club set was overwritten');
+  assert.equal(p.clubSets.vantage, 3, 'club sets were overwritten');
+  assert.equal(p.clubSets.nocturne, undefined, 'a set was minted by a snapshot');
 });
 
 test('a new player arrives able to buy something', () => {

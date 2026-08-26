@@ -15,6 +15,7 @@ import { SURFACES } from './terrain.js';
 import { clamp } from './rng.js';
 import { gearEffect } from './gear.js';
 import { crewEffect } from './crew.js';
+import { setStats, STARTER_SET } from './clubsets.js';
 import { canopyOf } from './biomes.js';
 import { PROP_KINDS } from './props.js';
 
@@ -101,9 +102,15 @@ export class ShotSim {
             : lieSurface.id === 'path' ? 1.0 : 1.0;
     const lieSpin = lieSurface.spinKeep;
 
-    // The Caddie Crew and the club set, applied by whoever runs this sim
-    // from whatever the server has on file.  All exact 1s and 0s when absent.
-    const cfx = this.cfx = crewEffect(shot.crew, shot.clubTier, shot.refine, {
+    /* The Caddie Crew and the club set, applied by whoever runs this sim
+       from whatever the server has on file.  All exact 1s and 0s when absent.
+       The shot names the set by ID and upgrade level rather than carrying
+       raw numbers, because this object is broadcast verbatim to every
+       client to replay (see server.js's game:shot) — an id survives that
+       hop meaningfully and lets a spectator see WHICH set was swung.
+       setStats returns null for an absent or unknown id, which crewEffect
+       already reads as the reference ball. */
+    const cfx = this.cfx = crewEffect(shot.crew, setStats(shot.clubSet, shot.setLevel), {
       power, isPutt: !!club.putter, afterBadHole: !!shot.afterBadHole
     });
 
@@ -713,19 +720,21 @@ export function simulate(terrain, shot) {
  * thing that makes the game playable rather than a guessing exercise.
  */
 export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist, gear = null, kit = null) {
-  // `kit` carries the rest of the equipment room — { crew, clubTier, refine }.
-  // The probe MUST swing the same ball the server will: a Signature Set with
-  // a Legend Bruiser flies up to ~19% faster than a bare one, and a marker
-  // calibrated for the bare ball would sail every green.
+  // `kit` carries the rest of the equipment room — { crew, clubSet, setLevel }.
+  // The probe MUST swing the same ball the server will: a maxed Mythic set
+  // with a Legend Bruiser flies up to ~19% faster than a bare one, and a
+  // marker calibrated for the bare ball would sail every green.
   const run = p => {
     const r = new ShotSim(terrain, {
       x, z, clubKey, power: p, aim, faceDeg: 0, attackDeg: 0, wind, gear,
       crew: kit?.crew || null,
-      // null, not 0: no kit named means the reference ball, exactly as the
-      // simulation treats it.  Defaulting to 0 would quietly price every
-      // caller's marker for a Wooden Starter Set.
-      clubTier: kit ? (kit.clubTier ?? 0) : null,
-      refine: kit?.refine ?? 0,
+      /* null, not the starter set: NO kit named at all means the reference
+         ball, exactly as the simulation treats it. A kit that IS named but
+         omits its set means a player carrying the free starter, which is a
+         different and much shorter ball — collapsing the two would quietly
+         price every caller's marker for the wrong bag. */
+      clubSet: kit ? (kit.clubSet ?? STARTER_SET) : null,
+      setLevel: kit?.setLevel ?? 0,
       ignoreCup: true          // measure how far it ROLLS, not whether it drops
     }).runToEnd();
     // measure along the aim line, so a shot that leaks sideways is not

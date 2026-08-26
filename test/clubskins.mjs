@@ -20,7 +20,8 @@ import {
   skinsFor, normaliseSkin
 } from '../public/js/shared/clubskins.js';
 
-const FRESH = { level: 1, aces: 0, eagles: 0, birdies: 0, rounds: 0, records: 0, clubTier: 0 };
+const FRESH = { level: 1, aces: 0, eagles: 0, birdies: 0, rounds: 0, records: 0,
+                clubSets: { hickory: 0 } };
 
 test('a finish changes nothing about the golf', () => {
   /* The property the whole idea rests on. If a key ever appears here that
@@ -48,7 +49,7 @@ test('every finish is reachable, and says how', () => {
     assert.ok(req && req.length > 3, `"${sk.name}" does not say how to earn it`);
     // and the requirement has to be satisfiable by some profile
     const maxed = { level: 100, aces: 99, eagles: 99, birdies: 999, rounds: 999,
-                    records: 9, clubTier: 5 };
+                    records: 9, clubSets: { hickory: 0, halcyon: 0 } };
     assert.ok(skinEarned(sk, maxed), `"${sk.name}" cannot be earned by anybody`);
   }
 });
@@ -107,7 +108,8 @@ test('progress counts towards the thing you have to do', () => {
 });
 
 test('skinsFor and skinEarned never disagree', () => {
-  const p = { level: 44, aces: 1, eagles: 12, birdies: 20, rounds: 30, records: 1, clubTier: 2 };
+  const p = { level: 44, aces: 1, eagles: 12, birdies: 20, rounds: 30, records: 1,
+              clubSets: { hickory: 0, kestrel: 1 } };
   const list = skinsFor(p);
   for (const sk of CLUB_SKINS) {
     assert.equal(list.includes(sk), skinEarned(sk, p),

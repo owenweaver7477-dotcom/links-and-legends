@@ -33,6 +33,7 @@ import * as SW from '../public/js/client/swing.js';
 const { lieTempo, pureBand, FACE_MAX } = SW;
 const barTempo = SW.barTempo || ((lie) => lieTempo(lie));
 import { crewEffect } from '../public/js/shared/crew.js';
+import { setStats } from '../public/js/shared/clubsets.js';
 import { gearEffect } from '../public/js/shared/gear.js';
 
 calibrateCarries();
@@ -49,7 +50,9 @@ const gauss = () => {
 const MID = {
   gear: { ball: 1, irons: 1, woods: 1, putter: 1, cart: 0 },
   crew: { ace: 2, bruiser: 2, steady: 2, roller: 2, pitstop: 0, lucky: 1, gale: 1, grit: 1 },
-  clubTier: 3, refine: 1
+  // a mid-rarity set part-way up its own upgrade path — the club-ladder
+  // equivalent of what "a few hours in" used to mean at tier 3 refine 1
+  clubSet: 'vantage', setLevel: 2
 };
 
 /**
@@ -59,7 +62,7 @@ const MID = {
  */
 function playShot(T, hole, x, z, lie, aim, wind, kit, timingSigma) {
   const toPin = Math.hypot(hole.pin.x - x, hole.pin.z - z);
-  const cfx = crewEffect(kit.crew, kit.clubTier, kit.refine, { power: 1 });
+  const cfx = crewEffect(kit.crew, setStats(kit.clubSet, kit.setLevel), { power: 1 });
   const reach = cfx.speed;
   const club = suggestClub(toPin, lie, lie === 'green', DEFAULT_BAG, reach);
   const key = club.key;
@@ -80,7 +83,7 @@ function playShot(T, hole, x, z, lie, aim, wind, kit, timingSigma) {
 
   const r = new ShotSim(T, {
     x, z, clubKey: key, power, aim, faceDeg, attackDeg, wind,
-    gear: kit.gear, crew: kit.crew, clubTier: kit.clubTier, refine: kit.refine
+    gear: kit.gear, crew: kit.crew, clubSet: kit.clubSet, setLevel: kit.setLevel
   }).runToEnd();
   return { r, key, power, raw, band, tempo };
 }

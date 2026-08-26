@@ -22,7 +22,14 @@ export const UNLOCK_KINDS = {
   hat:    { name: 'Headwear',     blurb: 'For the wardrobe' },
   title:  { name: 'Title',        blurb: 'Shown beside your name' },
   melee:  { name: 'Melee',        blurb: 'A new way to lay hands on somebody' },
-  ball:   { name: 'Ball finish',  blurb: 'How your ball catches the light' }
+  ball:   { name: 'Ball finish',  blurb: 'How your ball catches the light' },
+  /* Not a level unlock — nothing in UNLOCKS below has this kind, and
+     nothing may: club sets carry real stats and come from the Club Case
+     (see clubsets.js), which is exactly what test/xp.mjs's "levels buy
+     identity, never power" still forbids here. It lives in this table only
+     so the case reveal has a proper display name for one, instead of
+     printing the raw kind string. */
+  clubset: { name: 'Club set',     blurb: 'The bag you actually swing' }
 };
 
 export const UNLOCKS = [
