@@ -69,7 +69,7 @@ for (const id of [
   'coinHud', 'coinHudN', 'netPill', 'netDiag', 'walletHud', 'walletCoinsN', 'walletGemsN',
   'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal', 'gemBal', 'invSections',
   'marketSubTabs', 'marketBrowse', 'marketMine', 'marketGemBal',
-  'invCanvas', 'invCap', 'mktCanvas', 'mktCap',
+  'invCanvas', 'invCap', 'mktCanvas', 'mktCap', 'hkPageTitle',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -108,27 +108,38 @@ HUD.unit = () => (HUD.metric ? 'm' : 'yds');
 HUD.dist = dist;
 
 /* ---------------------------------------------------------------- screens */
-HUD.show = which => {
-  /* 'home' and 'landing' are the SAME SCREEN now. The old home screen was a
-     column of eleven controls beside a course picker beside a character
-     editor, and the landing page it sat behind was better at being a front
-     door than it was — so the front door became the whole thing, and every
-     control that earned its place moved onto it.
+/* EVERY SCREEN, IN ONE TABLE. This was nine hard-coded boolean lines, which
+   meant adding a screen required remembering to add a tenth — and forgetting
+   left the old screen sitting on top of the new one. A registry cannot be
+   forgotten: anything listed here is hidden unless it is the one asked for.
 
-     `screenHome` still exists in the DOM, hidden, because the wardrobe and
-     the clubhouse both render into the character panel inside it by id.
-     Showing it is never right. */
+   'home' and 'landing' are the SAME SCREEN. The old home screen was a column
+   of eleven controls beside a course picker beside a character editor, and
+   the landing page behind it was better at being a front door — so the front
+   door became the whole thing. `screenHome` still exists in the DOM, hidden,
+   because the wardrobe and the clubhouse render into the character panel
+   inside it by id. Showing it is never right, which is why it is not here. */
+const SCREENS = ['screenLanding', 'screenWardrobe', 'screenBoards', 'screenShop',
+                 'screenLobby', 'screenResults', 'screenHoleOver', 'screenLoad'];
+const SCREEN_OF = {
+  landing: 'screenLanding', home: 'screenLanding', wardrobe: 'screenWardrobe',
+  boards: 'screenBoards', shop: 'screenShop', lobby: 'screenLobby',
+  results: 'screenResults', holeover: 'screenHoleOver', load: 'screenLoad'
+};
+
+/** Which screen is up. `null` means the round itself. THE single source of
+ *  truth — main.js's `G.screen` is a getter onto this, so the two can no
+ *  longer drift the way they did when both were assigned by hand. */
+HUD.current = 'landing';
+
+HUD.show = which => {
+  HUD.current = which;
+  const want = SCREEN_OF[which] || null;
+  for (const id of SCREENS) if (el[id]) el[id].hidden = (id !== want);
+  el.screenHome.hidden = true;                    // never right, see above
+
   const landing = which === 'landing' || which === 'home';
-  el.screenBoards.hidden = which !== 'boards';
-  el.screenLanding.hidden = !landing;
-  el.screenWardrobe.hidden = which !== 'wardrobe';
-  el.screenHome.hidden = true;
-  el.screenLobby.hidden = which !== 'lobby';
-  el.screenResults.hidden = which !== 'results';
-  el.screenHoleOver.hidden = which !== 'holeover';
-  el.screenLoad.hidden = which !== 'load';
-  el.screenShop.hidden = which !== 'shop';
-  // `null` means the round itself is on screen.  The body class gates every
+  // `null` means the round itself is on screen. The body class gates every
   // piece of in-round chrome, so the transparent title screen never shows
   // the backdrop hole's own scorecard and minimap through itself.
   document.body.classList.toggle('playing', which == null);
@@ -139,7 +150,140 @@ HUD.show = which => {
   // which is what actually broke on a narrow screen: the header wraps
   // there, and the fixed badge doesn't wrap with it.
   document.body.classList.toggle('inshop', which === 'shop');
+  /* The nav bar belongs to the MENU, never to a round or a summary — those
+     are places you leave deliberately, not places you tab away from. */
+  document.body.classList.toggle('navbar-on', MENU_SCREENS.has(which));
+  HUD.paintNav();
 };
+
+/* ------------------------------------------------------------------ pages */
+/* THE NAV BAR. Six pages, one row, always visible in the menu.
+
+   What this replaces: a landing page whose cards led to a Career screen
+   with six tabs, one of which (Pro shop) had five more inside it, and a
+   Boards screen with two more levels under that. Reaching the Items shop
+   was four clicks through three different kinds of tab strip.
+
+   A page maps to a screen and, where that screen is the clubhouse, to the
+   panes it should show. Several panes at once is the point — the Locker is
+   your inventory AND your bag, on one page, rather than two tabs you have
+   to know to look behind. */
+const MENU_SCREENS = new Set(['landing', 'home', 'shop', 'boards', 'wardrobe']);
+const PAGES = {
+  play:   { label: 'Play',   screen: 'landing' },
+  shop:   { label: 'Shop',   screen: 'shop',   panes: ['shop'] },
+  locker: { label: 'Locker', screen: 'shop',   panes: ['inventory', 'bag'] },
+  market: { label: 'Market', screen: 'shop',   panes: ['market'] },
+  social: { label: 'Social', screen: 'boards' },
+  career: { label: 'Career', screen: 'shop',   panes: ['career', 'rewards'] }
+};
+HUD.PAGES = PAGES;
+HUD.page = 'play';
+
+/** Go to a page. The ONE navigation entry point — everything else
+ *  (nav clicks, landing cards, the hash, Back) funnels through here. */
+HUD.goPage = (page, { push = true } = {}) => {
+  const def = PAGES[page];
+  if (!def) return;
+  HUD.page = page;
+  HUD.onPageEnter?.(page, def);            // main.js renders what it needs
+  HUD.show(def.screen);
+  if (def.panes) HUD.showPanes(def.panes);
+  // the header named the screen, which was always "Career" whatever you
+  // were actually looking at
+  const title = document.getElementById('hkPageTitle');
+  if (title) title.textContent = def.label;
+  if (push) HUD.pushHash(page);
+  HUD.paintNav();
+};
+
+/** Show exactly these clubhouse panes, hiding the rest. Replaces
+ *  showClubhouseTab's one-at-a-time behaviour — the old tab bar is gone. */
+HUD.showPanes = names => {
+  const want = new Set(names);
+  for (const p of document.querySelectorAll('.hkpane')) {
+    p.hidden = !want.has(p.dataset.pane);
+  }
+  document.getElementById('hkSettingsBtn')?.classList.toggle('on', want.has('keys'));
+  // arriving on a page should start you at the top of it
+  document.querySelector('#screenShop .card')?.scrollTo?.({ top: 0 });
+
+  /* Per-pane arrival work. Done on ARRIVAL rather than on every render,
+     because five ladders and a hundred rows each is not something to pull
+     down for somebody who came to buy a putter. */
+  if (want.has('rewards')) HUD.bindLevelTrack?.();
+  if (want.has('market')) { HUD.bindMarketSubTabs?.(); HUD.onMarketTab?.(); }
+
+  /* Open on the first thing in each grid rather than an empty stage — an
+     empty stage beside a full list reads as broken, not as waiting. */
+  for (const [pane, sel] of [['inventory', '#invSections [data-prev]'],
+                             ['market', '.hkpane[data-pane="market"] [data-prev]']]) {
+    if (!want.has(pane)) continue;
+    document.querySelector(sel)?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+  }
+  if (want.has('shop')) {
+    const first = document.querySelector('#shopList [data-view]');
+    if (first) { try { HUD.previewShopItem(JSON.parse(first.dataset.view)); } catch {} }
+  }
+};
+
+HUD.paintNav = () => {
+  const bar = document.getElementById('navBar');
+  if (!bar) return;
+  for (const b of bar.querySelectorAll('[data-page]')) {
+    const on = b.dataset.page === HUD.page;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-current', on ? 'page' : 'false');
+  }
+};
+
+HUD.bindNav = () => {
+  const bar = document.getElementById('navBar');
+  if (!bar || bar.dataset.bound) return;
+  bar.dataset.bound = '1';
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('[data-page]');
+    if (b) HUD.goPage(b.dataset.page);
+  });
+};
+
+/* ----------------------------------------------------------------- history */
+/* REAL BACK. There was no routing at all before this — no hash, no
+   pushState, no popstate anywhere in the client — and "back" was a button
+   that called route(), which derives the screen from SERVER ROOM STATE and
+   knows nothing about the shop or the boards. So Career -> Boards -> back
+   landed on the front page rather than on Career, every time.
+
+   The hash is the menu page only. A round is deliberately NOT a hash state:
+   you cannot Back your way out of a hole, and a URL that drops somebody
+   into a live room they were never in is not a link worth having. */
+let hashLock = false;
+
+HUD.pushHash = page => {
+  const want = '#' + page;
+  if (location.hash === want) return;
+  hashLock = true;                       // our own write must not re-enter
+  try { history.pushState({ page }, '', want); } catch { location.hash = want; }
+  hashLock = false;
+};
+
+/** Wire Back/Forward. Called once at boot. */
+HUD.bindHistory = () => {
+  addEventListener('popstate', () => {
+    if (hashLock) return;
+    const page = (location.hash || '').replace('#', '');
+    // push:false — this IS the history event, pushing again would trap Back
+    if (HUD.PAGES[page]) HUD.goPage(page, { push: false });
+    else HUD.goPage('play', { push: false });
+  });
+};
+
+/** The page named by the URL on first load, or null. */
+HUD.hashPage = () => {
+  const page = (location.hash || '').replace('#', '');
+  return HUD.PAGES[page] ? page : null;
+};
+
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
 HUD.setHomeCoins = n => { el.homeCoins.innerHTML = icon('coin') + ' ' + (n || 0).toLocaleString(); };
 /** The always-there top-right balance — see .wallethud in style.css for
@@ -3061,61 +3205,29 @@ HUD.emotesOpen = () => el.emoteWheel && !el.emoteWheel.hidden;
  * own tab: every purchase re-renders the whole panel, and a tab that snaps
  * back to Career each time you buy something is worse than having no tabs.
  */
-HUD.hkTab = 'career';
+/* THE OLD CLUBHOUSE TAB BAR IS RETIRED. The nav bar navigates now, and two
+   navigations that disagree about which room you are in is worse than
+   either alone. The bar itself stays in the DOM but is never revealed —
+   removing it would break the no-JS fallback, where the clubhouse is still
+   one long scrolling page with everything on it.
+
+   These two functions survive because a handful of callers still reach for
+   them; both now defer to the page system rather than owning a tab state. */
 HUD.bindClubhouse = () => {
   const bar = document.getElementById('hkTabs');
-  if (!bar || bar.dataset.bound) return;
-  bar.dataset.bound = '1';
-  bar.addEventListener('click', e => {
-    const b = e.target.closest('.hktab');
-    if (b) HUD.showClubhouseTab(b.dataset.tab);
-  });
-  // Controls lives behind the gear icon in the header now, not a tab in
-  // this bar — see the button's own comment in index.html.
-  document.getElementById('hkSettingsBtn')?.addEventListener('click', () => HUD.showClubhouseTab('keys'));
-  /* The bar reveals itself, and the panes are hidden only from here. Until
-     this line runs the clubhouse is one scrolling page with everything on
-     it — which is a worse layout and a working one. */
-  bar.hidden = false;
-  document.body.classList.add('hktabbed');
-  HUD.showClubhouseTab(HUD.hkTab);
-};
-HUD.showClubhouseTab = (name) => {
-  HUD.hkTab = name;
-  for (const b of document.querySelectorAll('.hktab')) {
-    const on = b.dataset.tab === name;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-selected', on ? 'true' : 'false');
-  }
-  for (const p of document.querySelectorAll('.hkpane')) {
-    p.hidden = p.dataset.pane !== name;
-  }
-  document.getElementById('hkSettingsBtn')?.classList.toggle('on', name === 'keys');
-  // a tab switch should start you at the top of the room you just walked into
-  document.querySelector('#screenShop .card')?.scrollTo?.({ top: 0 });
-  /* The two tabs whose contents live on the server rather than in the
-     profile the client already holds. Fetched on ARRIVAL rather than on
-     open-the-clubhouse, because five ladders and a hundred rows each is not
-     something to pull down for somebody who came to buy a putter. */
-  if (name === 'ranks') HUD.onBoards?.(null);
-  if (name === 'world') HUD.onWorldTab?.();
-  if (name === 'rewards') HUD.bindLevelTrack?.();
-  if (name === 'market') { HUD.bindMarketSubTabs(); HUD.onMarketTab?.(); }
-  /* Open on the first thing in the grid rather than an empty stage — an
-     empty stage beside a full list reads as broken, not as waiting. Same
-     reasoning as the shop tab's own seed just below. */
-  if (name === 'inventory' || name === 'market') {
-    const sel = name === 'inventory' ? '#invSections [data-prev]' : '.hkpane[data-pane="market"] [data-prev]';
-    const first = document.querySelector(sel);
-    first?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
-  }
-  /* The turntable starts on the first thing in the list rather than empty —
-     an empty stage next to a full list reads as broken, not as waiting. */
-  if (name === 'shop') {
-    const first = document.querySelector('#shopList [data-view]');
-    if (first) { try { HUD.previewShopItem(JSON.parse(first.dataset.view)); } catch {} }
+  if (bar) bar.hidden = true;                    // the nav bar replaced it
+  document.body.classList.add('hktabbed');       // still gates the no-JS layout
+  // Controls has no page of its own — one panel, behind the gear in the header
+  const gear = document.getElementById('hkSettingsBtn');
+  if (gear && !gear.dataset.bound) {
+    gear.dataset.bound = '1';
+    gear.addEventListener('click', () => HUD.showPanes(['keys']));
   }
 };
+
+/** Kept as a thin alias so older call sites keep working. Panes are what a
+ *  page shows now, so this is one pane rather than one tab. */
+HUD.showClubhouseTab = name => HUD.showPanes([name]);
 
 /* ------------------------------------------------------------- the world --- */
 /**

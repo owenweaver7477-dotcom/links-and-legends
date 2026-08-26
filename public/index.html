@@ -293,6 +293,25 @@
      somewhere that already exists (the records board, the world ranking, the
      online lobby, the controls), so this is a front door onto the game
      rather than five new pages to keep in step. -->
+<!-- ═══════════════════════════ THE NAV BAR ═══════════════════════════════
+     Six pages, one row, always there while you are in the menu. It replaces
+     a landing page whose cards led to a Career screen with six tabs, one of
+     which had five more tabs inside it — reaching the Items shop used to be
+     four clicks through three different kinds of tab strip.
+
+     Outside the screens rather than inside one, because it belongs to all of
+     them. `body.navbar-on` (set by HUD.show) is what hides it during a round
+     and on the summary screens: those are places you leave deliberately, not
+     places you tab away from. -->
+<nav class="navbar" id="navBar" aria-label="Main">
+  <button class="navtab" data-page="play"   type="button">Play</button>
+  <button class="navtab" data-page="shop"   type="button">Shop</button>
+  <button class="navtab" data-page="locker" type="button">Locker</button>
+  <button class="navtab" data-page="market" type="button">Market</button>
+  <button class="navtab" data-page="social" type="button">Social</button>
+  <button class="navtab" data-page="career" type="button">Career</button>
+</nav>
+
 <div class="screen landing" id="screenLanding" hidden>
   <canvas class="intro-canvas" id="introCanvas" hidden></canvas>
 
@@ -679,7 +698,7 @@
          this game (the 3D golfer has no face either, and nothing here is
          loaded from a file — see icons.js's own header on why). -->
     <div class="hk-head hk-head-profile">
-      <div class="hk-brand"><h2>Career</h2></div>
+      <div class="hk-brand"><h2 id="hkPageTitle">Career</h2></div>
       <div class="hk-profile">
         <span class="hk-avatar" id="hkAvatar">?</span>
         <span class="hk-lvlbadge" id="hkLevelBadge">1</span>
@@ -710,7 +729,7 @@
         <span class="hk-xp-label">XP PROGRESS: <b id="hkXpInto">0</b> / <span id="hkXpNeed">0</span></span>
         <div class="hk-xp-bar"><i id="hkXpFill" style="width:0%"></i></div>
       </div>
-      <button class="btn" id="btnShopBack">← Back</button>
+      <button class="btn" id="btnShopBack">← Play</button>
     </div>
 
     <!-- The clubhouse was one long scroll of four sections: you arrived at

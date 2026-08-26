@@ -57,7 +57,6 @@ const G = {
   room: null, myPid: null, joined: false,
   course: null, hole: null, T: null, bio: null,
   loadedKey: null,
-  screen: 'home',
   anim: null,              // { pid, sim, srv, done, doneAt, hold }
   queue: [],
   balls: {},               // pid -> {x,y,z}
@@ -71,6 +70,17 @@ const G = {
   celebUntil: 0,            // ms; holds the hole summary back for a reaction
   lastMoveSent: 0
 };
+
+/* WHICH SCREEN IS UP — derived, never assigned. This used to be a plain
+   field set by hand right next to every HUD.show() call, which is exactly
+   how the two drifted: at least one call site set one without the other.
+   Reading it off HUD.current makes that impossible, and the ~30 guards
+   below that test `G.screen === 'game'` did not have to change at all.
+   `null` there means the round itself, which everything here calls 'game'. */
+Object.defineProperty(G, 'screen', {
+  get: () => (HUD.current == null ? 'game' : HUD.current),
+  enumerable: true
+});
 
 calibrateCarries();
 const COURSES = allCourses();
@@ -446,7 +456,6 @@ async function leaveLanding(target = 'play') {
      caller is about to tee off, showing the landing page first is a flash
      of the menu between the opener and the first tee. */
   if (target !== 'play') {
-    G.screen = 'landing';
     HUD.show('landing');
     openLegend(target);
   }
@@ -457,25 +466,18 @@ async function leaveLanding(target = 'play') {
    exists — the landing page is a front door onto the game, not five new
    pages that have to be kept in step with it. */
 function openLegend(target) {
-  if (target === 'clubhouse') { HUD.openClubhouse?.(); return; }
-  /* The boards are their own screen now, so the legend goes straight there
-     rather than into the clubhouse and along to a tab. */
-  if (target === 'leaderboards' || target === 'rankings') {
-    G.screen = 'boards';
-    HUD.show('boards');
-    HUD.bindBoardsScreen();
-    HUD.showBoardTab(target === 'rankings' ? 'ranks' : 'records');
-    Net.h2h(rows => HUD.renderH2H(rows));
-    return;
-  }
+  /* Every legend that has a nav page now GOES to that page, rather than to
+     a screen-and-tab of its own. Otherwise the front door and the nav bar
+     would be two ways of reaching the same rooms that disagree about which
+     one you are in — which is exactly the confusion this phase removes. */
+  const page = { clubhouse: 'career', leaderboards: 'social', rankings: 'social' }[target];
+  if (page) { HUD.goPage(page); return; }
   const tab = { settings: 'keys' }[target];
   if (tab) {
+    // Controls has no page of its own — it is one panel behind the gear
     renderClubhouse();
-    G.screen = 'shop';
     HUD.show('shop');
-    try { HUD.bindClubhouse?.(); HUD.showClubhouseTab(tab); } catch (e) { console.error('clubhouse:', e); }
-    if (tab === 'world') Net.ranking(d => HUD.renderWorld(d, G.myPid));
-    if (tab === 'ranks') HUD.onBoards(null);
+    try { HUD.bindClubhouse?.(); HUD.showPanes([tab]); } catch (e) { console.error('clubhouse:', e); }
     return;
   }
   if (target === 'community') {
@@ -667,7 +669,6 @@ function ensureLevelHist() {
 let emoteDraft = [];
 
 function openWardrobe() {
-  G.screen = 'wardrobe';
   HUD.show('wardrobe');
   HUD.bindWardrobe();
   ensureLevelHist();
@@ -2971,7 +2972,7 @@ Net.on('profile', prof => {
         HUD.toast(`Dev: ${res.coins} coins, ${res.gems} gems for case testing.`, 'good', 2600);
         HUD.setShopTab('cases');
         HUD.openClubhouse?.();
-        try { HUD.bindClubhouse?.(); HUD.showClubhouseTab('shop'); } catch { /* ignore */ }
+        try { HUD.goPage('shop'); } catch { /* ignore */ }
       } else HUD.toast(res?.error || 'Case test mode is disabled here.', 'warn', 2600);
     });
   }
@@ -3111,6 +3112,10 @@ function gpuString() {
 /* ===================================================================== */
 /*  ROUTING                                                               */
 /* ===================================================================== */
+/* The screens a nav page can land on. If we are already on one of these and
+   not in a room, route() has nothing to say. */
+const MENU_PAGES = new Set(['landing', 'shop', 'boards', 'wardrobe']);
+
 function route() {
   const r = G.room;
   const prevScreen = G.screen;   // §0.3's funnel fires on a TRANSITION into a
@@ -3126,12 +3131,18 @@ function route() {
   if (inPlay) gameplayStart(); else gameplayStop();
   if (inPlay && prevScreen !== 'game') funnel.tee(r.courseId);
   if (!G.joined || !r) {
-    /* The landing page outranks the default route. Connecting to the server
-       fires this, and without the guard the front door was replaced by the
-       menu about a second after it appeared — for everyone with a fast
-       connection, which is to say everyone. */
-    if (G.screen === 'landing') { menuBackdrop(); return; }
-    G.screen = 'landing'; HUD.show('landing');
+    /* NOT IN A ROOM MEANS THE MENU — and which menu page you are on is your
+       business, not this function's. route() runs on nearly every server
+       state change, including ones that move nobody anywhere (somebody
+       else's ball colour), and it used to answer all of them by forcing the
+       landing page. That is the whole reason Back never worked: you could
+       navigate to the Shop and be thrown to the front door a moment later.
+
+       So it now only ACTS when the current screen is not already a menu
+       screen. The room states below still outrank everything, which is
+       right — you cannot browse the shop from the middle of a hole. */
+    if (MENU_PAGES.has(G.screen)) { menuBackdrop(); return; }
+    HUD.goPage(HUD.page || 'play', { push: false });
     menuBackdrop();                  // back out of a room: the tee returns
     if (prevScreen !== 'landing') {
       funnel.menu();
@@ -3141,7 +3152,6 @@ function route() {
     return;
   }
   if (r.state === 'lobby') {
-    G.screen = 'lobby';
     HUD.show('lobby');
     /* Show the hole everybody is about to play. Called on every state, and
        cheap when nothing changed — menuBackdrop returns immediately if the
@@ -3157,10 +3167,9 @@ function route() {
   // screens dereference it; hold the loading screen for the moment it takes
   // the first broadcast to arrive and route again.
   if ((r.state === 'results' || r.state === 'holeover') && !G.course) {
-    G.screen = 'load'; HUD.show('load'); return;
+    HUD.show('load'); return;
   }
   if (r.state === 'results') {
-    G.screen = 'results';
     HUD.show('results');
     HUD.renderResults(r, G.myPid, G.course);
     /* How it compared. Computed from the same card the table above is drawn
@@ -3191,15 +3200,14 @@ function route() {
     // Do not drop the black summary over a celebration that is still running.
     // The server holds the hole open for 20 s on its own timer, so a couple of
     // seconds here costs nothing and is purely local.
-    if (celebrating() || G.anim) { G.screen = 'game'; HUD.show(null); return; }
-    G.screen = 'holeover'; HUD.show('holeover');
+    if (celebrating() || G.anim) { HUD.show(null); return; }
+    HUD.show('holeover');
     if (prevScreen !== 'holeover') {
       trackHoleOutcome(r.holeIndex + 1, true, r.courseId);
       if (r.holeIndex === 0) funnel.hole1Complete(r.courseId);
     }
     HUD.renderHoleOver(r, G.myPid, G.course, G.profile?.difficulty || DEFAULT_DIFFICULTY); return;
   }
-  G.screen = 'game';
   HUD.show(null);
 }
 
@@ -3289,6 +3297,11 @@ function armThenConfirm(btn, confirmText, onConfirm) {
   });
 }
 
+/* Filled in by renderClubhouse, called by the Shop page. Same trampoline
+   pattern as loadFriendsSafe/drawLookSafe above — a page needs it and
+   cannot reach inside another function's scope to get it. */
+let onShopBuy = () => {};
+
 /** The clubhouse: career, pro shop and the bag, all outside any room. */
 function renderClubhouse() {
   /* The mode picker. Rendered here with everything else on the screen, so
@@ -3309,8 +3322,10 @@ function renderClubhouse() {
   Net.ranking(d => HUD.renderWorld(d, G.myPid));
   // Shared between the Pro Shop's own tabs AND the Inventory page's Buy
   // buttons (see HUD.renderInventory's onBuy param) — one purchase
-  // dispatcher, not two.
-  function onShopBuy(item) {
+  // dispatcher, not two. Assigned to the module-level binding so the Shop
+  // PAGE can reach it: it used to be a closure in here, which meant the
+  // only way to render the shop was to render the entire clubhouse.
+  onShopBuy = function onShopBuy(item) {
     if (item === 'case:buy') return buyCaseOfKind('standard');
     if (item === 'case:buyVault') return buyCaseOfKind('vault');
     if (item === 'case:buyPro') return buyCaseOfKind('pro');
@@ -3338,7 +3353,7 @@ function renderClubhouse() {
       });
     }
     Net.buy(item);
-  }
+  };
   HUD.renderShop(prof, onShopBuy);
   function onInventoryPick(key, value) {
     lookDraft = normaliseLook({ ...lookDraft, [key]: value });
@@ -4226,9 +4241,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
        HUD.show leaves the player looking at a button that does nothing —
        and the tabs are a convenience, while getting into the clubhouse at
        all is not. */
-    G.screen = 'shop';
-    HUD.show('shop');
-    try { HUD.bindClubhouse?.(); } catch (e) { console.error('clubhouse tabs:', e); }
+    HUD.goPage('career');
   };
   /* Named on HUD as well as bound to a button, because the button it used
      to live on no longer exists — the clubhouse is a landing-page legend
@@ -4236,6 +4249,31 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      was missing: the legend rendered, was clickable, and did nothing. */
   HUD.openClubhouse = openClubhouse;
   HUD.el.btnClubhouse?.addEventListener('click', openClubhouse);
+
+  /* ---- the nav bar ---------------------------------------------------
+     One hook, called by HUD.goPage before it shows anything, so each page
+     renders what it needs and nothing it does not. This is what lets the
+     Shop be its own page: it renders the shop alone rather than dragging
+     the whole clubhouse along behind it. */
+  HUD.onPageEnter = (page, def) => {
+    if (def.screen === 'shop') {
+      // the clubhouse panes share one profile render; cheap and idempotent
+      renderClubhouse();
+      try { HUD.bindClubhouse?.(); } catch (e) { console.error('clubhouse:', e); }
+    }
+    if (page === 'shop') { try { HUD.setShopTab('clubs'); HUD.renderShop(G.profile, onShopBuy); } catch (e) { console.error('shop:', e); } }
+    if (page === 'social') {
+      HUD.bindBoardsScreen();
+      HUD.showBoardTab('ranks');
+      HUD.onBoards?.(null);
+      Net.h2h(rows => HUD.renderH2H(rows));
+      loadFriendsSafe();
+    }
+    if (page === 'market') { HUD.bindMarketSubTabs?.(); HUD.onMarketTab?.(); }
+    if (page === 'play') menuBackdrop();
+  };
+  HUD.bindNav();
+  HUD.bindHistory();
   /* ---- the two phone-only toggles -------------------------------------
      Both exist because a phone has room for the golf OR for a panel, never
      both — so everything that is not needed on every shot is one tap away
@@ -4345,9 +4383,12 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     }
   });
 
-  HUD.el.btnShopBack.addEventListener('click', () => route());
+  /* Straight to Play, not route(). route() only acts when room state
+     demands it now, so on a menu screen it correctly does nothing — which
+     would have left this button dead. */
+  HUD.el.btnShopBack.addEventListener('click', () => HUD.goPage('play'));
   HUD.bindLevelTrack();
-  HUD.el.bdBack.addEventListener('click', () => route());
+  HUD.el.bdBack.addEventListener('click', () => HUD.goPage('play'));
   HUD.onRecordsTab = () => Net.records(r => { G.records = r; HUD.renderRecords(COURSES, r, G.myPid); });
 
   /* ---- the wardrobe ---------------------------------------------------- */
@@ -4388,7 +4429,6 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   });
   HUD.el.wdSeeIn?.addEventListener('click', () => {
     wd.auto = false; syncAuto();
-    G.screen = 'landing';
     HUD.show('landing');
     showGolferCloseUp(7);
     HUD.toast('This is your golfer on the first tee. Press Play when you like it.', 'info', 3600);
@@ -4814,8 +4854,13 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   if (room) {
     HUD.show('landing');
   } else {
-    G.screen = 'landing';
-    HUD.show('landing');
+    /* A page in the URL wins on first load — that is what makes a page
+       linkable, and what makes Back land somewhere real rather than on the
+       front door. An invite link (`room`, above) still outranks it: being
+       dropped into the round you were invited to matters more. */
+    const startPage = HUD.hashPage();
+    if (startPage && startPage !== 'play') HUD.goPage(startPage, { push: false });
+    else HUD.show('landing');
     HUD.el.lpLegend.addEventListener('click', e => {
       const b = e.target.closest('.lp-item');
       if (!b) return;
