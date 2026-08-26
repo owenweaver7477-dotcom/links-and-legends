@@ -4053,12 +4053,33 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
    Hidden entirely unless body.navbar-on (see HUD.show): a round and the
    two summary screens are places you leave deliberately. */
 .navbar { display: none; }
+/* A CENTRED PILL, not a full-width bar. The full-width version painted its
+   background across the whole top strip at z-index 60, which put it on top
+   of the two things that live in those corners — the wallet (top right) and
+   the connection pill (dead centre) — and simply hid them. Sizing the bar to
+   its buttons gives both corners back. */
 body.navbar-on .navbar {
   display: flex; gap: 4px; justify-content: center;
-  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
-  padding: 8px 12px;
-  background: linear-gradient(180deg, rgba(10,14,11,.94), rgba(10,14,11,.72) 70%, rgba(10,14,11,0));
-  backdrop-filter: blur(8px);
+  position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+  z-index: 60; width: fit-content; max-width: calc(100vw - 24px);
+  padding: 5px; border-radius: 14px;
+  background: rgba(10,18,15,.82);
+  border: 1px solid rgba(255,255,255,.08);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 26px rgba(0,0,0,.42);
+  overflow-x: auto; scrollbar-width: none;
+}
+body.navbar-on .navbar::-webkit-scrollbar { display: none; }
+
+/* The wallet outranks the nav — it is read-only (pointer-events:none), so
+   sitting above it costs nothing and being hidden by it cost the balance. */
+body.navbar-on .wallethud { z-index: 61; }
+
+/* The connection pill is centred by default, which is exactly where the nav
+   now is. Out to the left while the nav is up — it is a glanceable
+   diagnostic, not something that needs the middle of the screen. */
+body.navbar-on .netpill {
+  left: 10px; right: auto; transform: none; top: 10px; bottom: auto; z-index: 61;
 }
 .navtab {
   padding: 9px 18px; border: 0; border-radius: 11px; background: transparent;
@@ -4071,13 +4092,18 @@ body.navbar-on .navbar {
   background: linear-gradient(180deg, #2f8a4a, #237038); color: #fff;
   box-shadow: 0 3px 14px rgba(35,112,56,.42);
 }
-/* The bar sits over the top of every menu screen, so they need room for it. */
+/* The bar floats over the top of every menu screen, so they need room. */
 body.navbar-on #screenShop,
-body.navbar-on #screenBoards { padding-top: 52px; }
+body.navbar-on #screenBoards { padding-top: 56px; }
 
 @media (max-width: 700px) {
+  /* Full width at the BOTTOM on a phone, where a thumb is — the one place a
+     persistent bar earns the space it takes. */
   body.navbar-on .navbar {
-    top: auto; bottom: 0; padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    top: auto; bottom: 0; left: 0; right: 0; transform: none;
+    width: auto; max-width: none;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    border-radius: 0; border: 0;
     background: linear-gradient(0deg, rgba(10,14,11,.97), rgba(10,14,11,.86));
     border-top: 1px solid rgba(255,255,255,.08);
     gap: 2px;
@@ -4087,4 +4113,15 @@ body.navbar-on #screenBoards { padding-top: 52px; }
   body.navbar-on #screenBoards { padding-top: 0; padding-bottom: 62px; }
   /* the landing page's own fixed Play button must clear the bar */
   body.navbar-on #btnPlay { bottom: 74px; }
+  /* .netpill's own mobile rule sends it to bottom:8px — straight under the
+     bar. Keep it top-left, where nothing else is. */
+  body.navbar-on .netpill { top: 10px; bottom: auto; left: 10px; }
 }
+
+/* The balance reads ONCE. The clubhouse header already carries coins and
+   gems (that is why .wallethud hides itself on this screen — see HUD.show's
+   'inshop' class), so the Pro shop pane's own copy was a third printing of
+   the same two numbers on the same screen. The elements stay: renderShop
+   writes into them unconditionally. */
+body.navbar-on #coinBal,
+body.navbar-on #gemBal { display: none; }

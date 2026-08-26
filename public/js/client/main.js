@@ -4386,9 +4386,13 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   /* Straight to Play, not route(). route() only acts when room state
      demands it now, so on a menu screen it correctly does nothing — which
      would have left this button dead. */
-  HUD.el.btnShopBack.addEventListener('click', () => HUD.goPage('play'));
+  /* Both of these buttons were removed with the nav bar — Play is one tap
+     away in the bar from every page, so a per-screen Back was a second way
+     of doing the same thing that had to be kept in step. The optional
+     chaining is what lets the markup drop them without this throwing. */
+  HUD.el.btnShopBack?.addEventListener('click', () => HUD.goPage('play'));
   HUD.bindLevelTrack();
-  HUD.el.bdBack.addEventListener('click', () => HUD.goPage('play'));
+  HUD.el.bdBack?.addEventListener('click', () => HUD.goPage('play'));
   HUD.onRecordsTab = () => Net.records(r => { G.records = r; HUD.renderRecords(COURSES, r, G.myPid); });
 
   /* ---- the wardrobe ---------------------------------------------------- */
