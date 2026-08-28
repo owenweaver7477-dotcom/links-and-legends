@@ -71,7 +71,7 @@ for (const id of [
   'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal', 'gemBal', 'invSections',
   'marketSubTabs', 'marketBrowse', 'marketMine', 'marketGemBal',
   'invCanvas', 'invCap', 'mktCanvas', 'mktCap', 'hkPageTitle',
-  'lpIdentity', 'lpIdAvatar', 'lpIdCode',
+  'lpIdentity', 'lpIdAvatar', 'lpIdCode', 'setCompare',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -1364,6 +1364,11 @@ HUD.renderShop = (prof, onBuy) => {
       const card = e.target.closest('[data-view]');
       if (!card) return;
       try { HUD.previewShopItem(JSON.parse(card.dataset.view)); } catch { /* ignore */ }
+      /* A set card also drives the side-by-side. Anything else (a caddie,
+         a case, a gear slot) has nothing to compare, so the panel goes
+         away rather than showing a stale set's numbers. */
+      if (card.dataset.set) HUD.renderSetCompare(prof, card.dataset.set);
+      else HUD.hideSetCompare();
     };
     grid.addEventListener('pointerover', show);
     grid.addEventListener('focusin', show);
@@ -1431,6 +1436,7 @@ HUD.renderShop = (prof, onBuy) => {
       // hovering ANY card previews it — the old tab left the set you
       // actually carry with no data-view at all, so hovering your own bag
       // showed whatever you last looked at
+      card.dataset.set = st.id;
       card.dataset.view = JSON.stringify({ kind: 'club', key: 'DR', set: st.id,
         skin: prof?.clubSkin || 'stock', name: st.name,
         sub: `${st.brand} · ${st.rarity}` });
@@ -2254,6 +2260,101 @@ HUD.previewOwnedItem = (canvasId, capId, kind, id, opts = {}) => {
   }
   setCap(opts.name || id, opts.sub || (UNLOCK_KINDS[kind]?.name || ''));
 };
+
+
+/* ══════════════════════════ SIDE BY SIDE ════════════════════════════════
+   What a set would actually change about your bag, against the one you
+   carry. Four stats, one club class at a time — five classes x four stats
+   is twenty numbers, which is a spreadsheet, not a decision.
+
+   The delta is the point. A bar shows where each set sits on the whole
+   game's range for that stat; the number beside it says which direction
+   you would be moving and by how much, green for better and red for worse.
+   Forgiveness and sweet spot read in their own units (percentage points
+   and degrees of face) because a percentage of a damping coefficient is
+   not a thing anybody can picture. */
+const CMP_RANGE = {
+  dist:    [0.860, 1.065],
+  forgive: [0.00, 0.33],
+  spin:    [0.92, 1.20],
+  sweet:   [5.6, 8.8]
+};
+/* How each stat's delta is written. `pts` for the two that are already
+   fractions of something, `pct` for the two that are multipliers. */
+const CMP_FMT = {
+  dist:    d => (d >= 0 ? '+' : '') + (d * 100).toFixed(1) + '%',
+  forgive: d => (d >= 0 ? '+' : '') + (d * 100).toFixed(1) + ' pts',
+  spin:    d => (d >= 0 ? '+' : '') + (d * 100).toFixed(1) + '%',
+  sweet:   d => (d >= 0 ? '+' : '') + d.toFixed(2) + '\u00b0'
+};
+/* Which club the class's line is read through. setStats answers per CLUB,
+   so comparing "wedges" means asking it about a representative wedge. */
+const CMP_CLUB = { driver: 'DR', woods: 'W3', irons: 'I7', wedges: 'SW', putter: 'PT' };
+
+HUD.cmpClass = 'driver';
+
+/**
+ * Render the comparison. `setId` is what is being hovered; the equipped set
+ * and its completion come from the profile.
+ */
+HUD.renderSetCompare = (prof, setId) => {
+  const box = el.setCompare;
+  if (!box) return;
+  const other = setById(setId);
+  if (!other) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const mineId = prof?.clubSet || STARTER_SET;
+  const mine = setById(mineId);
+  const doneOf = id => doneFromLevel(id, (prof?.clubSets || {})[id] || 0);
+  const cls = HUD.cmpClass;
+  const club = CMP_CLUB[cls] || 'I7';
+
+  const a = setStats(mineId, doneOf(mineId), club);      // what you carry
+  const b = setStats(other.id, doneOf(other.id), club);  // what you hovered
+  const same = other.id === mineId;
+
+  const classStrip = CLUB_CLASSES.map(k =>
+    `<button class="cmp-cls${k === cls ? ' on' : ''}" data-cmpcls="${k}">${escapeHtml(CLASS_LABEL[k])}</button>`).join('');
+
+  const rows = STAT_KEYS.map(k => {
+    const [lo, hi] = CMP_RANGE[k];
+    const pos = v => Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100;
+    const d = (b?.[k] ?? 0) - (a?.[k] ?? 0);
+    // a hair of tolerance: a delta of 0.0001 is not a difference anybody
+    // is making a decision about, and colouring it green would be a lie
+    const dir = Math.abs(d) < 1e-4 ? 'same' : d > 0 ? 'up' : 'down';
+    return `<div class="cmp-row">
+      <span class="cmp-name">${escapeHtml(STAT_LABEL[k])}</span>
+      <span class="cmp-track">
+        <i class="cmp-have" style="width:${pos(a?.[k] ?? lo).toFixed(1)}%"></i>
+        <i class="cmp-want cmp-${dir}" style="width:${pos(b?.[k] ?? lo).toFixed(1)}%"></i>
+      </span>
+      <span class="cmp-d cmp-${dir}">${same ? '\u2014' : CMP_FMT[k](d)}</span>
+    </div>`;
+  }).join('');
+
+  box.innerHTML =
+    `<div class="cmp-head">
+       <b>${escapeHtml(other.name)}</b>
+       <small>${same ? 'the set you carry' : 'vs ' + escapeHtml(mine?.name || 'your set')}</small>
+     </div>
+     <div class="cmp-classes">${classStrip}</div>
+     <div class="cmp-rows">${rows}</div>`;
+
+  if (!box.dataset.wired) {
+    box.dataset.wired = '1';
+    box.addEventListener('click', e => {
+      const b2 = e.target.closest('[data-cmpcls]');
+      if (!b2) return;
+      HUD.cmpClass = b2.dataset.cmpcls;
+      HUD.renderSetCompare(HUD._cmpProf, HUD._cmpSet);
+    });
+  }
+  HUD._cmpProf = prof; HUD._cmpSet = setId;
+};
+
+HUD.hideSetCompare = () => { if (el.setCompare) el.setCompare.hidden = true; };
 
 /* ------------------------------------------------------- marketplace --- */
 /** Same preview dispatcher and rarity-scoped art the Items shop tab and

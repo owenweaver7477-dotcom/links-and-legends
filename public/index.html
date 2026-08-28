@@ -749,9 +749,15 @@
     <div class="section hkpane" data-pane="shop">
       <h4 class="lbl">Pro shop <span class="coinbal" id="coinBal"></span><span class="coinbal" id="gemBal"></span></h4>
       <div class="shopwrap">
-        <div class="shopview">
-          <canvas id="shopCanvas"></canvas>
-          <div class="shopview-cap" id="shopCap"></div>
+        <div class="shopstage">
+          <div class="shopview">
+            <canvas id="shopCanvas"></canvas>
+            <div class="shopview-cap" id="shopCap"></div>
+          </div>
+          <!-- SIDE BY SIDE against what you carry. Filled by
+               HUD.renderSetCompare whenever a set card is hovered; hidden
+               when the hovered thing is not a set. -->
+          <div class="setcmp" id="setCompare" hidden></div>
         </div>
         <div id="shopList"></div>
       </div>

@@ -4219,3 +4219,56 @@ body.navbar-on #gemBal { display: none; }
      spare beats overlapping the wordmark on one of the two states. */
   body.navbar-on .lp-inner { padding-top: 246px; }
 }
+
+
+/* ═══════════════════════════════ SIDE-BY-SIDE SET COMPARISON ════════════
+   Sits under the turntable, filled on hover. Two bars per stat on one
+   track: what you carry, and what you are looking at. Green means the
+   hovered set is better at that stat, red means worse. */
+.shopstage { display: flex; flex-direction: column; gap: 10px; }
+.setcmp {
+  padding: 12px 14px; border-radius: 14px;
+  background: rgba(9,18,14,.62); border: 1px solid rgba(255,255,255,.09);
+  backdrop-filter: blur(8px);
+}
+.cmp-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 9px; }
+.cmp-head b { font-size: 13.5px; font-weight: 800; color: #eafbee; }
+.cmp-head small { font-size: 10px; color: #8fa694; }
+
+.cmp-classes { display: flex; gap: 3px; margin-bottom: 10px; flex-wrap: wrap; }
+.cmp-cls {
+  padding: 4px 9px; border: 0; border-radius: 7px; background: rgba(255,255,255,.05);
+  color: #9fb6a4; font: inherit; font-size: 9.5px; font-weight: 700; cursor: pointer;
+  white-space: nowrap; transition: background .13s, color .13s;
+}
+.cmp-cls:hover { color: #e6f2e8; background: rgba(255,255,255,.09); }
+.cmp-cls.on { background: linear-gradient(180deg, #2f8a4a, #237038); color: #fff; }
+
+.cmp-rows { display: flex; flex-direction: column; gap: 7px; }
+.cmp-row { display: grid; grid-template-columns: 86px 1fr 62px; align-items: center; gap: 9px; }
+.cmp-name { font-size: 10px; font-weight: 700; color: #8fa694; }
+/* One track, two overlaid bars — the hovered set draws over the one you
+   carry, so the difference is the sliver of colour that sticks out. */
+.cmp-track {
+  position: relative; height: 7px; border-radius: 999px;
+  background: rgba(255,255,255,.07); overflow: hidden;
+}
+.cmp-track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+.cmp-have { background: rgba(255,255,255,.28); }
+.cmp-want.cmp-up { background: linear-gradient(90deg, rgba(111,206,138,.5), #6fce8a); }
+.cmp-want.cmp-down { background: linear-gradient(90deg, rgba(226,104,90,.5), #e2685a); }
+.cmp-want.cmp-same { background: rgba(255,255,255,.4); }
+/* the losing bar has to stay visible under the winning one */
+.cmp-want.cmp-down { mix-blend-mode: normal; opacity: .95; }
+.cmp-d {
+  font-size: 10.5px; font-weight: 800; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cmp-d.cmp-up { color: #6fce8a; }
+.cmp-d.cmp-down { color: #e2685a; }
+.cmp-d.cmp-same { color: #7d9384; }
+
+@media (max-width: 700px) {
+  .cmp-row { grid-template-columns: 72px 1fr 56px; gap: 7px; }
+  .cmp-name { font-size: 9px; }
+}
