@@ -219,7 +219,7 @@ export const CLASS_LINES = {
     putter:  { dist: 0.969, forgive: 0.191, spin: 1.132, sweet: 7.9 }
   },
   /* Signature Holo — balanced */
-  signature: {
+  signet: {
     driver:  { dist: 1.007, forgive: 0.259, spin: 1.14, sweet: 8.2 },
     woods:   { dist: 1.007, forgive: 0.259, spin: 1.14, sweet: 8.2 },
     irons:   { dist: 1.007, forgive: 0.259, spin: 1.14, sweet: 8.2 },
@@ -301,6 +301,11 @@ export function upgradeCost(rarity, level) {
 
    `look` stays as the key into clubart.js's 2D FINISH table for the small
    SVG card art, where seven silhouettes is still plenty. */
+/* Ids are unique across EVERY collectible in the game, not just within
+   this table — a decal is already called 'signature', and two different
+   things answering to one id is the kind of thing that works until the day
+   something looks one up without knowing which kind it wanted. This set is
+   'signet' for that reason; its display name is unchanged. */
 export const CLUB_SETS = [
   /* ---- Standard: where everyone starts, and the honest cheap stuff ---- */
   { id: 'hickory', name: 'Hickory Standard', brand: 'Ashcombe', rarity: 'standard',
@@ -347,7 +352,7 @@ export const CLUB_SETS = [
     blurb: 'Gold-anodised crowns. Loud, expensive, and entirely unashamed.' },
 
   /* ---- Mythic: two, and two is right ---- */
-  { id: 'signature', name: 'Signature Holo', brand: 'Aurelian', rarity: 'mythic',
+  { id: 'signet', name: 'Signature Holo', brand: 'Aurelian', rarity: 'mythic',
     look: 'signature', shaft: '#e6d8ff', head: '#2a2438', grip: '#1d1828',
     blurb: 'Holographic everything. The bag they put on the poster.' },
   { id: 'nocturne', name: 'Nocturne Prototype', brand: 'Ironclad', rarity: 'mythic',
@@ -376,6 +381,22 @@ export const STARTER_SET = 'hickory';
  *  divisor ballistics.js has always hardcoded on its purity line. */
 export const REFERENCE_LINE = { dist: 1, forgive: 0, spin: 1, sweet: 6 };
 
+/* What a 0.000 grade is worth against a 1.000 one. "A slight scaling
+   bonus" — 1.5%, which is about a yard and a half on a driver: enough that
+   a Mint pull is genuinely better and nowhere near enough to make a Worn
+   set of a rarity above worse than a Mint one below. */
+export const GRADE_FLOOR = 0.985;
+
+/**
+ * The grade a freshly dropped set rolls, 0.000 to 1.000.
+ *
+ * Skewed toward the low end (x^1.7) so Mint is rare and worth showing off
+ * — a flat roll would make the average pull 0.5 and the number boring.
+ */
+export function rollGrade(rand = Math.random) {
+  return Math.pow(Math.max(0, Math.min(1, rand())), 1.7);
+}
+
 /**
  * What a set does for ONE CLUB, at a given completion.
  *
@@ -392,7 +413,7 @@ export const REFERENCE_LINE = { dist: 1, forgive: 0, spin: 1, sweet: 6 };
  * naming a set that no longer exists degrades to the calibration baseline
  * rather than throwing.
  */
-export function setStats(id, completion = 0, clubKey = null) {
+export function setStats(id, completion = 0, clubKey = null, grade = 1) {
   const set = setById(id);
   if (!set) return null;
   const cls = classOf(clubKey) || 'irons';   // a bag-wide question reads as irons
@@ -401,11 +422,20 @@ export function setStats(id, completion = 0, clubKey = null) {
   const band = CLASS_BANDS[set.rarity] || CLASS_BANDS.standard;
   // clamped, not trusted: a hand-edited save claiming 3.0 gets a maxed set
   const t = Math.max(0, Math.min(1, Number(completion) || 0));
+  /* THE GRADE SCALES THE WHOLE LINE, IT DOES NOT ADD TO IT. A worn set is
+     1.5% short of what a mint one of the same set does; a mint one is
+     exactly the number the tables say. Done this way round on purpose —
+     a bonus stacked ON TOP would push a maxed Mythic past 1.065 and quietly
+     inflate the whole game, and every calibrated carry with it. This way
+     the ceiling is still the ceiling and the grade decides how close to it
+     you actually get. */
+  const g = Math.max(0, Math.min(1, Number(grade) ?? 1));
+  const gradeScale = GRADE_FLOOR + (1 - GRADE_FLOOR) * g;
   const out = {};
   for (const k of STAT_KEYS) {
     const hi = band[k][1];
     const base = line[k];
-    out[k] = base + (hi - base) * t;
+    out[k] = (base + (hi - base) * t) * gradeScale;
   }
   /* `speed` and `faceDamp` are the names crewEffect and every existing
      caller already use. Kept as aliases rather than renamed so the physics

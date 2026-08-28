@@ -24,7 +24,7 @@ import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD,
 import { unlocksAt } from '../public/js/shared/unlocks.js';
 import { CLUB_TIERS, REFINE_COSTS } from '../public/js/shared/crew.js';
 import { CLUB_SETS, setById, STARTER_SET, upgradeCount, isMaxed,
-         rollClubCase, CLUB_CASE_GEM_COST } from '../public/js/shared/clubsets.js';
+         rollClubCase, CLUB_CASE_GEM_COST, rollGrade } from '../public/js/shared/clubsets.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
    moment a player opens it rather than after several rounds. */
@@ -106,6 +106,7 @@ export function migrateProfile(p) {
     p.clubSets = { [STARTER_SET]: 0 };
     p.clubSet = STARTER_SET;
     p.clubCases = 0;
+    p.clubGrades = { [STARTER_SET]: 1 };
     p.schemaVersion = 3;
   }
   return p;
@@ -199,6 +200,8 @@ export function getProfile(pid) {
          per profile — a shared literal here would be one inventory for
          every player at once. `clubSets` is setId -> upgrade level. */
       clubSets: { [STARTER_SET]: 0 }, clubSet: STARTER_SET, clubCases: 0,
+      // the free starter is Mint: nobody should begin behind on a roll
+      clubGrades: { [STARTER_SET]: 1 },
       cleared: [],
       clubSkin: 'stock',        // earned finish, never bought — see clubskins.js
       stars: {},                // courseId -> full rounds finished there
@@ -416,6 +419,7 @@ export function publicProfile(pid) {
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
     crew: p.crew || { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
     clubSets: p.clubSets || { [STARTER_SET]: 0 }, clubSet: p.clubSet || STARTER_SET,
+    clubGrades: p.clubGrades || {},
     clubCases: p.clubCases || 0, cleared: (p.cleared || []).length,
     clubSkin: p.clubSkin || 'stock',
     /* What they look like, so a browser with an empty localStorage — a new
@@ -1258,6 +1262,14 @@ export function openClubCase(pid) {
   // makes when it polishes an owned decal instead of paying flat gems
   const level = result.kind === 'upgrade' ? result.level : 0;
   p.clubSets = { ...p.clubSets, [result.set.id]: level };
+  /* THE GRADE IS ROLLED HERE, ONCE, AND KEPT. A fresh pull gets a fresh
+     roll; a duplicate keeps the better of the two, so opening more cases
+     can improve a set you own but never make it worse — a duplicate that
+     downgraded your bag would be a punishment for playing. */
+  const rolled = rollGrade();
+  const had = (p.clubGrades || {})[result.set.id];
+  const grade = had == null ? rolled : Math.max(had, rolled);
+  p.clubGrades = { ...(p.clubGrades || {}), [result.set.id]: grade };
   saveSoon();
   /* Reported in the SAME shape a cosmetic case reports an item pull, so the
      whole reel/reveal presentation (HUD.playCaseReel, HUD.revealCase) works
@@ -1271,6 +1283,7 @@ export function openClubCase(pid) {
     rarity: result.set.rarity,
     upgraded: result.kind === 'upgrade' ? level : 0,
     steps: upgradeCount(result.set.rarity),
+    grade,
     clubCasesLeft: p.clubCases
   };
 }

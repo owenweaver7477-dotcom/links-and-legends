@@ -1106,6 +1106,14 @@
     </div>
     <div class="case-reveal" id="caseReveal" hidden>
       <div class="case-burst" id="caseBurst"></div>
+      <!-- A club set reveals as a real model you can turn, with its grade
+           in the corner. Everything else keeps the flat art: a decal has no
+           mesh, and a spinning cube would be worse than its own pattern. -->
+      <div class="case-3d" id="case3d" hidden>
+        <canvas id="caseItemCanvas"></canvas>
+        <span class="case-grade" id="caseGrade" hidden></span>
+        <span class="case-turn" aria-hidden="true">drag to turn</span>
+      </div>
       <div class="case-item" id="caseItemArt"></div>
       <p class="case-rarity" id="caseRarity">Standard</p>
       <p class="case-name" id="caseItemName"></p>

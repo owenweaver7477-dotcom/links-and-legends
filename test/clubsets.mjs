@@ -139,7 +139,7 @@ test('a bigger sweet spot really does cost less on a mishit', async () => {
   }).runToEnd().carry;
 
   const starterCost = carry(STARTER_SET, 0) - carry(STARTER_SET, 5);
-  const mythicCost = carry('signature', 0) - carry('signature', 5);
+  const mythicCost = carry('signet', 0) - carry('signet', 5);
   assert.ok(starterCost > mythicCost + 3,
     `a 5-degree mishit should cost the starter set materially more than a Mythic one ` +
     `(${starterCost.toFixed(1)}m vs ${mythicCost.toFixed(1)}m)`);
@@ -184,6 +184,79 @@ test('isMaxed agrees with the cost table', () => {
     assert.equal(isMaxed(id, upgradeCount(r)), true);
     assert.equal(upgradeCost(r, upgradeCount(r)), null);
   }
+});
+
+/* ─────────────────────────────── the pools must not bleed into each other */
+test('a club case drops ONLY club gear, and a cosmetic case never drops a set', async () => {
+  /* The separation the whole gacha design rests on. It holds today because
+     rollClubCase reads CLUB_SETS and rollCase reads CASE_POOL and neither
+     knows the other exists — this is here so that stays true when somebody
+     later reaches for "just add trails to the club case". */
+  const { CASE_POOL } = await import('../public/js/shared/cases.js');
+
+  const COSMETIC = new Set(['decal', 'trail', 'title', 'ball']);
+  for (const item of CASE_POOL) {
+    assert.ok(COSMETIC.has(item.kind),
+      `the cosmetic case pool contains a "${item.kind}" — only cosmetics belong in it`);
+    assert.equal(setById(item.id), null,
+      `"${item.id}" is both a cosmetic case item and a club set`);
+  }
+
+  // and 400 real club-case rolls must never produce anything but a set
+  for (let i = 0; i < 400; i++) {
+    const r = rollClubCase({}, Math.random);
+    assert.equal(r.kind, 'set');
+    assert.ok(setById(r.set.id), `club case produced "${r.set?.id}", which is not a club set`);
+  }
+});
+
+/* ------------------------------------------------------------- the grade */
+test('a grade scales the line without ever lifting the ceiling', () => {
+  const mint = setStats('signet', 1, 'DR', 1);
+  const worn = setStats('signet', 1, 'DR', 0);
+  assert.ok(Math.abs(mint.speed - 1.065) < 1e-9,
+    'a MINT maxed Mythic must land exactly on the ceiling, not above it');
+  assert.ok(worn.speed < mint.speed, 'a worn set must be worse than a mint one');
+  assert.ok(worn.speed > mint.speed * 0.98,
+    'the grade is meant to be slight — a worn set should not be a different class of bag');
+  // absent grade must behave as mint, or every existing caller silently
+  // loses distance the day this shipped
+  assert.deepEqual(setStats('signet', 1, 'DR'), mint);
+});
+
+test('a grade is clamped, never trusted', () => {
+  const mint = setStats('signet', 1, 'DR', 1);
+  assert.deepEqual(setStats('signet', 1, 'DR', 9), mint, 'a grade above 1 went past mint');
+  assert.deepEqual(setStats('signet', 1, 'DR', -3), setStats('signet', 1, 'DR', 0));
+});
+
+test('rolled grades stay in range and favour the low end', async () => {
+  const { rollGrade } = await import('../public/js/shared/clubsets.js');
+  let lo = 1, hi = 0, sum = 0;
+  const N = 5000;
+  for (let i = 0; i < N; i++) {
+    const g = rollGrade();
+    assert.ok(g >= 0 && g <= 1, `rolled ${g}, outside 0..1`);
+    lo = Math.min(lo, g); hi = Math.max(hi, g); sum += g;
+  }
+  const mean = sum / N;
+  assert.ok(mean < 0.45,
+    `grades should skew low so Mint is worth showing off (mean was ${mean.toFixed(3)})`);
+  assert.ok(hi > 0.9 && lo < 0.1, 'the full range should still be reachable');
+});
+
+test('a duplicate pull can improve a grade but never worsen it', async () => {
+  const { getProfile, openClubCase } = await import('../server/profiles.js');
+  const pid = 'grade-dupe-' + Math.random().toString(36).slice(2);
+  const p = getProfile(pid);
+  const id = oneOf('mythic').id;
+  // own everything so every pull is a duplicate, and pin one grade at mint
+  p.clubSets = Object.fromEntries(CLUB_SETS.map(s => [s.id, 0]));
+  p.clubGrades = { [id]: 1 };
+  p.clubCases = 12;
+  for (let i = 0; i < 12; i++) openClubCase(pid);
+  assert.equal(getProfile(pid).clubGrades[id], 1,
+    'a duplicate rolled a worse grade and overwrote a better one');
 });
 
 /* ------------------------------------------------------------- the case */

@@ -27,3 +27,18 @@ export function purityTier(v) {
   const n = Math.max(0, Math.min(100, Number(v) || 0));
   return TIERS.find(t => n <= t.max) || TIERS[TIERS.length - 1];
 }
+
+/* ─────────────────────────────────── club sets: the same idea, 0.0 to 1.0
+   A club set carries a GRADE rather than a purity: the same six bands and
+   the same colours, so one visual language covers both, but shown as a
+   float because that is what it is — a number nobody chose, rolled when
+   the set dropped, that two otherwise identical Mythic sets will differ on.
+
+   Decals stayed on 0-100 because that is how `decalPurity` is already
+   persisted on every profile; converting it would rewrite live data to say
+   exactly the same thing. */
+export const gradeTier = v => purityTier((Number(v) || 0) * 100);
+
+/** How a grade is written wherever it is shown. Three decimals: enough to
+ *  be a real number you can compare, not so many it reads as noise. */
+export const formatGrade = v => (Math.max(0, Math.min(1, Number(v) || 0))).toFixed(3);

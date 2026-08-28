@@ -110,7 +110,7 @@ export class ShotSim {
        hop meaningfully and lets a spectator see WHICH set was swung.
        setStats returns null for an absent or unknown id, which crewEffect
        already reads as the reference ball. */
-    const cfx = this.cfx = crewEffect(shot.crew, setStats(shot.clubSet, shot.setDone, club.key), {
+    const cfx = this.cfx = crewEffect(shot.crew, setStats(shot.clubSet, shot.setDone, club.key, shot.setGrade), {
       power, isPutt: !!club.putter, afterBadHole: !!shot.afterBadHole
     });
 
@@ -732,7 +732,7 @@ export function simulate(terrain, shot) {
  * thing that makes the game playable rather than a guessing exercise.
  */
 export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist, gear = null, kit = null) {
-  // `kit` carries the rest of the equipment room — { crew, clubSet, setDone }.
+  // `kit` carries the rest of the equipment room — { crew, clubSet, setDone, setGrade }.
   // The probe MUST swing the same ball the server will: a maxed Mythic set
   // with a Legend Bruiser flies up to ~19% faster than a bare one, and a
   // marker calibrated for the bare ball would sail every green.
@@ -747,6 +747,7 @@ export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist, ge
          price every caller's marker for the wrong bag. */
       clubSet: kit ? (kit.clubSet ?? STARTER_SET) : null,
       setDone: kit?.setDone ?? 0,
+      setGrade: kit?.setGrade ?? 1,
       ignoreCup: true          // measure how far it ROLLS, not whether it drops
     }).runToEnd();
     // measure along the aim line, so a shot that leaks sideways is not

@@ -2416,6 +2416,7 @@ io.on('connection', socket => {
       crew: prof.crew || null,
       clubSet: prof.clubSet || STARTER_SET,
       setDone: doneFromLevel(prof.clubSet, (prof.clubSets || {})[prof.clubSet] || 0),
+      setGrade: (prof.clubGrades || {})[prof.clubSet] ?? 1,
       afterBadHole: !!p.afterBad,                      // Grit's moment
       clubKey: club.key,
       power: clamp(Number(data.power) || 0, 0, 1.12),

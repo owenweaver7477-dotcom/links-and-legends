@@ -4272,3 +4272,52 @@ body.navbar-on #gemBal { display: none; }
   .cmp-row { grid-template-columns: 72px 1fr 56px; gap: 7px; }
   .cmp-name { font-size: 9px; }
 }
+
+
+/* ══════════════════════════ THE 3D REVEAL, AND ITS GRADE ════════════════
+   A club set lands as a model you can turn rather than a picture of one.
+   The grade badge sits in the corner of it — the number nobody chose, which
+   is the whole point of a grade. */
+.case-3d { position: relative; width: min(320px, 74vw); aspect-ratio: 1 / 1; margin: 0 auto; }
+.case-3d canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.case-3d canvas:active { cursor: grabbing; }
+.case-grade {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  padding: 5px 9px; border-radius: 10px; pointer-events: none;
+  background: rgba(6,12,10,.82); border: 1px solid var(--gc, #9fb0a6);
+  box-shadow: 0 6px 18px rgba(0,0,0,.45);
+}
+.case-grade b {
+  font-size: 15px; font-weight: 800; color: var(--gc, #9fb0a6);
+  font-variant-numeric: tabular-nums; letter-spacing: .3px; line-height: 1;
+}
+.case-grade small {
+  font-size: 8px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;
+  color: #8fa694;
+}
+.case-turn {
+  position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
+  font-size: 9px; letter-spacing: .8px; text-transform: uppercase;
+  color: rgba(255,255,255,.35); pointer-events: none;
+}
+
+/* ═══════════════════════════ WHAT IS IN THE CASE ════════════════════════
+   Every item that can drop, as a grid, before you spend anything. Rarity
+   is the border — the same five colours the reveal and the marketplace
+   already use, so the language is one language. */
+.case-pool { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; margin-top: 8px; }
+.case-pool-item {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 4px 6px; border-radius: 10px; text-align: center;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.08);
+  border-top: 2px solid var(--rc, #9fb0a6);
+}
+.case-pool-item b { font-size: 8.5px; font-weight: 700; line-height: 1.2; color: #dfeae1; }
+.case-pool-item small { font-size: 7.5px; color: var(--rc, #8fa694); font-weight: 700;
+  letter-spacing: .4px; text-transform: uppercase; }
+.case-pool-art { width: 30px; height: 30px; display: grid; place-items: center; color: #cfe4d3; }
+.case-pool-art img { width: 30px; height: 30px; border-radius: 6px; object-fit: cover; }
+.case-pool-head { font-size: 9.5px; font-weight: 800; letter-spacing: .9px;
+  text-transform: uppercase; color: #8fd0a2; margin-top: 10px; }

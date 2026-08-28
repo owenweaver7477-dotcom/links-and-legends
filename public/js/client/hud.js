@@ -24,7 +24,7 @@ import { RARITIES, CASE_POOL, rarityForLevel, tierOdds, proTierOdds, vaultTierOd
          DIRECT_BUY_GEMS, weeklyItemRotation, weekIndex, priceBounds } from '../shared/cases.js';
 import { ballFinishDataUrl, trailPreviewDataUrl } from './finishpreview.js';
 import { icon } from './icons.js';
-import { purityTier } from '../shared/purity.js';
+import { purityTier, gradeTier, formatGrade } from '../shared/purity.js';
 
 const $ = id => document.getElementById(id);
 const el = {};
@@ -57,7 +57,7 @@ for (const id of [
   'rwProCases', 'rwProCasesS', 'btnRewardsOpenProCase', 'btnRewardsBuyProCase', 'rwCaseArt', 'rwProCaseArt',
   'modalCase', 'caseStage', 'caseOpenCanvas', 'caseHint', 'casePity', 'btnCaseContents', 'caseContents',
   'caseReelWrap', 'caseReelTrack',
-  'caseReveal', 'caseBurst', 'caseItemArt',
+  'caseReveal', 'caseBurst', 'caseItemArt', 'case3d', 'caseItemCanvas', 'caseGrade',
   'caseRarity', 'caseItemName', 'caseItemKind', 'btnCaseDone',
   'hCourse', 'hNum', 'hPar', 'hMeta', 'dYds', 'dLie', 'dElev',
   'wArrow', 'wSpeed', 'wDesc', 'wWeather',
@@ -1546,7 +1546,10 @@ HUD.renderShop = (prof, onBuy) => {
          above a button they are about to press. It is on the hover
          preview's caption either way (dataset.view's `sub`). */
       const oddsRows = caseOddsRowsHTML((CASE_TIERS[c.key] || CASE_TIERS.standard).oddsFn());
-      const swatches = caseDecalSwatchesHTML(c.key);
+      /* The full pool, not a swatch strip. The odds table says how likely
+         a tier is; this says what is actually IN it, which is the question
+         somebody deciding whether to spend is really asking. */
+      const swatches = HUD.casePoolHTML(c.key);
       card.innerHTML = `<span class="sc-art">${icon(CASE_ICON[c.key], { size: 40 })}
           ${c.owned > 0 ? `<i class="sc-qty">×${c.owned}</i>` : ''}</span>
         <b>${c.name}</b><span class="sc-rarity">${c.rarity}</span>
@@ -1555,7 +1558,7 @@ HUD.renderShop = (prof, onBuy) => {
         <span class="cad-now">${c.owned} in inventory</span>
         <button class="btn mini case-contents-toggle" type="button" aria-expanded="false">Contents ▾</button>
         <div class="case-contents-panel" hidden>${oddsRows}${swatches}</div>`;
-      paintCaseSwatches(card);
+      HUD.paintCasePool(card);
       const toggle = card.querySelector('.case-contents-toggle');
       const panel = card.querySelector('.case-contents-panel');
       toggle.addEventListener('click', () => {
@@ -2356,6 +2359,97 @@ HUD.renderSetCompare = (prof, setId) => {
 
 HUD.hideSetCompare = () => { if (el.setCompare) el.setCompare.hidden = true; };
 
+
+/* ─────────────────────────── the reveal's own turntable ─────────────────
+   A pulled set is shown as the actual club, on the same shopview stage the
+   Pro Shop turntable uses, and you can drag it. The grade goes in the
+   corner because that is where a grade belongs: a number attached to this
+   specific item, not to the set in general. */
+HUD.showRevealModel = (setId, grade) => {
+  const cv = el.caseItemCanvas;
+  if (!cv) return;
+  showShopItem(cv, { kind: 'club', key: 'DR', set: setId, skin: 'stock' });
+
+  const badge = el.caseGrade;
+  if (badge) {
+    if (grade == null) badge.hidden = true;
+    else {
+      const t = gradeTier(grade);
+      badge.hidden = false;
+      badge.style.setProperty('--gc', t.color);
+      badge.innerHTML = `<b>${formatGrade(grade)}</b><small>${escapeHtml(t.name)}</small>`;
+    }
+  }
+
+  /* Drag to turn, forwarded into shopview the same way the club-inspect
+     modal already does it. Bound once — the canvas is persistent. */
+  if (!cv.dataset.orbit) {
+    cv.dataset.orbit = '1';
+    const o = { yaw: 0, pitch: 0 };
+    let last = null;
+    cv.addEventListener('pointerdown', e => {
+      last = { x: e.clientX, y: e.clientY };
+      cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener('pointermove', e => {
+      if (!last) return;
+      o.yaw += (e.clientX - last.x) * 0.012;
+      o.pitch = Math.max(-0.6, Math.min(0.6, o.pitch + (e.clientY - last.y) * 0.010));
+      last = { x: e.clientX, y: e.clientY };
+      setShopOrbit(cv, o.yaw, o.pitch);
+    });
+    const release = () => { last = null; };
+    cv.addEventListener('pointerup', release);
+    cv.addEventListener('pointercancel', release);
+  } else {
+    releaseShopOrbit(cv);          // a new pull starts turning on its own again
+  }
+};
+
+/* ────────────────────────── what is actually in a case ──────────────────
+   Every item that can drop, before anything is spent. Grouped by rarity,
+   bordered in the rarity's own colour — the same five colours the reveal,
+   the marketplace and the set cards already use.
+
+   This replaces a swatch strip that showed a handful of decals: an odds
+   table tells you the chance of a tier, and this tells you what is
+   actually IN that tier, which is the question somebody deciding whether
+   to spend has. */
+HUD.casePoolHTML = kind => {
+  const isClub = kind === 'club';
+  const pool = isClub
+    ? CLUB_SETS.map(x => ({ id: x.id, name: x.name, rarity: x.rarity, kind: 'clubset', color: x.shaft }))
+    : CASE_POOL.map(x => ({ id: x.id, name: x.name, rarity: x.rarity, kind: x.kind, color: x.color }));
+
+  const order = ['mythic', 'legend', 'pro', 'tour', 'standard'];
+  return order.map(rid => {
+    const rows = pool.filter(x => x.rarity === rid);
+    if (!rows.length) return '';
+    const rarity = RARITIES.find(r => r.id === rid) || RARITIES[0];
+    const items = rows.map(x => {
+      const art = x.kind === 'decal'
+        ? `<img width="30" height="30" alt="" data-decal="${escapeHtml(x.id)}" data-c="${escapeHtml(x.color || rarity.color)}">`
+        : icon(CASE_KIND_ICON[x.kind] || 'gift', { size: 26 });
+      return `<div class="case-pool-item" style="--rc:${rarity.color}">
+        <span class="case-pool-art">${art}</span>
+        <b>${escapeHtml(x.name)}</b>
+      </div>`;
+    }).join('');
+    return `<div class="case-pool-head" style="color:${rarity.color}">${escapeHtml(rarity.name)} · ${rows.length}</div>
+      <div class="case-pool">${items}</div>`;
+  }).join('');
+};
+
+/** Decal art is a data URI, which must never be written into an HTML
+ *  string as src="..." — the portal bundle verifier reads that as a real
+ *  asset path. So the markup leaves the <img> blank and this fills it in. */
+HUD.paintCasePool = root => {
+  for (const img of (root || document).querySelectorAll('img[data-decal]')) {
+    const url = shaftDecalDataUrl(img.dataset.decal, img.dataset.c, 0, 48);
+    if (url) img.src = url;
+  }
+};
+
 /* ------------------------------------------------------- marketplace --- */
 /** Same preview dispatcher and rarity-scoped art the Items shop tab and
  *  Inventory page already share (itemPreviewUrl) — a listing has to look
@@ -3056,7 +3150,16 @@ HUD.revealCase = (result) => {
     const itemColor = result.item.color || rarity.color;
     const purityNow = isPurity ? result.newPurity : 0;
     const pattern = result.item.kind === 'decal' ? shaftDecalDataUrl(result.item.id, itemColor, purityNow) : null;
-    if (pattern) {
+    /* A CLUB SET GETS A MODEL, not a picture. Everything else keeps the
+       flat art it already had — a decal's own pattern says more about it
+       than any mesh would, and there is no mesh for a title at all. The
+       name and kind lines below still run either way, so the two paths
+       differ only in what fills the box above them. */
+    const isSet = result.item.kind === 'clubset';
+    if (el.case3d) el.case3d.hidden = !isSet;
+    el.caseItemArt.hidden = isSet;
+    if (isSet) HUD.showRevealModel(result.item.id, result.grade);
+    else if (pattern) {
       // The pattern is set as an <img>.src PROPERTY, never written into an
       // HTML string as src="..." — see renderClubDecalPicker's comment on
       // why: the portal-bundle verifier's static scanner reads that text
