@@ -70,6 +70,7 @@ for (const id of [
   'emoteWheel', 'recordBox', 'onlineNow', 'chatPanel', 'chatLog', 'chatInput', 'chatText', 'phraseBar', 'rosterPanel', 'rosterList', 'labelLayer', 'walkbar', 'walkText', 'lookPicker', 'optQuality', 'perfHud', 'careerBox', 'shopList', 'coinBal', 'gemBal', 'invSections',
   'marketSubTabs', 'marketBrowse', 'marketMine', 'marketGemBal',
   'invCanvas', 'invCap', 'mktCanvas', 'mktCap', 'hkPageTitle',
+  'lpIdentity', 'lpIdAvatar', 'lpIdCode',
   'cartbar', 'cartSeat', 'cartWho', 'cartMph', 'shareHint',
   'resTitle', 'resSub', 'fullCard', 'resNote', 'btnAgain', 'btnBackLobby'
 ]) el[id] = $(id);
@@ -172,7 +173,7 @@ const MENU_SCREENS = new Set(['landing', 'home', 'shop', 'boards', 'wardrobe']);
 const PAGES = {
   play:   { label: 'Play',   screen: 'landing' },
   shop:   { label: 'Shop',   screen: 'shop',   panes: ['shop'] },
-  locker: { label: 'Locker', screen: 'shop',   panes: ['inventory', 'bag'] },
+  locker: { label: 'Locker', screen: 'shop',   panes: ['golfer', 'inventory', 'bag'] },
   market: { label: 'Market', screen: 'shop',   panes: ['market'] },
   social: { label: 'Social', screen: 'boards' },
   career: { label: 'Career', screen: 'shop',   panes: ['career', 'rewards'] }
@@ -212,6 +213,7 @@ HUD.showPanes = names => {
      because five ladders and a hundred rows each is not something to pull
      down for somebody who came to buy a putter. */
   if (want.has('rewards')) HUD.bindLevelTrack?.();
+  if (want.has('golfer')) HUD.onGolferPane?.();
   if (want.has('market')) { HUD.bindMarketSubTabs?.(); HUD.onMarketTab?.(); }
 
   /* Open on the first thing in each grid rather than an empty stage — an
@@ -225,6 +227,13 @@ HUD.showPanes = names => {
     const first = document.querySelector('#shopList [data-view]');
     if (first) { try { HUD.previewShopItem(JSON.parse(first.dataset.view)); } catch {} }
   }
+};
+
+/** Your friend ID, under your name. It was only ever reachable by pressing
+ *  "My code" inside the friends sheet, which copied it to the clipboard —
+ *  fine for sending, useless for reading one out. */
+HUD.setFriendCode = code => {
+  if (el.lpIdCode) el.lpIdCode.textContent = code || '—';
 };
 
 HUD.paintNav = () => {
@@ -285,7 +294,13 @@ HUD.hashPage = () => {
 };
 
 HUD.loading = msg => { el.loadMsg.textContent = msg; };
-HUD.setHomeCoins = n => { el.homeCoins.innerHTML = icon('coin') + ' ' + (n || 0).toLocaleString(); };
+/* The landing page's own coin readout went with the Social & Career card —
+   the wallet in the corner already carries the same number, which is why
+   that card was mostly duplicates. Guarded rather than deleted: the caller
+   is on a hot path and the element may come back. */
+HUD.setHomeCoins = n => {
+  if (el.homeCoins) el.homeCoins.innerHTML = icon('coin') + ' ' + (n || 0).toLocaleString();
+};
 /** The always-there top-right balance — see .wallethud in style.css for
     which screens it's actually shown on. */
 HUD.setWallet = (coins, gems) => {

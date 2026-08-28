@@ -381,6 +381,7 @@ function closeSide() {
 let refreshRoomsSafe = () => {};
 let loadFriendsSafe = () => {};
 let drawLookSafe = () => {};
+let askFriendCodeSafe = () => {};
 
 /* Leaving the landing page.  The intro plays over the top of it and the
    destination screen is revealed underneath — so the animation is a
@@ -2957,6 +2958,7 @@ let redrawCourses = () => {};
 Net.on('profile', prof => {
   const before = G.profile;
   G.profile = prof;
+  askFriendCodeSafe();          // the socket knows who we are by now
   if (pendingDevLevel >= 1) {
     const want = pendingDevLevel;
     pendingDevLevel = 0;                       // one shot, never a loop
@@ -4272,6 +4274,14 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
     if (page === 'market') { HUD.bindMarketSubTabs?.(); HUD.onMarketTab?.(); }
     if (page === 'play') menuBackdrop();
   };
+  /* The avatar in the corner is the way into customising your golfer —
+     which lives in the Locker now, not in the landing page's side sheet. */
+  HUD.el.lpIdAvatar?.addEventListener('click', () => HUD.goPage('locker'));
+
+  /* The golfer pane's live preview and quick-change list are drawn on
+     arrival, the same way every other pane's contents are. */
+  HUD.onGolferPane = () => { try { drawLookSafe(); } catch (e) { console.error('golfer:', e); } };
+
   HUD.bindNav();
   HUD.bindHistory();
   /* ---- the two phone-only toggles -------------------------------------
@@ -4500,6 +4510,7 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   let myFriendCode = null;
   const drawFriends = res => {
     if (res?.state) myFriendCode = res.state.code || myFriendCode;
+    HUD.setFriendCode?.(myFriendCode);
     HUD.renderFriends(res?.state, res?.people);
   };
   const loadFriends = () => {
@@ -4512,6 +4523,14 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
      looking at the panel should appear in it — and a poll fast enough to
      feel live is a poll nobody should be paying for. */
   Net.onFriends(drawFriends);
+  /* The friend ID sits under your name on the front page now, and used to
+     be fetched only when the friends panel was opened — so it read "—"
+     until you went looking for the one place it was already shown.
+
+     Fetched when the PROFILE arrives, not at boot: friends:do resolves the
+     player from socket.data.pid, which profile:me sets, and at boot that
+     has not happened yet — asking then returns nothing. */
+  askFriendCodeSafe = () => { if (!myFriendCode) loadFriends(); };
 
   HUD.onFriendAct = (act, d) => {
     HUD.friendError('');

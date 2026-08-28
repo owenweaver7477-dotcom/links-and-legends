@@ -2204,7 +2204,11 @@ body.hktabbed .nojs-only { display: none; }
    one long list of eleven controls. .lp-inner widens to fit them — the
    narrow left column the single-list version needed no longer applies
    once the content is a grid, not a stack (see .lp-inner's own width). */
-.lp-legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+/* One card left. Profile moved to the corner block and Social & Career was
+   two rows the nav bar already carries plus Your Golfer, which moved to the
+   Locker — so a three-column grid now just squeezed the survivor into a
+   third of the width. */
+.lp-legend-grid { display: grid; grid-template-columns: minmax(280px, 420px); justify-content: center; gap: 16px; }
 @media (max-width: 900px) { .lp-legend-grid { grid-template-columns: 1fr; } }
 
 .lp-card { display: flex; flex-direction: column; gap: 8px; padding: 16px;
@@ -4076,10 +4080,11 @@ body.navbar-on .navbar::-webkit-scrollbar { display: none; }
 body.navbar-on .wallethud { z-index: 61; }
 
 /* The connection pill is centred by default, which is exactly where the nav
-   now is. Out to the left while the nav is up — it is a glanceable
-   diagnostic, not something that needs the middle of the screen. */
+   now is — and the top LEFT is now the identity block. It stacks under the
+   wallet instead: both are glanceable status readouts, so one corner column
+   for the pair reads better than scattering them. */
 body.navbar-on .netpill {
-  left: 10px; right: auto; transform: none; top: 10px; bottom: auto; z-index: 61;
+  left: auto; right: 12px; transform: none; top: 46px; bottom: auto; z-index: 61;
 }
 .navtab {
   padding: 9px 18px; border: 0; border-radius: 11px; background: transparent;
@@ -4114,8 +4119,8 @@ body.navbar-on #screenBoards { padding-top: 56px; }
   /* the landing page's own fixed Play button must clear the bar */
   body.navbar-on #btnPlay { bottom: 74px; }
   /* .netpill's own mobile rule sends it to bottom:8px — straight under the
-     bar. Keep it top-left, where nothing else is. */
-  body.navbar-on .netpill { top: 10px; bottom: auto; left: 10px; }
+     bottom bar. Keep it under the wallet, as on desktop. */
+  body.navbar-on .netpill { top: 44px; bottom: auto; left: auto; right: 10px; }
 }
 
 /* The balance reads ONCE. The clubhouse header already carries coins and
@@ -4125,3 +4130,92 @@ body.navbar-on #screenBoards { padding-top: 56px; }
    writes into them unconditionally. */
 body.navbar-on #coinBal,
 body.navbar-on #gemBal { display: none; }
+
+
+/* ═════════════════════════════════ WHO YOU ARE, top left ════════════════
+   Replaced a whole card in the legend grid whose other two rows (Friends,
+   Career) were already on the nav bar directly above it. What is left is
+   what the bar does not carry: your name, your friend ID, and the two
+   things you act on when you arrive. */
+/* Below the nav row rather than beside it. The nav is a centred pill about
+   500px wide, so how much room is left on the left depends entirely on the
+   viewport — dodging it by width would hold at 1280 and collide at 900.
+   Sitting under it is still the top-left corner and cannot collide at all. */
+.lp-id {
+  position: absolute; top: 62px; left: 16px; z-index: 6;
+  display: flex; align-items: stretch; gap: 10px;
+  padding: 8px 12px 8px 8px; border-radius: 15px;
+  background: rgba(10,18,15,.72); border: 1px solid rgba(255,255,255,.09);
+  backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,.4);
+  max-width: min(376px, calc(100vw - 32px));
+}
+/* The way into customising your golfer, which lives in the Locker now. */
+.lp-id-av {
+  position: relative; flex: 0 0 auto; width: 40px; height: 40px; align-self: center;
+  display: grid; place-items: center; border-radius: 13px; cursor: pointer;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+  color: #cfe4d3; transition: background .15s, transform .15s, color .15s;
+}
+.lp-id-av:hover { background: rgba(111,206,138,.16); color: #eafbee; transform: translateY(-1px); }
+.lp-id-edit {
+  position: absolute; left: 50%; bottom: -1px; transform: translateX(-50%);
+  font-size: 8px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+  color: #0d140f; background: #8fe07a; padding: 1px 5px; border-radius: 999px;
+  opacity: 0; transition: opacity .15s;
+}
+.lp-id-av:hover .lp-id-edit, .lp-id-av:focus-visible .lp-id-edit { opacity: 1; }
+
+.lp-id-main { display: flex; flex-direction: column; gap: 3px; min-width: 0;
+  justify-content: center; }
+.lp-id .lp-who { margin: 0; }
+.lp-id .lp-name span:first-child { display: none; }   /* the label is obvious here */
+.lp-id .lp-name input {
+  padding: 4px 8px; font-size: 12.5px; border-radius: 8px; max-width: 168px;
+}
+.lp-id .identity { padding: 0; background: none; border: 0; gap: 7px; }
+.lp-id .identity .id-face { width: 0; height: 0; overflow: hidden; }  /* the avatar above IS the face */
+.lp-id-code {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .7px; color: #7d9384;
+  text-transform: uppercase; font-variant-numeric: tabular-nums;
+}
+.lp-id-code b { color: #8fdfff; letter-spacing: 1.2px; }
+.lp-id .lp-stat-row {
+  margin: 0; font-size: 10px; padding: 0; border: 0; background: none;
+  display: flex; align-items: center; gap: 5px; white-space: nowrap; color: #8fa694;
+}
+.lp-id .lp-stat-row b { font-weight: 700; }
+.lp-id .lp-stat-row svg { flex: 0 0 auto; }
+
+/* Daily rewards, beside the identity rather than under it. */
+/* Narrow enough to clear the centred wordmark, so the sub-line truncates
+   rather than pushing the block into it. */
+.lp-id #lpRewardsBtn {
+  flex: 1 1 auto; min-width: 0; margin: 0; padding: 7px 11px; border-radius: 11px;
+  align-self: center;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.10);
+}
+.lp-id #lpRewardsBtn .lp-txt { min-width: 0; }
+.lp-id #lpRewardsBtn small {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lp-id #lpRewardsBtn:hover { background: rgba(255,255,255,.09); }
+
+@media (max-width: 700px) {
+  /* WRAPS on a phone, and stays OUT OF FLOW. #screenLanding is a
+     flex-direction:row container, so position:static turned this into a
+     sibling column beside the page and squeezed everything sideways — it
+     has to stay absolute. The desktop row (avatar + details + rewards) is
+     also far wider than 375px, so it wraps and the rewards button takes its
+     own line. .lp-inner gets matching headroom rather than sitting under it. */
+  .lp-id {
+    position: absolute; top: 52px; left: 8px; right: 8px;
+    margin: 0; max-width: none; padding: 10px; gap: 10px; flex-wrap: wrap;
+  }
+  .lp-id .lp-id-main { flex: 1 1 140px; }
+  .lp-id .lp-name input { width: 100%; max-width: none; }
+  .lp-id #lpRewardsBtn { flex: 1 0 100%; padding: 8px; }
+  /* Generous on purpose: the block's height changes once a name is claimed
+     (the input is replaced by a shorter chip), and clearing it with room to
+     spare beats overlapping the wordmark on one of the two states. */
+  body.navbar-on .lp-inner { padding-top: 246px; }
+}

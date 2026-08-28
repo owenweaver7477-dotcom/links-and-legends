@@ -317,6 +317,47 @@
 
   <div class="lp-veil" aria-hidden="true"></div>
 
+  <!-- WHO YOU ARE, top left. This was a whole card in the legend grid, and
+       two of its three neighbours (Friends, Career) were already on the nav
+       bar — so the card was mostly duplicates of a bar sitting directly
+       above it. What is left is the part the bar does NOT carry: your name,
+       your friend ID, and the two things you actually act on when you
+       arrive. The avatar is the way into customising your golfer, which
+       now lives in the Locker.
+
+       Every id is the one it always was, so nothing that writes into this
+       needed to change. -->
+  <div class="lp-id" id="lpIdentity">
+    <button class="lp-id-av" id="lpIdAvatar" type="button"
+            title="Customise your golfer" aria-label="Customise your golfer">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8.5 3.5 4 6.5l1.6 3.4L8 9v11.5h8V9l2.4.9L20 6.5l-4.5-3-1 1.6a3 3 0 0 1-5 0Z" fill="currentColor"/></svg>
+      <span class="lp-id-edit" aria-hidden="true">Edit</span>
+    </button>
+    <div class="lp-id-main">
+        <div class="lp-who">
+          <div class="identity" id="identityChip" hidden>
+            <div class="id-face"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><line x1="6" y1="21" x2="6" y2="4" stroke="#5c3a1a" stroke-width="1.6" stroke-linecap="round"/><path d="M6 4 17 8 6 12Z" fill="#e8443a"/><ellipse cx="6" cy="21" rx="4.5" ry="1.4" fill="#6f8f5c" opacity=".55"/></svg></div>
+            <div class="id-txt"><b>Playing as <span id="idName">—</span></b></div>
+            <button class="btn mini" id="btnNotYou">Change</button>
+          </div>
+          <label class="field lp-name" id="nameField"><span>Your name</span>
+            <input id="inpName" type="text" maxlength="20" placeholder="e.g. Owen" autocomplete="off" spellcheck="false">
+            <!-- Checked as you type. A name is claimed for good, so finding
+                 out it was taken AFTER pressing play is the wrong moment. -->
+            <span class="nm-state" id="nameState"></span>
+            <span class="nm-suggest" id="nameSuggest"></span></label>
+        </div>
+      <span class="lp-id-code">FRIEND ID <b id="lpIdCode">—</b></span>
+        <div class="lp-stat-row"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" fill="#ffd76b" stroke="#a9822f" stroke-width="1"/><path d="M7 5H4a3 3 0 0 0 3 3M17 5h3a3 3 0 0 1-3 3" fill="none" stroke="#a9822f" stroke-width="1.3" stroke-linecap="round"/></svg><b>Total Rounds:</b> <span id="lpTotalRounds">0</span></div>
+    </div>
+        <button class="lp-item lp-row" id="lpRewardsBtn">
+          <span class="lp-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="1.5" fill="currentColor"/><rect x="4" y="7" width="16" height="4" rx="1" fill="currentColor" opacity=".82"/><rect x="11" y="7" width="2" height="14" fill="#000" opacity=".16"/><path d="M12 7c-1-3-5-3-5 0M12 7c1-3 5-3 5 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+          <span class="lp-txt"><b>Daily rewards</b><small id="lpRewardsSub">come back tomorrow for more</small></span>
+          <span class="lp-count claim" id="lpRewardsBadge" hidden>!</span>
+        </button>
+  </div>
+
+
   <div class="lp-inner">
     <div class="lp-brand">
       <span class="lp-eyebrow"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-0.12em" aria-hidden="true"><line x1="6" y1="21" x2="6" y2="4" stroke="#5c3a1a" stroke-width="1.6" stroke-linecap="round"/><path d="M6 4 17 8 6 12Z" fill="#e8443a"/><ellipse cx="6" cy="21" rx="4.5" ry="1.4" fill="#6f8f5c" opacity=".55"/></svg> &nbsp;Online golf · twelve courses · no sign-up</span>
@@ -335,31 +376,6 @@
          delegation on #lpLegend (see main.js) needed zero changes; only
          which card a button physically sits in, and how it's drawn, moved. -->
     <nav class="lp-legend lp-legend-grid" id="lpLegend" aria-label="Main">
-      <div class="lp-card">
-        <h3 class="lp-card-h">Profile &amp; Achievements</h3>
-        <!-- Who you are. One line, not a form: the name is the only thing
-             the game needs before it can let you play, and the chip
-             replaces it the moment it knows. -->
-        <div class="lp-who">
-          <div class="identity" id="identityChip" hidden>
-            <div class="id-face"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><line x1="6" y1="21" x2="6" y2="4" stroke="#5c3a1a" stroke-width="1.6" stroke-linecap="round"/><path d="M6 4 17 8 6 12Z" fill="#e8443a"/><ellipse cx="6" cy="21" rx="4.5" ry="1.4" fill="#6f8f5c" opacity=".55"/></svg></div>
-            <div class="id-txt"><b>Playing as <span id="idName">—</span></b></div>
-            <button class="btn mini" id="btnNotYou">Change</button>
-          </div>
-          <label class="field lp-name" id="nameField"><span>Your name</span>
-            <input id="inpName" type="text" maxlength="20" placeholder="e.g. Owen" autocomplete="off" spellcheck="false">
-            <!-- Checked as you type. A name is claimed for good, so finding
-                 out it was taken AFTER pressing play is the wrong moment. -->
-            <span class="nm-state" id="nameState"></span>
-            <span class="nm-suggest" id="nameSuggest"></span></label>
-        </div>
-        <button class="lp-item lp-row" id="lpRewardsBtn">
-          <span class="lp-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="1.5" fill="currentColor"/><rect x="4" y="7" width="16" height="4" rx="1" fill="currentColor" opacity=".82"/><rect x="11" y="7" width="2" height="14" fill="#000" opacity=".16"/><path d="M12 7c-1-3-5-3-5 0M12 7c1-3 5-3 5 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-          <span class="lp-txt"><b>Daily rewards</b><small id="lpRewardsSub">come back tomorrow for more</small></span>
-          <span class="lp-count claim" id="lpRewardsBadge" hidden>!</span>
-        </button>
-        <div class="lp-stat-row"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" fill="#ffd76b" stroke="#a9822f" stroke-width="1"/><path d="M7 5H4a3 3 0 0 0 3 3M17 5h3a3 3 0 0 1-3 3" fill="none" stroke="#a9822f" stroke-width="1.3" stroke-linecap="round"/></svg><b>Total Rounds:</b> <span id="lpTotalRounds">0</span></div>
-      </div>
 
       <div class="lp-card">
         <h3 class="lp-card-h">Play &amp; Course</h3>
@@ -372,22 +388,6 @@
         </button>
       </div>
 
-      <div class="lp-card">
-        <h3 class="lp-card-h">Social &amp; Career</h3>
-        <button class="lp-item lp-row lp-row-tall" data-panel="friends">
-          <span class="lp-txt-top"><b>Friends &amp; players online</b><span class="lp-count" id="lpOnlineCount" hidden>0</span></span>
-          <div class="lp-avatars" id="lpFriendAvatars" hidden></div>
-        </button>
-        <button class="lp-item lp-row" data-panel="golfer">
-          <span class="lp-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8.5 3.5 4 6.5l1.6 3.4L8 9v11.5h8V9l2.4.9L20 6.5l-4.5-3-1 1.6a3 3 0 0 1-5 0Z" fill="currentColor"/></svg></span>
-          <span class="lp-txt"><b>Your Golfer</b></span>
-        </button>
-        <button class="lp-item lp-row" data-go="clubhouse">
-          <span class="lp-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 21V11L12 4l8 7v10Z" fill="currentColor"/><rect x="9.4" y="13.6" width="5.2" height="7.4" fill="#000" opacity=".28"/><line x1="12" y1="4" x2="12" y2="1" stroke="currentColor" stroke-width="1.3"/><path d="M12 1.4 16.5 3.2 12 5Z" fill="#e8443a"/></svg></span>
-          <span class="lp-txt"><b>Career</b></span>
-          <span class="lp-coins" id="homeCoins"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-0.15em" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="#ffd76b" stroke="#a9822f" stroke-width="1.4"/><circle cx="12" cy="12" r="6.2" fill="none" stroke="#a9822f" stroke-width="1.1" opacity=".55"/><circle cx="12" cy="12" r="1.8" fill="#a9822f" opacity=".55"/></svg> 0</span>
-        </button>
-      </div>
     </nav>
 
     <!-- LEADERBOARDS. A permanent fixture of the front door now rather than
@@ -487,25 +487,6 @@
     <!-- YOUR GOLFER. It lived inside the old home screen, which is now
          hidden forever — so it was unreachable, and "I can't change the
          appearance of anything" was exactly right. -->
-    <div class="lp-pane" data-pane="golfer" hidden>
-      <div class="lp-block">
-        <div class="hk-head">
-          <h5>Your character</h5>
-          <button class="btn mini" id="btnRandomLook" title="Surprise me"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity=".14"/><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="8" cy="16" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/></svg></button>
-        </div>
-        <div class="charcard" id="charCard"></div>
-        <button class="btn wardrobe-btn" id="btnWardrobe">
-          <span class="wb-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8.5 3.5 4 6.5l1.6 3.4L8 9v11.5h8V9l2.4.9L20 6.5l-4.5-3-1 1.6a3 3 0 0 1-5 0Z" fill="currentColor"/></svg></span>
-          <span class="wb-txt"><b>Open the wardrobe</b><small>outfits, decals and the full preview</small></span>
-          <span class="wb-arr" aria-hidden="true">→</span>
-        </button>
-      </div>
-      <div class="lp-block">
-        <h5>Quick change</h5>
-        <div class="looker" id="lookPicker"></div>
-        <p class="tiny">That's them on the tee — changes show up instantly.</p>
-      </div>
-    </div>
   </aside>
 
   <!-- Play now lives here as well as in the legend list: on a phone the
@@ -793,6 +774,32 @@
       <div id="bindList"></div>
     </div>
 
+    <!-- YOUR GOLFER. Moved here from the landing page's side sheet: the nav
+         bar covers Career and Social, so that card was two duplicates and
+         this — and your golfer's appearance belongs with the rest of what
+         you own and wear. Every id is unchanged, so the wardrobe button,
+         the quick-change picker and the live preview all still work. -->
+    <div class="section hkpane" data-pane="golfer">
+      <h4 class="lbl">Your golfer</h4>
+      <div class="lp-block">
+        <div class="hk-head">
+          <h5>Your character</h5>
+          <button class="btn mini" id="btnRandomLook" title="Surprise me"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity=".14"/><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="8" cy="16" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/></svg></button>
+        </div>
+        <div class="charcard" id="charCard"></div>
+        <button class="btn wardrobe-btn" id="btnWardrobe">
+          <span class="wb-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8.5 3.5 4 6.5l1.6 3.4L8 9v11.5h8V9l2.4.9L20 6.5l-4.5-3-1 1.6a3 3 0 0 1-5 0Z" fill="currentColor"/></svg></span>
+          <span class="wb-txt"><b>Open the wardrobe</b><small>outfits, decals and the full preview</small></span>
+          <span class="wb-arr" aria-hidden="true">→</span>
+        </button>
+      </div>
+      <div class="lp-block">
+        <h5>Quick change</h5>
+        <div class="looker" id="lookPicker"></div>
+        <p class="tiny">That's them on the tee — changes show up instantly.</p>
+      </div>
+    </div>
+
     <div class="section hkpane" data-pane="bag">
       <h4 class="lbl">Your bag <span id="bagCount"></span></h4>
       <!-- The same turntable the shop uses. Picking fourteen clubs out of
@@ -837,6 +844,7 @@
          out, in one place, at last — the quick-change panel only ever
          showed four of the seven kinds, as plain text pills with no
          preview. See HUD.renderInventory. -->
+
     <div class="section hkpane" data-pane="inventory">
       <h4 class="lbl">Inventory</h4>
       <!-- One stage for the whole grid, driven on hover — NOT a canvas per
