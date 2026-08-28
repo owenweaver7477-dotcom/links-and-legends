@@ -18,7 +18,8 @@ import assert from 'node:assert/strict';
 import { rm } from 'node:fs/promises';
 import {
   CLUB_SETS, SET_TIERS, UPGRADE_COSTS, CLUB_CASE_ODDS, STARTER_SET,
-  setById, setStats, upgradeCost, upgradeCount, isMaxed, rarityRank, rollClubCase
+  setById, setStats, upgradeCost, upgradeCount, isMaxed, rarityRank, rollClubCase,
+  CLASS_LINES, CLASS_BANDS, CLUB_CLASSES, STAT_KEYS, CLUBS_IN_CLASS, classOf
 } from '../public/js/shared/clubsets.js';
 
 process.env.GOLF_DATA_DIR ||= '.test-data-clubsets';
@@ -46,15 +47,15 @@ test('every set names a real rarity, and every rarity has at least one set', () 
 });
 
 test('the ceiling has not moved: a maxed Mythic set is exactly the old top set', () => {
-  const top = setStats(oneOf('mythic').id, upgradeCount('mythic'));
+  const top = setStats(oneOf('mythic').id, 1, 'DR');
   assert.ok(Math.abs(top.speed - 1.065) < 1e-9, `speed is ${top.speed}, was 1.065`);
   assert.ok(Math.abs(top.faceDamp - 0.33) < 1e-9, `faceDamp is ${top.faceDamp}, was 0.33`);
 });
 
 test('the ladder climbs, and every rarity is strictly better than the one below', () => {
   for (let i = 1; i < RARITIES.length; i++) {
-    const lo = setStats(oneOf(RARITIES[i - 1]).id, 0);
-    const hi = setStats(oneOf(RARITIES[i]).id, 0);
+    const lo = setStats(oneOf(RARITIES[i - 1]).id, 0, 'I7');
+    const hi = setStats(oneOf(RARITIES[i]).id, 0, 'I7');
     assert.ok(hi.speed > lo.speed,
       `a fresh ${RARITIES[i]} set (${hi.speed}) must out-hit a fresh ${RARITIES[i - 1]} one (${lo.speed})`);
     assert.ok(hi.faceDamp >= lo.faceDamp, `${RARITIES[i]} is less forgiving than ${RARITIES[i - 1]}`);
@@ -64,8 +65,8 @@ test('the ladder climbs, and every rarity is strictly better than the one below'
 test('a maxed set always beats a fresh set one rarity up — upgrading is never wasted', () => {
   for (let i = 0; i < RARITIES.length - 1; i++) {
     const lo = RARITIES[i], hi = RARITIES[i + 1];
-    const loMax = setStats(oneOf(lo).id, upgradeCount(lo)).speed;
-    const hiBase = setStats(oneOf(hi).id, 0).speed;
+    const loMax = setStats(oneOf(lo).id, 1, 'I7').speed;
+    const hiBase = setStats(oneOf(hi).id, 0, 'I7').speed;
     assert.ok(loMax > hiBase,
       `a maxed ${lo} set (${loMax}) must beat a fresh ${hi} one (${hiBase}) — ` +
       'without this overlap, coins spent on an unlucky pull buy nothing');
@@ -91,30 +92,88 @@ test('mythics really do take longer', () => {
   }
 });
 
-test('stats come from rarity alone, so two sets of a rarity can never drift', () => {
-  for (const r of RARITIES) {
-    const peers = CLUB_SETS.filter(s => s.rarity === r);
-    const first = setStats(peers[0].id, 0);
-    for (const s of peers) {
-      const st = setStats(s.id, 0);
-      assert.deepEqual(st, first,
-        `"${s.id}" does not match its own rarity's stat line — no set may be a trap`);
+test('every one of the 70 authored class lines sits inside its rarity band', () => {
+  /* Sets now author five INDEPENDENT class lines each, so they genuinely
+     differ in character — a bomber is not a wedge specialist. What stops
+     280 hand-written numbers drifting into a broken set is this: every one
+     must land inside its rarity's band. */
+  for (const set of CLUB_SETS) {
+    const band = CLASS_BANDS[set.rarity];
+    for (const cls of CLUB_CLASSES) {
+      const line = CLASS_LINES[set.id]?.[cls];
+      assert.ok(line, `${set.id} has no line for ${cls}`);
+      for (const k of STAT_KEYS) {
+        const [lo, hi] = band[k];
+        assert.ok(line[k] >= lo - 1e-9 && line[k] <= hi + 1e-9,
+          `${set.id}/${cls}/${k} = ${line[k]} is outside its ${set.rarity} band [${lo}, ${hi}]`);
+      }
     }
   }
+});
+
+test('sets really do differ per class — a bomber is not a wedge specialist', () => {
+  // the whole point of five independent lines: if every set resolved the
+  // same, this rework bought nothing
+  const bomber = setStats('saltmarsh', 0, 'DR').dist;
+  const bomberWedge = setStats('saltmarsh', 0, 'SW').dist;
+  assert.ok(bomber > bomberWedge,
+    `a bomber's driver (${bomber}) must out-distance its own wedges (${bomberWedge})`);
+
+  const precise = setStats('ironclad', 0, 'I7');
+  const blades = setStats('obsidian', 0, 'I7');
+  assert.ok(precise.sweet > blades.sweet,
+    'a cavity-back set must have a wider sweet spot than a blade set a rarity above it');
+  assert.ok(blades.spin > precise.spin, 'blades must out-spin cavity backs');
+});
+
+test('a bigger sweet spot really does cost less on a mishit', async () => {
+  /* The stat has to be worth displaying. Before mishits cost ball speed,
+     sweet spot only nudged backspin and a comparison matrix would have been
+     showing the player a number that did almost nothing. */
+  const { ShotSim, calibrateCarries, makeFlatRange } = await import('../public/js/shared/ballistics.js');
+  calibrateCarries();
+  const T = makeFlatRange();
+  const carry = (set, faceDeg) => new ShotSim(T, {
+    x: 0, z: 0, clubKey: 'I7', power: 1, aim: 0, faceDeg, attackDeg: 0,
+    wind: { dir: 0, speed: 0 }, clubSet: set, setDone: 0, ignoreCup: true
+  }).runToEnd().carry;
+
+  const starterCost = carry(STARTER_SET, 0) - carry(STARTER_SET, 5);
+  const mythicCost = carry('signature', 0) - carry('signature', 5);
+  assert.ok(starterCost > mythicCost + 3,
+    `a 5-degree mishit should cost the starter set materially more than a Mythic one ` +
+    `(${starterCost.toFixed(1)}m vs ${mythicCost.toFixed(1)}m)`);
+  assert.ok(mythicCost > 0, 'a mishit must still cost something, even with the best bag');
+});
+
+test('a pure strike is exactly neutral, so the calibrated carries cannot move', async () => {
+  const { crewEffect } = await import('../public/js/shared/crew.js');
+  // smash = 0.90 + 0.10 * purity, and purity is 1 for a square face at
+  // full power — the whole reason adding it left physics.mjs untouched
+  const ref = crewEffect(null, null, { power: 1 });
+  assert.equal(ref.speed, 1);
+  assert.equal(ref.sweet, 6, 'the reference sweet spot must stay the hardcoded 6');
+  assert.equal(ref.spin, 1);
+});
+
+test('a club with no class still resolves, and an unknown one reads as irons', () => {
+  assert.ok(setStats(STARTER_SET, 0, 'DR'));
+  assert.ok(setStats(STARTER_SET, 0, null));
+  assert.deepEqual(setStats(STARTER_SET, 0, 'NOPE'), setStats(STARTER_SET, 0, 'I7'));
 });
 
 /* ------------------------------------------------------------- clamping */
 test('an upgrade level is clamped, never trusted', () => {
   const id = oneOf('standard').id;
-  const max = setStats(id, upgradeCount('standard'));
-  assert.deepEqual(setStats(id, 99), max, 'a hand-edited level went past the cap');
-  assert.deepEqual(setStats(id, -5), setStats(id, 0), 'a negative level went below the floor');
-  assert.deepEqual(setStats(id, NaN), setStats(id, 0), 'NaN must read as unupgraded, not NaN stats');
+  const max = setStats(id, 1, 'I7');
+  assert.deepEqual(setStats(id, 99, 'I7'), max, 'a hand-edited completion went past the cap');
+  assert.deepEqual(setStats(id, -5, 'I7'), setStats(id, 0, 'I7'), 'a negative completion went below the floor');
+  assert.deepEqual(setStats(id, NaN, 'I7'), setStats(id, 0, 'I7'), 'NaN must read as uncollected, not NaN stats');
 });
 
 test('an unknown set resolves to null, which crewEffect already reads as the reference ball', () => {
-  assert.equal(setStats('no-such-set', 0), null);
-  assert.equal(setStats(undefined, 0), null);
+  assert.equal(setStats('no-such-set', 0, 'I7'), null);
+  assert.equal(setStats(undefined, 0, 'I7'), null);
   assert.equal(upgradeCost('standard', upgradeCount('standard')), null, 'a maxed set must have no price');
 });
 

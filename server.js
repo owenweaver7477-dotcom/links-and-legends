@@ -29,7 +29,7 @@ import { loadFriends, friendState, friendCode, requestFriend, acceptFriend,
          toggleFavourite, friendsOf, areFriends } from './server/friends.js';
 import { loadMarketplace, listItem, cancelListing, buyListing,
          myListings, allListings } from './server/marketplace.js';
-import { STARTER_SET } from './public/js/shared/clubsets.js';
+import { STARTER_SET, doneFromLevel } from './public/js/shared/clubsets.js';
 
 /* Course rating and slope, computed once per course and kept. The geometry
    is a pure function of the seed, so these cannot change while the process
@@ -2415,7 +2415,7 @@ io.on('connection', socket => {
       gear: prof.gear || null,                         // what WE have on file
       crew: prof.crew || null,
       clubSet: prof.clubSet || STARTER_SET,
-      setLevel: (prof.clubSets || {})[prof.clubSet] || 0,
+      setDone: doneFromLevel(prof.clubSet, (prof.clubSets || {})[prof.clubSet] || 0),
       afterBadHole: !!p.afterBad,                      // Grit's moment
       clubKey: club.key,
       power: clamp(Number(data.power) || 0, 0, 1.12),

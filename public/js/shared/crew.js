@@ -152,7 +152,7 @@ export const CLUB_TIERS = [
    table, which is what calibrateCarries() measures and the physics suite
    asserts against.  A real profile always names its set, so this is never
    what a player swings — it is the yardstick the ladder is measured with. */
-const REFERENCE_SET = { speed: 1, faceDamp: 0 };
+const REFERENCE_SET = { speed: 1, faceDamp: 0, spin: 1, sweet: 6 };
 
 /** LEGACY, and kept alive for exactly one caller: the refund migration in
     server/profiles.js, which pays back what a player spent on the old
@@ -196,6 +196,14 @@ export function crewEffect(crew, set = null, ctx = {}) {
     ? set
     : REFERENCE_SET;
 
+  /* The two stats a set gained when it started being authored per club
+     class (clubsets.js): how much backspin reward it earns, and how wide
+     its sweet spot is in degrees of face error. Defaulted to the values
+     the simulation hardcoded before they existed, so a reference shot —
+     and every one of test/physics.mjs's ~2000 — behaves identically. */
+  const spin = Number.isFinite(tier.spin) ? tier.spin : 1;
+  const sweet = Number.isFinite(tier.sweet) ? tier.sweet : 6;
+
   // ball speed: the club set and Bruiser on full swings
   let speed = tier.speed;
   if ((ctx.power ?? 0) > 0.92 && c.bruiser > 0) speed *= 1 + c.bruiser * 0.010;
@@ -213,7 +221,7 @@ export function crewEffect(crew, set = null, ctx = {}) {
   const cupBonus = Math.min(0.20, c.lucky * 0.02);  // lip-outs drop more often
   const lieMercy = Math.min(0.10, c.lucky * 0.01);  // rough steals less speed
 
-  return { speed, faceDamp: damp, windDamp, cupBonus, lieMercy };
+  return { speed, faceDamp: damp, spin, sweet, windDamp, cupBonus, lieMercy };
 }
 
 /** Cart speed never touches the shot sim — the cart reads this directly. */

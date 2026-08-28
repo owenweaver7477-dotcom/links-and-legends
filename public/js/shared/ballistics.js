@@ -110,7 +110,7 @@ export class ShotSim {
        hop meaningfully and lets a spectator see WHICH set was swung.
        setStats returns null for an absent or unknown id, which crewEffect
        already reads as the reference ball. */
-    const cfx = this.cfx = crewEffect(shot.crew, setStats(shot.clubSet, shot.setLevel), {
+    const cfx = this.cfx = crewEffect(shot.crew, setStats(shot.clubSet, shot.setDone, club.key), {
       power, isPutt: !!club.putter, afterBadHole: !!shot.afterBadHole
     });
 
@@ -134,7 +134,19 @@ export class ShotSim {
     this.wx = shot.weather || null;
     const wCarry = this.wx?.carry ?? 1;
     this.rollMul = this.wx?.roll ?? 1;
-    let speed = club.speed * power * Math.min(1, lieSpeed + cfx.lieMercy) * fx.speed * cfx.speed * wCarry;
+    /* STRIKE QUALITY, computed before speed because it now costs speed.
+       `cfx.sweet` is the sweet spot in degrees of open face — how far off
+       centre you can be before the strike stops counting as pure at all. */
+    const purity = clamp(1 - Math.abs(face) / cfx.sweet - Math.max(0, power - 1) * 2.5, 0, 1);
+    /* A mishit LOSES BALL SPEED. It did not before — an off-centre strike
+       flew exactly as fast as a flushed one, so the sweet spot was a stat
+       with almost nothing to do and every miss was purely directional.
+       Losing up to a tenth of ball speed off the toe is the single thing
+       that makes a forgiving set feel forgiving. A pure strike is exactly
+       1.0, so the reference bag and all twenty calibrated carries are
+       untouched. */
+    const smash = 0.90 + 0.10 * purity;
+    let speed = club.speed * power * Math.min(1, lieSpeed + cfx.lieMercy) * fx.speed * cfx.speed * wCarry * smash;
     let launch = club.launch + attack;
     if (lieSurface.id === 'sand') launch += 5;         // you have to dig it out
     if (lieSurface.id === 'deep' || lieSurface.id === 'rough') launch += 2.5;
@@ -159,9 +171,9 @@ export class ShotSim {
     // club the more there is to earn — a flushed wedge checks up hard, a
     // flushed driver barely differs, and nothing extra comes out of a mishit
     // or an overswing.  This is why a good wedge player can attack pins.
-    const purity = clamp(1 - Math.abs(face) / 6 - Math.max(0, power - 1) * 2.5, 0, 1);
     const spinReward = 1 + purity * (club.loft / 64) * 0.30;
-    const backspin = club.spin * (0.55 + 0.45 * power) * lieSpin * spinReward * fx.spin;
+    // SPIN CONTROL: the set's own multiplier on top of the gear's
+    const backspin = club.spin * (0.55 + 0.45 * power) * lieSpin * spinReward * fx.spin * cfx.spin;
     const sidespin = face * club.curve * 330 * lieSpin;   // rpm per degree of face
     this.spinBack = backspin * RPM;
     this.spinSide = sidespin * RPM;
@@ -720,7 +732,7 @@ export function simulate(terrain, shot) {
  * thing that makes the game playable rather than a guessing exercise.
  */
 export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist, gear = null, kit = null) {
-  // `kit` carries the rest of the equipment room — { crew, clubSet, setLevel }.
+  // `kit` carries the rest of the equipment room — { crew, clubSet, setDone }.
   // The probe MUST swing the same ball the server will: a maxed Mythic set
   // with a Legend Bruiser flies up to ~19% faster than a bare one, and a
   // marker calibrated for the bare ball would sail every green.
@@ -734,7 +746,7 @@ export function suggestedPower(terrain, x, z, clubKey, aim, wind, targetDist, ge
          different and much shorter ball — collapsing the two would quietly
          price every caller's marker for the wrong bag. */
       clubSet: kit ? (kit.clubSet ?? STARTER_SET) : null,
-      setLevel: kit?.setLevel ?? 0,
+      setDone: kit?.setDone ?? 0,
       ignoreCup: true          // measure how far it ROLLS, not whether it drops
     }).runToEnd();
     // measure along the aim line, so a shot that leaks sideways is not

@@ -52,7 +52,7 @@ const MID = {
   crew: { ace: 2, bruiser: 2, steady: 2, roller: 2, pitstop: 0, lucky: 1, gale: 1, grit: 1 },
   // a mid-rarity set part-way up its own upgrade path — the club-ladder
   // equivalent of what "a few hours in" used to mean at tier 3 refine 1
-  clubSet: 'vantage', setLevel: 2
+  clubSet: 'vantage', setDone: 0.4
 };
 
 /**
@@ -62,7 +62,7 @@ const MID = {
  */
 function playShot(T, hole, x, z, lie, aim, wind, kit, timingSigma) {
   const toPin = Math.hypot(hole.pin.x - x, hole.pin.z - z);
-  const cfx = crewEffect(kit.crew, setStats(kit.clubSet, kit.setLevel), { power: 1 });
+  const cfx = crewEffect(kit.crew, setStats(kit.clubSet, kit.setDone, 'DR'), { power: 1 });
   const reach = cfx.speed;
   const club = suggestClub(toPin, lie, lie === 'green', DEFAULT_BAG, reach);
   const key = club.key;
@@ -83,7 +83,7 @@ function playShot(T, hole, x, z, lie, aim, wind, kit, timingSigma) {
 
   const r = new ShotSim(T, {
     x, z, clubKey: key, power, aim, faceDeg, attackDeg, wind,
-    gear: kit.gear, crew: kit.crew, clubSet: kit.clubSet, setLevel: kit.setLevel
+    gear: kit.gear, crew: kit.crew, clubSet: kit.clubSet, setDone: kit.setDone
   }).runToEnd();
   return { r, key, power, raw, band, tempo };
 }

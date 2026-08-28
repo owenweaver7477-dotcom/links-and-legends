@@ -82,11 +82,11 @@ test('each upgrade changes the ball the server actually simulates', () => {
   }).runToEnd().carry;
 
   const NONE = { ball: 0, irons: 0, woods: 0, putter: 0 };
-  const base = k => carry(k, { gear: NONE, crew: null, clubSet: STARTER_SET, setLevel: 0 });
+  const base = k => carry(k, { gear: NONE, crew: null, clubSet: STARTER_SET, setDone: 0 });
 
   // A wood upgrade must show up on a wood, an iron upgrade on an iron.
   const withGear = (k, slot, tier) =>
-    carry(k, { gear: { ...NONE, [slot]: tier }, crew: null, clubSet: STARTER_SET, setLevel: 0 });
+    carry(k, { gear: { ...NONE, [slot]: tier }, crew: null, clubSet: STARTER_SET, setDone: 0 });
 
   assert.ok(withGear('DR', 'woods', 1) - base('DR') > 2,
     'Carbon woods must add real distance off the tee');
@@ -111,7 +111,7 @@ test('each upgrade changes the ball the server actually simulates', () => {
   const RARITIES = ['standard', 'tour', 'pro', 'legend', 'mythic'];
   const oneOf = r => CLUB_SETS.find(x => x.rarity === r).id;
   const ladder = RARITIES.map(r =>
-    carry('DR', { gear: NONE, crew: null, clubSet: oneOf(r), setLevel: 0 }));
+    carry('DR', { gear: NONE, crew: null, clubSet: oneOf(r), setDone: 0 }));
   for (let i = 1; i < ladder.length; i++) {
     assert.ok(ladder[i] > ladder[i - 1] + 2,
       `a fresh ${RARITIES[i]} set must beat a fresh ${RARITIES[i - 1]} one by a felt margin ` +
@@ -123,8 +123,8 @@ test('each upgrade changes the ball the server actually simulates', () => {
      a player can see. */
   for (const r of RARITIES) {
     const id = oneOf(r);
-    const fresh = carry('DR', { gear: NONE, crew: null, clubSet: id, setLevel: 0 });
-    const maxed = carry('DR', { gear: NONE, crew: null, clubSet: id, setLevel: upgradeCount(r) });
+    const fresh = carry('DR', { gear: NONE, crew: null, clubSet: id, setDone: 0 });
+    const maxed = carry('DR', { gear: NONE, crew: null, clubSet: id, setDone: 1 });
     assert.ok(maxed > fresh + 2,
       `fully upgrading a ${r} set must be worth real distance ` +
       `(${fresh.toFixed(1)}m -> ${maxed.toFixed(1)}m)`);

@@ -9,7 +9,8 @@ import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost } from '../shared/crew.js';
 import { CLUB_SETS, setById, setStats, STARTER_SET, upgradeCost, upgradeCount,
-         isMaxed, rarityRank, CLUB_CASE_GEM_COST, CLUB_CASE_ODDS } from '../shared/clubsets.js';
+         isMaxed, rarityRank, CLUB_CASE_GEM_COST, CLUB_CASE_ODDS,
+         doneFromLevel, classOf, CLUB_CLASSES, CLASS_LABEL, STAT_KEYS, STAT_LABEL } from '../shared/clubsets.js';
 import { EMOTES, EMOTE_SLOTS } from './celebrations.js';
 import { UNLOCKS, unlocksAt, unlocksOfKind, ownedOfKind, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { ACTIONS, keysFor, bindKey, resetBinds, keyLabel, RESERVED } from './binds.js';
@@ -1022,7 +1023,7 @@ function carryYds(clubKey, prof) {
       wind: { dir: 0, speed: 0 },
       gear: prof?.gear || null, crew: prof?.crew || null,
       clubSet: prof?.clubSet || STARTER_SET,
-      setLevel: (prof?.clubSets || {})[prof?.clubSet] || 0
+      setDone: doneFromLevel(prof?.clubSet, (prof?.clubSets || {})[prof?.clubSet] || 0)
     }).runToEnd();
     v = Math.round(toYards(r.carry));
   } catch { v = 0; }

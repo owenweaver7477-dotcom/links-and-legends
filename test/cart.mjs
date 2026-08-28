@@ -485,9 +485,11 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
      `${perRound} vs ${CADDIE_COSTS[9]}`);
 
   // the distance arc is the point of the ladder: a beginner must be short
-  const mult = (setId, level, bruiser) => crewEffect(
+  // completion 0..1 now, and the DRIVER's line specifically — a set's stats
+  // are authored per club class, so "how far does this set hit" needs a club
+  const mult = (setId, done, bruiser) => crewEffect(
     bruiser ? { ace: 0, bruiser: 10, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 } : null,
-    setStats(setId, level), { power: 1 }).speed;
+    setStats(setId, done, 'DR'), { power: 1 }).speed;
   const anyOf = r => CLUB_SETS.find(x => x.rarity === r).id;
   const starter = STARTER_SET, mythic = anyOf('mythic');
 
@@ -496,11 +498,11 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
   ok('the starter set is genuinely short', mult(starter, 0, false) < 0.9,
      'x' + mult(starter, 0, false).toFixed(3));
   ok('a maxed Mythic set lands exactly where the old top set did',
-     Math.abs(mult(mythic, 8, false) - 1.065) < 1e-9,
-     'x' + mult(mythic, 8, false).toFixed(3));
+     Math.abs(mult(mythic, 1, false) - 1.065) < 1e-9,
+     'x' + mult(mythic, 1, false).toFixed(3));
   ok('and a maxed player hits it a third further than a beginner',
-     mult(mythic, 8, true) / mult(starter, 0, false) > 1.3,
-     'x' + (mult(mythic, 8, true) / mult(starter, 0, false)).toFixed(2));
+     mult(mythic, 1, true) / mult(starter, 0, false) > 1.3,
+     'x' + (mult(mythic, 1, true) / mult(starter, 0, false)).toFixed(2));
 
   /* The property the whole rework rests on: upgrading what you actually
      pulled is never wasted. A maxed set of any rarity must out-hit a fresh
@@ -509,7 +511,7 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
   let overlapHolds = true, overlapDetail = '';
   for (let i = 0; i < order.length - 1; i++) {
     const lo = anyOf(order[i]), hi = anyOf(order[i + 1]);
-    const loMax = mult(lo, upgradeCount(order[i]), false);
+    const loMax = mult(lo, 1, false);
     const hiBase = mult(hi, 0, false);
     if (!(loMax > hiBase)) {
       overlapHolds = false;
@@ -591,7 +593,7 @@ head('the caddie crew — hired stats that actually do things');
   ok('Bruiser only fires on full swings', br.speed > 1.09 && brSoft.speed === 1,
      `full x${br.speed.toFixed(3)}, soft x${brSoft.speed.toFixed(3)}`);
   const topSet = CLUB_SETS.find(x => x.rarity === 'mythic');
-  const sig = crewEffect(null, setStats(topSet.id, upgradeCount('mythic')), {});
+  const sig = crewEffect(null, setStats(topSet.id, 1, 'DR'), {});
   ok('a fully upgraded Mythic set is +6.5% ball speed, exactly where the old top set sat',
      Math.abs(sig.speed - 1.065) < 1e-9, 'x' + sig.speed.toFixed(3));
   // Pitstop tops up a cart that is already usable rather than unlocking one:
@@ -629,7 +631,7 @@ head('the caddie crew — hired stats that actually do things');
 
   // a partial crew object (older save, hand-edited file, or a future ninth
   // caddie) must behave as zeros, never as NaN — NaN here is a NaN ball
-  const partial = crewEffect({ ace: 2 }, setStats(STARTER_SET, 0), { power: 1, isPutt: true, afterBadHole: true });
+  const partial = crewEffect({ ace: 2 }, setStats(STARTER_SET, 0, 'I7'), { power: 1, isPutt: true, afterBadHole: true });
   ok('a partial crew object never NaNs the shot',
      [partial.speed, partial.faceDamp, partial.windDamp, partial.cupBonus, partial.lieMercy]
        .every(Number.isFinite),

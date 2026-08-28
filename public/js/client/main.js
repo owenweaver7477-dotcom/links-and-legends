@@ -11,7 +11,7 @@ import { reactionFor, REACTION_TIER } from './celebrations.js';
 import { rarityForLevel, RARITIES } from '../shared/cases.js';
 import { BOARD_RADIUS, KMH, TOP_SPEED_KMH, MAX_BOOST } from '../shared/cart.js';
 import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost } from '../shared/crew.js';
-import { setStats, setById, STARTER_SET } from '../shared/clubsets.js';
+import { setStats, setById, STARTER_SET, doneFromLevel } from '../shared/clubsets.js';
 import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
@@ -856,12 +856,15 @@ const myBag = () => me()?.bag?.length ? me().bag : normaliseBag(DEFAULT_BAG);
    One helper rather than the same three-line lookup at six call sites —
    the server derives this once in its swing handler, and the client's
    marker MUST agree with it or every power preview lies. */
-const mySetStats = () => setStats(G.profile?.clubSet,
+const myDone = () => doneFromLevel(G.profile?.clubSet,
   (G.profile?.clubSets || {})[G.profile?.clubSet] || 0);
+/* Club-agnostic: this feeds the yardage under the club name and the reach
+   used to CHOOSE a club, both of which are asked before a club is known. */
+const mySetStats = clubKey => setStats(G.profile?.clubSet, myDone(), clubKey || null);
 
 function carryMult(club) {
   const fx = gearEffect(G.profile?.gear || null, club);
-  const cfx = crewEffect(G.profile?.crew || null, mySetStats(), { power: 1 });
+  const cfx = crewEffect(G.profile?.crew || null, mySetStats(club?.key), { power: 1 });
   /* The outfit is a real, small factor and it goes HERE — through the same
      function the carry number under the club name is computed from. That is
      the whole reason it is in this function rather than applied at the
@@ -993,8 +996,8 @@ function refreshAimPreview(force) {
   const myGear = G.profile?.gear || null;
   const myCrew = G.profile?.crew || null;
   const mySet = G.profile?.clubSet || STARTER_SET;
-  const mySetLevel = (G.profile?.clubSets || {})[mySet] || 0;
-  const myKit = { crew: myCrew, clubSet: mySet, setLevel: mySetLevel };
+  const mySetDone = myDone();
+  const myKit = { crew: myCrew, clubSet: mySet, setDone: mySetDone };
   const previewPower = isPutt
     ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45, myGear, myKit) ?? 1)
     : (dragging ? Math.max(0.06, swing.power) : 1);
@@ -1005,7 +1008,7 @@ function refreshAimPreview(force) {
   const sim = new ShotSim(G.T, {
     x: b.x, z: b.z, clubKey, power: Math.min(previewPower, 1.12), aim: swing.aim,
     faceDeg: 0, attackDeg: 0, wind: G.wind, weather: G.weather, ignoreCup: showRunOut, gear: myGear,
-    crew: myCrew, clubSet: mySet, setLevel: mySetLevel
+    crew: myCrew, clubSet: mySet, setDone: mySetDone
   });
   const r = sim.runToEnd();
 
@@ -1283,7 +1286,7 @@ function updateLandingDot(now) {
     faceDeg: m.face || 0, attackDeg: 0, wind: G.wind, weather: G.weather,
     gear: G.profile?.gear || null, crew: G.profile?.crew || null,
     clubSet: G.profile?.clubSet || STARTER_SET,
-    setLevel: (G.profile?.clubSets || {})[G.profile?.clubSet] || 0
+    setDone: myDone()
   }).runToEnd();
   scene.setLanding(r.x, G.T.heightAt(r.x, r.z), r.z, Math.min(1, Math.abs(m.face || 0) / 7));
   G.landingOn = true;
