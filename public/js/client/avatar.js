@@ -125,6 +125,11 @@ function chamferedBox(b = CHAMFER) {
 
 let _box = null;
 const box = () => (_box || (_box = shared(chamferedBox())));
+/* The contact patch: small and dark, not big and soft. A soft circle the
+   width of the figure is a fake shadow, and there is a real one now. */
+const CONTACT_SCALE = 0.62;
+const CONTACT_OPACITY = 0.55;
+
 let _blob = null;
 const blobGeo = () => (_blob || (_blob = shared(new THREE.CircleGeometry(0.42, 14))));
 let _blobTex = null;
@@ -409,13 +414,33 @@ export class Avatar {
 
     this.root.add(this.body);
 
-    /* --- blob shadow: one textured disc, no shadow map ------------------ */
+    /* --- CONTACT, which is two things now -------------------------------
+       A shadow map at 52 metres of coverage resolves a golfer to a few
+       texels: it is the right tool for "this figure is standing in the
+       sun" and the wrong one for "these shoes are touching that grass".
+       The second is what makes something look placed rather than pasted,
+       and it is the only ambient occlusion this scene has.
+
+       So the disc stayed, and stopped pretending to be a shadow. It is a
+       tight dark patch right under the feet — half the width it used to
+       be, because a big soft circle IS a fake shadow and now competes with
+       the real one — and it shrinks and fades as the figure leaves the
+       ground, which is the whole reason contact AO is a separate thing
+       from a shadow in the first place. */
     this.blob = new THREE.Mesh(blobGeo(), new THREE.MeshBasicMaterial({
-      map: blobTexture(), transparent: true, depthWrite: false, opacity: 0.85
+      map: blobTexture(), transparent: true, depthWrite: false, opacity: CONTACT_OPACITY
     }));
     this.blob.rotation.x = -Math.PI / 2;
+    this.blob.scale.set(CONTACT_SCALE, CONTACT_SCALE, 1);
     this.blob.renderOrder = 1;
     this.root.add(this.blob);
+
+    /* And the figure casts a REAL one. It never did — every avatar in this
+       game has been lit from a sun that could not see it, which is why they
+       read as decals on the fairway however good the light was. The scene
+       turns this off wholesale on the low tier (see setQuality), so this is
+       a request rather than a demand. */
+    this._castShadows();
 
     this.phase = 0;
     this.speed = 0;
@@ -483,6 +508,19 @@ export class Avatar {
      Rebuilds hair, hat and accessory from a look.  Cheap enough to call on
      every change (the customiser previews live), and the only allocation is a
      handful of boxes sharing materials that already exist. */
+  /* Every mesh on the figure casts. Its own method because the headwear is
+     REBUILT whenever the look changes (hair, hat, accessory are torn down
+     and remade), and a part added after the constructor would otherwise be
+     the one thing on the golfer with no shadow — which reads as a hat
+     floating rather than as an oversight. */
+  _castShadows() {
+    this.root.traverse(o => {
+      // not the contact patch: a shadow caster that is itself a shadow
+      // stamps a second dark disc into the map under the first
+      if (o.isMesh && o !== this.blob) o.castShadow = true;
+    });
+  }
+
   buildHeadwear(look) {
     const clear = g => { while (g.children.length) g.remove(g.children[0]); };
     clear(this.hair); clear(this.hat); clear(this.accessory);
@@ -561,6 +599,8 @@ export class Avatar {
       this.accessory.add(part(lens, 0.014, H * 0.010, armLen, 0.101, armY, 0.117 - armLen / 2 + H * 0.006));
       this.accessory.add(part(lens, 0.014, H * 0.010, armLen, -0.101, armY, 0.117 - armLen / 2 + H * 0.006));
     }
+    /* Whatever was just rebuilt has to cast too — see _castShadows. */
+    this._castShadows();
   }
 
   /**

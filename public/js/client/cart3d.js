@@ -259,14 +259,24 @@ export class Cart3D {
     this.front.position.set(0, RIDE, FRONT);
     this.tilt.add(this.front);
 
+    /* CONTACT, not a shadow. Same split the avatar makes: the sun casts a
+       real one now, and this is the dark patch under the tyres that a
+       52-metre shadow map is far too coarse to resolve. Tightened from
+       3.1 x 4.4 — it was sized as a fake shadow of the whole vehicle, which
+       double-darkens the ground under the real one. */
     this.blob = new THREE.Mesh(sharedBlobGeo(), new THREE.MeshBasicMaterial({
-      map: sharedBlobTexture(), transparent: true, depthWrite: false, opacity: 0.7
+      map: sharedBlobTexture(), transparent: true, depthWrite: false, opacity: 0.5
     }));
     this.blob.rotation.x = -Math.PI / 2;
-    this.blob.scale.set(3.1, 4.4, 1);
+    this.blob.scale.set(2.2, 3.1, 1);
     this.blob.position.set(0, 0.02, 0.75);
     this.blob.renderOrder = 1;
     this.root.add(this.blob);            // on root, not tilt — stays on the ground
+
+    /* And the cart casts. It never did: eight carts could be parked on a
+       fairway in full sun with nothing on the grass under any of them. */
+    this.chassis.castShadow = true;
+    this.front.castShadow = true;
 
     /* The livery panels. Built lazily in setDecal so a cart with no decal —
        which is every cart below level 17 — costs exactly what it always did.
@@ -390,6 +400,17 @@ export class Cart3D {
     // once it is over, the chassis rests on its side rather than hovering at
     // wheel height — drop it by roughly half the track
     this.tilt.position.y = this.heave - Math.min(0.34, Math.abs(bodyTilt) * 0.30);
+
+    /* THE CONTACT PATCH ANSWERS TO THE SUSPENSION. It was pinned at a fixed
+       size directly under the cart whatever the cart was doing, so a
+       vehicle up on two wheels or launched off a bank kept a firm dark
+       print on the ground it was nowhere near — which is the exact thing
+       contact AO exists to say is not happening. */
+    const lift = Math.max(0, this.heave) + Math.abs(bodyTilt) * 0.9;
+    const k = Math.max(0, 1 - lift * 1.6);
+    this.blob.scale.set(2.2 * (0.55 + 0.45 * k), 3.1 * (0.55 + 0.45 * k), 1);
+    this.blob.material.opacity = 0.5 * k;
+    this.blob.visible = k > 0.02;
   }
 
   /** Where a rider sits, in world space, including the body tilt. */

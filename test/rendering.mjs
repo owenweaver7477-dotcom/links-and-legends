@@ -227,8 +227,10 @@ test('the stylesheet has a palette, and nothing re-types a colour it names', () 
      slightly differently each time: FIVE muted greens were doing the job of
      one text ladder, two of them four points apart per channel. */
   const CSS = readFileSync(join(__dirname, '../public/css/style.css'), 'utf8');
-  const root = CSS.match(/:root \{([\s\S]*?)\n\}/);
-  assert.ok(root, 'no :root token block in style.css');
+  /* The colour block, specifically — there is a type-scale :root above it
+     now, and matching the first one found would grep the wrong table. */
+  const root = CSS.match(/:root \{\s*\/\* text, brightest to quietest \*\/([\s\S]*?)\n\}/);
+  assert.ok(root, 'no colour token block in style.css');
 
   const tokens = [...root[1].matchAll(/--([\w-]+):\s*(#[0-9a-f]{6})/gi)]
     .map(m => [m[1], m[2].toLowerCase()]);
@@ -243,10 +245,27 @@ test('the stylesheet has a palette, and nothing re-types a colour it names', () 
   }
 
   // and the body must not re-type any of them as a literal
-  const body = CSS.slice(CSS.indexOf('}', CSS.indexOf(':root {')) + 1);
+  // everything after the colour block itself, so the definitions are not
+  // read as strays. `root.index` is where the match starts, not a guess.
+  const body = CSS.slice(root.index + root[0].length);
   for (const [name, hex] of tokens) {
     const stray = body.match(new RegExp(hex, 'gi'));
     assert.equal(stray, null,
       `${hex} is written out ${stray?.length} time(s) in the body instead of var(--${name})`);
   }
+});
+
+test('the type scale has no half-pixel twins left in it', () => {
+  /* Thirty-four distinct font sizes, half of them .5 variants of each
+     other — 214 declarations between the twins alone. Nobody chose those;
+     they are what happens when a size is picked by nudging until a line
+     fits, four hundred times. The result is the same label a different
+     size on every screen by an amount too small to look deliberate. */
+  const CSS = readFileSync(join(__dirname, '../public/css/style.css'), 'utf8');
+  const sizes = [...CSS.matchAll(/font-size:\s*([\d.]+)px/g)].map(m => Number(m[1]));
+  const halves = sizes.filter(v => v % 1 !== 0);
+  assert.deepEqual([...new Set(halves)], [],
+    `half-pixel font sizes are back: ${[...new Set(halves)].join(', ')}`);
+  // and the scale itself is declared, so the next size is picked not nudged
+  assert.ok(/--t-base:\s*\d+px/.test(CSS), 'no type scale declared in :root');
 });
