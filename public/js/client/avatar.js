@@ -69,9 +69,21 @@ function chamferedBox(b = CHAMFER) {
 
   /* The six faces, each an inset square of four corner points. Winding is
      per-face so every one points outward. */
+  /* THE ±X FACES WERE WOUND BACKWARDS. Y and Z's point orders happen to
+     give an outward normal via the right-hand rule; carrying the same
+     (second, third)-axis order over to X does not, because X,Y,Z do not
+     cycle the same way — you need (y,z), (z,x), (x,y) in that rotation, not
+     (y,z) and (y,z) again. The result was a normal pointing INTO the box on
+     both side faces, so THREE's default FrontSide culling dropped them
+     entirely: every torso, arm and leg segment had no left or right wall,
+     invisible from any camera outside the box on that axis. Facing the
+     camera it was never seen, because the missing faces are the ones a
+     front view doesn't look at — turn side-on and you look straight through
+     the hollow shell. Fixed by reversing those two point lists, which flips
+     a planar polygon's winding without touching Y or Z. */
   const faces = [
-    ['x', 1,  [[1,-1,-1],[1,-1,1],[1,1,1],[1,1,-1]]],
-    ['x', -1, [[-1,-1,1],[-1,-1,-1],[-1,1,-1],[-1,1,1]]],
+    ['x', 1,  [[1,1,-1],[1,1,1],[1,-1,1],[1,-1,-1]]],
+    ['x', -1, [[-1,1,1],[-1,1,-1],[-1,-1,-1],[-1,-1,1]]],
     ['y', 1,  [[-1,1,1],[1,1,1],[1,1,-1],[-1,1,-1]]],
     ['y', -1, [[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1]]],
     ['z', 1,  [[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]]],

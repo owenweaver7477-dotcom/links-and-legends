@@ -192,3 +192,55 @@ test('the club is put down for a melee, and does not whip about otherwise', () =
   assert.ok(/this\.hands\.rotation\.x \+= \(rest - this\.hands\.rotation\.x\)/.test(SRC),
     'the hands snap to the arm pose instead of easing — the club will whip');
 });
+
+/* ═══════════════════════════════════════════ WINDING, NOT A THEME BUG ═══
+   "My character goes transparent when I turn sideways" was never about
+   opacity — nothing on the body is transparent. It was the ±X faces of the
+   chamfered box (every torso, arm and leg segment) wound BACKWARDS: their
+   computed normal pointed INTO the box instead of out of it, so THREE's
+   default FrontSide culling dropped them. A face pointing the wrong way is
+   invisible from every camera outside the box on that axis — which a
+   front-on view never looks at, and a side-on view looks at directly. Y and
+   Z's point order happened to give an outward normal; carrying the same
+   (second, third)-axis order over to X does not, because X, Y, Z do not
+   cycle the same way.
+
+   Re-derived from the SOURCE rather than asserted by eye, so a future edit
+   to the face table cannot reintroduce this without the test computing the
+   same cross product and catching it. */
+test('every chamfered-box face winds outward, not inward', () => {
+  const CH = Number(SRC.match(/const CHAMFER = ([\d.]+);/)[1]);
+  const i = 0.5 - CH, o = 0.5;
+  // faces: [axis, sign, [[sx,sy,sz], ...four corners...]]
+  const m = SRC.match(/const faces = \[([\s\S]*?)\n  \];/);
+  assert.ok(m, 'no faces table in chamferedBox');
+  const rowRe = /\['([xyz])',\s*(-?1),\s*(\[\[.+?\]\])\]/g;
+  const rows = [...m[1].matchAll(rowRe)];
+  assert.equal(rows.length, 6, `found ${rows.length} face rows, expected 6`);
+
+  const AXIS = { x: 0, y: 1, z: 2 };
+  for (const [, axis, signStr, ptsSrc] of rows) {
+    const sign = Number(signStr);
+    const octants = JSON.parse(ptsSrc);
+    // corner point for octant [sx,sy,sz], picking the vertex the real
+    // corner-builder assigns to `axis` — offset o along `axis`, i elsewhere
+    const point = ([sx, sy, sz]) => {
+      const s = { x: sx, y: sy, z: sz };
+      const v = [0, 0, 0];
+      for (const a of ['x', 'y', 'z']) v[AXIS[a]] = s[a] * (a === axis ? o : i);
+      return v;
+    };
+    const [p0, p1, p2] = octants.slice(0, 3).map(point);
+    const e1 = p1.map((v, k) => v - p0[k]);
+    const e2 = p2.map((v, k) => v - p1[k]);
+    const normal = [
+      e1[1] * e2[2] - e1[2] * e2[1],
+      e1[2] * e2[0] - e1[0] * e2[2],
+      e1[0] * e2[1] - e1[1] * e2[0]
+    ];
+    const outward = normal[AXIS[axis]] * sign;
+    assert.ok(outward > 0,
+      `face ['${axis}', ${sign}] winds inward (normal[${axis}] = ${normal[AXIS[axis]].toFixed(3)}) — ` +
+      'this is the exact bug that made a side-on view of the golfer see through the body');
+  }
+});

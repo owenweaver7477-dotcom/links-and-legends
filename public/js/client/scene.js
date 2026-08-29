@@ -2810,9 +2810,16 @@ function bevelBox(w, h, d, b) {
   }
   const C = (a, c, e) => corner[`${a}${c}${e}`];
 
+  /* THE ±X FACES WERE WOUND BACKWARDS — same bug, same fix, as the avatar's
+     chamferedBox in avatar.js: carrying Y/Z's (second, third)-axis point
+     order over to X does not give an outward normal, because X,Y,Z do not
+     cycle the same way. Both side faces of every hut, bench, sign and bin
+     on every hole had no left or right wall, invisible from outside on that
+     axis — culled by THREE's default FrontSide. Reversed here, which flips
+     a planar polygon's winding without touching Y or Z. */
   for (const [axis, pts] of [
-    ['x', [[1,-1,-1],[1,-1,1],[1,1,1],[1,1,-1]]],
-    ['x', [[-1,-1,1],[-1,-1,-1],[-1,1,-1],[-1,1,1]]],
+    ['x', [[1,1,-1],[1,1,1],[1,-1,1],[1,-1,-1]]],
+    ['x', [[-1,1,1],[-1,1,-1],[-1,-1,-1],[-1,-1,1]]],
     ['y', [[-1,1,1],[1,1,1],[1,1,-1],[-1,1,-1]]],
     ['y', [[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1]]],
     ['z', [[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]]],

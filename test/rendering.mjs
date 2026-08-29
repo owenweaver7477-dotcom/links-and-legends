@@ -384,3 +384,52 @@ test('a nav tab re-enters its page when the screen it named is gone', () => {
     'goPage short-circuits on the page name alone — a tab whose screen has been ' +
     'replaced by a round becomes a dead button');
 });
+
+test('every prop bevel-box face winds outward, not inward', () => {
+  /* Same bug, same shape, as the avatar's chamferedBox in avatar.js: the
+     ±X faces of the props' bevelBox — every hut, bench, sign and bin —
+     were wound backwards, so THREE's default FrontSide culling dropped
+     their side walls entirely. Invisible from any camera outside the box
+     on that axis, which is exactly a side-on view of the prop. Re-derived
+     from the source, so a future edit to the face table cannot reintroduce
+     this without the test computing the same cross product and catching it. */
+  const m = SCENE.match(/function bevelBox\(w, h, d, b\) \{[\s\S]*?for \(const \[axis, pts\] of \[([\s\S]*?)\n  \]\) \{/);
+  assert.ok(m, 'no face table in bevelBox');
+  const rowRe = /\['([xyz])',\s*(\[\[.+?\]\])\]/g;
+  const rows = [...m[1].matchAll(rowRe)];
+  assert.equal(rows.length, 6, `found ${rows.length} face rows, expected 6`);
+
+  // bevelBox's own corner points: sx*x (outer) vs sx*xi (inset) per axis —
+  // collapsed to the same o/i shape the avatar's box uses, since bevelBox
+  // is a rectangular box (w,h,d) rather than a cube: only the RATIO of
+  // outer to inset matters for winding, so any b < min(w,h,d)/2 works.
+  const o = 0.5, i = 0.3;
+  const AXIS = { x: 0, y: 1, z: 2 };
+  for (const [, axis, ptsSrc] of rows) {
+    // bevelBox has two rows per axis (no explicit sign column) — the sign
+    // is the shared sx/sy/sz of the face's four corners
+    const octants = JSON.parse(ptsSrc);
+    const sign = octants[0][AXIS[axis]];
+    assert.ok(octants.every(pt => pt[AXIS[axis]] === sign),
+      `face '${axis}' mixes signs on its own axis — not a planar face`);
+
+    const point = ([sx, sy, sz]) => {
+      const s = { x: sx, y: sy, z: sz };
+      const v = [0, 0, 0];
+      for (const a of ['x', 'y', 'z']) v[AXIS[a]] = s[a] * (a === axis ? o : i);
+      return v;
+    };
+    const [p0, p1, p2] = octants.slice(0, 3).map(point);
+    const e1 = p1.map((v, k) => v - p0[k]);
+    const e2 = p2.map((v, k) => v - p1[k]);
+    const normal = [
+      e1[1] * e2[2] - e1[2] * e2[1],
+      e1[2] * e2[0] - e1[0] * e2[2],
+      e1[0] * e2[1] - e1[1] * e2[0]
+    ];
+    const outward = normal[AXIS[axis]] * sign;
+    assert.ok(outward > 0,
+      `bevelBox face '${axis}' (sign ${sign}) winds inward — this is the exact bug ` +
+      "that dropped a prop's side wall from FrontSide culling");
+  }
+});
