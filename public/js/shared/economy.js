@@ -90,6 +90,158 @@ export function roundCoins(holeScores, firstClear = false) {
 }
 
 /* =========================================================================
+   GEMS
+   -------------------------------------------------------------------------
+   THE PROBLEM THIS FIXES. Gems had exactly three sources: the daily login
+   table, duplicate compensation from a case, and selling an item back. None
+   of them is PLAYING. So somebody who played twenty rounds a day and did
+   not happen to log in on the right day of a streak earned nothing, and the
+   only currency that buys cases was the one the game never paid you for.
+   That is not a slow economy, it is a disconnected one.
+
+   THE SHAPE. Coins already reward showing up — the worst hole in the game
+   still pays a floor, because a bad round should not read as the economy
+   being broken. Gems are the opposite on purpose: they reward GOLF. A bogey
+   is worth nothing, a par is worth one, and the ladder climbs steeply from
+   there. That difference is what makes them feel like different currencies
+   rather than two numbers that both go up.
+
+     ace          10     the once-a-year one
+     albatross     8
+     eagle         5
+     birdie        3
+     par           1
+     bogey+        0     nothing, and that is the point
+
+   Nine holes at level par is 9 gems; a good round is 15-20. On top of that
+   a completed round pays a flat 50, which is deliberately the bulk of it:
+   the thing the game most wants is for you to FINISH, and a per-hole
+   trickle that rewards abandoning a bad round after the two holes you
+   parred would reward exactly the wrong behaviour.
+
+   So a round is roughly 60-70 gems. A Club Case is 600 — nine or ten rounds
+   for a real pull, which is a chase you can see the end of. A Set Crate is
+   9,000, about 140 rounds, which is the "deliberately not cheap" it was
+   always meant to be and was previously unreachable by playing at all.
+   ========================================================================= */
+
+const GEM_ACE = 10, GEM_ALBATROSS = 8, GEM_EAGLE = 5, GEM_BIRDIE = 3, GEM_PAR = 1;
+
+/** Gems for one finished hole. Nothing at all for a bogey — see above. */
+export function holeGems(strokes, par) {
+  if (!(strokes > 0) || !(par > 0)) return 0;
+  if (strokes === 1) return GEM_ACE;
+  const rel = strokes - par;
+  if (rel <= -3) return GEM_ALBATROSS;
+  if (rel === -2) return GEM_EAGLE;
+  if (rel === -1) return GEM_BIRDIE;
+  if (rel === 0) return GEM_PAR;
+  return 0;
+}
+
+/** Finishing the round is worth more than any single hole in it. */
+export const ROUND_GEMS = 50;
+/** And the first time you finish a course you have never cleared. */
+export const FIRST_CLEAR_GEMS = 100;
+
+/**
+ * The end-of-round gem settlement.
+ *
+ * `earnMult` is the difficulty's own earn rate (see difficulty.js), applied
+ * to the WHOLE payout rather than to the per-hole part: the argument for
+ * paying more on a harder setting is about the round being harder to
+ * finish, and a player on an easier setting having a birdie be worth less
+ * than somebody else's birdie is a different and worse claim.
+ *
+ * @param holeScores  [{strokes, par}] for every hole actually finished
+ * @param opts.firstClear  this course has never been finished before
+ * @param opts.full        a complete round, not an abandoned one
+ * @param opts.earnMult    the difficulty multiplier, default 1
+ */
+export function roundGems(holeScores, opts = {}) {
+  if (!Array.isArray(holeScores) || !holeScores.length) {
+    return { holes: 0, finish: 0, firstClear: 0, total: 0 };
+  }
+  const holes = holeScores.reduce((a, h) => a + holeGems(h.strokes, h.par), 0);
+  const finish = opts.full ? ROUND_GEMS : 0;
+  const firstClear = (opts.full && opts.firstClear) ? FIRST_CLEAR_GEMS : 0;
+  const mult = Number.isFinite(opts.earnMult) && opts.earnMult > 0 ? opts.earnMult : 1;
+  const total = Math.round((holes + finish + firstClear) * mult);
+  return { holes, finish, firstClear, mult, total };
+}
+
+/* ------------------------------------------------------------ milestones ---
+   REPEATABLE, and that is the whole design. A one-off achievement list pays
+   out once and then the game is quieter than it was before you cleared it,
+   which is the opposite of what a "consistent pipeline" means. Every one of
+   these is a rung on a ladder that keeps going, so there is always a next
+   one and it is always further away than the last.
+
+   `n` is how many times it has been claimed. The target grows and so does
+   the reward, but the reward grows SLOWER than the target — a ladder where
+   both scale together is a treadmill that pays the same rate forever, and
+   one where the reward outpaces the target eventually pays more than the
+   game can afford.
+
+   Every one of these is measured from things the server already records
+   about a shot it simulated itself. Nothing here can be claimed by a
+   client saying it happened. */
+export const MILESTONES = [
+  { id: 'fairways', name: 'Off the tee',
+    unit: 'fairways in a row', base: 5, step: 3, gems: 25, gemStep: 10,
+    blurb: 'Find the short grass, five drives running.' },
+  { id: 'pars', name: 'Steady hands',
+    unit: 'pars or better in a row', base: 3, step: 2, gems: 30, gemStep: 12,
+    blurb: 'Three holes without dropping a shot.' },
+  { id: 'birdies', name: 'Card of birdies',
+    unit: 'birdies', base: 10, step: 10, gems: 40, gemStep: 15,
+    blurb: 'They add up over a career.' },
+  { id: 'rounds', name: 'Regular',
+    unit: 'rounds finished', base: 5, step: 5, gems: 35, gemStep: 15,
+    blurb: 'Turning up is most of it.' },
+  { id: 'gir', name: 'Ball striking',
+    unit: 'greens in regulation', base: 15, step: 15, gems: 35, gemStep: 15,
+    blurb: 'On the dance floor with a putt for birdie.' },
+  { id: 'courses', name: 'Tour player',
+    unit: 'courses cleared', base: 3, step: 2, gems: 60, gemStep: 25,
+    blurb: 'See the whole tour, not one favourite hole.' }
+];
+
+export const milestoneById = id => MILESTONES.find(m => m.id === id) || null;
+
+/** The target and reward for the nth claim of a milestone (n = claims so far). */
+export function milestoneRung(m, n = 0) {
+  const done = Math.max(0, Math.floor(Number(n) || 0));
+  return {
+    tier: done + 1,
+    target: m.base + m.step * done,
+    /* Rewards grow, but sub-linearly against the target: a ladder where
+       both scale together pays the same rate forever, which is a treadmill
+       rather than progress. */
+    gems: Math.round(m.gems + m.gemStep * Math.sqrt(done))
+  };
+}
+
+/**
+ * How far along every milestone a set of counters is, and what is claimable.
+ * Pure — the caller supplies the counters and the claim history, so the
+ * server can rule on it and the client can render the same answer.
+ */
+export function milestoneState(counters = {}, claims = {}) {
+  return MILESTONES.map(m => {
+    const n = Math.max(0, Math.floor(Number(claims[m.id]) || 0));
+    const have = Math.max(0, Math.floor(Number(counters[m.id]) || 0));
+    const rung = milestoneRung(m, n);
+    return {
+      id: m.id, name: m.name, unit: m.unit, blurb: m.blurb,
+      tier: rung.tier, target: rung.target, gems: rung.gems,
+      have, claimable: have >= rung.target,
+      pct: Math.min(1, rung.target ? have / rung.target : 0)
+    };
+  });
+}
+
+/* =========================================================================
    XP AND LEVELS
    -------------------------------------------------------------------------
    Coins buy things; XP unlocks them.  The two are deliberately separate

@@ -11,7 +11,9 @@
    profile is a record of what actually happened, not what a client claimed.
    ========================================================================= */
 
-import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp, xpForLevel } from '../public/js/shared/economy.js';
+import { holeCoins, roundCoins, holeXp, roundXp, levelFromXp, xpForLevel,
+         roundGems, milestoneState, milestoneById, milestoneRung,
+         MILESTONES } from '../public/js/shared/economy.js';
 import { openStore, touch, saveSoon as storeSaveSoon, flushNow as flushStore,
          setPersistFilter } from './store.js';
 import { handicapIndex, differential, ratingTier } from '../public/js/shared/handicap.js';
@@ -221,6 +223,7 @@ export function getProfile(pid) {
          is the moment the whole progression makes sense. */
       coins: STARTING_COINS, rating: 20, xp: 0,
       gems: 0, cases: 0, caseUnlocks: [], decalPurity: {},
+      milestones: {}, runs: { fairway: 0, fairwayBest: 0, par: 0, parBest: 0 },
       login: { day: 0, cycle: 1, freezes: 0, lastClaimDate: null },
       gear: { ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 },
       crew: { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
@@ -476,6 +479,8 @@ export function publicProfile(pid) {
     clubPieces: p.clubPieces || { [STARTER_SET]: [...SET_CLUBS] },
     clubSet: p.clubSet || STARTER_SET, clubGrades: p.clubGrades || {},
     setCrates: p.setCrates || 0, mastery: p.mastery || {},
+    milestones: milestoneState(milestoneCounters(p), p.milestones || {}),
+    runs: p.runs || { fairway: 0, fairwayBest: 0, par: 0, parBest: 0 },
     clubCases: p.clubCases || 0, cleared: (p.cleared || []).length,
     clubSkin: p.clubSkin || 'stock',
     /* What they look like, so a browser with an empty localStorage — a new
@@ -623,6 +628,23 @@ export function recordHole(pid, h) {
   if (h.fairwayHit !== null) { p.fairwayChances++; if (h.fairwayHit) p.fairways++; }
   if (h.gir) p.gir++;
   const rel = h.strokes - h.par;
+
+  /* RUNS, for the milestones that are about consecutive holes. Kept as a
+     current run and a best-ever, because a milestone asks "have you EVER
+     strung five together" — resetting the record at the end of a round
+     would make a run that spans the turn worth less than one that does not,
+     which is not a distinction golf makes.
+
+     A hole with no fairway to hit (a par 3) neither extends the run nor
+     breaks it: you cannot miss a fairway that was never offered. */
+  p.runs = p.runs || { fairway: 0, fairwayBest: 0, par: 0, parBest: 0 };
+  if (h.fairwayHit !== null) {
+    p.runs.fairway = h.fairwayHit ? p.runs.fairway + 1 : 0;
+    p.runs.fairwayBest = Math.max(p.runs.fairwayBest, p.runs.fairway);
+  }
+  p.runs.par = rel <= 0 ? p.runs.par + 1 : 0;
+  p.runs.parBest = Math.max(p.runs.parBest, p.runs.par);
+
   if (h.strokes === 1) p.aces++;
   else if (rel === -2) p.eagles++;
   else if (rel === -1) p.birdies++;
@@ -630,6 +652,66 @@ export function recordHole(pid, h) {
   p.coins += holeCoins(h.strokes, h.par);
   p.xp = (p.xp || 0) + holeXp(h.strokes, h.par);
   saveSoon();
+}
+
+/* ═══════════════════════════════════════════════════════ MILESTONES ═════
+   Repeatable gem rewards, ruled on entirely from counters the server keeps
+   about shots it simulated itself. Nothing here can be claimed by a client
+   saying something happened.
+
+   NOT AUTO-PAID, deliberately. A reward that lands silently in a balance is
+   a number changing; one you press a button for is a moment, and it is also
+   the only way the player ever finds out the ladder exists. The claim is
+   the thing that teaches the system.
+
+   The counters are all pre-existing career totals except the two RUNS,
+   which recordHole now keeps — see the note there on why a run's record
+   survives the end of a round. */
+export function milestoneCounters(p) {
+  return {
+    fairways: p.runs?.fairwayBest || 0,
+    pars: p.runs?.parBest || 0,
+    birdies: p.birdies || 0,
+    rounds: p.rounds || 0,
+    gir: p.gir || 0,
+    courses: (p.cleared || []).length
+  };
+}
+
+/** Every milestone, where they are on it, and what the next rung pays. */
+export function milestonesFor(pid) {
+  const p = getProfile(pid);
+  return milestoneState(milestoneCounters(p), p.milestones || {});
+}
+
+/**
+ * Claim one milestone rung.
+ *
+ * Single-threaded and with no await between the check and the write, which
+ * is the same property every other payout in this file relies on — two
+ * claims racing would otherwise both see the same unclaimed rung and both
+ * pay it.
+ */
+export function claimMilestone(pid, id) {
+  const m = milestoneById(id);
+  if (!m) return { ok: false, error: 'No such milestone.' };
+  const p = getProfile(pid);
+  p.milestones = p.milestones || {};
+  const done = Math.max(0, Math.floor(Number(p.milestones[id]) || 0));
+  const rung = milestoneRung(m, done);
+  const have = milestoneCounters(p)[id] || 0;
+  if (have < rung.target) {
+    return { ok: false, error: `${have} of ${rung.target} ${m.unit}.` };
+  }
+  p.milestones[id] = done + 1;
+  p.gems = (p.gems || 0) + rung.gems;
+  saveSoon();
+  return {
+    ok: true, id, gems: rung.gems, tier: rung.tier,
+    next: milestoneRung(m, done + 1),
+    balance: p.gems,
+    milestones: milestoneState(milestoneCounters(p), p.milestones)
+  };
 }
 
 /** Fold a finished ROUND in: rating moves on how you played against par. */
@@ -725,6 +807,16 @@ export function settleRound(pid, courseId, holeScores, earn = 1) {
   rc.level = after;
   rc.leveledUp = after > before ? { from: before, to: after } : null;
   if (firstClear) { p.cleared = p.cleared || []; p.cleared.push(courseId); }
+
+  /* GEMS. Paid at the END of the round rather than hole by hole, and that
+     is the design rather than an implementation detail: the flat 50 for
+     finishing is most of the payout, so a player who walks off after the
+     two holes they parred should not already be holding the gems. Coins go
+     the other way — they bank live, because coins reward showing up and
+     gems reward finishing. See the long note in economy.js. */
+  const rg = roundGems(holeScores, { full, firstClear, earnMult: rate });
+  p.gems = (p.gems || 0) + rg.total;
+  rc.gems = rg;
 
   // one star for going round the whole thing, however you scored
   if (full && courseId) {

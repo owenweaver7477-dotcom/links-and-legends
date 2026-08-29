@@ -396,6 +396,11 @@ Net.onInvites = fn => Net.socket?.on('invite:state', fn);
    two names for it is what keeps the two from being confused. */
 Net.profileOf = (pid, cb) => ask('profile:of', { pid }, res => cb?.(res));
 
+/* Milestones. The claim sends an id and nothing else — every counter behind
+   it is the server's, kept off shots it simulated itself. */
+Net.milestones = cb => ask('milestone:state', {}, res => cb?.(res));
+Net.claimMilestone = (id, cb) => ask('milestone:claim', { id }, res => cb?.(res));
+
 Net.friends = (act, payload, cb) =>
   ask('friends:do', { act, ...(payload || {}) }, res => cb?.(res));
 /** Pushed when somebody accepts, removes or blocks you. */

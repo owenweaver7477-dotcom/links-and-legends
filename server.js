@@ -230,6 +230,7 @@ import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/av
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
 import { loadProfiles, getProfile, publicProfile, visitorProfile, profileExists,
          recordHole, recordRound, colorAllowed, buyItem, seedProfile,
+         milestonesFor, claimMilestone,
          worldRanking, worldPlace, handicapRanking, handicapPlace, levelRanking, rememberName,
          setClubSkin,
          weeklyGainers, seasonBoard, courseBoard, levelHistogram } from './server/profiles.js';
@@ -955,6 +956,7 @@ function nextHole(room) {
       if (sock && prof) {
         sock.emit('profile', prof);
         const bits = ['🪙 +' + rc.total + ' this round'];
+        if (rc.gems?.total) bits.push('💎 +' + rc.gems.total);
         if (rc.xp) bits.push('+' + rc.xp + ' XP');
         if (rc.streakPct) bits.push('streak +' + rc.streakPct + '%');
         if (rc.firstClearBonus) bits.push('first clear +500');
@@ -1775,6 +1777,25 @@ io.on('connection', socket => {
          store from outside;
        - somebody who blocked you does not appear to you, which is the
          thing blocking is for. */
+  /* MILESTONE CLAIMS. Ruled on entirely server-side from counters kept off
+     shots the server itself simulated — the client sends an id and nothing
+     else, and could not lie about a fairway if it wanted to. */
+  socket.on('milestone:claim', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || socket.data?.pid || null;
+    if (!pid) return ack({ error: 'Not connected.' });
+    const res = claimMilestone(pid, typeof d?.id === 'string' ? d.id : null);
+    if (res.ok) socket.emit('profile', publicProfile(pid));
+    ack(res);
+  });
+
+  socket.on('milestone:state', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const pid = sockets.get(socket.id)?.pid || socket.data?.pid || null;
+    if (!pid) return ack({ error: 'Not connected.' });
+    ack({ ok: true, milestones: milestonesFor(pid) });
+  });
+
   socket.on('profile:of', (d, ack) => {
     if (typeof ack !== 'function') return;
     const me = sockets.get(socket.id)?.pid || socket.data?.pid || null;

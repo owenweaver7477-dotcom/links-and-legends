@@ -27,22 +27,38 @@ const CYCLE_SCALE_STEP = 0.4;   // cycle 2 = 1.4x, cycle 3 = 1.8x, then capped
 
 /** Day 1..14. `coins`/`gems` scale with the cycle; `cases` does not — a
     flood of chests would cheapen the one thing this system exists to hand
-    out slowly. */
+    out slowly.
+
+    THE COINS ARE NOW TOKENS AND THE GEMS ARE THE POINT. These were written
+    when gems had no other source at all, so the table was the entire gem
+    economy and had to be stingy with it. Playing now pays gems (see
+    economy.js's roundGems), which changes what this table is FOR: it is no
+    longer the supply, it is the reason to come back tomorrow.
+
+    So the coins stayed where they are — 400 coins is a rounding error
+    against a round's ~7,500 and was already only a gesture — and the gems
+    went up to 475 over a full fortnight. Somebody who plays one round a day
+    for those fourteen days earns about 870 from the golf, so the streak is
+    a bit over half again on top: clearly worth keeping, and clearly not a
+    way to skip playing. That is the relationship worth holding.
+
+    Every day pays gems now. A day that paid nothing but 150 coins was a day
+    the streak asked you to come back for nothing. */
 const BASE_DAYS = [
-  { day: 1,  coins: 100 },
-  { day: 2,  coins: 150 },
-  { day: 3,  cases: 1 },
-  { day: 4,  gems: 20 },
-  { day: 5,  coins: 200 },
-  { day: 6,  coins: 250 },
-  { day: 7,  cases: 1, gems: 30 },
-  { day: 8,  coins: 300 },
-  { day: 9,  gems: 40 },
-  { day: 10, cases: 1 },
-  { day: 11, coins: 350 },
-  { day: 12, gems: 50 },
-  { day: 13, coins: 400 },
-  { day: 14, cases: 2, gems: 75 }
+  { day: 1,  coins: 100, gems: 10 },
+  { day: 2,  coins: 150, gems: 10 },
+  { day: 3,  cases: 1,   gems: 15 },
+  { day: 4,  gems: 30 },
+  { day: 5,  coins: 200, gems: 15 },
+  { day: 6,  coins: 250, gems: 20 },
+  { day: 7,  cases: 1,   gems: 50 },
+  { day: 8,  coins: 300, gems: 20 },
+  { day: 9,  gems: 45 },
+  { day: 10, cases: 1,   gems: 25 },
+  { day: 11, coins: 350, gems: 25 },
+  { day: 12, gems: 60 },
+  { day: 13, coins: 400, gems: 30 },
+  { day: 14, cases: 2,   gems: 120 }
 ];
 
 const cycleScale = cycle =>

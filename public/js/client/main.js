@@ -3339,6 +3339,11 @@ function renderClubhouse() {
   const prof = G.profile;
   HUD.renderClubhouseHeader(prof, Net.lastName || document.getElementById('inpName')?.value);
   HUD.renderCareer(prof);
+  /* Straight off the profile the server just sent, so this cannot fall out
+     of step with the balance beside it. `Net.milestones` exists for a
+     refresh that does not need a whole profile, but the common case is that
+     one already arrived. */
+  HUD.renderMilestones(prof?.milestones, claimMilestone);
   /* The record board. Asked for rather than pushed: it is global data that
      changes rarely, and the clubhouse is the only place that wants all of it
      at once. Rendered from whatever we last heard, so opening the clubhouse
@@ -3394,7 +3399,15 @@ function renderClubhouse() {
     Net.buy(item);
   };
   HUD.renderShop(prof, onShopBuy);
-  function onInventoryPick(key, value) {
+  function claimMilestone(id) {
+  Net.claimMilestone(id, res => {
+    if (!res?.ok) return HUD.toast(res?.error || 'Not there yet.', 'warn', 2200);
+    HUD.toast(`${res.gems} gems — next at ${res.next.target}.`, 'good', 2400);
+    HUD.renderMilestones(res.milestones, claimMilestone);
+  });
+}
+
+function onInventoryPick(key, value) {
     lookDraft = normaliseLook({ ...lookDraft, [key]: value });
     saveLook(lookDraft);
     refreshMenuAvatar();

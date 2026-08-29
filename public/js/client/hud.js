@@ -1369,6 +1369,49 @@ function masteryStrip(mastery) {
     }).join('')}</div>`;
 }
 
+/* ═══════════════════════════════════════════════════════ MILESTONES ═════
+   Repeatable gem rewards, and the claim button is load-bearing rather than
+   decorative: a reward that lands silently in a balance is a number
+   changing, and one you press for is a moment. It is also the only way
+   anybody discovers the ladder exists.
+
+   Every rung shows the NEXT target as well as the reward, so a claimed one
+   immediately says what it costs to do again — the point of a repeatable is
+   that there is never a last one. */
+HUD.renderMilestones = (list, onClaim) => {
+  const box = document.getElementById('mstoneBox');
+  if (!box) return;
+  const ms = Array.isArray(list) ? list : [];
+  if (!ms.length) { box.innerHTML = ''; return; }
+
+  const ready = ms.filter(m => m.claimable).length;
+  box.innerHTML =
+    `<h5 class="cr-h">Milestones${ready ? ` — <em class="ms-ready">${ready} ready</em>` : ''}</h5>
+     <div class="ms-grid">${ms.map(m => `
+       <div class="ms${m.claimable ? ' ready' : ''}">
+         <div class="ms-top">
+           <b>${escapeHtml(m.name)}</b>
+           <span class="ms-tier">TIER ${m.tier}</span>
+         </div>
+         <small>${escapeHtml(m.blurb)}</small>
+         <i class="ms-bar"><span style="width:${(m.pct * 100).toFixed(0)}%"></span></i>
+         <div class="ms-foot">
+           <span class="ms-prog">${m.have.toLocaleString()} / ${m.target.toLocaleString()}
+             <em>${escapeHtml(m.unit)}</em></span>
+           <button class="btn mini${m.claimable ? ' primary' : ''}" data-claim="${m.id}"
+             ${m.claimable ? '' : 'disabled'}>${icon('gem')} ${m.gems}</button>
+         </div>
+       </div>`).join('')}</div>`;
+
+  if (!box.dataset.wired) {
+    box.dataset.wired = '1';
+    box.addEventListener('click', e => {
+      const b = e.target.closest('[data-claim]:not([disabled])');
+      if (b) onClaim?.(b.dataset.claim);
+    });
+  }
+};
+
 HUD.renderCareer = (prof) => {
   const box = el.careerBox;
   if (!box) return;
