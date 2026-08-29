@@ -240,9 +240,21 @@ export function footPlant(L, life, dt, {
  * Walk cycle knee bend, layered onto whatever gait the rig already has.
  * A straight-legged walk is the other half of why the old rig scissored.
  */
-export function walkKnees(L, life, speed) {
+/* `phase` is the SAME stride clock the legs swing on, and that is the whole
+   point of the argument.
+   -------------------------------------------------------------------------
+   This used to derive its own: `Math.sin(life.t * speed * 3.1)`. The legs
+   swing on `avatar.phase`, which integrates `2.1 + speed * 0.62` — a
+   different frequency AND a different origin. At a walk the two ran at 3.1
+   against 5.0 rad/s; at a run, 4.8 against 13.6. So the knee bent while the
+   leg was pushing off and straightened while it swung through, drifting in
+   and out of sync forever rather than being wrong in a fixed way.
+
+   That is the "running looks off" nobody can point at: every joint below the
+   hip was animating to a metronome the leg above it could not hear. */
+export function walkKnees(L, phase, speed) {
   if (speed < 0.15) return L;
-  const sw = Math.sin(life.t * speed * 3.1);
+  const sw = Math.sin(phase);
   /* The knee bends on the way THROUGH, not on the way back — a leg swinging
      forward is bent and a leg pushing off is straight, and getting that
      backwards is the uncanny walk everybody recognises and nobody can name. */

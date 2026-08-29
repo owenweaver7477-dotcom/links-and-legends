@@ -43,10 +43,22 @@ test('the rig has a pelvis, and the legs hang off it', () => {
   assert.ok(/this\.hips = new THREE\.Group\(\)/.test(SRC), 'no pelvis group');
   assert.ok(/this\.torso = new THREE\.Group\(\)/.test(SRC), 'no torso group');
   assert.ok(/this\.body\.add\(this\.hips\)/.test(SRC), 'the pelvis is not on the body');
-  assert.ok(/this\.hips\.add\(this\.torso\)/.test(SRC), 'the torso does not hang off the pelvis');
-  assert.ok(/this\.hips\.add\(this\.legL, this\.legR\)/.test(SRC),
+  assert.ok(/this\.hipsInner\.add\(this\.torso\)/.test(SRC),
+    'the torso does not hang off the pelvis');
+  /* PIVOTS AT THE JOINTS. Both groups used to sit at the origin — ground
+     level — so leaning the spine swung the waist box through 0.7 x lean x
+     1.06 while the hip box only swung 0.3 x lean x 0.90, and two boxes that
+     are supposed to touch came apart with daylight between them. */
+  assert.ok(/this\.hips\.position\.y = HIP_Y/.test(SRC), 'the pelvis does not pivot at the hip');
+  assert.ok(/this\.torso\.position\.y = WAIST_Y;/.test(SRC), 'the torso does not pivot at the waist');
+  /* And the inner groups must cancel exactly, or every child moves. */
+  assert.ok(/this\.hipsInner\.position\.y = -HIP_Y/.test(SRC), 'hipsInner does not cancel the hip offset');
+  assert.ok(/this\.torsoInner\.position\.y = -WAIST_Y/.test(SRC), 'torsoInner does not cancel the waist offset');
+  assert.ok(/this\.torso\.add\(this\.torsoInner\)/.test(SRC),
+    'torsoInner is not parented to torso — a group added to itself detaches the whole upper body');
+  assert.ok(/this\.hipsInner\.add\(this\.legL, this\.legR\)/.test(SRC),
     'the legs are not on the pelvis — turning the shoulders will turn them');
-  assert.ok(/this\.torso\.add\(this\.armL, this\.armR\)/.test(SRC),
+  assert.ok(/this\.torsoInner\.add\(this\.armL, this\.armR\)/.test(SRC),
     'the arms are not on the torso, so they cannot turn against the hips');
 });
 
@@ -243,4 +255,30 @@ test('every chamfered-box face winds outward, not inward', () => {
       `face ['${axis}', ${sign}] winds inward (normal[${axis}] = ${normal[AXIS[axis]].toFixed(3)}) — ` +
       'this is the exact bug that made a side-on view of the golfer see through the body');
   }
+});
+
+test('the knees run on the same stride clock as the legs', async () => {
+  /* walkKnees used to derive its own phase — `Math.sin(life.t * speed*3.1)`
+     — while the legs swung on `avatar.phase`, which integrates
+     `2.1 + speed*0.62`. At a walk that is 3.1 against 5.0 rad/s; at a run,
+     4.8 against 13.6. The knee therefore bent while the leg was pushing off
+     and straightened while it swung through, drifting in and out of sync
+     forever rather than being wrong in a fixed way — the "running looks
+     off" that nobody can point at.
+
+     Asserted on the SOURCE, because instantiating an Avatar needs a live
+     document. Measured in-browser, a synced rig scores 1.0 on
+     "knee bends while its own leg is forward" and a desynced one scores
+     0.49 — chance. */
+  const ANIM = readFileSync(new URL('../public/js/client/anim.js', import.meta.url), 'utf8');
+  assert.ok(/export function walkKnees\(L, phase, speed\)/.test(ANIM),
+    'walkKnees no longer takes the stride phase');
+  assert.ok(/const sw = Math\.sin\(phase\);/.test(ANIM),
+    'walkKnees derives its own clock again — the joints will drift against the legs');
+  // strip comments first — the note above this fix quotes the old expression
+  const code = ANIM.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.equal(/life\.t \* speed/.test(code), false,
+    'a second, speed-derived clock is back in anim.js');
+  assert.ok(/walkKnees\(L, this\.phase, speed\)/.test(SRC),
+    'avatar.js is not passing its own stride phase to walkKnees');
 });

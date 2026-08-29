@@ -344,14 +344,43 @@ export class Avatar {
        which now turns with the legs instead of with the chest — and the
        separation between hips and shoulders becomes a real thing the swing
        can open up rather than a number with nowhere to go. */
+    /* PIVOTS AT THE JOINTS, not at the floor.
+       ---------------------------------------------------------------
+       A group rotates about its own origin, and both of these sat at
+       (0,0,0) — ground level. So leaning the spine swung the waist box
+       (y ≈ 1.06) through 0.7 × lean × 1.06 while the hip box (y ≈ 0.90)
+       only swung 0.3 × lean × 0.90: two boxes that are supposed to be
+       touching travelled different distances, and the back came apart with
+       daylight through the gap. A hinge has to be AT the joint.
+
+       `hips` now turns about the hip joint and `torso` about the waist
+       seam. An inner group carries the children at their authored
+       coordinates, so nothing below had to be re-measured — the pivot
+       moves, the geometry does not. */
+    const HIP_Y = H * 0.47;      // where the legs meet the pelvis
+    const WAIST_Y = H * 0.545;   // the seam between the hip box and the waist
+
     this.hips = new THREE.Group();
+    this.hips.position.y = HIP_Y;
+    this.hipsInner = new THREE.Group();
+    this.hipsInner.position.y = -HIP_Y;
+    this.hips.add(this.hipsInner);
+
     this.torso = new THREE.Group();
+    /* WAIST_Y, not WAIST_Y - HIP_Y. `hipsInner` already cancels the hips
+       offset, so subtracting it again here drops the whole upper body by a
+       leg length — which it did, straight into the shins. */
+    this.torso.position.y = WAIST_Y;
+    this.torsoInner = new THREE.Group();
+    this.torsoInner.position.y = -WAIST_Y;
+    this.torso.add(this.torsoInner);
+
     this.body.add(this.hips);
-    this.hips.add(this.torso);
+    this.hipsInner.add(this.torso);
 
     // hips -> waist -> chest, spanning the same H*0.47 .. H*0.79 as before
-    this.hips.add(part(this.mats.trousers, W * B.hips, H * 0.075, D * B.depth, 0, H * 0.5075, 0));
-    this.torso.add(part(this.mats.shirt, W * B.waist, H * 0.105, D * 0.95 * B.depth, 0, H * 0.5975, 0));
+    this.hipsInner.add(part(this.mats.trousers, W * B.hips, H * 0.075, D * B.depth, 0, H * 0.5075, 0));
+    this.torsoInner.add(part(this.mats.shirt, W * B.waist, H * 0.105, D * 0.95 * B.depth, 0, H * 0.5975, 0));
     // kept, because breathing scales it and nothing else in the rig moves
     // when a golfer is standing still
     this.chest = part(this.mats.shirt, W * B.chest, H * 0.140, D * B.depth, 0, H * 0.7200, 0);
@@ -360,13 +389,13 @@ export class Avatar {
        replaced a 0.42 x 0.25 x 0.24 chest with a one-metre cube — a golfer
        with a slab for a torso, which is exactly what appeared on screen. */
     this._chestBase = this.chest.scale.clone();
-    this.torso.add(this.chest);
+    this.torsoInner.add(this.chest);
     if (B.bust > 0) {
       // sits proud of the chest front, so it reads in silhouette rather than
       // only head-on; two boxes rather than one so it is not a shelf
       const bw = W * B.chest * 0.34, by = H * 0.700, bz = D * B.depth * 0.5;
-      this.torso.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, bw * 0.52, by, bz));
-      this.torso.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, -bw * 0.52, by, bz));
+      this.torsoInner.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, bw * 0.52, by, bz));
+      this.torsoInner.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, -bw * 0.52, by, bz));
     }
 
     // The head and hat hang off pivots at the neck so a celebration can nod,
@@ -394,7 +423,7 @@ export class Avatar {
     this.accessory = new THREE.Group();
     this.head.add(this.accessory);
     this.buildHeadwear(look);
-    this.torso.add(this.head);
+    this.torsoInner.add(this.head);
 
     /* --- limbs, pivoted at the shoulder / hip so they can swing --------- */
     /* A limb is TWO segments with a joint between them.
@@ -470,13 +499,13 @@ export class Avatar {
     this._legHalf = ll / 2;
     /* Arms on the torso, legs on the pelvis. That one line is the whole
        difference between a body that turns and a body that twists. */
-    this.torso.add(this.armL, this.armR);
-    this.hips.add(this.legL, this.legR);
+    this.torsoInner.add(this.armL, this.armR);
+    this.hipsInner.add(this.legL, this.legR);
 
     /* Worn accessories that hang off the body rather than the head.  Built
        after the limbs, because the glove goes ON one of them. */
     this.worn = new THREE.Group();
-    this.torso.add(this.worn);
+    this.torsoInner.add(this.worn);
     this.buildWorn(look);
 
     /* --- the club: grip, shaft and an interchangeable head ---------------
@@ -522,7 +551,7 @@ export class Avatar {
        the grip is always at a point both arms can be solved onto. */
     this.hands = new THREE.Group();
     this.hands.position.set(0, H * 0.775, 0);        // the shoulder line, centred
-    this.torso.add(this.hands);
+    this.torsoInner.add(this.hands);
     this.hands.add(this.club);
     this.clubKey = null;
     this.clubSetId = null;
@@ -799,17 +828,17 @@ export class Avatar {
     /* ---- neckwear ------------------------------------------------------- */
     const neckY = H * 0.800;
     if (look.neck === 'collar') {
-      this.torso.add(part(this.mats.shirt, 0.250, H * 0.022, 0.190, 0, neckY, 0));
+      this.torsoInner.add(part(this.mats.shirt, 0.250, H * 0.022, 0.190, 0, neckY, 0));
     } else if (look.neck === 'scarf') {
       const nm = mine(look.shirt2 || '#7d2f42');
-      this.torso.add(part(nm, 0.238, H * 0.030, 0.200, 0, neckY, 0));
-      this.torso.add(part(nm, 0.070, H * 0.090, 0.036, 0.060, neckY - H * 0.055, 0.098));
+      this.torsoInner.add(part(nm, 0.238, H * 0.030, 0.200, 0, neckY, 0));
+      this.torsoInner.add(part(nm, 0.070, H * 0.090, 0.036, 0.060, neckY - H * 0.055, 0.098));
     } else if (look.neck === 'buff') {
-      this.torso.add(part(mine(look.shirt2 || '#3a4048'), 0.236, H * 0.060, 0.206, 0, neckY + H * 0.010, 0));
+      this.torsoInner.add(part(mine(look.shirt2 || '#3a4048'), 0.236, H * 0.060, 0.206, 0, neckY + H * 0.010, 0));
     } else if (look.neck === 'chain') {
       const cm = mine('#e8c15a');
-      this.torso.add(part(cm, 0.150, H * 0.010, 0.014, 0, neckY - H * 0.012, 0.106));
-      this.torso.add(part(cm, 0.030, H * 0.028, 0.018, 0, neckY - H * 0.035, 0.108));
+      this.torsoInner.add(part(cm, 0.150, H * 0.010, 0.014, 0, neckY - H * 0.012, 0.106));
+      this.torsoInner.add(part(cm, 0.030, H * 0.028, 0.018, 0, neckY - H * 0.035, 0.108));
     }
 
     /* ---- the trouser cut. Shorts and plus fours change where the leg
@@ -1372,7 +1401,7 @@ export class Avatar {
       moving, swinging: !!this._swinging, seated: this.seated,
       wind: this._wind || 0, windDir: this._windDir || 0, facing: this._yaw
     });
-    walkKnees(L, this.life, speed);
+    walkKnees(L, this.phase, speed);   // the same stride clock the legs use
     if (this._swingLay) swingLayers(L, this._swingLay.f, this._swingLay.back);
     if (this._terrain) {
       footPlant(L, this.life, dt, {
