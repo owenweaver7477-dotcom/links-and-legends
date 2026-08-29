@@ -25,8 +25,106 @@ import { setById, rarityRank, STARTER_SET } from '../shared/clubsets.js';
    the flag, which would tear the geometry out from under every live avatar. */
 const shared = g => { g.userData.shared = true; return g; };
 
+/* THE ONE GEOMETRY EVERY AVATAR PART IS MADE OF, and it is no longer a
+   cube. A chamfer of six percent on each axis, which is small enough that
+   nothing changes shape and large enough that every silhouette in the game
+   softens at once — a torso, a cap brim, a shoe, a club head.
+
+   Why this is worth 44 triangles instead of 12. A hard 90-degree edge has
+   one normal on each side and nothing between them, so it takes the light
+   in exactly two steps: it is the single strongest "made of boxes" signal
+   there is, and it is why these figures read as placeholder art however
+   well they are lit. A chamfer puts a third, angled face on every edge that
+   catches a highlight along its length, and that thin bright line is what
+   the eye reads as a manufactured object rather than a primitive.
+
+   PROPORTIONAL, deliberately. Parts are scaled hard on one axis — a club
+   shaft is 0.020 x 0.80 x 0.020 — so a chamfer in unit space becomes a
+   different absolute size per axis. That is the behaviour worth having: a
+   1.2 mm chamfer on the shaft (invisible, correctly) and a 2.4 cm one on the
+   torso (visible, correctly), from one number.
+
+   Still procedural, still one shared geometry, still no download. Eight
+   golfers cost about 5,000 triangles against the hole's 143,000. */
+const CHAMFER = 0.06;
+
+function chamferedBox(b = CHAMFER) {
+  const i = 0.5 - b;          // where a face stops and the bevel begins
+  const o = 0.5;              // the outer extent, unchanged
+  const pos = [], idx = [];
+  const V = (x, y, z) => { pos.push(x, y, z); return pos.length / 3 - 1; };
+  const quad = (a, c, d, e) => idx.push(a, c, d, a, d, e);
+
+  /* Eight corner points per octant: the cube's corner cut back to three
+     points, one per axis. Indexed by sign so the loops below can find them. */
+  const corner = {};
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    corner[`${sx}${sy}${sz}`] = {
+      x: V(sx * o, sy * i, sz * i),
+      y: V(sx * i, sy * o, sz * i),
+      z: V(sx * i, sy * i, sz * o)
+    };
+  }
+  const C = (sx, sy, sz) => corner[`${sx}${sy}${sz}`];
+
+  /* The six faces, each an inset square of four corner points. Winding is
+     per-face so every one points outward. */
+  const faces = [
+    ['x', 1,  [[1,-1,-1],[1,-1,1],[1,1,1],[1,1,-1]]],
+    ['x', -1, [[-1,-1,1],[-1,-1,-1],[-1,1,-1],[-1,1,1]]],
+    ['y', 1,  [[-1,1,1],[1,1,1],[1,1,-1],[-1,1,-1]]],
+    ['y', -1, [[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1]]],
+    ['z', 1,  [[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]]],
+    ['z', -1, [[1,-1,-1],[-1,-1,-1],[-1,1,-1],[1,1,-1]]]
+  ];
+  for (const [axis, , pts] of faces) {
+    const [a, c, d, e] = pts.map(p => C(p[0], p[1], p[2])[axis]);
+    quad(a, c, d, e);
+  }
+
+  /* The twelve edge bevels. Each joins two face-points on one corner to the
+     two on its neighbour along the shared axis. */
+  const edges = [
+    // edges running along Z: vary sx, sy
+    ...[[1,1],[1,-1],[-1,-1],[-1,1]].map(([sx, sy]) => ['z', sx, sy]),
+    // along X: vary sy, sz
+    ...[[1,1],[1,-1],[-1,-1],[-1,1]].map(([sy, sz]) => ['x', sy, sz]),
+    // along Y: vary sz, sx
+    ...[[1,1],[1,-1],[-1,-1],[-1,1]].map(([sz, sx]) => ['y', sz, sx])
+  ];
+  for (const [along, s1, s2] of edges) {
+    let a, b2, c, d;
+    if (along === 'z') {
+      a = C(s1, s2, -1).x; b2 = C(s1, s2, -1).y;
+      c = C(s1, s2, 1).y;  d = C(s1, s2, 1).x;
+    } else if (along === 'x') {
+      a = C(-1, s1, s2).y; b2 = C(-1, s1, s2).z;
+      c = C(1, s1, s2).z;  d = C(1, s1, s2).y;
+    } else {
+      a = C(s2, -1, s1).z; b2 = C(s2, -1, s1).x;
+      c = C(s2, 1, s1).x;  d = C(s2, 1, s1).z;
+    }
+    quad(a, b2, c, d);
+    quad(d, c, b2, a);        // both windings: an edge strip is seen from
+                              // either side depending on the octant, and two
+                              // triangles is cheaper than working out which
+  }
+
+  /* The eight corner triangles, both windings for the same reason. */
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const c = C(sx, sy, sz);
+    idx.push(c.x, c.y, c.z, c.z, c.y, c.x);
+  }
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 let _box = null;
-const box = () => (_box || (_box = shared(new THREE.BoxGeometry(1, 1, 1))));
+const box = () => (_box || (_box = shared(chamferedBox())));
 let _blob = null;
 const blobGeo = () => (_blob || (_blob = shared(new THREE.CircleGeometry(0.42, 14))));
 let _blobTex = null;

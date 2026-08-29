@@ -201,3 +201,52 @@ test('the shop and the course read one finish table', () => {
   assert.equal(/const BALL_FINISH = \{/.test(SCENE), false,
     'scene.js still has its own copy of the finish table');
 });
+
+/* ------------------------------------------------------------- geometry -- */
+
+test('the avatar is built from a chamfered box, not a cube', () => {
+  /* A hard 90-degree edge has one normal on each side and nothing between
+     them, so it takes the light in exactly two steps — it is the single
+     strongest "made of boxes" signal there is, and it is why these figures
+     read as placeholder art however well they are lit. */
+  const AV = src('avatar.js');
+  assert.ok(/const box = \(\) => \(_box \|\| \(_box = shared\(chamferedBox\(\)\)\)\)/.test(AV),
+    'the avatar still shares a plain BoxGeometry for every part');
+  const c = AV.match(/const CHAMFER = ([\d.]+);/);
+  assert.ok(c, 'no CHAMFER constant');
+  const v = Number(c[1]);
+  assert.ok(v > 0 && v < 0.12,
+    `a chamfer of ${v} is not a chamfer — under ~0.02 it is invisible and over ~0.1 ` +
+    'the parts stop meeting each other');
+});
+
+/* ---------------------------------------------------------------- chrome -- */
+
+test('the stylesheet has a palette, and nothing re-types a colour it names', () => {
+  /* ~4,400 lines of hex literals meant the same decision got made again
+     slightly differently each time: FIVE muted greens were doing the job of
+     one text ladder, two of them four points apart per channel. */
+  const CSS = readFileSync(join(__dirname, '../public/css/style.css'), 'utf8');
+  const root = CSS.match(/:root \{([\s\S]*?)\n\}/);
+  assert.ok(root, 'no :root token block in style.css');
+
+  const tokens = [...root[1].matchAll(/--([\w-]+):\s*(#[0-9a-f]{6})/gi)]
+    .map(m => [m[1], m[2].toLowerCase()]);
+  assert.ok(tokens.length >= 6, 'the palette is too small to be a system');
+
+  // no two tokens may be the same colour: that is the duplicate this fixed
+  const byHex = new Map();
+  for (const [name, hex] of tokens) {
+    assert.equal(byHex.has(hex), false,
+      `--${name} and --${byHex.get(hex)} are the same colour under two names`);
+    byHex.set(hex, name);
+  }
+
+  // and the body must not re-type any of them as a literal
+  const body = CSS.slice(CSS.indexOf('}', CSS.indexOf(':root {')) + 1);
+  for (const [name, hex] of tokens) {
+    const stray = body.match(new RegExp(hex, 'gi'));
+    assert.equal(stray, null,
+      `${hex} is written out ${stray?.length} time(s) in the body instead of var(--${name})`);
+  }
+});
