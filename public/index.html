@@ -348,6 +348,7 @@
 
        Every id is the one it always was, so nothing that writes into this
        needed to change. -->
+  <div class="lp-corner">
   <div class="lp-id" id="lpIdentity">
     <button class="lp-id-av" id="lpIdAvatar" type="button"
             title="Customise your golfer" aria-label="Customise your golfer">
@@ -368,9 +369,13 @@
             <span class="nm-state" id="nameState"></span>
             <span class="nm-suggest" id="nameSuggest"></span></label>
         </div>
+      <!-- THE CODE IS A THING YOU HAND SOMEBODY, so it looks like a token
+           rather than a caption: a rounded badge you can press to copy. The
+           round count moved out — this block is your identity and the one
+           claim waiting for you, and a career stat is neither. -->
       <div class="lp-id-facts">
-        <span class="lp-id-code">FRIEND ID <b id="lpIdCode">—</b></span>
-        <div class="lp-stat-row"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" fill="#ffd76b" stroke="#a9822f" stroke-width="1"/><path d="M7 5H4a3 3 0 0 0 3 3M17 5h3a3 3 0 0 1-3 3" fill="none" stroke="#a9822f" stroke-width="1.3" stroke-linecap="round"/></svg><span id="lpTotalRounds">0</span> <b>rounds</b></div>
+        <button class="lp-code-pill" id="lpIdCode" type="button"
+                title="Copy your friend code">—</button>
       </div>
     </div>
         <button class="lp-item lp-row" id="lpRewardsBtn">
@@ -378,6 +383,25 @@
           <span class="lp-txt"><b>Daily rewards</b><small id="lpRewardsSub">come back tomorrow</small></span>
           <span class="lp-count claim" id="lpRewardsBadge" hidden>!</span>
         </button>
+  </div>
+
+  <!-- FRIENDS, and until now there was no way in. The whole panel exists —
+       add by code, your own code, who is online, join their room — and
+       nothing on any screen opened it: `data-panel="friends"` was never
+       written, so the only `data-panel` in the markup was "course". A built
+       feature nobody could reach. -->
+  <button class="lp-friends" id="lpFriendsBtn" type="button" data-panel="friends">
+    <span class="lp-fr-ico"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+      <circle cx="9" cy="8" r="3.4" fill="currentColor"/>
+      <path d="M3 20c0-3.3 2.7-5.4 6-5.4s6 2.1 6 5.4" fill="currentColor"/>
+      <circle cx="17" cy="9.5" r="2.6" fill="currentColor" opacity=".62"/>
+      <path d="M15.4 20c0-2.6 1.6-4.3 3.6-4.3S22 17.4 22 20" fill="currentColor" opacity=".62"/>
+    </svg></span>
+    <span class="lp-fr-txt"><b>Friends &amp; players online</b>
+      <small id="lpFriendsSub">Add by code · join a round</small></span>
+    <span class="lp-count" id="lpFriendsBadge" hidden>0</span>
+    <span class="lp-fr-arr" aria-hidden="true">→</span>
+  </button>
   </div>
 
 
@@ -529,6 +553,15 @@
      drawn any other way is a promise the game then has to keep. -->
 <div class="screen wardrobe" id="screenWardrobe" hidden>
   <div class="wd-veil" aria-hidden="true"></div>
+  <!-- ONE WAY OUT, back to where you came in from. The nav bar used to sit
+       over this screen offering six exits from a room with one door — and
+       none of them said "back". -->
+  <button class="wd-back" id="wdBack" type="button">
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Locker</span>
+  </button>
 
   <!-- the course carousel: which hole is behind the golfer -->
   <div class="wd-carousel" id="wdCarousel">

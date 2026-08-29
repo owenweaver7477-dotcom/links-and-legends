@@ -671,7 +671,7 @@ function ensureLevelHist() {
 let emoteDraft = [];
 
 function openWardrobe() {
-  HUD.show('wardrobe');
+  HUD.enterWardrobe();          // remembers the page to come back to
   HUD.bindWardrobe();
   ensureLevelHist();
   wd.t = 0; wd.hold = 0;
@@ -4487,6 +4487,12 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   // behind the panel, the same way every other wardrobe piece previews
   HUD.onEmotePreview = id => menu.av?.play(id);
   document.getElementById('btnWardrobe')?.addEventListener('click', openWardrobe);
+  /* The friends door. Bound directly rather than through the legend's
+     delegated handler, because it lives in the corner block beside the
+     identity — outside that list entirely — and a delegated listener that
+     never sees the element is exactly how this feature came to have no way
+     in at all. */
+  document.getElementById('lpFriendsBtn')?.addEventListener('click', () => openSide('friends'));
   HUD.el.wdPrev.addEventListener('click', () => { wd.auto = false; syncAuto(); wd.hold = 0; wdCourse(wd.idx - 1); });
   HUD.el.wdNext.addEventListener('click', () => { wd.auto = false; syncAuto(); wd.hold = 0; wdCourse(wd.idx + 1); });
   HUD.el.wdAuto.addEventListener('click', () => { wd.auto = !wd.auto; wd.hold = 0; syncAuto(); });
@@ -4525,7 +4531,9 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   HUD.el.wdDone.addEventListener('click', () => {
     wd.auto = false; syncAuto();
     drawLookPicker();
-    route();
+    /* Back to the page the wardrobe was opened from — Done and Back are the
+       same journey, so they end in the same place. */
+    HUD.leaveWardrobe();
   });
   /* ---- your name ------------------------------------------------------
      Checked as you type and CLAIMED when you leave the field. A name is

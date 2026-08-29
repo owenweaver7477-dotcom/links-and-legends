@@ -38,7 +38,7 @@ for (const id of [
   'screenLanding', 'introCanvas', 'lpLegend', 'lpLive', 'lpSide', 'lpSideTitle',
   'lpSideClose', 'lpOnlineCount', 'lpCourseName', 'lpCourseSub', 'lpFriendSub',
   'lpWeekTop', 'lpWeekTopRows', 'lpWeekTopEmpty', 'lpGlobalRankRows', 'lpGlobalRankEmpty',
-  'lpTotalRounds', 'lpFriendAvatars',
+  'lpTotalRounds', 'lpFriendAvatars', 'lpFriendsBadge', 'lpFriendsSub',
   'nameState', 'nameSuggest',
   'screenWardrobe', 'wdCarousel', 'wdCourseName', 'wdCourseWhere', 'wdDots', 'wdPrev', 'wdNext',
   'wdAuto', 'wdCats', 'wdFits', 'wdRTabs', 'wdRBody', 'wdName', 'wdFit', 'wdStats',
@@ -174,7 +174,12 @@ HUD.show = which => {
    panes it should show. Several panes at once is the point — the Locker is
    your inventory AND your bag, on one page, rather than two tabs you have
    to know to look behind. */
-const MENU_SCREENS = new Set(['landing', 'home', 'shop', 'boards', 'wardrobe']);
+/* THE WARDROBE IS NOT A MENU DESTINATION. It is a place you enter FROM
+   somewhere — the Locker's "Open the wardrobe" — and leave back to. Leaving
+   the nav bar up there offered six ways out of a room you got into through
+   one door, and none of them was "back". It gets a back button instead (see
+   HUD.enterWardrobe). */
+const MENU_SCREENS = new Set(['landing', 'home', 'shop', 'boards']);
 const PAGES = {
   play:   { label: 'Play',   screen: 'landing' },
   shop:   { label: 'Shop',   screen: 'shop',   panes: ['shop'] },
@@ -301,6 +306,34 @@ HUD.goSub = sub => {
   HUD.onSubEnter?.(HUD.page, sub);
 };
 
+/* ─────────────────────────────────────────────────────── the wardrobe ──
+   Entered from a page, left back to that same page. `_cameFrom` is captured
+   on the way in rather than hard-coded to the Locker, because the wardrobe
+   is reachable from more than one place and "Back" that lies about where
+   you were is worse than no back button. */
+HUD.enterWardrobe = () => {
+  HUD._cameFrom = HUD.page || 'locker';
+  HUD.show('wardrobe');
+  HUD.paintWardrobeBack();
+};
+
+HUD.leaveWardrobe = () => {
+  const back = HUD._cameFrom || 'locker';
+  HUD._cameFrom = null;
+  HUD.goPage(back);
+};
+
+HUD.paintWardrobeBack = () => {
+  const b = document.getElementById('wdBack');
+  if (!b) return;
+  const to = HUD.PAGES[HUD._cameFrom || 'locker'];
+  b.querySelector('span').textContent = to ? to.label : 'Back';
+  if (!b.dataset.wired) {
+    b.dataset.wired = '1';
+    b.addEventListener('click', () => HUD.leaveWardrobe());
+  }
+};
+
 /** Show exactly these clubhouse panes, hiding the rest. Replaces
  *  showClubhouseTab's one-at-a-time behaviour — the old tab bar is gone. */
 HUD.showPanes = names => {
@@ -336,7 +369,20 @@ HUD.showPanes = names => {
  *  "My code" inside the friends sheet, which copied it to the clipboard —
  *  fine for sending, useless for reading one out. */
 HUD.setFriendCode = code => {
-  if (el.lpIdCode) el.lpIdCode.textContent = code || '—';
+  if (el.lpIdCode) {
+    el.lpIdCode.textContent = code || '—';
+    el.lpIdCode.disabled = !code;
+    if (code && !el.lpIdCode.dataset.wired) {
+      el.lpIdCode.dataset.wired = '1';
+      el.lpIdCode.addEventListener('click', () => {
+        const c = el.lpIdCode.textContent.trim();
+        if (!c || c === '—') return;
+        navigator.clipboard?.writeText(c)
+          .then(() => HUD.toast('Friend code copied — send it to somebody.', 'good', 2200))
+          .catch(() => HUD.toast('Your code is ' + c, 'info', 3000));
+      });
+    }
+  }
 };
 
 HUD.paintNav = () => {
@@ -3143,6 +3189,9 @@ HUD.renderLpGlobalRank = data => {
 
 /** Total rounds, on the front door — the one career number the reference
     design wants visible before the clubhouse's own, fuller stat block. */
+/* The round count left the identity block — it is a career stat, and that
+   block is who you are plus the one claim waiting for you. Kept as a no-op
+   rather than deleted, because callers should not have to know. */
 HUD.setLpRounds = n => { if (el.lpTotalRounds) el.lpTotalRounds.textContent = (n || 0).toLocaleString(); };
 
 /** A handful of small circles standing in for "there are people online" —
@@ -5036,6 +5085,22 @@ HUD.renderFriends = (state, people) => {
 
   const pending = state?.pending || [];
   if (badge) { badge.hidden = !pending.length; badge.textContent = pending.length; }
+
+  /* The landing button says what is behind it before you open it — a
+     pending request is the one thing on this screen that needs answering,
+     and a door with nothing written on it gets opened once. */
+  const online = (people || []).filter(f => f.online).length;
+  if (el.lpFriendsBadge) {
+    el.lpFriendsBadge.hidden = !pending.length;
+    el.lpFriendsBadge.textContent = pending.length;
+    el.lpFriendsBadge.classList.toggle('claim', !!pending.length);
+  }
+  if (el.lpFriendsSub) {
+    el.lpFriendsSub.textContent = pending.length
+      ? `${pending.length} ${pending.length === 1 ? 'request' : 'requests'} waiting`
+      : online ? `${online} online now`
+      : (people || []).length ? `${people.length} friends` : 'Add by code · join a round';
+  }
 
   const rows = [];
 
