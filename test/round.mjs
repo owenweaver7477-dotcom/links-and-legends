@@ -8,6 +8,7 @@ import { BIOMES } from '../public/js/shared/biomes.js';
 import { ShotSim, calibrateCarries, suggestedPower } from '../public/js/shared/ballistics.js';
 import { CLUBS, CLUB_BY_KEY, CARRY, suggestClub } from '../public/js/shared/clubs.js';
 import { crewEffect } from '../public/js/shared/crew.js';
+import { setStats, pieceCompletionFor } from '../public/js/shared/clubsets.js';
 
 calibrateCarries();
 /* Point the socket tests at a server on another port with GOLF_URL, so a
@@ -95,7 +96,19 @@ function maybePlay(c, st) {
     // and reach well short of the reference bag the CARRY table was measured
     // with.  Club up accordingly, exactly as the client does for a player.
     const kit = c.profile || {};
-    const reach = crewEffect(kit.crew || null, kit.clubTier ?? 0, kit.refine ?? 0, { power: 1 }).speed;
+    /* The bot must price the bag the SERVER will swing, or it clubs down for
+       reach it does not have. This was still passing the retired
+       (crew, clubTier, refine, ctx) signature, which quietly resolved to the
+       reference ball for everybody — a bot carrying a Mythic set played its
+       shots as if it carried the starter.
+
+       Bag-wide here, with no club named, because this is the number that
+       CHOOSES the club and there is no club yet. setStats reads an unnamed
+       club as irons, which is the right middle of a bag to club from. */
+    const pieces = (kit.clubPieces || {})[kit.clubSet];
+    const grade = (kit.clubGrades || {})[kit.clubSet] ?? 1;
+    const bagWide = setStats(kit.clubSet || null, pieceCompletionFor(pieces, null), null, grade);
+    const reach = crewEffect(kit.crew || null, bagWide, { power: 1 }).speed;
     const club = suggestClub(dist, lie.id, lie.id === 'green', null, reach);
     // Aim like a golfer, not a crow: near the hole go at the pin, but from
     // distance follow the ROUTE — which is what makes a dogleg guarded by
@@ -127,7 +140,8 @@ function maybePlay(c, st) {
     // the caddie's number has to price the bag the server will actually swing
     let power = suggestedPower(T, p.x, p.z, club.key, aim, cur.wind,
       target + (club.putter ? 0.45 : 0), kit.gear || null,
-      { crew: kit.crew || null, clubTier: kit.clubTier ?? 0, refine: kit.refine ?? 0 });
+      { crew: kit.crew || null, clubSet: kit.clubSet || null,
+        setDone: pieceCompletionFor(pieces, club.key), setGrade: grade });
     if (power == null) power = 1;
     const face = (Math.random() * 2 - 1) * 2.0 * SKILL;
     const pw = Math.min(1.05, power * (1 + (Math.random() * 2 - 1) * 0.04 * SKILL));

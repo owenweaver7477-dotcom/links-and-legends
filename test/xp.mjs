@@ -424,6 +424,33 @@ test('cosmetic case items never grant power either — sets are the only excepti
   }
 });
 
+test('mastery is prestige and never reaches the simulation', async () => {
+  /* Club sets are already the one place power comes from a case. Letting
+     time-in-game be a THIRD source of distance would mean a player who has
+     hit ten thousand 7 irons out-drives one who has not, on top of rarity
+     and on top of collection — the point where equipment stops being a
+     choice and becomes a tax on hours played. */
+  const { masteryRank, MASTERY_RANKS } = await import('../public/js/shared/mastery.js');
+  const { crewEffect } = await import('../public/js/shared/crew.js');
+
+  for (const r of MASTERY_RANKS) {
+    for (const banned of POWER_KEYS) {
+      assert.equal(r[banned], undefined,
+        `mastery rank "${r.name}" grants ${banned} — mastery must never sell power`);
+    }
+  }
+  // a maxed rank resolves to a name and a colour, and nothing a shot reads
+  const top = masteryRank(999999);
+  assert.deepEqual(Object.keys(top).sort(),
+    ['color', 'into', 'level', 'name', 'need', 'next', 'pct', 'shots'].sort(),
+    'a mastery rank grew a field — check it is not a stat');
+
+  // and the shot itself is identical with or without any mastery at all
+  const ref = crewEffect(null, null, { power: 1 });
+  assert.equal(ref.speed, 1);
+  assert.equal(ref.faceDamp, 0);
+});
+
 test('a club set carries stats, and they come from its rarity alone', () => {
   // the deliberate exception, asserted so it stays deliberate
   for (const set of CLUB_SETS) {

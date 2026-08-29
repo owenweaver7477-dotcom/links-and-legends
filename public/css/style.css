@@ -536,6 +536,17 @@ html.touch .fsbtn { display: grid; }
 .clubbtn b { display: block; font-size: 12px; }
 .clubbtn span { font-size: 10px; color: #93ad99; font-variant-numeric: tabular-nums; }
 .clubbtn.on span { color: #bfe4c8; }
+/* Mastery on a club button. Prestige only (see mastery.js), so it is
+   deliberately quiet: a corner count in the rank's colour and a hairline
+   toward the next rank, never a stat line that reads as power. */
+.clubbtn { position: relative; overflow: hidden; }
+.clubbtn .mast { position: absolute; top: 5px; right: 6px; font-style: normal;
+  font-size: 9px; font-weight: 800; letter-spacing: .02em; color: var(--mc, #9fb0a6);
+  font-variant-numeric: tabular-nums; opacity: .92; }
+.clubbtn .mastbar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: rgba(255,255,255,.07); display: block; }
+.clubbtn .mastbar b { display: block; height: 100%; border-radius: 0 2px 2px 0;
+  transition: width .2s; }
 .bagbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
 .unitsel { font-size: 12px; color: #93ad99; display: flex; align-items: center; gap: 7px; cursor: pointer; }
 .unitsel input { accent-color: #4fb767; }
@@ -4338,3 +4349,17 @@ body.navbar-on #gemBal { display: none; }
   background: rgba(111,206,138,.18); color: #9fe8b4;
   border-color: rgba(111,206,138,.42);
 }
+
+/* Clubs you know — the mastery portrait on the career card. */
+.cr-mast { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 2px; }
+.crm { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+  border-radius: 10px; padding: 9px 10px 8px; position: relative; overflow: hidden; }
+.crm b { display: block; font-size: 15px; color: #fff; letter-spacing: .01em; }
+.crm span { display: block; font-size: 10px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--mc, #9fb0a6); margin-top: 1px; }
+.crm em { display: block; font-style: normal; font-size: 10px; color: #93ad99;
+  font-variant-numeric: tabular-nums; margin-top: 3px; }
+.crm i { position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: rgba(255,255,255,.07); }
+.crm i span { display: block; height: 100%; background: var(--mc, #9fb0a6); }
+@media (max-width: 560px) { .cr-mast { grid-template-columns: 1fr; } }

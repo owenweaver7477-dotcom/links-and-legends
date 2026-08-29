@@ -3438,12 +3438,12 @@ function renderClubhouse() {
   bagDraft = me()?.bag?.length ? me().bag.slice()
     : (prof?.bag?.length ? prof.bag.slice()
       : (bagDraft || normaliseBag(DEFAULT_BAG, { pad: true })));
-  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, G.profile?.clubSkin || 'stock');
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, G.profile?.clubSkin || 'stock', G.profile?.mastery);
   HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
     if (res?.error) return HUD.toast(res.error, 'warn', 3000);
     if (G.profile) G.profile.clubSkin = res.skin;
     HUD.renderClubSkins(G.profile, () => {});
-    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, res.skin);
+    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, res.skin, G.profile?.mastery);
   }));
   HUD.setHomeCoins(prof?.coins ?? 0);
   HUD.setCoins(prof?.coins ?? 0);
@@ -3503,24 +3503,24 @@ function toggleClubInBag(key) {
     set.add(key);
   }
   bagDraft = normaliseBag([...set]);   // optimistic; the server echo confirms it
-  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, G.profile?.clubSkin || 'stock');
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, G.profile?.clubSkin || 'stock', G.profile?.mastery);
   HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
     if (res?.error) return HUD.toast(res.error, 'warn', 3000);
     if (G.profile) G.profile.clubSkin = res.skin;
     HUD.renderClubSkins(G.profile, () => {});
-    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, res.skin);
+    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, res.skin, G.profile?.mastery);
   }));
   Net.prefs({ bag: bagDraft });
 }
 
 document.getElementById('btnBagReset').addEventListener('click', () => {
   bagDraft = normaliseBag(DEFAULT_BAG, { pad: true });
-  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, G.profile?.clubSkin || 'stock');
+  HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, G.profile?.clubSkin || 'stock', G.profile?.mastery);
   HUD.renderClubSkins(G.profile, id => Net.setClubSkin(id, res => {
     if (res?.error) return HUD.toast(res.error, 'warn', 3000);
     if (G.profile) G.profile.clubSkin = res.skin;
     HUD.renderClubSkins(G.profile, () => {});
-    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, res.skin);
+    HUD.renderBag(bagDraft, toggleClubInBag, G.profile?.clubSet || STARTER_SET, res.skin, G.profile?.mastery);
   }));
   Net.prefs({ bag: bagDraft });
 });

@@ -218,7 +218,7 @@ import { settleRound, setDifficulty, difficultyOf,
          flushProfiles, claimLogin, openCase, buyCase, openVaultCase, buyVaultCase, openProCase, buyProCase,
          buyUnlockDirect, sellUnlock,
          buyClubCase, openClubCase, equipClubSet,
-         buySetCrate, openSetCrate, buyClubPiece,
+         buySetCrate, openSetCrate, buyClubPiece, recordShot,
          devSetLevel, devGrantTestGems } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
@@ -2464,6 +2464,7 @@ io.on('connection', socket => {
     const fromGreen = p.lie === 'green';
     const wasTeeShot = p.strokes === 0;
     const result = new ShotSim(terrain(room), shot).runToEnd();
+    recordShot(p.pid, club.key);        // prestige only — see mastery.js
 
     p.strokes += 1 + result.penalty;
     // the stats book: a putt is a stroke played from the green; a fairway is

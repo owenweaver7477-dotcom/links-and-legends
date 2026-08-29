@@ -231,6 +231,7 @@ export function getProfile(pid) {
          not the first rung of a chase. Its own object per profile. */
       clubPieces: { [STARTER_SET]: [...SET_CLUBS] },
       clubSet: STARTER_SET, clubCases: 0, setCrates: 0,
+      mastery: {},              // clubKey -> shots hit with it. Prestige only.
       // and Mint: nobody should begin behind on a roll
       clubGrades: { [STARTER_SET]: 1 },
       cleared: [],
@@ -474,7 +475,7 @@ export function publicProfile(pid) {
     crew: p.crew || { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
     clubPieces: p.clubPieces || { [STARTER_SET]: [...SET_CLUBS] },
     clubSet: p.clubSet || STARTER_SET, clubGrades: p.clubGrades || {},
-    setCrates: p.setCrates || 0,
+    setCrates: p.setCrates || 0, mastery: p.mastery || {},
     clubCases: p.clubCases || 0, cleared: (p.cleared || []).length,
     clubSkin: p.clubSkin || 'stock',
     /* What they look like, so a browser with an empty localStorage — a new
@@ -508,6 +509,20 @@ export function publicProfile(pid) {
  * Fold one finished hole into a player's profile.
  * @param holeStats { strokes, par, putts, fairwayHit (bool|null), gir (bool) }
  */
+/* One shot, with one club. Counted server-side off a shot the server
+   itself simulated, so it is a record of what happened rather than what a
+   client claimed — the same rule every other stat in this file follows.
+
+   Prestige only: this never reaches crewEffect. See mastery.js. */
+export function recordShot(pid, clubKey) {
+  if (!clubKey) return;
+  const p = getProfile(pid);
+  if (!p.mastery) p.mastery = {};
+  p.mastery[clubKey] = (p.mastery[clubKey] || 0) + 1;
+  // no saveSoon: a shot is followed by recordHole within the same hole, and
+  // saving on every swing would write the store forty times a round
+}
+
 export function recordHole(pid, h) {
   const p = getProfile(pid);
   p.holes++;

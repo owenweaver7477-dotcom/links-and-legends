@@ -13,6 +13,7 @@ import { CLUB_SETS, setById, setStats, STARTER_SET, upgradeCost, upgradeCount,
          classOf, CLUB_CLASSES, CLASS_LABEL, STAT_KEYS, STAT_LABEL,
          pieceCompletionFor, completionOf, SET_CLUBS, missingPieces,
          piecePrice, SET_CRATE_GEM_COST } from '../shared/clubsets.js';
+import { masteryRank, totalShots, topClubs } from '../shared/mastery.js';
 import { EMOTES, EMOTE_SLOTS } from './celebrations.js';
 import { UNLOCKS, unlocksAt, unlocksOfKind, ownedOfKind, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { ACTIONS, keysFor, bindKey, resetBinds, keyLabel, RESERVED } from './binds.js';
@@ -733,9 +734,10 @@ HUD.renderColours = (room, myPid, onPick, rating = 0) => {
   }
 };
 
-HUD.renderBag = (bag, onToggle, clubSet = STARTER_SET, skin = 'stock') => {
+HUD.renderBag = (bag, onToggle, clubSet = STARTER_SET, skin = 'stock', mastery = null) => {
   HUD.mySet = clubSet;
   HUD.mySkin = skin;
+  HUD.myMastery = mastery || HUD.myMastery || {};
   el.bagList.innerHTML = '';
   const carried = new Set(bag);
   el.bagCount.textContent = `(${bag.length}/${BAG_SIZE})`;
@@ -745,7 +747,16 @@ HUD.renderBag = (bag, onToggle, clubSet = STARTER_SET, skin = 'stock') => {
     const b = document.createElement('button');
     b.className = 'clubbtn' + (on ? ' on' : '') + (c.putter ? ' fixed' : '');
     const carry = c.putter ? '' : Math.round(dist(CARRY[c.key] || 0)) + ' ' + HUD.unit();
-    b.innerHTML = `<b>${c.label}</b><span>${c.putter ? 'always in' : c.loft + '° · ' + carry}</span>`;
+    /* MASTERY. Shots hit with this exact club, and the name that count has
+       earned. It buys nothing — see mastery.js — so it sits quietly as a
+       corner number rather than a stat line, and a club you have never
+       swung shows nothing at all rather than a zero. */
+    const mk = masteryRank((HUD.myMastery || {})[c.key] || 0);
+    const mastBadge = mk.shots
+      ? `<em class="mast" style="--mc:${mk.color}" title="${escapeHtml(mk.name)} · ${mk.shots} shots"
+           >${mk.shots > 999 ? (mk.shots / 1000).toFixed(1) + 'k' : mk.shots}</em>
+         <i class="mastbar"><b style="width:${(mk.pct * 100).toFixed(0)}%;background:${mk.color}"></b></i>` : '';
+    b.innerHTML = `<b>${c.label}</b><span>${c.putter ? 'always in' : c.loft + '° · ' + carry}</span>${mastBadge}`;
     if (!c.putter) b.addEventListener('click', () => onToggle(c.key));
     /* Hovering a club shows it. Fourteen picks out of twenty-one from a list
        of abbreviations is a spreadsheet; seeing the club you are about to
@@ -753,7 +764,8 @@ HUD.renderBag = (bag, onToggle, clubSet = STARTER_SET, skin = 'stock') => {
     const view = { kind: 'club', key: c.key, set: HUD.mySet || STARTER_SET,
                    skin: HUD.mySkin || 'stock',
                    name: c.name || c.label,
-                   sub: c.putter ? 'Always in the bag' : `${c.loft}° · ${carry}` };
+                   sub: (c.putter ? 'Always in the bag' : `${c.loft}° · ${carry}`)
+                        + (mk.shots ? ` · ${mk.name} (${mk.shots} shots)` : '') };
     const show = () => HUD.previewBagClub(view);
     b.addEventListener('pointerover', show);
     b.addEventListener('focus', show);
@@ -1224,6 +1236,28 @@ function buildCaddieCompare(prof) {
   return wrap;
 }
 
+/* The three clubs somebody actually plays, by shots hit. This is the whole
+   visible payoff of mastery and it is deliberately a portrait rather than a
+   scoreboard: a player who lives on their 7 iron and a player who bombs
+   driver read as different golfers here, and neither of them is stronger
+   for it (see mastery.js). Hidden entirely until there is something to
+   show — an empty "most swung" board on a new career is just furniture. */
+function masteryStrip(mastery) {
+  const top = topClubs(mastery, 3);
+  if (!top.length) return '';
+  const total = totalShots(mastery);
+  return `<h5 class="cr-h">Clubs you know — ${total.toLocaleString()} shots hit</h5>
+    <div class="cr-mast">${top.map(t => {
+      const label = CLUB_BY_KEY[t.key]?.label || t.key;
+      return `<div class="crm" style="--mc:${t.rank.color}">
+        <b>${escapeHtml(label)}</b>
+        <span>${escapeHtml(t.rank.name)}</span>
+        <em>${t.shots.toLocaleString()} shots</em>
+        <i><span style="width:${(t.rank.pct * 100).toFixed(0)}%"></span></i>
+      </div>`;
+    }).join('')}</div>`;
+}
+
 HUD.renderCareer = (prof) => {
   const box = el.careerBox;
   if (!box) return;
@@ -1279,6 +1313,8 @@ HUD.renderCareer = (prof) => {
        ${dial(prof.avgPutts == null ? 0 : Math.max(0, (2.4 - prof.avgPutts) / 1.2 * 100),
               'putts / hole', prof.avgPutts == null ? '—' : prof.avgPutts)}
      </div>
+
+     ${masteryStrip(prof.mastery)}
 
      <div class="cr-tally">
        <span><b>${prof.birdies || 0}</b> birdies</span>
