@@ -505,6 +505,98 @@ export function publicProfile(pid) {
   };
 }
 
+/* ═══════════════════════════════════════════ WHAT A STRANGER MAY SEE ════
+   The projection sent when somebody opens SOMEBODY ELSE'S profile.
+
+   Written as an ALLOW-LIST, and that is the whole point of it. The obvious
+   implementation is to take publicProfile and delete the private keys, and
+   that is exactly the version that leaks: the next person to add a field
+   adds it to publicProfile, never thinks about this function, and the field
+   ships to strangers by default. Built this way, a new field is invisible
+   here until somebody decides to put it here.
+
+   WHAT IS DELIBERATELY NOT IN IT, since a list of omissions is easier to
+   review than an absence:
+
+     coins, gems, cases, proCases, vaultCases, clubCases, setCrates,
+     casesSincePity — somebody else's wallet and how close they are to a
+     pity drop. Nothing about another player's economy is any of your
+     business, and knowing their case count is the raw material for
+     begging and for scams.
+
+     difficulty and earnRate — a personal setting. Broadcasting "this
+     player is on the easy earn rate" invites a judgement they never opted
+     into, and it is not a golf statistic.
+
+     login — a daily-streak counter is engagement data, not something a
+     golfer did.
+
+   What IS here is what the request asked for: their profile, their skins
+   and everything. Cosmetics are the point of looking somebody up.
+
+   publicProfile stays as it is: ~35 fields including the wallet, and it is
+   only ever emitted to the socket that owns it. */
+/** Is this a player who has ever existed? getProfile CREATES one on a miss,
+ *  which is right for the owner and wrong for a lookup: without this, asking
+ *  for a made-up pid mints an empty profile and answers as though it were
+ *  real, which is both a fake profile and a way to grow the store from
+ *  outside. */
+export const profileExists = pid => profiles.has(pid);
+
+export function visitorProfile(pid) {
+  const p = getProfile(pid);
+  const lv = levelFromXp(p.xp || 0);
+  return {
+    pid,
+    name: p.name || null,
+
+    /* who they are */
+    level: lv.level, progress: lv.progress, maxed: lv.maxed,
+    rating: Math.round(p.rating),
+    handicap: handicapFor(p.rating),
+    index: indexOf(p),
+
+    /* what they have done */
+    rounds: p.rounds, best: p.best,
+    birdies: p.birdies, eagles: p.eagles, aces: p.aces,
+    records: p.recordsHeld || 0,
+    cleared: (p.cleared || []).length,
+    stars: p.stars || {},
+    pro: Object.entries(p.stars || {}).filter(([, n]) => n >= STARS_FOR_PRO).map(([c]) => c),
+    avgPutts: p.holes ? +(p.putts / p.holes).toFixed(2) : null,
+    fairwayPct: p.fairwayChances ? Math.round(p.fairways / p.fairwayChances * 100) : null,
+    girPct: p.holes ? Math.round(p.gir / p.holes * 100) : null,
+    byCourse: courseForm(p),
+    history: p.history.slice(-20),
+
+    /* what they look like — the reason anybody opens this */
+    look: p.look || null,
+    ballColor: p.ballColor || null,
+    clubSkin: p.clubSkin || 'stock',
+    clubSet: p.clubSet || STARTER_SET,
+    clubPieces: p.clubPieces || { [STARTER_SET]: [...SET_CLUBS] },
+    clubGrades: p.clubGrades || {},
+    caseUnlocks: p.caseUnlocks || [],
+    decalPurity: p.decalPurity || {},
+    equippedEmotes: p.equippedEmotes || null,
+    bag: p.bag || null,
+
+    /* the clubs they actually play — prestige, and a portrait (mastery.js) */
+    mastery: p.mastery || {}
+  };
+}
+
+/** Every key visitorProfile is allowed to send. Exported so the test can
+ *  assert the projection has not quietly grown — a field arriving here
+ *  should be a decision somebody made, not one they inherited. */
+export const VISITOR_FIELDS = Object.freeze([
+  'pid', 'name', 'level', 'progress', 'maxed', 'rating', 'handicap', 'index',
+  'rounds', 'best', 'birdies', 'eagles', 'aces', 'records', 'cleared',
+  'stars', 'pro', 'avgPutts', 'fairwayPct', 'girPct', 'byCourse', 'history',
+  'look', 'ballColor', 'clubSkin', 'clubSet', 'clubPieces', 'clubGrades',
+  'caseUnlocks', 'decalPurity', 'equippedEmotes', 'bag', 'mastery'
+]);
+
 /**
  * Fold one finished hole into a player's profile.
  * @param holeStats { strokes, par, putts, fairwayHit (bool|null), gir (bool) }

@@ -1129,6 +1129,24 @@
      yourself rather than watching the bag panel's little auto-spin;
      "New decal" reaches the one cosmetic slot (the shaft band) that had
      no picker anywhere in the game before this. -->
+<!-- SOMEBODY ELSE'S PROFILE. A modal rather than a page, because you open
+     one from a friends list, a leaderboard or a roster and you want to go
+     back to where you were — a page would lose your place in whichever list
+     you were reading. -->
+<div class="modal" id="modalProfile" hidden>
+  <div class="modal-card profcard">
+    <div class="rw-head">
+      <h3 id="pvName">Golfer</h3>
+      <button class="btn mini" id="btnProfClose" title="Close"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M5 5 19 19M19 5 5 19" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="pv-body">
+      <div class="pv-stage"><canvas id="pvCanvas"></canvas><span class="pv-cap" id="pvCap"></span></div>
+      <div class="pv-side" id="pvSide"></div>
+    </div>
+    <div class="pv-more" id="pvMore"></div>
+  </div>
+</div>
+
 <div class="modal" id="modalClubInspect" hidden>
   <div class="modal-card inspectcard">
     <div class="rw-head">

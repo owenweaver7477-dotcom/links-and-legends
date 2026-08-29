@@ -6,7 +6,7 @@ import { CARRY, CLUBS, CLUB_BY_KEY, BAG_SIZE, DEFAULT_BAG } from '../shared/club
 import { HOLES_PER_COURSE, BALL_COLORS, COURSE_ORDER } from '../shared/biomes.js';
 import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
          HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES, bodiesOf,
-         clubDecalFor } from '../shared/avatars.js';
+         clubDecalFor, normaliseLook } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost } from '../shared/crew.js';
 import { CLUB_SETS, setById, setStats, STARTER_SET, upgradeCost, upgradeCount,
@@ -3679,7 +3679,7 @@ HUD.renderWorld = (data, myPid) => {
     const mine = r.pid === myPid;
     const rel = r.best == null ? '—'
       : (r.best === 0 ? 'E' : r.best > 0 ? '+' + r.best : String(r.best));
-    return `<li class="wr${mine ? ' mine' : ''}">` +
+    return `<li class="wr clickable${mine ? ' mine' : ''}" data-profile="${r.pid}">` +
       `<span class="wr-n">${r.rank}</span>` +
       `<span class="wr-name">${escapeHtml(r.name)}${mine ? '<em>you</em>' : ''}</span>` +
       `<span class="wr-lvl">LV ${r.level}</span>` +
@@ -4185,7 +4185,8 @@ import { shaftDecalDataUrl } from './shaftdecals.js';
 import { cartDecalDataUrl } from './cartdecals.js';
 import { showItem as showShopItem, setUserOrbit as setShopOrbit, releaseUserOrbit as releaseShopOrbit,
          mountCaseOpener, mountAvatarStage } from './shopview.js';
-import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress, RARITY_ACCENT } from '../shared/clubskins.js';
+import { CLUB_SKINS, skinById, skinEarned, skinRequirement, skinProgress,
+         RARITY_ACCENT } from '../shared/clubskins.js';
 import { DIFFICULTIES, difficultyById } from '../shared/difficulty.js';
 import { weatherEffects, clockText } from '../shared/weather.js';
 
@@ -4649,7 +4650,8 @@ HUD.renderBoards = (data, myPid, courseNames) => {
      rows, which is the whole point of the feature — finding the two people
      you know in a list of strangers. */
   const row = (r, main, sub, tag) =>
-    `<div class="rkrow${r.pid === myPid || r.me ? ' me' : ''}${r.friend ? ' pal' : ''}">
+    `<div class="rkrow clickable${r.pid === myPid || r.me ? ' me' : ''}${r.friend ? ' pal' : ''}"
+       ${r.pid ? `data-profile="${r.pid}"` : ''}>
        <span class="rkn${r.rank <= 3 ? ' gold' : ''}">${r.rank}</span>
        <span class="rkname">${r.friend ? `<i class="rkstar">${icon('star')}</i>` : ''}<b>${escapeHtml(r.name)}</b>${tag || ''}</span>
        <span class="rkv">${main}</span>
@@ -4788,7 +4790,8 @@ HUD.renderFriends = (state, people) => {
     const sub = f.online
       ? (f.where || 'In the menu')
       : `Level ${f.level} · ${t.name}${f.index != null ? ' · plays off ' + hcpText(f.index) : ''}`;
-    rows.push(`<div class="fr-row${f.fav ? ' fav' : ''}">
+    rows.push(`<div class="fr-row clickable${f.fav ? ' fav' : ''}" data-profile="${f.pid}"
+      title="See ${escapeHtml(f.name)}'s profile">
       <span class="fr-dot${f.online ? ' on' : ''}"></span>
       <span class="fr-nm"><b>${f.fav ? icon('star') + ' ' : ''}${escapeHtml(f.name)}</b><small>${escapeHtml(sub)}</small></span>
       <span class="fr-acts">
@@ -4804,6 +4807,162 @@ HUD.renderFriends = (state, people) => {
        somebody, and they can add you — or paste theirs above.
        <br>Your friends stay with your golfer; there is nothing to sign up for.</div>`;
 };
+
+/* ═════════════════════════════════════════ SOMEBODY ELSE'S PROFILE ══════
+   Opened from a friends list, a leaderboard or the room roster. A modal
+   rather than a page, because you arrive from a list and want to go back to
+   your place in it.
+
+   THE CONTENT IS THE POINT. A card with a name, a level and a rating on it
+   is what every list already showed — nothing worth a click. What is not
+   anywhere else is the GOLFER: their outfit, the set they carry and how
+   much of it they have collected, the finish on their clubs, the clubs they
+   actually play. That is what people look each other up for.
+
+   Everything here comes from the server's visitorProfile projection, which
+   is an allow-list and carries no wallet — see the note on it in
+   server/profiles.js. This function must never be handed a publicProfile. */
+HUD.showProfile = (prof, opts = {}) => {
+  const modal = document.getElementById('modalProfile');
+  if (!modal || !prof) return;
+  modal.hidden = false;
+
+  const t = rTier(prof.level || 1);
+  document.getElementById('pvName').textContent = prof.name || 'A golfer';
+
+  /* Their golfer, turning. The same avatar stage the wardrobe uses, so what
+     you see here is exactly what walks the fairway beside you. */
+  const cv = document.getElementById('pvCanvas');
+  if (cv) {
+    mountAvatarStage(cv, normaliseLook(prof.look));
+    const cap = document.getElementById('pvCap');
+    if (cap) {
+      cap.innerHTML = `<b>LV ${prof.level}</b> ${escapeHtml(t.name)}` +
+        (opts.self ? ' <em>you</em>' : opts.friend ? ' <em>friend</em>' : '');
+    }
+  }
+
+  /* The record. `—` rather than 0 wherever a number needs rounds behind it
+     to mean anything: "0.00 putts per hole" reads as a claim, and a dash
+     reads as "they have not played yet", which is the truth. */
+  const rel = v => v == null ? '—' : v === 0 ? 'E' : v > 0 ? '+' + v : String(v);
+  const pct = v => v == null ? '—' : v + '%';
+  const stat = (v, l) => `<div class="pv-stat"><b>${v}</b><span>${l}</span></div>`;
+  const side = document.getElementById('pvSide');
+  if (side) {
+    side.innerHTML =
+      `<div class="pv-grid">
+         ${stat(prof.rating ?? '—', 'rating')}
+         ${stat(prof.index == null ? '—' : hcpText(prof.index), 'handicap')}
+         ${stat((prof.rounds || 0).toLocaleString(), 'rounds')}
+         ${stat(rel(prof.best), 'best')}
+       </div>
+       <div class="pv-grid four">
+         ${stat(prof.birdies || 0, 'birdies')}
+         ${stat(prof.eagles || 0, 'eagles')}
+         ${stat(prof.aces || 0, 'aces')}
+         ${stat(prof.records || 0, 'records')}
+       </div>
+       <div class="pv-grid">
+         ${stat(pct(prof.fairwayPct), 'fairways')}
+         ${stat(pct(prof.girPct), 'greens')}
+         ${stat(prof.avgPutts ?? '—', 'putts / hole')}
+         ${stat(`${prof.cleared || 0} / ${COURSE_ORDER.length}`, 'courses cleared')}
+       </div>`;
+  }
+
+  /* WHAT THEY CARRY. The half of this panel that no list anywhere else
+     shows, and the reason somebody clicked. */
+  const more = document.getElementById('pvMore');
+  if (!more) return;
+  const bits = [];
+
+  const setId = prof.clubSet || STARTER_SET;
+  const set = setById(setId);
+  if (set) {
+    const pieces = (prof.clubPieces || {})[setId] || [];
+    const done = Math.round(completionOf(pieces) * 100);
+    const grade = (prof.clubGrades || {})[setId];
+    const skin = skinById(prof.clubSkin || 'stock');
+    bits.push(`<div class="pv-sec">
+      <h5>In the bag</h5>
+      <div class="pv-set" style="--rarity-color:${RARITY_ACCENT[set.rarity] || RARITY_ACCENT.standard}">
+        <span class="pv-set-art">${clubSvg(set.look, 34)}</span>
+        <span class="pv-set-txt">
+          <b>${escapeHtml(set.name)}</b>
+          <small>${escapeHtml(set.brand)} · ${set.rarity[0].toUpperCase()}${set.rarity.slice(1)}
+            · ${pieces.length}/${SET_CLUBS.length} clubs${grade != null ? ' · grade ' + formatGrade(grade) : ''}</small>
+          <i class="pv-bar"><span style="width:${done}%"></span></i>
+        </span>
+      </div>
+      ${skin.id !== 'stock' ? `<p class="pv-note">Finish: <b>${escapeHtml(skin.name)}</b>${skin.feat ? ' — earned, not bought' : ''}</p>` : ''}
+    </div>`);
+  }
+
+  /* The clubs they actually swing. Prestige only (mastery.js), which is
+     precisely why it is worth showing a stranger: it is a portrait rather
+     than a scoreboard, and it says what kind of golfer somebody is. */
+  const top = topClubs(prof.mastery, 3);
+  if (top.length) {
+    bits.push(`<div class="pv-sec">
+      <h5>Clubs they know — ${totalShots(prof.mastery).toLocaleString()} shots</h5>
+      <div class="cr-mast">${top.map(c => `
+        <div class="crm" style="--mc:${c.rank.color}">
+          <b>${escapeHtml(CLUB_BY_KEY[c.key]?.label || c.key)}</b>
+          <span>${escapeHtml(c.rank.name)}</span>
+          <em>${c.shots.toLocaleString()} shots</em>
+          <i><span style="width:${(c.rank.pct * 100).toFixed(0)}%"></span></i>
+        </div>`).join('')}</div>
+    </div>`);
+  }
+
+  /* Cosmetics they own. Not a full inventory — the point is to show off,
+     and thirty tiles is a spreadsheet — so it is what they are WEARING plus
+     a count of the rest. */
+  const worn = [];
+  const L = prof.look || {};
+  const named = (kind, id) => UNLOCKS.find(u => u.kind === kind && u.id === id)?.name;
+  for (const [kind, id] of [['decal', L.decal], ['cartdecal', L.cartDecal],
+                            ['trail', L.trail], ['ball', L.ballFinish], ['title', L.title]]) {
+    const n = id && named(kind, id);
+    if (n) worn.push(`<span class="pv-chip">${escapeHtml(n)}</span>`);
+  }
+  const ownedCount = (prof.caseUnlocks || []).length;
+  if (worn.length || ownedCount) {
+    bits.push(`<div class="pv-sec">
+      <h5>Wearing</h5>
+      <div class="pv-chips">${worn.join('') || '<span class="pv-chip none">Nothing equipped</span>'}</div>
+      ${ownedCount ? `<p class="pv-note">${ownedCount} item${ownedCount === 1 ? '' : 's'} pulled from cases.</p>` : ''}
+    </div>`);
+  }
+
+  more.innerHTML = bits.join('');
+};
+
+let profBound = false;
+HUD.bindProfile = () => {
+  if (profBound) return;
+  profBound = true;
+  document.getElementById('btnProfClose')?.addEventListener('click', () => {
+    document.getElementById('modalProfile').hidden = true;
+  });
+  /* ONE delegated listener on the document rather than one per list. The
+     friends list, both leaderboards, the room roster and the records board
+     are five separately-rendered trees that are each replaced wholesale on
+     every update, so a direct listener would be torn off with them — and
+     five bindings to keep in step is how one of them quietly stops working.
+     Any row anywhere that carries data-profile opens a profile. */
+  document.addEventListener('click', e => {
+    const row = e.target.closest('[data-profile]');
+    if (!row) return;
+    // an action button inside a row is an action, not a profile click
+    if (e.target.closest('button, a')) return;
+    const pid = row.dataset.profile;
+    if (pid) HUD.onOpenProfile?.(pid);
+  });
+};
+
+HUD.profileError = msg => HUD.toast(msg || 'Could not open that profile.', 'warn', 2000);
 
 let friendsBound = false;
 HUD.bindFriends = () => {

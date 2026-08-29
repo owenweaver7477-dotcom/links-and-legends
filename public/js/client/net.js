@@ -390,6 +390,12 @@ Net.onInvites = fn => Net.socket?.on('invite:state', fn);
 /* ---------------------------------------------------------------- friends ---
    One call for eleven verbs, matching the server's single handler. The
    client never says who it IS — only who it wants to act on. */
+/* SOMEBODY ELSE'S PROFILE. A different call from `profile:me` on purpose —
+   the server answers this one with a deliberately narrower projection that
+   carries no wallet (see visitorProfile in server/profiles.js), and having
+   two names for it is what keeps the two from being confused. */
+Net.profileOf = (pid, cb) => ask('profile:of', { pid }, res => cb?.(res));
+
 Net.friends = (act, payload, cb) =>
   ask('friends:do', { act, ...(payload || {}) }, res => cb?.(res));
 /** Pushed when somebody accepts, removes or blocks you. */

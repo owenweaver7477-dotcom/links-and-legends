@@ -4545,6 +4545,19 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
 
   /* ---- friends --------------------------------------------------------- */
   HUD.bindFriends();
+  HUD.bindProfile();
+  /* Any row anywhere carrying data-profile — a friend, a leaderboard place,
+     a name in the room roster — opens that player's profile. Always from the
+     server rather than from whatever the row happened to be rendered with:
+     a list row carries five fields and a profile is thirty, and the server
+     is the only thing that decides which thirty a stranger may see. */
+  HUD.onOpenProfile = pid => {
+    if (!pid) return;
+    Net.profileOf(pid, res => {
+      if (!res?.ok) return HUD.profileError(res?.error);
+      HUD.showProfile(res.profile, { self: !!res.self, friend: !!res.friend });
+    });
+  };
   let myFriendCode = null;
   const drawFriends = res => {
     if (res?.state) myFriendCode = res.state.code || myFriendCode;

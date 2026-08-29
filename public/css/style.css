@@ -4468,3 +4468,61 @@ body.navbar-on #gemBal { display: none; }
   background: rgba(255,255,255,.07); }
 .crm i span { display: block; height: 100%; background: var(--mc, #9fb0a6); }
 @media (max-width: 560px) { .cr-mast { grid-template-columns: 1fr; } }
+
+/* ═══════════════════════════════ SOMEBODY ELSE'S PROFILE ════════════════
+   A row you can open. The cursor and the lift are the whole affordance —
+   these lists have looked identical to unclickable ones since they existed,
+   so without this nobody would ever discover that a name is a link. */
+.clickable { cursor: pointer; transition: background .13s, transform .13s; }
+.fr-row.clickable:hover, .rkrow.clickable:hover, li.wr.clickable:hover {
+  background: rgba(255,255,255,.07);
+}
+.rkrow.clickable:hover, .fr-row.clickable:hover { transform: translateX(2px); }
+
+.profcard { width: min(680px, 94vw); max-height: 88vh; overflow: auto; }
+.pv-body { display: grid; grid-template-columns: 210px 1fr; gap: 16px; margin-top: 4px; }
+.pv-stage { position: relative; border-radius: 13px; overflow: hidden;
+  background: linear-gradient(170deg, rgba(255,255,255,.06), rgba(0,0,0,.22));
+  border: 1px solid rgba(255,255,255,.09); aspect-ratio: 3 / 4; }
+.pv-stage canvas { width: 100%; height: 100%; display: block; }
+.pv-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 7px 10px;
+  font-size: 11px; color: var(--ink-2); background: linear-gradient(transparent, rgba(6,12,9,.86)); }
+.pv-cap b { color: var(--accent-hi); margin-right: 5px; }
+.pv-cap em { font-style: normal; font-size: 9px; font-weight: 800; letter-spacing: .6px;
+  text-transform: uppercase; color: var(--label); margin-left: 5px; }
+
+.pv-side { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.pv-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.pv-stat { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px; padding: 8px 6px; text-align: center; min-width: 0; }
+.pv-stat b { display: block; font-size: 16px; font-variant-numeric: tabular-nums;
+  color: var(--ink); line-height: 1.15; }
+.pv-stat span { display: block; font-size: 8.5px; font-weight: 800; letter-spacing: .5px;
+  text-transform: uppercase; color: var(--muted-dim); margin-top: 3px; }
+
+.pv-more { margin-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+.pv-sec h5 { font-size: 10px; font-weight: 800; letter-spacing: .9px;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+.pv-set { display: flex; align-items: center; gap: 11px; padding: 10px 12px;
+  border-radius: 11px; background: rgba(255,255,255,.04);
+  border: 1px solid var(--rarity-color, rgba(255,255,255,.1)); }
+.pv-set-art { flex: 0 0 auto; display: grid; place-items: center; }
+.pv-set-txt { min-width: 0; flex: 1; }
+.pv-set-txt b { display: block; font-size: 13.5px; color: var(--ink); }
+.pv-set-txt small { display: block; font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+.pv-bar { display: block; height: 3px; border-radius: 999px; margin-top: 6px;
+  background: rgba(255,255,255,.08); overflow: hidden; }
+.pv-bar span { display: block; height: 100%; background: var(--rarity-color, var(--accent)); }
+.pv-note { font-size: 10.5px; color: var(--muted); margin: 7px 0 0; }
+.pv-note b { color: var(--ink-2); }
+.pv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-chip { font-size: 10.5px; font-weight: 700; padding: 4px 9px; border-radius: 999px;
+  background: rgba(111,206,138,.14); border: 1px solid rgba(111,206,138,.28); color: var(--ink-2); }
+.pv-chip.none { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.09);
+  color: var(--muted-dim); font-weight: 600; }
+
+@media (max-width: 620px) {
+  .pv-body { grid-template-columns: 1fr; }
+  .pv-stage { max-width: 190px; margin: 0 auto; }
+  .pv-grid { grid-template-columns: repeat(2, 1fr); }
+}

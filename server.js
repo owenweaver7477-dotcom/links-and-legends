@@ -26,7 +26,7 @@ import { loadNames, claimName, checkName, adoptName, nameOf as claimedName,
          renameQuote, nameHistory } from './server/names.js';
 import { loadFriends, friendState, friendCode, requestFriend, acceptFriend,
          declineFriend, removeFriend, blockPlayer, unblockPlayer,
-         toggleFavourite, friendsOf, areFriends } from './server/friends.js';
+         toggleFavourite, friendsOf, areFriends, hasBlocked } from './server/friends.js';
 import { loadMarketplace, listItem, cancelListing, buyListing,
          myListings, allListings } from './server/marketplace.js';
 import { STARTER_SET, pieceCompletionFor } from './public/js/shared/clubsets.js';
@@ -204,7 +204,8 @@ import { CLUB_BY_KEY, normaliseBag, DEFAULT_BAG } from './public/js/shared/clubs
 import { rngKit, hashSeed, clamp } from './public/js/shared/rng.js';
 import { normaliseLook, looksEarnedAt, SHOT_RADIUS } from './public/js/shared/avatars.js';
 import { CART_TTL_MS, HAIL_RADIUS } from './public/js/shared/cart.js';
-import { loadProfiles, getProfile, publicProfile, recordHole, recordRound, colorAllowed, buyItem, seedProfile,
+import { loadProfiles, getProfile, publicProfile, visitorProfile, profileExists,
+         recordHole, recordRound, colorAllowed, buyItem, seedProfile,
          worldRanking, worldPlace, handicapRanking, handicapPlace, levelRanking, rememberName,
          setClubSkin,
          weeklyGainers, seasonBoard, courseBoard, levelHistogram } from './server/profiles.js';
@@ -1736,6 +1737,30 @@ io.on('connection', socket => {
     const rows = Activity.headToHeadFor(getProfile(pid), 20)
       .map(r => ({ ...r, name: nameOf(r.pid) || r.name }));
     ack({ rows });
+  });
+
+  /* SOMEBODY ELSE'S PROFILE.
+     Answers with visitorProfile, never publicProfile — see the long note on
+     the projection in server/profiles.js. The short version: publicProfile
+     carries the wallet and is only ever sent to the socket that owns it.
+
+     Three gates, and none of them is about the data being secret:
+       - you have to be a player yourself, so this is not an open endpoint;
+       - the pid has to already exist, because getProfile MINTS one on a
+         miss and would otherwise answer for a made-up player and grow the
+         store from outside;
+       - somebody who blocked you does not appear to you, which is the
+         thing blocking is for. */
+  socket.on('profile:of', (d, ack) => {
+    if (typeof ack !== 'function') return;
+    const me = sockets.get(socket.id)?.pid || socket.data?.pid || null;
+    if (!me) return ack({ error: 'Not connected.' });
+    const other = typeof d?.pid === 'string' ? d.pid.slice(0, 64) : null;
+    if (!other) return ack({ error: 'No player named.' });
+    if (other === me) return ack({ ok: true, profile: visitorProfile(me), self: true });
+    if (!profileExists(other)) return ack({ error: 'No such player.' });
+    if (hasBlocked(other, me)) return ack({ error: 'No such player.' });
+    ack({ ok: true, profile: visitorProfile(other), friend: areFriends(me, other) });
   });
 
   socket.on('friends:do', (d, ack) => {
