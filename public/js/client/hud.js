@@ -2954,7 +2954,15 @@ HUD.renderLpFriendAvatars = people => {
 };
 
 /* ------------------------------------------------------ daily rewards --- */
-HUD.showRewardsBadge = show => { if (el.lpRewardsBadge) el.lpRewardsBadge.hidden = !show; };
+/* The badge and the line under it say the same thing, so they move
+   together. "come back tomorrow" sitting next to a lit exclamation mark is
+   the card contradicting its own badge — and it was static text nothing
+   ever wrote to, so it said that even on the day a claim was waiting. */
+HUD.showRewardsBadge = show => {
+  if (el.lpRewardsBadge) el.lpRewardsBadge.hidden = !show;
+  if (el.lpRewardsSub) el.lpRewardsSub.textContent = show ? 'ready to claim' : 'come back tomorrow';
+  el.lpRewardsBtn?.classList.toggle('claimable', !!show);
+};
 
 /** The 14-day calendar, the streak line, and the gem/case wallet — all of
     it derived from the profile, nothing kept in the DOM as its own state. */

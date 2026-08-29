@@ -4177,7 +4177,7 @@ body.navbar-on #gemBal { display: none; }
   padding: 8px 12px 8px 8px; border-radius: 15px;
   background: rgba(10,18,15,.72); border: 1px solid rgba(255,255,255,.09);
   backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,.4);
-  max-width: min(376px, calc(100vw - 32px));
+  max-width: min(486px, calc(100vw - 32px));
 }
 /* The way into customising your golfer, which lives in the Locker now. */
 .lp-id-av {
@@ -4195,40 +4195,92 @@ body.navbar-on #gemBal { display: none; }
 }
 .lp-id-av:hover .lp-id-edit, .lp-id-av:focus-visible .lp-id-edit { opacity: 1; }
 
-.lp-id-main { display: flex; flex-direction: column; gap: 3px; min-width: 0;
+.lp-id-main { display: flex; flex-direction: column; gap: 5px; min-width: 0;
   justify-content: center; }
 .lp-id .lp-who { margin: 0; }
 .lp-id .lp-name span:first-child { display: none; }   /* the label is obvious here */
 .lp-id .lp-name input {
   padding: 4px 8px; font-size: 12.5px; border-radius: 8px; max-width: 168px;
 }
-.lp-id .identity { padding: 0; background: none; border: 0; gap: 7px; }
-.lp-id .identity .id-face { width: 0; height: 0; overflow: hidden; }  /* the avatar above IS the face */
+.lp-id .identity { padding: 0; background: none; border: 0; gap: 8px; align-items: baseline; }
+/* The avatar tile to the left IS the face. Collapsing it to zero size left
+   its 1px border and gradient behind as a 2px dot floating beside the name,
+   which is the stray bullet in the corner. It has to go entirely. */
+.lp-id .identity .id-face { display: none; }
+
+/* PLAYING AS / Oweiner, on two lines.
+   As one sentence at 12.5px in a column this narrow, "Playing as Oweiner"
+   wrapped across three lines and read as a paragraph rather than as a name.
+   The label is the small permanent half and the NAME is the half worth
+   reading, so they are sized accordingly and the name truncates rather than
+   wrapping — a long name should shorten, never reflow the block. */
+.lp-id .identity .id-txt b { display: block; font-size: 12.5px; font-weight: 600; }
+.lp-id .identity .id-txt b em {
+  display: block; font-style: normal; font-size: 9px; font-weight: 800;
+  letter-spacing: 1.1px; text-transform: uppercase; color: #7d9384;
+  line-height: 1.2; margin-bottom: 1px;
+}
+.lp-id .identity .id-txt b span {
+  display: block; font-size: 15px; font-weight: 700; color: #8fe07a;
+  line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* "Change" is a correction, not an action anybody came here for — a full
+   button beside the name was competing with it for both room and attention. */
+.lp-id .identity .btn {
+  flex: 0 0 auto; align-self: center; padding: 3px 8px; font-size: 9.5px;
+  font-weight: 700; letter-spacing: .3px; border-radius: 7px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.10);
+  color: #8fa694;
+}
+.lp-id .identity .btn:hover { background: rgba(255,255,255,.11); color: #cfe4d3; }
+
+/* Friend ID and round count on ONE line. Two rows of one short fact each is
+   most of what made this block tall enough to feel crowded. */
+/* NOWRAP, and that is the point rather than a detail. Both facts are
+   `white-space: nowrap`, so with `flex-wrap: wrap` the column's width was
+   decided by the name row above and the facts wrapped back onto the two
+   lines this was meant to collapse whenever they came to one pixel more —
+   which they did, at 214 against 213. Refusing to wrap makes the facts
+   line the thing that sets the column width instead, so it fits by
+   construction rather than by counting pixels. The phone breakpoint below
+   puts the wrap back, where there genuinely is not room. */
+.lp-id-facts { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
 .lp-id-code {
-  font-size: 9.5px; font-weight: 700; letter-spacing: .7px; color: #7d9384;
-  text-transform: uppercase; font-variant-numeric: tabular-nums;
+  font-size: 9px; font-weight: 700; letter-spacing: .4px; color: #7d9384;
+  text-transform: uppercase; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.lp-id-code b { color: #8fdfff; letter-spacing: 1.2px; }
+.lp-id-code b { color: #8fdfff; letter-spacing: .7px; font-size: 10.5px; margin-left: 2px; }
 .lp-id .lp-stat-row {
-  margin: 0; font-size: 10px; padding: 0; border: 0; background: none;
-  display: flex; align-items: center; gap: 5px; white-space: nowrap; color: #8fa694;
+  margin: 0; font-size: 9.5px; padding: 0; border: 0; background: none;
+  display: flex; align-items: center; gap: 4px; white-space: nowrap; color: #7d9384;
+  text-transform: uppercase; letter-spacing: .4px; font-weight: 700;
 }
-.lp-id .lp-stat-row b { font-weight: 700; }
+.lp-id .lp-stat-row span { color: #ffd76b; font-size: 10.5px; }
+.lp-id .lp-stat-row b { font-weight: 700; color: #7d9384; }
 .lp-id .lp-stat-row svg { flex: 0 0 auto; }
 
-/* Daily rewards, beside the identity rather than under it. */
-/* Narrow enough to clear the centred wordmark, so the sub-line truncates
-   rather than pushing the block into it. */
+/* Daily rewards, beside the identity rather than under it. Given a real
+   minimum: at `flex: 1 1 auto` with no floor it collapsed until its own
+   sub-line truncated to "come back ...", which is worse than no sub-line. */
 .lp-id #lpRewardsBtn {
-  flex: 1 1 auto; min-width: 0; margin: 0; padding: 7px 11px; border-radius: 11px;
-  align-self: center;
+  flex: 0 1 auto; min-width: 158px; margin: 0; padding: 8px 11px; border-radius: 11px;
+  align-self: center; gap: 9px;
   background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.10);
 }
 .lp-id #lpRewardsBtn .lp-txt { min-width: 0; }
+.lp-id #lpRewardsBtn .lp-txt b { font-size: 12px; white-space: nowrap; }
 .lp-id #lpRewardsBtn small {
-  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: block; font-size: 10px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.lp-id #lpRewardsBtn .lp-ico { flex: 0 0 auto; }
 .lp-id #lpRewardsBtn:hover { background: rgba(255,255,255,.09); }
+/* A claim waiting is the one thing on this block worth chasing, so it is
+   the one thing allowed to use the accent colour. */
+.lp-id #lpRewardsBtn.claimable {
+  background: rgba(232,193,90,.10); border-color: rgba(232,193,90,.34);
+}
+.lp-id #lpRewardsBtn.claimable small { color: #e8c15a; }
 
 @media (max-width: 700px) {
   /* WRAPS on a phone, and stays OUT OF FLOW. #screenLanding is a
@@ -4242,12 +4294,14 @@ body.navbar-on #gemBal { display: none; }
     margin: 0; max-width: none; padding: 10px; gap: 10px; flex-wrap: wrap;
   }
   .lp-id .lp-id-main { flex: 1 1 140px; }
+  .lp-id-facts { flex-wrap: wrap; }
   .lp-id .lp-name input { width: 100%; max-width: none; }
   .lp-id #lpRewardsBtn { flex: 1 0 100%; padding: 8px; }
-  /* Generous on purpose: the block's height changes once a name is claimed
-     (the input is replaced by a shorter chip), and clearing it with room to
-     spare beats overlapping the wordmark on one of the two states. */
-  body.navbar-on .lp-inner { padding-top: 246px; }
+  /* Cleared against the TALLER of the block's two states — the name input,
+     which is 19px more than the chip that replaces it once a name is
+     claimed. 246 was set against a block that has since lost a row, and
+     left fifty pixels of nothing above the wordmark. */
+  body.navbar-on .lp-inner { padding-top: 226px; }
 }
 
 

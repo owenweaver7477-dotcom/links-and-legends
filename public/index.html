@@ -337,7 +337,7 @@
         <div class="lp-who">
           <div class="identity" id="identityChip" hidden>
             <div class="id-face"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><line x1="6" y1="21" x2="6" y2="4" stroke="#5c3a1a" stroke-width="1.6" stroke-linecap="round"/><path d="M6 4 17 8 6 12Z" fill="#e8443a"/><ellipse cx="6" cy="21" rx="4.5" ry="1.4" fill="#6f8f5c" opacity=".55"/></svg></div>
-            <div class="id-txt"><b>Playing as <span id="idName">—</span></b></div>
+            <div class="id-txt"><b><em>Playing as</em><span id="idName">—</span></b></div>
             <button class="btn mini" id="btnNotYou">Change</button>
           </div>
           <label class="field lp-name" id="nameField"><span>Your name</span>
@@ -347,12 +347,14 @@
             <span class="nm-state" id="nameState"></span>
             <span class="nm-suggest" id="nameSuggest"></span></label>
         </div>
-      <span class="lp-id-code">FRIEND ID <b id="lpIdCode">—</b></span>
-        <div class="lp-stat-row"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" fill="#ffd76b" stroke="#a9822f" stroke-width="1"/><path d="M7 5H4a3 3 0 0 0 3 3M17 5h3a3 3 0 0 1-3 3" fill="none" stroke="#a9822f" stroke-width="1.3" stroke-linecap="round"/></svg><b>Total Rounds:</b> <span id="lpTotalRounds">0</span></div>
+      <div class="lp-id-facts">
+        <span class="lp-id-code">FRIEND ID <b id="lpIdCode">—</b></span>
+        <div class="lp-stat-row"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 4h10v3a5 5 0 0 1-10 0V4Z" fill="#ffd76b" stroke="#a9822f" stroke-width="1"/><path d="M7 5H4a3 3 0 0 0 3 3M17 5h3a3 3 0 0 1-3 3" fill="none" stroke="#a9822f" stroke-width="1.3" stroke-linecap="round"/></svg><span id="lpTotalRounds">0</span> <b>rounds</b></div>
+      </div>
     </div>
         <button class="lp-item lp-row" id="lpRewardsBtn">
           <span class="lp-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="1.5" fill="currentColor"/><rect x="4" y="7" width="16" height="4" rx="1" fill="currentColor" opacity=".82"/><rect x="11" y="7" width="2" height="14" fill="#000" opacity=".16"/><path d="M12 7c-1-3-5-3-5 0M12 7c1-3 5-3 5 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-          <span class="lp-txt"><b>Daily rewards</b><small id="lpRewardsSub">come back tomorrow for more</small></span>
+          <span class="lp-txt"><b>Daily rewards</b><small id="lpRewardsSub">come back tomorrow</small></span>
           <span class="lp-count claim" id="lpRewardsBadge" hidden>!</span>
         </button>
   </div>
