@@ -137,15 +137,28 @@
   </div>
 
   <!-- walk prompt -->
+  <!-- ONE INSTRUCTION AND ONE SHORTCUT. This was a ten-item keyboard manual
+       on one line — WASD, Shift, hold-drag, F, C, B, N, T, Enter, V — which
+       at any real window width truncated mid-word, so the message a player
+       most needs to read ("walk to your ball") was buried in a list they
+       could not finish reading anyway. The full list already exists in the
+       hint bar at the bottom of the screen; this says the thing to DO and
+       the one key that does it fastest. -->
   <div class="walkbar" id="walkbar">
     <span id="walkText">Walk to your ball</span>
-    <kbd>W A S D</kbd><kbd>Shift</kbd> run <kbd>hold-drag</kbd> or <kbd>Shift</kbd>+move look <kbd>F</kbd> teleport to ball <kbd>C</kbd> cart <kbd>B</kbd> melee <kbd>N</kbd> switch <kbd>T</kbd> emote <kbd>Enter</kbd> chat <kbd>V</kbd> view
+    <span class="wb-tip"><kbd>W A S D</kbd> walk<i></i><kbd>F</kbd> jump to it</span>
   </div>
 
   <!-- turn banner -->
   <div class="turnbar" id="turnbar"><span class="tb-dot" id="tbDot"></span><span id="tbText">—</span></div>
 
-  <!-- club + swing -->
+  <!-- club + swing.
+       ONE BAR, not four islands. Club, power, cancel and aim were four
+       separate floating panels with their own borders and shadows, sitting
+       in a row at the bottom of a screen that already had eleven of them —
+       so the thing a player touches on every single shot was the busiest
+       part of the picture. They are one control surface now, divided
+       INSIDE by hairlines rather than by gaps. -->
   <div class="playbar" id="playbar">
     <div class="clubsel">
       <button class="cbtn" id="clubDown" title="Longer club (Q)">‹</button>
@@ -176,11 +189,19 @@
     </div>
   </div>
 
+  <!-- Every shortcut, grouped by what it is FOR. It was one run-on line of
+       eighteen items separated by middots, which is a manual rather than a
+       reference: nobody scans "· <kbd>N</kbd> switch melee ·" looking for
+       how to aim. Three named groups, and it opens on hover. -->
   <div class="hintbar" id="hintbar">
-    <kbd>W A S D</kbd> walk · <kbd>Shift</kbd> run · <kbd>F</kbd> teleport to ball · <kbd>C</kbd> cart · <kbd>B</kbd> melee · <kbd>N</kbd> switch melee · <kbd>T</kbd> emote · <kbd>Enter</kbd> chat · <kbd>V</kbd> view ·
-    <kbd>drag ↓</kbd> power · <kbd>click</kbd>/<kbd>Space</kbd> strike · <kbd>← →</kbd> aim · <kbd>Q</kbd><kbd>E</kbd> club ·
-    <kbd>1-4</kbd> camera · <kbd>Space</kbd> re-frame ·
-    <kbd>hold-drag</kbd> or <kbd>Shift</kbd>+move look · <kbd>M</kbd> map · <kbd>P</kbd> fps
+    <span class="hb-grp"><b>Move</b>
+      <kbd>W A S D</kbd><kbd>Shift</kbd>run<kbd>F</kbd>to ball<kbd>C</kbd>cart</span>
+    <span class="hb-grp"><b>Shot</b>
+      <kbd>drag ↓</kbd>power<kbd>Space</kbd>strike<kbd>← →</kbd>aim<kbd>Q E</kbd>club</span>
+    <span class="hb-grp"><b>Look</b>
+      <kbd>1-4</kbd>camera<kbd>hold-drag</kbd>turn<kbd>M</kbd>map</span>
+    <span class="hb-grp"><b>Social</b>
+      <kbd>T</kbd>emote<kbd>Enter</kbd>chat<kbd>B</kbd>melee<kbd>V</kbd>view</span>
   </div>
 
   <!-- Touch controls.  Walking, the cart, the map and the view were keyboard

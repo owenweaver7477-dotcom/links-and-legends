@@ -188,9 +188,51 @@ HUD.page = 'play';
 
 /** Go to a page. The ONE navigation entry point — everything else
  *  (nav clicks, landing cards, the hash, Back) funnels through here. */
+/* ─────────────────────────────────────────────── the page transition ──
+   Screens used to swap by flipping `hidden`, which is instant — and an
+   instant swap of a full-screen layout reads as a flicker rather than as
+   going somewhere. There is no sense of leaving one page and arriving at
+   another, which is most of what makes a set of screens feel like an
+   application instead of a website from 1999.
+
+   A WIPE, not a crossfade. Two pages dissolving through each other is a
+   glitch; a sheet passing over the screen is a transition, and it also
+   covers the one frame where the new page is laid out but not yet painted.
+
+   Cheap on purpose: one element, one transform, no layout. And it is
+   skipped entirely when the player has asked for less motion — a
+   full-screen wipe is exactly the kind of thing that setting exists for. */
+const REDUCED = typeof matchMedia === 'function' &&
+                matchMedia('(prefers-reduced-motion: reduce)').matches;
+let _wipeEl = null;
+function wipe(then) {
+  if (REDUCED) { then(); return; }
+  if (!_wipeEl) {
+    _wipeEl = document.createElement('div');
+    _wipeEl.className = 'pagewipe';
+    document.body.appendChild(_wipeEl);
+  }
+  const w = _wipeEl;
+  w.classList.remove('out');
+  // force a reflow so the class change animates rather than being coalesced
+  void w.offsetWidth;
+  w.classList.add('in');
+  setTimeout(() => {
+    then();
+    w.classList.remove('in');
+    w.classList.add('out');
+  }, 190);
+}
+
 HUD.goPage = (page, { push = true } = {}) => {
   const def = PAGES[page];
   if (!def) return;
+  // no wipe when you are already there — pressing Shop twice is not a journey
+  if (HUD.page === page) { HUD.paintNav(); return; }
+  wipe(() => HUD._enterPage(page, def, push));
+};
+
+HUD._enterPage = (page, def, push) => {
   HUD.page = page;
   HUD.onPageEnter?.(page, def);            // main.js renders what it needs
   HUD.show(def.screen);
@@ -3406,6 +3448,14 @@ HUD.revealCase = (result) => {
   el.caseReelWrap.closest('.casecard')?.classList.remove('reeling');
   el.caseReveal.hidden = false;
   el.btnCaseDone.hidden = false;
+
+  /* THE MOMENT. Scaled by what actually came out: a Standard decal gets a
+     polite handful and a Legend or Mythic pull gets the gold, because a
+     burst that is identical whatever you rolled tells the player nothing
+     and stops meaning anything by the fourth case. */
+  const rank = { standard: 0, tour: 1, pro: 2, legend: 3, mythic: 4 }[result.rarity] ?? 1;
+  HUD.burst({ n: 22 + rank * 16, gold: rank >= 3, spread: 260 + rank * 70,
+              y: innerHeight * 0.40 });
   const isItem = result.kind === 'item';
   const isPurity = result.kind === 'purity';
   // A purity result still has a real item (the decal it just polished) —
@@ -3661,6 +3711,13 @@ HUD.renderResults = (room, myPid, course) => {
   const sorted = players.slice().sort((a, b) => total(a) - total(b));
   const best = sorted.length ? total(sorted[0]) : 0;
   const winners = sorted.filter(p => total(p) === best);
+
+  /* WINNING LOOKS LIKE SOMETHING. Only when it is YOU and only when there
+     was somebody to beat — confetti for going round on your own is the game
+     congratulating you for turning up, which is worth less than nothing. */
+  if (players.length > 1 && winners.some(w => w.pid === myPid)) {
+    HUD.burst({ n: 70, gold: true, spread: 420, y: innerHeight * 0.30 });
+  }
 
   el.resTitle.textContent = course.name + ' — final';
   el.resSub.textContent = winners.length === 0 ? ''
@@ -5110,6 +5167,65 @@ HUD.bindProfile = () => {
     if (btn && btn.contains(row)) { e.preventDefault(); e.stopPropagation(); }
     HUD.onOpenProfile?.(pid);
   }, true);
+};
+
+/* ═══════════════════════════════════════════════ THE CONFETTI BURST ═════
+   A level-up, a case reveal and a win were all announced by a panel sliding
+   in and a sound playing. That is an ANNOUNCEMENT, and an announcement is
+   what a bank does when your balance changes — it is not a moment.
+
+   Cheap on purpose: DOM elements with one transform each, no canvas, no
+   renderer, no per-frame JavaScript at all. The whole burst is CSS keyframes
+   with per-piece custom properties, so it costs one style recalculation and
+   then runs entirely on the compositor — which is why it can fire during a
+   round without touching the frame rate of the golf underneath it.
+
+   Colours come from the palette rather than being invented here: a burst in
+   colours the game never uses elsewhere reads as a stock effect somebody
+   pasted in. */
+const BURST_COLORS = ['--accent', '--accent-hi', '--label', '--ink-3'];
+
+/**
+ * @param opts.x, opts.y   viewport coordinates; defaults to the centre
+ * @param opts.n           how many pieces
+ * @param opts.spread      how wide it throws, in pixels
+ * @param opts.gold        a rarer, richer burst — for a big pull or a win
+ */
+HUD.burst = (opts = {}) => {
+  if (REDUCED) return;
+  const n = Math.min(90, opts.n || 34);
+  const cx = opts.x ?? innerWidth / 2;
+  const cy = opts.y ?? innerHeight * 0.42;
+  const spread = opts.spread || 320;
+
+  const layer = document.createElement('div');
+  layer.className = 'burst';
+  layer.style.left = cx + 'px';
+  layer.style.top = cy + 'px';
+
+  for (let i = 0; i < n; i++) {
+    const b = document.createElement('i');
+    /* Thrown in a full circle with a bias upward, because confetti that
+       goes evenly in all directions looks like an explosion and confetti
+       that only goes up looks like a fountain. */
+    const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+    const r = spread * (0.35 + Math.random() * 0.65);
+    b.style.setProperty('--dx', Math.cos(a) * r + 'px');
+    b.style.setProperty('--dy', (Math.sin(a) * r - spread * 0.35) + 'px');
+    b.style.setProperty('--rot', (Math.random() * 900 - 450) + 'deg');
+    b.style.setProperty('--dur', (0.85 + Math.random() * 0.7).toFixed(2) + 's');
+    b.style.setProperty('--delay', (Math.random() * 0.10).toFixed(2) + 's');
+    b.style.setProperty('--c', opts.gold
+      ? (i % 3 ? '#ffd94a' : '#fff3c4')
+      : `var(${BURST_COLORS[i % BURST_COLORS.length]})`);
+    // a mix of ribbons and squares, so it is not a field of identical dots
+    if (i % 3 === 0) b.classList.add('ribbon');
+    layer.appendChild(b);
+  }
+  document.body.appendChild(layer);
+  // removed on a timer rather than on animationend: animationend fires per
+  // piece, and ninety listeners to delete one element is ninety too many
+  setTimeout(() => layer.remove(), 2200);
 };
 
 HUD.profileError = msg => HUD.toast(msg || 'Could not open that profile.', 'warn', 2000);

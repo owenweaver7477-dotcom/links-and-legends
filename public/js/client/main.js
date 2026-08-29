@@ -2887,6 +2887,10 @@ function levelUpMoment(from, to) {
   // passing the string 'birdie', which matches none of its branches and
   // has been playing nothing at all since the day it was written.
   try { Sound.celebrate?.(1); } catch { /* audio may be blocked */ }
+  /* And it looks like something happened. A panel sliding in with a sound
+     behind it is an announcement; this is the difference between being told
+     you levelled up and it being a moment. */
+  HUD.burst?.({ n: 46, gold: true, y: innerHeight * 0.34 });
   // Only when there's a golfer actually standing in the scene to burst
   // from — a level-up can land mid-menu, between rounds, with nobody on
   // the tee at all.

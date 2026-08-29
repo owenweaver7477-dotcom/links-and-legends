@@ -87,14 +87,43 @@ html, body {
 #gl.swinging { cursor: crosshair; }
 #gl.swinging { cursor: ns-resize; }
 
-/* ───────────────────────────────────────────────────────── glass panels */
+/* ══════════════════════════════════════════════════════════ GLASS ═══════
+   WHAT WAS WRONG WITH THE OLD PANEL, in one line: it was a flat fill and a
+   1px border. That reads as a rectangle drawn on the screen, and eleven of
+   them floating over a golf course reads as a debug overlay.
+
+   Glass is not a colour, it is four things happening at once, and it is the
+   difference between "a box" and "a pane of something":
+
+     a GRADIENT, because light falls off down a real surface and a flat fill
+       is the single strongest signal that a thing is not a thing;
+     an INNER TOP HIGHLIGHT, which is the lit edge where the pane catches the
+       sky — one inset line, and it does most of the work;
+     an INNER BOTTOM SHADE, so the panel has a bottom lip rather than just
+       stopping;
+     TWO shadows, not one — a tight contact shadow that says it is close to
+       the screen and a wide ambient one that says it is above the scene.
+       A single blurred drop shadow reads as a sticker.
+
+   The variables exist so every surface in the game can be the same material
+   without four hundred rules each inventing their own. */
+:root {
+  --glass-bg: linear-gradient(160deg, rgba(20, 33, 27, .80), rgba(8, 15, 12, .86));
+  --glass-line: rgba(255, 255, 255, .13);
+  --glass-lit: inset 0 1px 0 rgba(255, 255, 255, .10);
+  --glass-lip: inset 0 -1px 0 rgba(0, 0, 0, .35);
+  --glass-cast: 0 1px 2px rgba(0, 0, 0, .45), 0 12px 34px -8px rgba(0, 0, 0, .62);
+  --glass-blur: blur(14px) saturate(1.25);
+  --r-sm: 9px; --r-md: 13px; --r-lg: 17px;
+}
+
 .panel {
   position: absolute; z-index: 5;
-  background: rgba(10, 18, 15, .72);
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, .11);
-  border-radius: 13px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, .5);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--glass-lit), var(--glass-lip), var(--glass-cast);
 }
 
 /* hole info */
@@ -151,14 +180,28 @@ html, body {
 .tb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-hi); box-shadow: 0 0 8px currentColor; }
 
 /* ─────────────────────────────────────────────────────── club + swing */
-.playbar { position: absolute; bottom: 46px; left: 50%; transform: translateX(-50%); z-index: 6;
-  display: flex; align-items: flex-end; gap: 14px; opacity: 0; transition: opacity .22s; pointer-events: none; }
-.playbar.show { opacity: 1; pointer-events: auto; }
+/* ONE CONTROL SURFACE. Four panels became one shell with hairline dividers
+   inside it — a player's eye now finds a single object at the bottom of the
+   screen instead of counting four. It also rises on show rather than only
+   fading, which is what makes it read as arriving. */
+.playbar { position: absolute; bottom: 40px; left: 50%; z-index: 6;
+  display: flex; align-items: stretch; gap: 0;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line); border-radius: var(--r-lg);
+  box-shadow: var(--glass-lit), var(--glass-lip), var(--glass-cast);
+  padding: 8px;
+  opacity: 0; transform: translate(-50%, 10px); pointer-events: none;
+  transition: opacity .24s ease, transform .28s cubic-bezier(.22,1,.36,1); }
+.playbar.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 
+/* The sections. No border, no shadow, no background of their own — the
+   hairline between them is the whole separation, which is what stops the
+   bar reading as a row of buttons in a tray. */
 .clubsel, .aimsel { display: flex; align-items: center; gap: 6px;
-  background: rgba(10,18,15,.76); backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 7px 8px;
-  box-shadow: 0 8px 26px rgba(0,0,0,.5); }
+  background: none; border: 0; box-shadow: none; padding: 0 12px; }
+.clubsel { border-right: 1px solid rgba(255,255,255,.08); }
+.aimsel { border-left: 1px solid rgba(255,255,255,.08); }
 /* Swipe cycles clubs here (see main.js) — pan-y rather than none, so a
    mostly-vertical touch still scrolls/behaves normally and only a real
    horizontal swipe gets claimed. */
@@ -184,9 +227,8 @@ html, body {
 .cinfo b { display: block; font-size: 14px; }
 .cinfo span { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.meter { width: 230px; background: rgba(10,18,15,.76); backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,.12); border-radius: 12px; padding: 9px 11px 8px;
-  box-shadow: 0 8px 26px rgba(0,0,0,.5); }
+.meter { width: 240px; background: none; border: 0; box-shadow: none;
+  padding: 2px 14px 0; display: flex; flex-direction: column; justify-content: center; }
 .m-track { position: relative; height: 18px; border-radius: 9px; background: rgba(0,0,0,.45);
   box-shadow: inset 0 1px 3px rgba(0,0,0,.6); overflow: visible; }
 .m-over { position: absolute; right: 0; top: 0; bottom: 0; width: 10.7%; background: rgba(255,90,70,.28); }
@@ -239,13 +281,24 @@ html, body {
    pixels past each side at 1280, so the first and last key were cut in half
    and the whole thing read as a rendering fault. It wraps now, and it is
    width-limited rather than centred-and-hoping. */
+/* GROUPED, and quiet until you look at it. Eighteen shortcuts on one line
+   separated by middots is a manual, not a reference — nobody scans a run-on
+   sentence looking for how to aim. Four named groups, each in its own well,
+   and the whole thing lifts to full opacity on hover. */
 .hintbar { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
-  z-index: 5; max-width: min(96vw, 1100px); text-align: center;
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 10px;
-  font-size: 10px; color: #6d8672; opacity: .62; text-shadow: 0 1px 5px rgba(0,0,0,.8); }
+  z-index: 5; max-width: min(96vw, 1180px);
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+  opacity: .5; transition: opacity .18s; }
 .hintbar:hover { opacity: 1; }
-.hintbar kbd { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16);
-  border-radius: 4px; padding: 1px 5px; margin: 0 1px; font: inherit; font-size: 10px; }
+.hb-grp { display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(6,12,9,.55); border: 1px solid rgba(255,255,255,.07);
+  border-radius: 999px; padding: 4px 11px;
+  font-size: 9px; color: var(--muted-dim); white-space: nowrap; }
+.hb-grp b { font-size: 8px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase;
+  color: var(--label); margin-right: 3px; }
+.hintbar kbd { background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.15);
+  border-radius: 4px; padding: 1px 5px; margin-left: 4px; font: inherit; font-size: 9px;
+  color: var(--ink-3); }
 
 /* shot result flash */
 .shotinfo { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 7;
@@ -662,15 +715,25 @@ html.touch .fsbtn { display: grid; }
 }
 
 /* walk prompt */
-.walkbar { position: absolute; bottom: 118px; left: 50%; transform: translateX(-50%); z-index: 6;
-  background: rgba(10,18,15,.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.12);
-  border-radius: 999px; padding: 7px 16px; font-size: 12px; color: var(--ink-2);
-  box-shadow: 0 8px 26px rgba(0,0,0,.5); white-space: nowrap;
-  opacity: 0; transition: opacity .2s; pointer-events: none; }
-.walkbar.show { opacity: 1; }
-.walkbar kbd { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
-  border-radius: 4px; padding: 1px 5px; margin-left: 7px; font: inherit; font-size: 10px; }
-.walkbar #walkText { font-weight: 600; color: #ffd76b; }
+.walkbar { position: absolute; bottom: 118px; left: 50%; z-index: 6;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line);
+  border-radius: 999px; padding: 7px 8px 7px 17px; font-size: 12px; color: var(--ink-2);
+  box-shadow: var(--glass-lit), var(--glass-cast); white-space: nowrap;
+  opacity: 0; transform: translate(-50%, 6px); transition: opacity .2s, transform .24s cubic-bezier(.22,1,.36,1);
+  pointer-events: none; }
+.walkbar.show { opacity: 1; transform: translate(-50%, 0); }
+.walkbar #walkText { font-weight: 700; color: #ffd76b; }
+/* The shortcut, set apart in its own well rather than trailing off the end
+   of the sentence — a hint that looks like part of the instruction is read
+   as part of the instruction. */
+.wb-tip { display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(0,0,0,.28); border-radius: 999px; padding: 3px 11px;
+  font-size: 10px; color: var(--muted); }
+.wb-tip i { width: 1px; height: 10px; background: rgba(255,255,255,.14); margin: 0 2px; }
+.walkbar kbd { background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.18);
+  border-radius: 4px; padding: 1px 5px; font: inherit; font-size: 10px; color: var(--ink-2); }
 
 /* appearance picker */
 /* The wardrobe.  Nine groups now rather than four, so it scrolls inside the
@@ -1295,11 +1358,15 @@ input[type=text] { font-size: 16px; padding: 12px 14px; }
 /* An explicit way out of a shot.  The auto-equip radius is small now, so
    stepping away is deliberate — and backing out has to be just as deliberate
    rather than a matter of walking backwards and hoping. */
-.cancelshot { display: none; flex-direction: column; align-items: center; gap: 2px;
-  width: 54px; padding: 8px 4px; border-radius: 12px; cursor: pointer;
-  background: rgba(40,14,14,.82); border: 1px solid rgba(255,120,100,.32);
-  color: #ffb3a3; font: inherit; font-size: 15px; line-height: 1;
-  backdrop-filter: blur(10px); box-shadow: 0 8px 26px rgba(0,0,0,.5);
+/* Inside the bar now, and quieter for it. A full red panel with its own
+   shadow beside the power meter was competing with the meter for attention
+   — and cancelling a shot is the thing you do least often on this bar. */
+.cancelshot { display: none; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; width: 46px; padding: 6px 4px; border-radius: var(--r-sm); cursor: pointer;
+  margin: 0 4px; align-self: center;
+  background: rgba(150,50,42,.16); border: 1px solid rgba(255,120,100,.24);
+  color: #ffb3a3; font: inherit; font-size: 14px; line-height: 1;
+  transition: background .14s, color .14s, transform .08s;
   -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 .playbar.show .cancelshot { display: flex; }
 .cancelshot span { font-size: 8px; letter-spacing: .6px; text-transform: uppercase; font-weight: 700; }
@@ -4648,3 +4715,62 @@ body.navbar-on #gemBal { display: none; }
 .rp.big b { font-size: 20px; }
 .rp.gem { background: rgba(90,184,255,.10); border-color: rgba(90,184,255,.28); }
 .rp.gem b { color: #8fdfff; }
+
+/* ═════════════════════════════════════════════════ THE PAGE WIPE ════════
+   Screens used to swap by flipping `hidden`, which is instant — and an
+   instant swap of a full-screen layout reads as a flicker rather than as
+   going somewhere.
+
+   A sheet passing across, not a crossfade: two pages dissolving through
+   each other is a glitch, a sheet travelling over them is a transition. It
+   also covers the one frame where the new page is laid out but not painted.
+
+   One element, one transform, no layout, and hud.js skips it entirely under
+   prefers-reduced-motion. */
+.pagewipe {
+  position: fixed; inset: 0; z-index: 400; pointer-events: none;
+  background: linear-gradient(100deg, rgba(9,16,12,0) 0%, rgba(9,16,12,.97) 22%,
+                              rgba(9,16,12,.97) 78%, rgba(9,16,12,0) 100%);
+  transform: translateX(-120%);
+}
+.pagewipe.in  { animation: wipe-in .20s cubic-bezier(.4,0,.2,1) forwards; }
+.pagewipe.out { animation: wipe-out .26s cubic-bezier(.4,0,.2,1) forwards; }
+@keyframes wipe-in  { from { transform: translateX(-120%); } to { transform: translateX(0); } }
+@keyframes wipe-out { from { transform: translateX(0); }     to { transform: translateX(120%); } }
+
+/* And the page it uncovers rises into place, which is what turns "the
+   screen changed" into "I arrived somewhere". */
+.hkpane:not([hidden]) { animation: page-rise .30s cubic-bezier(.22,1,.36,1) both; }
+@keyframes page-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .pagewipe { display: none; }
+  .hkpane:not([hidden]) { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════ THE CONFETTI BURST ═════
+   A level-up, a case reveal and a win were all announced by a panel sliding
+   in and a sound playing. That is an announcement, not a moment.
+
+   Entirely CSS: each piece carries its own throw vector, spin, duration and
+   delay as custom properties, so the whole burst is one style recalculation
+   and then runs on the compositor. No canvas, no per-frame JavaScript, and
+   it can fire mid-round without touching the frame rate of the golf. */
+.burst { position: fixed; z-index: 500; pointer-events: none; width: 0; height: 0; }
+.burst i {
+  position: absolute; left: 0; top: 0;
+  width: 8px; height: 8px; margin: -4px 0 0 -4px;
+  background: var(--c); border-radius: 2px;
+  animation: burst-fly var(--dur) cubic-bezier(.15,.6,.3,1) var(--delay) forwards;
+  will-change: transform, opacity;
+}
+/* Ribbons rather than dots for a third of them — a field of identical
+   squares reads as pixels, and confetti is a mix of shapes. */
+.burst i.ribbon { width: 4px; height: 13px; border-radius: 1px; }
+@keyframes burst-fly {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(.5); opacity: 0; }
+  12%  { opacity: 1; transform: translate(calc(var(--dx) * .18), calc(var(--dy) * .30)) rotate(calc(var(--rot) * .2)) scale(1); }
+  /* the arc: out fast, then gravity takes the vertical while the horizontal
+     carries on — which is what stops it looking like a starburst */
+  100% { transform: translate(var(--dx), calc(var(--dy) + 46vh)) rotate(var(--rot)) scale(.85); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .burst { display: none; } }
