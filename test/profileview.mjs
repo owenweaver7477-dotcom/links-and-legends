@@ -146,3 +146,42 @@ test('looking up a player who does not exist does not create one', async () => {
   assert.equal(/publicProfile/.test(handler[0]), false,
     'profile:of reaches for publicProfile');
 });
+
+test('a record holder is only offered as a link when there is somebody there', async () => {
+  /* The board is seeded with fictional pros (t1, e1, a1 — records.seed.json)
+     and carries leftovers from round-bot runs, none of which have a profile.
+     A name that looks clickable and always errors is worse than a name that
+     never looked clickable, so the payload says which holders are real and
+     the client links only those. */
+  const { readFileSync } = await import('node:fs');
+  const srv = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  assert.ok(/const stampReal = board =>/.test(srv), 'no stampReal in server.js');
+  assert.ok(/r\.real = profileExists\(r\.pid\)/.test(srv),
+    'stampReal does not consult the profile store');
+  // both places the board leaves the server must be stamped
+  const sends = [...srv.matchAll(/allRecords\(\)/g)].length;
+  const stamped = [...srv.matchAll(/stampReal\(allRecords\(\)\)/g)].length;
+  assert.ok(stamped >= 2,
+    `the board is sent ${sends} times and stamped ${stamped} — an unstamped send ` +
+    'gives the client dead links');
+
+  const hud = readFileSync(new URL('../public/js/client/hud.js', import.meta.url), 'utf8');
+  assert.ok(/const holderLink = r => \(r && r\.pid && r\.real\)/.test(hud),
+    'the records board links a holder without checking they are real');
+});
+
+test('every list that shows a name offers to open it', async () => {
+  /* Six trees, and the one that was missed is the one somebody notices. */
+  const { readFileSync } = await import('node:fs');
+  const hud = readFileSync(new URL('../public/js/client/hud.js', import.meta.url), 'utf8');
+  for (const [what, re] of [
+    ['the friends list', /fr-row clickable[^`]*data-profile=/],
+    ['the world ranking', /li class="wr clickable[^`]*data-profile=/],
+    ['the ranking boards', /rkrow clickable[\s\S]{0,120}data-profile=/],
+    ['the round scoreboard', /row\.dataset\.profile = p\.pid/],
+    ['the presence panel', /row\.dataset\.profile = o\.pid/],
+    ['the records board', /holderLink\(/]
+  ]) {
+    assert.ok(re.test(hud), `${what} shows names that cannot be opened`);
+  }
+});

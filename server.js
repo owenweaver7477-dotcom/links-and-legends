@@ -39,6 +39,30 @@ import { STARTER_SET, pieceCompletionFor } from './public/js/shared/clubsets.js'
 /* Who a player's friends ARE, as cards: name, level, handicap, and where
    they are right now. Presence comes from the live socket map rather than
    from anything stored — "online" is only ever a claim about this instant. */
+/* A RECORD HOLDER IS NOT ALWAYS A PLAYER. The board is seeded with
+   fictional pros (pids t1, e1, a1 — see records.seed.json) and carries
+   leftovers from round-bot runs, none of which have a profile. The client
+   turns a holder's name into a link, and a link that always errors is
+   worse than a name that never looked clickable, so the payload says
+   which holders can actually be opened.
+
+   Stamped here rather than in records.js: that module owns a board and
+   knows nothing about the profile store, and giving it a reason to import
+   one would couple two stores that have stayed independent. */
+const stampReal = board => {
+  for (const course of Object.values(board || {})) {
+    for (const entry of Object.values(course || {})) {
+      if (!entry || typeof entry !== 'object') continue;
+      const rows = [entry.round, ...(entry.holes || [])];
+      if (entry.pid) rows.push(entry);          // courseRecord is a bare holder
+      for (const r of rows) {
+        if (r && r.pid) r.real = profileExists(r.pid);
+      }
+    }
+  }
+  return board;
+};
+
 function friendPeople(pid) {
   const out = [];
   for (const fid of friendsOf(pid)) {
@@ -924,7 +948,7 @@ function nextHole(room) {
           round: beat.round ? { total, par: parTotal } : null,
           courseRecord: isCourseRecord,
           holes: beat.holes,
-          all: allRecords()
+          all: stampReal(allRecords())
         });
       }
       const sock = p.socketId && io.sockets.sockets.get(p.socketId);
@@ -2037,7 +2061,7 @@ io.on('connection', socket => {
       const pid = socket.data?.pid || socket.id;
       try { offerRecords(pid, d.mine); } catch (e) { console.error('  records: offer failed —', e.message); }
     }
-    if (typeof ack === 'function') ack({ records: allRecords() });
+    if (typeof ack === 'function') ack({ records: stampReal(allRecords()) });
   });
 
   /* Reachable from the clubhouse, outside any room — same reasoning as

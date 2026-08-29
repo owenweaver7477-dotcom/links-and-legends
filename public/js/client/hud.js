@@ -643,6 +643,12 @@ HUD.renderBoard = (room, myPid, course) => {
     tot.textContent = p.spectator ? 'watch' : relLabel(rel);
 
     row.append(sw, nm, st, tot);
+    /* The scoreboard is the list you spend a whole round looking at, so it
+       is the one place a name most obviously wants to be a link. Spectators
+       included: watching is not a reason to be anonymous. */
+    row.dataset.profile = p.pid;
+    row.classList.add('clickable');
+    row.title = `See ${p.name}'s profile`;
     if (p.pid !== myPid) {
       const rep = document.createElement('button');
       rep.type = 'button'; rep.className = 'preport'; rep.title = `Report ${p.name}`;
@@ -3966,6 +3972,13 @@ HUD.bindLevelTrack = () => {
 HUD.recOpen = null;              // which course's difficulty boards are expanded
 const RECORD_DIFF_IDS = DIFFICULTIES.filter(d => d.records).map(d => d.id);
 
+/* A record holder is only a LINK if there is somebody there to open. The
+   board is seeded with fictional pros and carries leftovers from round-bot
+   runs, and the server marks which holders have a real profile (see
+   stampReal in server.js) — a name that always errors when you click it is
+   worse than a name that never looked clickable. */
+const holderLink = r => (r && r.pid && r.real) ? ` data-profile="${r.pid}"` : '';
+
 HUD.renderRecords = (courses, records, myPid) => {
   const box = el.recordBox;
   if (!box) return;
@@ -3987,7 +4000,7 @@ HUD.renderRecords = (courses, records, myPid) => {
       `<span class="rc-course">${escapeHtml(c.name)}</span>` +
       (r ? `<span class="rc-diff">${escapeHtml(difficultyById(cr.difficulty).name)}</span>` : '') +
       `<span class="rc-score">${r ? r.total + (rel === 0 ? ' (E)' : rel > 0 ? ` (+${rel})` : ` (${rel})`) : '—'}</span>` +
-      `<span class="rc-who">${r ? escapeHtml(r.pid === myPid ? 'you' : r.name) : 'unclaimed'}</span>` +
+      `<span class="rc-who"${holderLink(r)}>${r ? escapeHtml(r.pid === myPid ? 'you' : r.name) : 'unclaimed'}</span>` +
       `<span class="rc-caret">${open ? '▾' : '▸'}</span>`;
     /* Clicking a course opens its per-difficulty boards. The hole records are
        the part of this an ordinary player can realistically get their name
@@ -4011,7 +4024,7 @@ HUD.renderRecords = (courses, records, myPid) => {
         `<span class="rd-badge">${isCourseRecord ? icon('crown') : dr ? icon('medal') : ''}</span>` +
         `<span class="rd-name">${escapeHtml(difficultyById(diffId).name)}</span>` +
         `<span class="rd-score">${dr ? dr.total + (drRel === 0 ? ' (E)' : drRel > 0 ? ` (+${drRel})` : ` (${drRel})`) : '—'}</span>` +
-        `<span class="rd-who">${dr ? escapeHtml(dr.pid === myPid ? 'you' : dr.name) : 'unclaimed'}</span>`;
+        `<span class="rd-who"${holderLink(dr)}>${dr ? escapeHtml(dr.pid === myPid ? 'you' : dr.name) : 'unclaimed'}</span>`;
       wrap.appendChild(head);
 
       const panel = document.createElement('div');
@@ -4025,7 +4038,7 @@ HUD.renderRecords = (courses, records, myPid) => {
           if (!h) return `<span class="rh empty"><i>${i + 1}</i><b>—</b></span>`;
           const mine = h.pid === myPid;
           return `<span class="rh${mine ? ' mine' : ''}"><i>${i + 1}</i>` +
-            `<b>${h.strokes}</b><em>${escapeHtml(mine ? 'you' : h.name)}</em></span>`;
+            `<b>${h.strokes}</b><em${holderLink(h)}>${escapeHtml(mine ? 'you' : h.name)}</em></span>`;
         }).join('');
       }
       wrap.appendChild(panel);
@@ -4065,7 +4078,10 @@ HUD.renderOnline = (list, myPid, onJoin) => {
   rows.className = 'on-list';
   for (const o of others.slice(0, 6)) {
     const row = document.createElement('div');
-    row.className = 'on-row';
+    row.className = 'on-row clickable';
+    // strangers most of all: this panel exists to answer "who is that"
+    row.dataset.profile = o.pid;
+    row.title = `See ${o.name}'s profile`;
     /* Rating first, because it is the only number on this panel that tells
        you anything about the golf. A best round is shown when they have one
        — "-3" beside a name is an invitation and a warning at the same time. */
@@ -4947,19 +4963,35 @@ HUD.bindProfile = () => {
     document.getElementById('modalProfile').hidden = true;
   });
   /* ONE delegated listener on the document rather than one per list. The
-     friends list, both leaderboards, the room roster and the records board
-     are five separately-rendered trees that are each replaced wholesale on
-     every update, so a direct listener would be torn off with them — and
-     five bindings to keep in step is how one of them quietly stops working.
-     Any row anywhere that carries data-profile opens a profile. */
+     friends list, both leaderboards, the scoreboard, the presence panel and
+     the records board are six separately-rendered trees, each replaced
+     wholesale on every update — a direct listener would be torn off with
+     them, and six bindings to keep in step is how one quietly stops
+     working. Any element anywhere carrying data-profile opens a profile.
+
+     WHICHEVER IS CLOSER TO THE CLICK WINS, and both directions really
+     happen:
+
+       a friends row carries data-profile and CONTAINS action buttons, so
+       clicking Remove must remove, not open a profile;
+
+       a records row IS a button (it expands the course) and CONTAINS the
+       record-holder's name, so clicking the name must open a profile and
+       must not also expand the row.
+
+     Hence capture phase and stopPropagation: the row's own direct listener
+     would otherwise have already fired by the time a bubbling handler got
+     to decide. */
   document.addEventListener('click', e => {
     const row = e.target.closest('[data-profile]');
     if (!row) return;
-    // an action button inside a row is an action, not a profile click
-    if (e.target.closest('button, a')) return;
+    const btn = e.target.closest('button, a');
+    if (btn && btn !== row && btn.contains(row) === false) return;   // an action
     const pid = row.dataset.profile;
-    if (pid) HUD.onOpenProfile?.(pid);
-  });
+    if (!pid) return;
+    if (btn && btn.contains(row)) { e.preventDefault(); e.stopPropagation(); }
+    HUD.onOpenProfile?.(pid);
+  }, true);
 };
 
 HUD.profileError = msg => HUD.toast(msg || 'Could not open that profile.', 'warn', 2000);

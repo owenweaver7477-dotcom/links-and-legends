@@ -4478,6 +4478,17 @@ body.navbar-on #gemBal { display: none; }
   background: rgba(255,255,255,.07);
 }
 .rkrow.clickable:hover, .fr-row.clickable:hover { transform: translateX(2px); }
+.prow.clickable:hover, .on-row.clickable:hover { background: rgba(255,255,255,.07); }
+/* A NAME inside a row that is not itself clickable — the records board,
+   where the row's own job is to expand the course. Only the name opens a
+   profile there, so only the name says so. */
+[data-profile].rc-who, [data-profile].rd-who, .rh em[data-profile] {
+  cursor: pointer; text-decoration: underline; text-decoration-style: dotted;
+  text-underline-offset: 2px; text-decoration-color: rgba(255,255,255,.25);
+}
+[data-profile].rc-who:hover, [data-profile].rd-who:hover, .rh em[data-profile]:hover {
+  color: var(--ink); text-decoration-color: var(--accent);
+}
 
 .profcard { width: min(680px, 94vw); max-height: 88vh; overflow: auto; }
 .pv-body { display: grid; grid-template-columns: 210px 1fr; gap: 16px; margin-top: 4px; }
