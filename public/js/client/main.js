@@ -11,7 +11,8 @@ import { reactionFor, REACTION_TIER } from './celebrations.js';
 import { rarityForLevel, RARITIES } from '../shared/cases.js';
 import { BOARD_RADIUS, KMH, TOP_SPEED_KMH, MAX_BOOST } from '../shared/cart.js';
 import { cartBoost, crewEffect, CADDIES, CADDIE_MAX, caddieCost } from '../shared/crew.js';
-import { setStats, setById, STARTER_SET, doneFromLevel } from '../shared/clubsets.js';
+import { setStats, setById, STARTER_SET, pieceCompletionFor,
+         completionOf, SET_CLUBS } from '../shared/clubsets.js';
 import { gearEffect } from '../shared/gear.js';
 import { Roster } from './roster.js';
 import { CameraRig, fitMapCamera } from './cameras.js';
@@ -856,11 +857,14 @@ const myBag = () => me()?.bag?.length ? me().bag : normaliseBag(DEFAULT_BAG);
    One helper rather than the same three-line lookup at six call sites —
    the server derives this once in its swing handler, and the client's
    marker MUST agree with it or every power preview lies. */
-const myDone = () => doneFromLevel(G.profile?.clubSet,
-  (G.profile?.clubSets || {})[G.profile?.clubSet] || 0);
+const myPieces = () => (G.profile?.clubPieces || {})[G.profile?.clubSet] || [];
+/* Per CLUB, because a set's stats are per class now — the same number the
+   server computes for the real shot, so the marker cannot lie. */
+const myDone = clubKey => pieceCompletionFor(myPieces(), clubKey || 'I7');
+const myGrade = () => (G.profile?.clubGrades || {})[G.profile?.clubSet] ?? 1;
 /* Club-agnostic: this feeds the yardage under the club name and the reach
    used to CHOOSE a club, both of which are asked before a club is known. */
-const mySetStats = clubKey => setStats(G.profile?.clubSet, myDone(), clubKey || null);
+const mySetStats = clubKey => setStats(G.profile?.clubSet, myDone(clubKey), clubKey || null, myGrade());
 
 function carryMult(club) {
   const fx = gearEffect(G.profile?.gear || null, club);
@@ -996,8 +1000,8 @@ function refreshAimPreview(force) {
   const myGear = G.profile?.gear || null;
   const myCrew = G.profile?.crew || null;
   const mySet = G.profile?.clubSet || STARTER_SET;
-  const mySetDone = myDone();
-  const myKit = { crew: myCrew, clubSet: mySet, setDone: mySetDone };
+  const mySetDone = myDone(clubKey);
+  const myKit = { crew: myCrew, clubSet: mySet, setDone: mySetDone, setGrade: myGrade() };
   const previewPower = isPutt
     ? (suggestedPower(G.T, b.x, b.z, clubKey, swing.aim, G.wind, toPinD + 0.45, myGear, myKit) ?? 1)
     : (dragging ? Math.max(0.06, swing.power) : 1);
@@ -1008,7 +1012,7 @@ function refreshAimPreview(force) {
   const sim = new ShotSim(G.T, {
     x: b.x, z: b.z, clubKey, power: Math.min(previewPower, 1.12), aim: swing.aim,
     faceDeg: 0, attackDeg: 0, wind: G.wind, weather: G.weather, ignoreCup: showRunOut, gear: myGear,
-    crew: myCrew, clubSet: mySet, setDone: mySetDone
+    crew: myCrew, clubSet: mySet, setDone: mySetDone, setGrade: myGrade()
   });
   const r = sim.runToEnd();
 
@@ -1286,7 +1290,7 @@ function updateLandingDot(now) {
     faceDeg: m.face || 0, attackDeg: 0, wind: G.wind, weather: G.weather,
     gear: G.profile?.gear || null, crew: G.profile?.crew || null,
     clubSet: G.profile?.clubSet || STARTER_SET,
-    setDone: myDone()
+    setDone: myDone(clubKey), setGrade: myGrade()
   }).runToEnd();
   scene.setLanding(r.x, G.T.heightAt(r.x, r.z), r.z, Math.min(1, Math.abs(m.face || 0) / 7));
   G.landingOn = true;
@@ -3264,7 +3268,8 @@ const CASE_NET = {
   standard: { open: () => Net.openCase, buy: () => Net.buyCase, label: 'Case' },
   vault: { open: () => Net.openVaultCase, buy: () => Net.buyVaultCase, label: 'Vault case' },
   pro: { open: () => Net.openProCase, buy: () => Net.buyProCase, label: 'Pro case' },
-  club: { open: () => Net.openClubCase, buy: () => Net.buyClubCase, label: 'Club case' }
+  club: { open: () => Net.openClubCase, buy: () => Net.buyClubCase, label: 'Club case' },
+  set: { open: () => Net.openSetCrate, buy: () => Net.buySetCrate, label: 'Set crate' }
 };
 let caseModalKind = 'standard';
 function openCaseFlow(kind) {
@@ -3335,14 +3340,25 @@ function renderClubhouse() {
     if (item === 'case:buyVault') return buyCaseOfKind('vault');
     if (item === 'case:buyPro') return buyCaseOfKind('pro');
     if (item === 'case:buyClub') return buyCaseOfKind('club');
+    if (item === 'case:buySet') return buyCaseOfKind('set');
     if (item === 'case:open') return openCaseFlow('standard');
     if (item === 'case:openVault') return openCaseFlow('vault');
     if (item === 'case:openPro') return openCaseFlow('pro');
     if (item === 'case:openClub') return openCaseFlow('club');
+    if (item === 'case:openSet') return openCaseFlow('set');
     /* Equipping a set goes through its own socket call rather than the
        coin till — nothing is spent, so routing it through Net.buy would
        mean the shop's purchase path handling something that is not a
        purchase. The server re-checks ownership either way. */
+    /* One named club, for coins. Named rather than rolled, so the toast
+       says which club actually arrived. */
+    if (item.startsWith('piece:')) {
+      const [, setId, clubKey] = item.split(':');
+      return Net.buyPiece(setId, clubKey, res => {
+        if (!res?.ok) { HUD.toast(res?.error || 'Could not buy that club.', 'warn', 2200); return; }
+        HUD.toast(`${res.set.name} — ${res.clubKey} bought (${res.have}/${res.of}).`, 'good', 2200);
+      });
+    }
     if (item.startsWith('set:equip:')) {
       const id = item.slice('set:equip:'.length);
       return Net.equipSet(id, res => {
@@ -3447,8 +3463,8 @@ function renderClubhouse() {
          protect. It translates them through the same coin refund the
          server-side migration performs. */
       storeSet('lg_save', JSON.stringify({
-        v: 2, coins: prof.coins, rating: prof.rating, crew: prof.crew,
-        gear: prof.gear, clubSets: prof.clubSets, clubSet: prof.clubSet,
+        v: 3, coins: prof.coins, rating: prof.rating, crew: prof.crew,
+        gear: prof.gear, clubPieces: prof.clubPieces, clubSet: prof.clubSet,
         stars: prof.stars, rounds: prof.rounds, best: prof.best,
         xp: prof.xp                       // or a wiped host eats every unlock
       }));

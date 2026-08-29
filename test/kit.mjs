@@ -169,7 +169,7 @@ import { worthSaving } from '../server/profiles.js';
    stands up its own server in its own directory and checks an outfit survives
    a session. */
 const blank = () => ({ rounds: 0, holes: 0, xp: 0, coins: 900,
-                       gear: {}, crew: {}, clubSets: { hickory: 0 }, clubSet: 'hickory' });
+                       gear: {}, crew: {}, clubPieces: { hickory: [] }, clubSet: 'hickory' });
 
 test('a profile nobody has done anything with is not written', () => {
   assert.equal(worthSaving(blank()), false, 'an untouched profile would reach the disk');

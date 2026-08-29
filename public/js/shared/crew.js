@@ -22,7 +22,6 @@
    own simulation; the client uses the same tables to preview and to render
    the shop.  No DOM, no Three.js.
    ========================================================================= */
-import { setById, upgradeCost, STARTER_SET } from './clubsets.js';
 
 /* ------------------------------------------------------------ the crew --- */
 export const CADDIES = {
@@ -234,7 +233,7 @@ export const cartBoost = crew =>
 /* ----------------------------------------------------------- the till ---- */
 /**
  * What may be bought right now, and for how much.  Returns { cost } or
- * { blocked: reason }.  item forms: 'caddie:ace' | 'set:upgrade'
+ * { blocked: reason }.  item forms: 'caddie:ace'
  */
 export function crewPurchase(item, profile) {
   const coins = profile.coins || 0;
@@ -250,25 +249,10 @@ export function crewPurchase(item, profile) {
     return { cost, apply: p => { p.crew[which] = lvl + 1; } };
   }
 
-  /* Upgrading the set you actually carry, which replaced buying your way up
-     a fixed ladder. Everything real is re-derived from the profile — which
-     set is equipped, what level it is at, what that rarity's next rung
-     costs — so the client naming 'set:upgrade' can only ever mean "one
-     more rung on the thing I am holding", never a set or a price of its
-     choosing. */
-  if (kind === 'set' && which === 'upgrade') {
-    const id = profile.clubSet || STARTER_SET;
-    const set = setById(id);
-    if (!set) return { blocked: 'No such set.' };
-    if (!(profile.clubSets && id in profile.clubSets)) {
-      return { blocked: 'You do not own that set.' };
-    }
-    const level = profile.clubSets[id] || 0;
-    const cost = upgradeCost(set.rarity, level);
-    if (cost == null) return { blocked: `Your ${set.name} is fully upgraded.` };
-    if (coins < cost) return { blocked: `Costs ${cost} coins — you have ${coins}.` };
-    return { cost, apply: p => { p.clubSets = { ...p.clubSets, [id]: level + 1 }; } };
-  }
+  /* Club sets used to be upgraded here for coins. They are COLLECTED now —
+     fourteen clubs, one at a time — so coins buy a named club through
+     piece:buy in server.js instead, and this till is back to being about
+     the caddie crew alone. */
 
   return { blocked: 'No such item.' };
 }

@@ -4321,3 +4321,20 @@ body.navbar-on #gemBal { display: none; }
 .case-pool-art img { width: 30px; height: 30px; border-radius: 6px; object-fit: cover; }
 .case-pool-head { font-size: 9.5px; font-weight: 800; letter-spacing: .9px;
   text-transform: uppercase; color: #8fd0a2; margin-top: 10px; }
+
+
+/* ══════════════════════════ THE FOURTEEN, HELD OR NOT ═══════════════════
+   A set is collected a club at a time, so a card shows which ones you
+   actually have. Fourteen chips say "you are missing your wedges" at a
+   glance in a way "9/14" never does. */
+.pieces { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; margin: 4px 0 2px; }
+.pieces .pc {
+  font-size: 8px; font-weight: 800; font-style: normal; letter-spacing: .3px;
+  padding: 2px 4px; border-radius: 5px; min-width: 20px; text-align: center;
+  background: rgba(255,255,255,.04); color: #5f7266;
+  border: 1px solid rgba(255,255,255,.06);
+}
+.pieces .pc.has {
+  background: rgba(111,206,138,.18); color: #9fe8b4;
+  border-color: rgba(111,206,138,.42);
+}

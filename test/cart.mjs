@@ -421,15 +421,17 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
   const { CADDIE_COSTS, CADDIE_KEYS, crewEffect } =
     await import('../public/js/shared/crew.js');
   const { SHOP } = await import('../public/js/shared/gear.js');
-  const { UPGRADE_COSTS, CLUB_SETS, STARTER_SET, setStats, upgradeCount } =
+  const { CLUB_SETS, STARTER_SET, setStats, piecePrice, SET_CLUBS } =
     await import('../public/js/shared/clubsets.js');
 
   const sum = a => a.reduce((x, y) => x + y, 0);
-  /* "Everything" is every caddie, every gear item, and fully upgrading a set
-     of each rarity. Club SETS themselves are no longer a coin purchase — they
-     drop from the Club Case — so what coins actually buy is the upgrade path,
-     and the sum of all five paths is the club-shaped part of this total. */
-  const allSetPaths = sum(Object.values(UPGRADE_COSTS).map(sum));
+  /* "Everything" is every caddie, every gear item, and completing a set of
+     each rarity. Club sets are not a coin purchase in themselves — they drop
+     from the Club Case — but the fourteen clubs that COMPLETE one can each
+     be bought by name, and that is the club-shaped part of the coin sink. */
+  const oneOfEach = r => CLUB_SETS.find(x => x.rarity === r).id;
+  const RAR = ['standard', 'tour', 'pro', 'legend', 'mythic'];
+  const allSetPaths = sum(RAR.map(r => piecePrice(oneOfEach(r)) * SET_CLUBS.length));
   const toMax = sum(CADDIE_COSTS) * CADDIE_KEYS.length
     + allSetPaths
     + Object.values(SHOP).reduce((a, i) => a + i.cost, 0);
@@ -451,14 +453,15 @@ head('progression — bad at the start, and a ladder that outlasts the shop');
      built in for a pace nobody measured — moved by raising economy.js's
      PAYOUT_SCALE rather than touching any of the prices below, which is
      exactly what that constant is for. */
-  const early = sum(UPGRADE_COSTS.standard) + sum(UPGRADE_COSTS.tour);
+  const pathOf = r => piecePrice(oneOfEach(r)) * SET_CLUBS.length;
+  const early = pathOf('standard') + pathOf('tour');
   const earlyRounds = Math.ceil(early / perRound);
-  ok('maxing a Standard and a Tour set is a normal early progression', earlyRounds <= 12,
-     earlyRounds + ' rounds for both lower paths');
-  /* The whole point of "mythics take longer": the top two paths must dwarf
-     the bottom two, or rarity costs nothing to live up to. */
-  const top = sum(UPGRADE_COSTS.legend) + sum(UPGRADE_COSTS.mythic);
-  ok('the top two paths cost far more than the bottom two', top > early * 5,
+  ok('completing a Standard and a Tour set is a normal early progression', earlyRounds <= 12,
+     earlyRounds + ' rounds for both lower sets');
+  /* The whole point of rarity: the top two must dwarf the bottom two, or
+     pulling a Mythic set costs nothing to live up to. */
+  const top = pathOf('legend') + pathOf('mythic');
+  ok('the top two sets cost far more than the bottom two', top > early * 5,
      'top two ' + top + ' vs bottom two ' + early);
 
   ok('owning everything takes 200-250 rounds, not 300+', rounds >= 200 && rounds <= 250,
@@ -538,8 +541,9 @@ head('progression — what fifty rounds of actual golf, not idealised par, buys'
   const { CADDIE_COSTS, CADDIE_KEYS } =
     await import('../public/js/shared/crew.js');
   const { SHOP } = await import('../public/js/shared/gear.js');
-  const { UPGRADE_COSTS } = await import('../public/js/shared/clubsets.js');
+  const { CLUB_SETS, piecePrice, SET_CLUBS } = await import('../public/js/shared/clubsets.js');
   const sum = a => a.reduce((x, y) => x + y, 0);
+  const pathOf = r => piecePrice(CLUB_SETS.find(x => x.rarity === r).id) * SET_CLUBS.length;
 
   // relative-to-par distribution for a mixed-skill player: eagle, birdie,
   // par, bogey, double, triple — bogey the single most likely outcome,
@@ -564,12 +568,12 @@ head('progression — what fifty rounds of actual golf, not idealised par, buys'
      realAvg > idealPerRound * 0.5 && realAvg <= idealPerRound,
      `${Math.round(realAvg)} vs ${idealPerRound} idealised (${Math.round(realAvg / idealPerRound * 100)}%)`);
 
-  const earlyPaths = sum(UPGRADE_COSTS.standard) + sum(UPGRADE_COSTS.tour);
-  ok('the lower club-set paths are affordable well within fifty rounds', earned >= earlyPaths * 2,
-     `${earned} earned vs ${earlyPaths} to max a Standard and a Tour set`);
+  const earlyPaths = pathOf('standard') + pathOf('tour');
+  ok('the lower club sets are affordable well within fifty rounds', earned >= earlyPaths * 2,
+     `${earned} earned vs ${earlyPaths} to complete a Standard and a Tour set`);
 
   const everything = sum(CADDIE_COSTS) * CADDIE_KEYS.length
-    + sum(Object.values(UPGRADE_COSTS).map(sum))
+    + sum(['standard', 'tour', 'pro', 'legend', 'mythic'].map(pathOf))
     + Object.values(SHOP).reduce((a, i) => a + i.cost, 0);
   ok('but the whole shop is nowhere close after fifty rounds', earned < everything * 0.3,
      `${earned} of ${everything}`);
@@ -579,7 +583,7 @@ head('progression — what fifty rounds of actual golf, not idealised par, buys'
 head('the caddie crew — hired stats that actually do things');
 {
   const { crewEffect, crewPurchase, cartBoost, NO_CREW, CADDIE_COSTS } = await import('../public/js/shared/crew.js');
-  const { setStats, STARTER_SET, CLUB_SETS, UPGRADE_COSTS, upgradeCount } =
+  const { setStats, STARTER_SET, CLUB_SETS, upgradeCount } =
     await import('../public/js/shared/clubsets.js');
   // no crew AND no bag named: the reference ball, exactly 1s and 0s.  This is
   // the configuration the physics suite and calibrateCarries() run in.
@@ -608,26 +612,10 @@ head('the caddie crew — hired stats that actually do things');
   ok('and 500 is exactly enough', rich.cost === 500 && !rich.blocked);
   ok('maxing one caddie costs 39,500 total',
      CADDIE_COSTS.reduce((a, b) => a + b, 0) === 39500);
-  const base = { clubSet: STARTER_SET, clubSets: { [STARTER_SET]: 0 }, crew: { ...NO_CREW } };
-  const up = crewPurchase('set:upgrade', { ...base, coins: 999999 });
-  ok('the first upgrade on the starter set costs what the table says',
-     up.cost === UPGRADE_COSTS.standard[0], String(up.cost));
-  const poor = crewPurchase('set:upgrade', { ...base, coins: UPGRADE_COSTS.standard[0] - 1 });
-  ok('and one coin short is refused', !!poor.blocked);
-  const p = { coins: 999999, clubSet: STARTER_SET, clubSets: { [STARTER_SET]: 0 }, crew: { ...NO_CREW } };
-  crewPurchase('set:upgrade', p).apply(p);
-  ok('upgrading raises only the equipped set', p.clubSets[STARTER_SET] === 1);
-  const maxed = { coins: 999999, clubSet: STARTER_SET,
-                  clubSets: { [STARTER_SET]: upgradeCount('standard') }, crew: { ...NO_CREW } };
-  ok('a fully upgraded set has nothing left to sell',
-     !!crewPurchase('set:upgrade', maxed).blocked);
-  /* You cannot pour coins into a set sitting in a cupboard — only the one
-     you actually carry. The client hides the button; this is the server
-     side of the same rule. */
-  const notCarried = { coins: 999999, clubSet: 'nocturne',
-                       clubSets: { [STARTER_SET]: 0 }, crew: { ...NO_CREW } };
-  ok('upgrading a set you do not own is refused',
-     !!crewPurchase('set:upgrade', notCarried).blocked);
+  /* The club-set upgrade branch is gone from this till: sets are COLLECTED
+     now, and coins buy a named club through piece:buy on the server. What
+     is left here is the caddie crew, which is what it was always for. */
+  ok('the till no longer sells club upgrades', !!crewPurchase('set:upgrade', { coins: 999999, crew: { ...NO_CREW } }).blocked);
 
   // a partial crew object (older save, hand-edited file, or a future ninth
   // caddie) must behave as zeros, never as NaN — NaN here is a NaN ball

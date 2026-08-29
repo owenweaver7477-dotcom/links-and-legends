@@ -174,7 +174,7 @@ test('buying an item is recorded and reported back to the client', async () => {
   assert.ok(profile.gear && typeof profile.gear === 'object',
     'profile must expose gear, or the shop cannot show what is owned');
   assert.ok('coins' in profile, 'profile must expose coins');
-  assert.ok('clubSets' in profile, 'profile must expose the club sets it owns');
+  assert.ok('clubPieces' in profile, 'profile must expose the clubs it has collected');
   assert.ok('clubSet' in profile, 'profile must expose which set is equipped');
 
   s.disconnect();
@@ -272,10 +272,10 @@ test('a wiped server restores a career from the player\'s own snapshot', () => {
      was blocked forever and the career was gone. */
   const pid = 'restore-' + Math.random().toString(36).slice(2, 8);
   const snap = JSON.stringify({
-    v: 2, coins: 12000, rating: 61, rounds: 24, best: -3,
+    v: 3, coins: 12000, rating: 61, rounds: 24, best: -3,
     crew: { ace: 4, bruiser: 3, steady: 2, roller: 1, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
     gear: { ball: 2, irons: 1, woods: 1, putter: 1, cart: 1 },
-    clubSets: { [STARTER_SET]: 2, vantage: 1 }, clubSet: 'vantage', stars: {}
+    clubPieces: { [STARTER_SET]: ['DR'], vantage: ['DR', 'W3'] }, clubSet: 'vantage', stars: {}
   });
 
   // something touches the profile FIRST — this is what used to kill it
@@ -284,7 +284,7 @@ test('a wiped server restores a career from the player\'s own snapshot', () => {
 
   const p = getProfile(pid);
   assert.equal(p.coins, 12000, 'coins were not restored');
-  assert.equal(p.clubSets.vantage, 1, 'club sets were not restored');
+  assert.deepEqual(p.clubPieces.vantage, ['DR', 'W3'], 'collected clubs were not restored');
   assert.equal(p.clubSet, 'vantage', 'the equipped set was not restored');
   assert.equal(p.rounds, 24);
   assert.equal(p.crew.ace, 4, 'crew was not restored');
@@ -318,14 +318,14 @@ test('a v1 snapshot still restores, paying back the retired club ladder', () => 
 test('a live career is never overwritten by a snapshot', () => {
   const pid = 'live-' + Math.random().toString(36).slice(2, 8);
   const p = getProfile(pid);
-  p.rounds = 9; p.coins = 300; p.clubSets = { [STARTER_SET]: 0, vantage: 3 };
+  p.rounds = 9; p.coins = 300; p.clubPieces = { [STARTER_SET]: [], vantage: ['DR', 'W3', 'W5'] };
 
-  const fat = JSON.stringify({ v: 2, coins: 999999, rating: 90, rounds: 500,
-    crew: {}, gear: {}, clubSets: { nocturne: 8 }, clubSet: 'nocturne', stars: {} });
+  const fat = JSON.stringify({ v: 3, coins: 999999, rating: 90, rounds: 500,
+    crew: {}, gear: {}, clubPieces: { nocturne: ['DR','W3','W5','H4','I5','I6','I7','I8','I9','PW','GW','SW','LW','PT'] }, clubSet: 'nocturne', stars: {} });
   assert.equal(seedProfile(pid, fat), false, 'a played profile was seeded over');
   assert.equal(p.coins, 300, 'coins were overwritten');
-  assert.equal(p.clubSets.vantage, 3, 'club sets were overwritten');
-  assert.equal(p.clubSets.nocturne, undefined, 'a set was minted by a snapshot');
+  assert.deepEqual(p.clubPieces.vantage, ['DR', 'W3', 'W5'], 'collected clubs were overwritten');
+  assert.equal(p.clubPieces.nocturne, undefined, 'a set was minted by a snapshot');
 });
 
 test('a new player arrives able to buy something', () => {

@@ -10,7 +10,9 @@ import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost } from '../shared/crew.js';
 import { CLUB_SETS, setById, setStats, STARTER_SET, upgradeCost, upgradeCount,
          isMaxed, rarityRank, CLUB_CASE_GEM_COST, CLUB_CASE_ODDS,
-         doneFromLevel, classOf, CLUB_CLASSES, CLASS_LABEL, STAT_KEYS, STAT_LABEL } from '../shared/clubsets.js';
+         classOf, CLUB_CLASSES, CLASS_LABEL, STAT_KEYS, STAT_LABEL,
+         pieceCompletionFor, completionOf, SET_CLUBS, missingPieces,
+         piecePrice, SET_CRATE_GEM_COST } from '../shared/clubsets.js';
 import { EMOTES, EMOTE_SLOTS } from './celebrations.js';
 import { UNLOCKS, unlocksAt, unlocksOfKind, ownedOfKind, nextUnlock, UNLOCK_KINDS } from '../shared/unlocks.js';
 import { ACTIONS, keysFor, bindKey, resetBinds, keyLabel, RESERVED } from './binds.js';
@@ -1012,7 +1014,7 @@ let rangeT = null;
 const carryCache = new Map();
 function carryYds(clubKey, prof) {
   const key = clubKey + '|' + (prof?.clubSet || '') + '|' +
-    ((prof?.clubSets || {})[prof?.clubSet] || 0) + '|' +
+    ((prof?.clubPieces || {})[prof?.clubSet] || []).join(',') + '|' +
     JSON.stringify(prof?.gear || {}) + '|' + JSON.stringify(prof?.crew || {});
   if (carryCache.has(key)) return carryCache.get(key);
   let v = 0;
@@ -1023,7 +1025,8 @@ function carryYds(clubKey, prof) {
       wind: { dir: 0, speed: 0 },
       gear: prof?.gear || null, crew: prof?.crew || null,
       clubSet: prof?.clubSet || STARTER_SET,
-      setDone: doneFromLevel(prof?.clubSet, (prof?.clubSets || {})[prof?.clubSet] || 0)
+      setDone: pieceCompletionFor((prof?.clubPieces || {})[prof?.clubSet], clubKey),
+      setGrade: (prof?.clubGrades || {})[prof?.clubSet] ?? 1
     }).runToEnd();
     v = Math.round(toYards(r.carry));
   } catch { v = 0; }
@@ -1052,7 +1055,7 @@ function tryItLine(it, prof) {
 }
 
 /** The same player with nothing bought — the honest baseline to compare to. */
-const BARE = { clubSet: STARTER_SET, clubSets: { [STARTER_SET]: 0 },
+const BARE = { clubSet: STARTER_SET, clubPieces: { [STARTER_SET]: [...SET_CLUBS] },
                gear: { ball: 0, irons: 0, woods: 0, putter: 0 }, crew: {} };
 
 /**
@@ -1064,14 +1067,16 @@ function buildPayoff(prof) {
   wrap.className = 'payoff';
   const crew = prof?.crew || {};
   const set = setById(prof?.clubSet) || setById(STARTER_SET);
-  const level = (prof?.clubSets || {})[set.id] || 0;
-  const steps = upgradeCount(set.rarity);
+  const pieces = (prof?.clubPieces || {})[set.id] || [];
+  const level = pieces.length;
+  const steps = SET_CLUBS.length;
   /* Power and accuracy used to read `tier / 6` off a seven-rung ladder that
      no longer exists. They now read the set's ACTUAL speed against the
      range the game spans (the free starter at 0.860 up to a maxed Mythic
      at 1.065), so the bar means the same thing it always did — how much of
      the available distance you have — without hardcoding a rung count. */
-  const stats = setStats(set.id, level) || { speed: 0.86, faceDamp: 0 };
+  const stats = setStats(set.id, completionOf(pieces), 'DR',
+    (prof?.clubGrades || {})[set.id] ?? 1) || { speed: 0.86, faceDamp: 0 };
   const SPAN_LO = 0.860, SPAN_HI = 1.065, DAMP_HI = 0.33;
   const setPower = Math.max(0, Math.min(1, (stats.speed - SPAN_LO) / (SPAN_HI - SPAN_LO)));
 
@@ -1088,8 +1093,8 @@ function buildPayoff(prof) {
      Its length varies by rarity on purpose — a Mythic set showing eight
      pips next to a Standard set's three is the clearest possible statement
      of "mythics take longer". */
-  const pips = Array.from({ length: steps }, (_, i) =>
-    `<i class="${i < level ? 'done' : i === level ? 'now' : ''}"></i>`).join('');
+  const pips = SET_CLUBS.map(k =>
+    `<i class="${pieces.includes(k) ? 'done' : ''}" title="${escapeHtml(CLUB_BY_KEY[k]?.label || k)}"></i>`).join('');
   const rarityName = set.rarity[0].toUpperCase() + set.rarity.slice(1);
 
   wrap.innerHTML = `
@@ -1097,9 +1102,9 @@ function buildPayoff(prof) {
       <span class="po-art">${clubSvg(set.look, 64)}</span>
       <div class="po-settxt">
         <b>${escapeHtml(set.name)}</b>
-        <span>${escapeHtml(set.brand)} · ${rarityName}${level ? ` · upgrade ${level}/${steps}` : ''}</span>
+        <span>${escapeHtml(set.brand)} · ${rarityName} · ${level}/${steps} clubs</span>
       </div>
-      <div class="po-tiers" title="${level} of ${steps} upgrades">${pips}</div>
+      <div class="po-tiers" title="${level} of ${steps} clubs collected">${pips}</div>
     </div>
     <div class="po-carry">${[['Driver', 'DR'], ['7 iron', 'I7'], ['Wedge', 'PW']].map(([label, k]) => {
       const now = carryYds(k, prof), base = carryYds(k, BARE), d = now - base;
@@ -1142,11 +1147,13 @@ function computeRecommended(prof) {
      anything for is the one already in the bag. */
   {
     const set = setById(prof?.clubSet) || setById(STARTER_SET);
-    const level = (prof?.clubSets || {})[set.id] || 0;
-    const cost = upgradeCost(set.rarity, level);
-    if (cost != null) {
-      candidates.push({ kind: 'set:upgrade', name: set.name, cost,
-        sub: `Upgrade ${level + 1}/${upgradeCount(set.rarity)}`, art: clubSvg(set.look, 28) });
+    const pieces = (prof?.clubPieces || {})[set.id] || [];
+    const missing = missingPieces(pieces);
+    if (missing.length) {
+      const k = missing[0];
+      candidates.push({ kind: 'piece:' + set.id + ':' + k,
+        name: `${CLUB_BY_KEY[k]?.label || k} — ${set.name}`, cost: piecePrice(set.id),
+        sub: `${pieces.length}/${SET_CLUBS.length} clubs collected`, art: clubSvg(set.look, 28) });
     }
   }
   for (const [key, c] of Object.entries(CADDIES)) {
@@ -1414,12 +1421,11 @@ HUD.renderShop = (prof, onBuy) => {
       grid.appendChild(card);
     }
   } else if (shopTab === 'clubs') {
-    /* Every set you own, the one you carry first. There is no ladder to buy
-       your way up any more — sets come out of the Club Case (see
-       clubsets.js) and coins only ever buy the next upgrade on something
-       already in the bag. So this tab is an inventory with one action on
-       each card, not a catalogue. */
-    const owned = prof?.clubSets || { [STARTER_SET]: 0 };
+    /* Every set you own, the one you carry first. A set is COLLECTED now —
+       fourteen clubs, one at a time — so each card is a progress bar and a
+       shelf of which clubs you are still missing, and the coin button buys
+       a named one rather than an anonymous upgrade. */
+    const owned = prof?.clubPieces || { [STARTER_SET]: [...SET_CLUBS] };
     const equipped = prof?.clubSet || STARTER_SET;
     const mine = CLUB_SETS
       .filter(st => st.id in owned)
@@ -1427,23 +1433,33 @@ HUD.renderShop = (prof, onBuy) => {
                    || rarityRank(b.rarity) - rarityRank(a.rarity));
 
     for (const st of mine) {
-      const level = owned[st.id] || 0;
-      const steps = upgradeCount(st.rarity);
+      const pieces = owned[st.id] || [];
+      const steps = SET_CLUBS.length;
+      const missing = missingPieces(pieces);
       const on = st.id === equipped;
+      const grade = (prof?.clubGrades || {})[st.id] ?? 1;
+      const gt = gradeTier(grade);
       const card = document.createElement('div');
       card.className = 'shopcard' + (on ? ' owned' : '');
       card.style.setProperty('--rarity-color', RARITY_ACCENT[st.rarity] || RARITY_ACCENT.standard);
-      // hovering ANY card previews it — the old tab left the set you
-      // actually carry with no data-view at all, so hovering your own bag
-      // showed whatever you last looked at
       card.dataset.set = st.id;
       card.dataset.view = JSON.stringify({ kind: 'club', key: 'DR', set: st.id,
         skin: prof?.clubSkin || 'stock', name: st.name,
         sub: `${st.brand} · ${st.rarity}` });
       const rarityName = st.rarity[0].toUpperCase() + st.rarity.slice(1);
+
+      /* Every club in the set, held or not. Fourteen tiny chips say "you
+         are missing your wedges" at a glance in a way "9/14" never does. */
+      const chips = SET_CLUBS.map(k => {
+        const has = pieces.includes(k);
+        return `<i class="pc${has ? ' has' : ''}" title="${escapeHtml(CLUB_BY_KEY[k]?.label || k)}">${escapeHtml(k)}</i>`;
+      }).join('');
+
       card.innerHTML = `<span class="sc-art">${clubSvg(st.look, 46)}</span>
         <b>${escapeHtml(st.name)}</b><span class="sc-blurb">${escapeHtml(st.blurb)}</span>
-        <span class="cad-now">${escapeHtml(st.brand)} · ${rarityName} · ${level}/${steps} upgrades</span>`;
+        <span class="cad-now">${escapeHtml(st.brand)} · ${rarityName} · ${pieces.length}/${steps} clubs
+          · <em style="color:${gt.color};font-style:normal;font-weight:800">${formatGrade(grade)}</em></span>
+        <div class="pieces">${chips}</div>`;
 
       if (!on) {
         const eq = document.createElement('button');
@@ -1453,25 +1469,26 @@ HUD.renderShop = (prof, onBuy) => {
         card.appendChild(eq);
       }
 
-      /* Only the carried set can be upgraded. Coins go into the bag you
-         actually swing, never into one sitting in a cupboard — and the
-         server enforces exactly the same rule (see crewPurchase). */
-      if (on) {
-        const cost = upgradeCost(st.rarity, level);
-        const ub = document.createElement('button');
-        if (cost == null) {
-          ub.className = 'btn';
-          ub.textContent = 'Fully upgraded';
-          ub.disabled = true;
-        } else {
-          ub.className = 'btn' + (coins >= cost ? ' primary' : '');
-          ub.innerHTML = coins >= cost
-            ? `Upgrade ${level + 1}/${steps} · ${icon('coin')} ${cost.toLocaleString()}`
-            : `${icon('coin')} ${cost.toLocaleString()} · need ${(cost - coins).toLocaleString()} more`;
-          ub.disabled = coins < cost;
-          if (coins >= cost) ub.addEventListener('click', () => onBuy('set:upgrade'));
-        }
-        card.appendChild(ub);
+      /* Buying a NAMED club. The case is random and the crate is expensive;
+         this is the deliberate route for somebody one club short. */
+      if (missing.length) {
+        const k = missing[0];
+        const cost = piecePrice(st.id);
+        const pb = document.createElement('button');
+        pb.className = 'btn' + (coins >= cost ? ' primary' : '');
+        const label = CLUB_BY_KEY[k]?.label || k;
+        pb.innerHTML = coins >= cost
+          ? `Buy ${escapeHtml(label)} · ${icon('coin')} ${cost.toLocaleString()}`
+          : `${icon('coin')} ${cost.toLocaleString()} · need ${(cost - coins).toLocaleString()} more`;
+        pb.disabled = coins < cost;
+        if (coins >= cost) pb.addEventListener('click', () => onBuy(`piece:${st.id}:${k}`));
+        card.appendChild(pb);
+      } else {
+        const done = document.createElement('button');
+        done.className = 'btn';
+        done.textContent = 'Complete set';
+        done.disabled = true;
+        card.appendChild(done);
       }
       grid.appendChild(card);
     }
@@ -1483,9 +1500,9 @@ HUD.renderShop = (prof, onBuy) => {
     hint.className = 'shopcard';
     hint.style.setProperty('--rarity-color', RARITY_ACCENT.legend);
     hint.innerHTML = `<span class="sc-art">${icon('gift', { size: 40 })}</span>
-      <b>More sets</b><span class="sc-blurb">New club sets come out of the Club
-      Case — every rarity, from Standard up to Mythic.</span>
-      <span class="cad-now">${CLUB_CASE_GEM_COST} gems on the Cases tab</span>`;
+      <b>More sets</b><span class="sc-blurb">Club Cases hand over one club at a
+      time; a Set Crate hands over all fourteen at once.</span>
+      <span class="cad-now">${CLUB_CASE_GEM_COST} gems a case · ${SET_CRATE_GEM_COST.toLocaleString()} a crate</span>`;
     const go = document.createElement('button');
     go.className = 'btn';
     go.textContent = 'Go to Cases';
@@ -1509,7 +1526,7 @@ HUD.renderShop = (prof, onBuy) => {
     const vaultTop = vaultTierOdds()[0];
     const proTop = proTierOdds()[0];
     const CASE_ICON = { standard: 'caseCommon', vault: 'caseVault', pro: 'caseLegendary',
-                        club: 'ironHead' };
+                        club: 'ironHead', set: 'caseLegendary' };
     const cases = [
       { key: 'standard', name: 'Fairway Supply Crate', rarity: 'Common', rarityClass: 'common',
         owned: prof?.cases || 0, cost: CASE_COIN_COST, currency: 'coin', have: coins,
@@ -1533,7 +1550,16 @@ HUD.renderShop = (prof, onBuy) => {
         owned: prof?.clubCases || 0, cost: CLUB_CASE_GEM_COST, currency: 'gem', have: gems,
         blurb: 'Club sets, from Standard up to Mythic — the bag you swing, not a cosmetic.',
         hint: 'A duplicate set is never wasted: it upgrades the one you already own.',
-        buyItem: 'case:buyClub', openItem: 'case:openClub' }
+        buyItem: 'case:buyClub', openItem: 'case:openClub' },
+      /* The way out of the chase for somebody who would rather pay than
+         grind. Deliberately not the cheap route — fourteen Club Cases is
+         8,400 gems and this is 9,000 — so what you are buying is certainty,
+         not a discount. */
+      { key: 'set', name: 'Set Crate', rarity: 'Complete', rarityClass: 'legendary',
+        owned: prof?.setCrates || 0, cost: SET_CRATE_GEM_COST, currency: 'gem', have: gems,
+        blurb: 'A whole club set, all fourteen clubs, complete in one go.',
+        hint: 'The certain route rather than the cheap one — fourteen Club Cases cost less.',
+        buyItem: 'case:buySet', openItem: 'case:openSet' }
     ];
     for (const c of cases) {
       const card = document.createElement('div');
@@ -2309,12 +2335,15 @@ HUD.renderSetCompare = (prof, setId) => {
 
   const mineId = prof?.clubSet || STARTER_SET;
   const mine = setById(mineId);
-  const doneOf = id => doneFromLevel(id, (prof?.clubSets || {})[id] || 0);
+  const piecesOf = id => (prof?.clubPieces || {})[id] || [];
+  const gradeOf = id => (prof?.clubGrades || {})[id] ?? 1;
   const cls = HUD.cmpClass;
   const club = CMP_CLUB[cls] || 'I7';
 
-  const a = setStats(mineId, doneOf(mineId), club);      // what you carry
-  const b = setStats(other.id, doneOf(other.id), club);  // what you hovered
+  // the CLASS's completion for the club being compared, and each set's
+  // own grade — the same two numbers the simulation would use
+  const a = setStats(mineId, pieceCompletionFor(piecesOf(mineId), club), club, gradeOf(mineId));
+  const b = setStats(other.id, pieceCompletionFor(piecesOf(other.id), club), club, gradeOf(other.id));
   const same = other.id === mineId;
 
   const classStrip = CLUB_CLASSES.map(k =>
@@ -2416,7 +2445,7 @@ HUD.showRevealModel = (setId, grade) => {
    actually IN that tier, which is the question somebody deciding whether
    to spend has. */
 HUD.casePoolHTML = kind => {
-  const isClub = kind === 'club';
+  const isClub = kind === 'club' || kind === 'set';
   const pool = isClub
     ? CLUB_SETS.map(x => ({ id: x.id, name: x.name, rarity: x.rarity, kind: 'clubset', color: x.shaft }))
     : CASE_POOL.map(x => ({ id: x.id, name: x.name, rarity: x.rarity, kind: x.kind, color: x.color }));
@@ -2872,7 +2901,8 @@ const CASE_TIERS = {
   pro: { pityLabel: 'Always Pro or better', oddsFn: proTierOdds, swatchFloor: PITY_TIER },
   /* The Club Case rolls SETS on its own odds table, not the cosmetic
      ladder, so it brings its own rows rather than borrowing tierOdds(). */
-  club: { pityLabel: 'Club sets only', oddsFn: clubCaseOdds, swatchFloor: null }
+  club: { pityLabel: 'Club sets only', oddsFn: clubCaseOdds, swatchFloor: null },
+  set: { pityLabel: 'A complete set, all 14 clubs', oddsFn: clubCaseOdds, swatchFloor: null }
 };
 
 /** The Club Case's own odds, in the shape caseOddsRowsHTML expects. */

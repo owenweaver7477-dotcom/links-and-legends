@@ -24,7 +24,9 @@ import { rollCase, caseItemKey, tierIndex, PITY_TIER, PITY_THRESHOLD,
 import { unlocksAt } from '../public/js/shared/unlocks.js';
 import { CLUB_TIERS, REFINE_COSTS } from '../public/js/shared/crew.js';
 import { CLUB_SETS, setById, STARTER_SET, upgradeCount, isMaxed,
-         rollClubCase, CLUB_CASE_GEM_COST, rollGrade } from '../public/js/shared/clubsets.js';
+         rollClubCase, CLUB_CASE_GEM_COST, rollGrade, SET_CLUBS, wholeSet,
+         missingPieces, completionOf, pieceCompletionFor, SET_CRATE_GEM_COST,
+         piecePrice } from '../public/js/shared/clubsets.js';
 
 /* Enough for the first Forged irons or a caddie, so the shop is usable the
    moment a player opens it rather than after several rounds. */
@@ -41,7 +43,7 @@ export const STARTING_COINS = 900;
  * shape change ships costs finding out which profiles are which shape from
  * their contents alone, on a live store, with players in it.
  */
-export const PROFILE_SCHEMA_VERSION = 3;
+export const PROFILE_SCHEMA_VERSION = 4;
 
 /* What the old coin-bought club ladder cost, so a migrating profile can be
    paid back exactly what it spent. Lives here rather than being derived at
@@ -108,6 +110,32 @@ export function migrateProfile(p) {
     p.clubCases = 0;
     p.clubGrades = { [STARTER_SET]: 1 };
     p.schemaVersion = 3;
+  }
+  if (p.schemaVersion < 4) {
+    /* Sets became something you COLLECT rather than something you upgrade:
+       fourteen clubs, one at a time, and how much of a class you hold is
+       what drives that class's stats.
+
+       Upgrade levels convert straight into pieces rather than being
+       refunded — the coins bought stat improvement and pieces ARE stat
+       improvement, so converting preserves exactly what was paid for while
+       refunding on top would pay for it twice. Rounded UP, so nobody comes
+       out of this with less than they went in with. */
+    const pieces = {};
+    for (const [id, level] of Object.entries(p.clubSets || {})) {
+      const set = setById(id);
+      if (!set) continue;
+      const steps = upgradeCount(set.rarity) || 1;
+      const t = Math.max(0, Math.min(1, (Number(level) || 0) / steps));
+      const n = Math.max(1, Math.ceil(t * SET_CLUBS.length));   // owning it at all is one club
+      pieces[id] = SET_CLUBS.slice(0, n);
+    }
+    if (!Object.keys(pieces).length) pieces[STARTER_SET] = [...SET_CLUBS];
+    // the free starter has always been a whole bag, not a chase
+    if (pieces[STARTER_SET]) pieces[STARTER_SET] = [...SET_CLUBS];
+    p.clubPieces = pieces;
+    delete p.clubSets;
+    p.schemaVersion = 4;
   }
   return p;
 }
@@ -198,9 +226,12 @@ export function getProfile(pid) {
       crew: { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
       /* The free starter set, so nobody is ever bagless. Its own object
          per profile — a shared literal here would be one inventory for
-         every player at once. `clubSets` is setId -> upgrade level. */
-      clubSets: { [STARTER_SET]: 0 }, clubSet: STARTER_SET, clubCases: 0,
-      // the free starter is Mint: nobody should begin behind on a roll
+         every player at once. `clubPieces` is setId -> the club keys held. */
+      /* The free starter arrives COMPLETE — it is the bag you begin with,
+         not the first rung of a chase. Its own object per profile. */
+      clubPieces: { [STARTER_SET]: [...SET_CLUBS] },
+      clubSet: STARTER_SET, clubCases: 0, setCrates: 0,
+      // and Mint: nobody should begin behind on a roll
       clubGrades: { [STARTER_SET]: 1 },
       cleared: [],
       clubSkin: 'stock',        // earned finish, never bought — see clubskins.js
@@ -260,8 +291,7 @@ function untouched(p) {
   if ((p.rounds || 0) > 0 || (p.holes || 0) > 0 || (p.xp || 0) > 0) return false;
   /* Any club set beyond the free starter, or any upgrade bought on it, is
      real progress — the same thing the old clubTier/refine check meant. */
-  if (p.clubSets && Object.entries(p.clubSets)
-        .some(([id, lvl]) => id !== STARTER_SET || (lvl || 0) > 0)) return false;
+  if (p.clubPieces && Object.keys(p.clubPieces).some(id => id !== STARTER_SET)) return false;
   if (p.gear && Object.values(p.gear).some(v => (v || 0) > 0)) return false;
   if (p.crew && Object.values(p.crew).some(v => (v || 0) > 0)) return false;
   // a login streak, a case in the wallet, or gems from either one is a
@@ -320,13 +350,15 @@ export function seedProfile(pid, snap) {
   if (profiles.has(pid) && !untouched(profiles.get(pid))) return false;
   let d = snap;
   if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return false; } }
-  /* BOTH snapshot versions are accepted, deliberately. v1 snapshots carry
-     the retired clubTier/refine ladder and are already sitting in real
-     players' browser storage right now — refusing them would mean a
-     returning player on a wiped host loses their whole career, which is
-     the exact failure this function exists to prevent. v1 is translated
-     below through the same refund the server-side migration performs. */
-  if (!d || typeof d !== 'object' || (d.v !== 1 && d.v !== 2)) return false;
+  /* ALL THREE snapshot versions are accepted, deliberately. v1 carries the
+     retired clubTier/refine ladder, v2 the retired upgrade levels, v3 the
+     collected clubs — and v1 and v2 are sitting in real players' browser
+     storage right now. Refusing an old one would mean a returning player on
+     a wiped host loses their whole career, which is the exact failure this
+     function exists to prevent. Each older shape is translated below the
+     same way migrateProfile translates it, so a restore and a migration can
+     never disagree about what an old save was worth. */
+  if (!d || typeof d !== 'object' || ![1, 2, 3].includes(d.v)) return false;
 
   const p = getProfile(pid);                 // creates the blank profile
   p.coins = num(d.coins, CLAMP.coins);
@@ -337,6 +369,17 @@ export function seedProfile(pid, snap) {
   if (d.v === 1) {
     // pay the old ladder back rather than restoring a field nothing reads
     p.coins = Math.min(CLAMP.coins, p.coins + ladderRefund(d.clubTier, d.refine));
+  } else if (d.clubPieces && typeof d.clubPieces === 'object') {
+    // v3 snapshot: pieces already. Only real sets, only real clubs.
+    const out = {};
+    for (const [id, arr] of Object.entries(d.clubPieces)) {
+      if (!setById(id) || !Array.isArray(arr)) continue;
+      const keys = [...new Set(arr.filter(k => SET_CLUBS.includes(k)))];
+      if (keys.length) out[id] = keys;
+    }
+    out[STARTER_SET] = [...SET_CLUBS];
+    p.clubPieces = out;
+    p.clubSet = out[d.clubSet] ? d.clubSet : STARTER_SET;
   } else if (d.clubSets && typeof d.clubSets === 'object') {
     // only sets that really exist, only to their own rarity's cap
     const sets = {};
@@ -344,9 +387,20 @@ export function seedProfile(pid, snap) {
       const set = setById(id);
       if (set) sets[id] = Math.min(num(lvl, CLAMP.setLevel), upgradeCount(set.rarity));
     }
-    if (Object.keys(sets).length) sets[STARTER_SET] ??= 0;
-    p.clubSets = Object.keys(sets).length ? sets : { [STARTER_SET]: 0 };
-    p.clubSet = p.clubSets[d.clubSet] != null ? d.clubSet : STARTER_SET;
+    /* A v2 snapshot names upgrade LEVELS, which no longer exist. Converted
+       the same way migrateProfile converts them, so a restore and a
+       migration cannot disagree about what a level was worth. */
+    const out = {};
+    for (const [id, lvl] of Object.entries(sets)) {
+      const set = setById(id);
+      if (!set) continue;
+      const steps = upgradeCount(set.rarity) || 1;
+      const t = Math.max(0, Math.min(1, (Number(lvl) || 0) / steps));
+      out[id] = SET_CLUBS.slice(0, Math.max(1, Math.ceil(t * SET_CLUBS.length)));
+    }
+    out[STARTER_SET] = [...SET_CLUBS];
+    p.clubPieces = out;
+    p.clubSet = out[d.clubSet] ? d.clubSet : STARTER_SET;
   }
   p.rounds = num(d.rounds, CLAMP.rounds);
   if (Number.isFinite(Number(d.best))) p.best = Number(d.best);
@@ -418,8 +472,9 @@ export function publicProfile(pid) {
     birdies: p.birdies, eagles: p.eagles, aces: p.aces,
     gear: p.gear || { ball: 0, irons: 0, woods: 0, putter: 0 },
     crew: p.crew || { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 },
-    clubSets: p.clubSets || { [STARTER_SET]: 0 }, clubSet: p.clubSet || STARTER_SET,
-    clubGrades: p.clubGrades || {},
+    clubPieces: p.clubPieces || { [STARTER_SET]: [...SET_CLUBS] },
+    clubSet: p.clubSet || STARTER_SET, clubGrades: p.clubGrades || {},
+    setCrates: p.setCrates || 0,
     clubCases: p.clubCases || 0, cleared: (p.cleared || []).length,
     clubSkin: p.clubSkin || 'stock',
     /* What they look like, so a browser with an empty localStorage — a new
@@ -476,7 +531,7 @@ export function buyItem(pid, item, SHOP, purchaseBlocked, crewPurchase) {
   const p = getProfile(pid);
   if (!p.gear) p.gear = { ball: 0, irons: 0, woods: 0, putter: 0 };
   if (!p.crew) p.crew = { ace: 0, bruiser: 0, steady: 0, roller: 0, pitstop: 0, lucky: 0, gale: 0, grit: 0 };
-  if (!p.clubSets) { p.clubSets = { [STARTER_SET]: 0 }; p.clubSet = STARTER_SET; }
+  if (!p.clubPieces) { p.clubPieces = { [STARTER_SET]: [...SET_CLUBS] }; p.clubSet = STARTER_SET; }
 
   // the Caddie Crew and club-set upgrades go through the shared till
   if (String(item).includes(':')) {
@@ -1250,42 +1305,104 @@ export function buyClubCase(pid) {
 export function openClubCase(pid) {
   const p = getProfile(pid);
   if ((p.clubCases || 0) < 1) return { ok: false, error: 'No Club cases to open.' };
-  if (!p.clubSets) { p.clubSets = { [STARTER_SET]: 0 }; p.clubSet = STARTER_SET; }
-  const result = rollClubCase(p.clubSets, Math.random);
+  if (!p.clubPieces) { p.clubPieces = { [STARTER_SET]: [...SET_CLUBS] }; p.clubSet = STARTER_SET; }
+  const result = rollClubCase(p.clubPieces, Math.random);
   p.clubCases -= 1;
   if (result.kind === 'gems') {
     p.gems = (p.gems || 0) + result.amount;
     saveSoon();
     return { ok: true, kind: 'gems', amount: result.amount, clubCasesLeft: p.clubCases };
   }
-  // a duplicate is worth a rung rather than nothing — same move rollCase
-  // makes when it polishes an owned decal instead of paying flat gems
-  const level = result.kind === 'upgrade' ? result.level : 0;
-  p.clubSets = { ...p.clubSets, [result.set.id]: level };
-  /* THE GRADE IS ROLLED HERE, ONCE, AND KEPT. A fresh pull gets a fresh
-     roll; a duplicate keeps the better of the two, so opening more cases
-     can improve a set you own but never make it worse — a duplicate that
-     downgraded your bag would be a punishment for playing. */
-  const rolled = rollGrade();
-  const had = (p.clubGrades || {})[result.set.id];
-  const grade = had == null ? rolled : Math.max(had, rolled);
-  p.clubGrades = { ...(p.clubGrades || {}), [result.set.id]: grade };
+  const grade = grantPiece(p, result.set.id, result.clubKey);
   saveSoon();
   /* Reported in the SAME shape a cosmetic case reports an item pull, so the
-     whole reel/reveal presentation (HUD.playCaseReel, HUD.revealCase) works
-     on a club set with no special-casing — exactly how rollCase's own
-     purity result already rides the item path. `upgraded` is the only extra:
-     it is what lets the client say "upgraded to 3/8" rather than pretending
-     a duplicate was a fresh pull. */
+     whole reel/reveal presentation works on a club piece with no special
+     casing — the same trick the purity result already rides. */
   return {
     ok: true, kind: 'item',
     item: { ...result.set, kind: 'clubset' },
     rarity: result.set.rarity,
-    upgraded: result.kind === 'upgrade' ? level : 0,
-    steps: upgradeCount(result.set.rarity),
+    clubKey: result.clubKey,
+    have: result.have, of: result.of, first: result.first,
     grade,
     clubCasesLeft: p.clubCases
   };
+}
+
+/* One place that writes a piece in, so the case, the crate and the shop
+   cannot drift on how a grade is rolled or when. */
+function grantPiece(p, setId, clubKey) {
+  const had = p.clubPieces[setId] || [];
+  if (!had.includes(clubKey)) p.clubPieces = { ...p.clubPieces, [setId]: [...had, clubKey] };
+  /* THE GRADE IS ROLLED ONCE PER SET, on the first piece of it. Rolling per
+     club would mean a bag of fourteen different grades, which is a spread-
+     sheet; rolling again on every piece would mean the number you were
+     shown when you pulled it kept changing underneath you. */
+  const g = (p.clubGrades || {})[setId];
+  if (g != null) return g;
+  const rolled = rollGrade();
+  p.clubGrades = { ...(p.clubGrades || {}), [setId]: rolled };
+  return rolled;
+}
+
+export function buySetCrate(pid) {
+  const p = getProfile(pid);
+  if ((p.gems || 0) < SET_CRATE_GEM_COST) return { ok: false, error: `Not enough gems (need ${SET_CRATE_GEM_COST}).` };
+  p.gems -= SET_CRATE_GEM_COST;
+  p.setCrates = (p.setCrates || 0) + 1;
+  saveSoon();
+  return { ok: true, gems: p.gems, setCrates: p.setCrates };
+}
+
+/** The Set Crate: a whole set, complete, in one go. Rolls its rarity on the
+ *  same odds the Club Case uses, then hands over all fourteen clubs. */
+export function openSetCrate(pid) {
+  const p = getProfile(pid);
+  if ((p.setCrates || 0) < 1) return { ok: false, error: 'No Set crates to open.' };
+  if (!p.clubPieces) { p.clubPieces = { [STARTER_SET]: [...SET_CLUBS] }; p.clubSet = STARTER_SET; }
+  /* Rolled against a pretend-empty collection so it always lands on a real
+     set rather than falling through to gems, then filled completely. An
+     incomplete set out of the expensive crate would miss its whole point. */
+  const roll = rollClubCase({}, Math.random);
+  const set = roll.kind === 'piece' ? roll.set : CLUB_SETS[0];
+  p.setCrates -= 1;
+  const grade = grantPiece(p, set.id, SET_CLUBS[0]);
+  p.clubPieces = { ...p.clubPieces, [set.id]: wholeSet() };
+  saveSoon();
+  return {
+    ok: true, kind: 'item',
+    item: { ...set, kind: 'clubset' },
+    rarity: set.rarity, grade, whole: true,
+    have: SET_CLUBS.length, of: SET_CLUBS.length,
+    setCratesLeft: p.setCrates
+  };
+}
+
+/** Buy ONE NAMED club of a set, for coins. The deliberate route: the case
+ *  is random and the crate is expensive, and this is how somebody one club
+ *  short finishes what they started. */
+export function buyClubPiece(pid, setId, clubKey) {
+  const set = setById(String(setId || ''));
+  if (!set) return { ok: false, error: 'No such set.' };
+  if (!SET_CLUBS.includes(String(clubKey))) return { ok: false, error: 'That club is not part of a set.' };
+  const p = getProfile(pid);
+  if (!p.clubPieces) p.clubPieces = { [STARTER_SET]: [...SET_CLUBS] };
+  /* You can only buy INTO a set you have already pulled. The Shop is how
+     you finish a collection, not how you skip having one — otherwise coins
+     alone would buy a Mythic bag and the case would be decoration. */
+  if (!(set.id in p.clubPieces)) {
+    return { ok: false, error: 'Pull this set from a Club Case before buying pieces of it.' };
+  }
+  if ((p.clubPieces[set.id] || []).includes(String(clubKey))) {
+    return { ok: false, error: 'You already have that club.' };
+  }
+  const cost = piecePrice(set.id);
+  if ((p.coins || 0) < cost) return { ok: false, error: `Costs ${cost} coins — you have ${p.coins || 0}.` };
+  p.coins -= cost;
+  grantPiece(p, set.id, String(clubKey));
+  saveSoon();
+  return { ok: true, set, clubKey, cost, coins: p.coins,
+           have: p.clubPieces[set.id].length, of: SET_CLUBS.length };
 }
 
 /** Equip a set. Ownership is re-checked here, never trusted from the
@@ -1295,7 +1412,7 @@ export function equipClubSet(pid, id) {
   const p = getProfile(pid);
   const set = setById(String(id || ''));
   if (!set) return { ok: false, error: 'No such set.' };
-  if (!(p.clubSets && set.id in p.clubSets)) return { ok: false, error: 'You do not own that set.' };
+  if (!(p.clubPieces && set.id in p.clubPieces)) return { ok: false, error: 'You do not own that set.' };
   p.clubSet = set.id;
   saveSoon();
   return { ok: true, clubSet: p.clubSet };

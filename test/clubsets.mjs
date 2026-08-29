@@ -19,7 +19,8 @@ import { rm } from 'node:fs/promises';
 import {
   CLUB_SETS, SET_TIERS, UPGRADE_COSTS, CLUB_CASE_ODDS, STARTER_SET,
   setById, setStats, upgradeCost, upgradeCount, isMaxed, rarityRank, rollClubCase,
-  CLASS_LINES, CLASS_BANDS, CLUB_CLASSES, STAT_KEYS, CLUBS_IN_CLASS, classOf
+  CLASS_LINES, CLASS_BANDS, CLUB_CLASSES, STAT_KEYS, CLUBS_IN_CLASS, classOf,
+  SET_CLUBS, missingPieces, completionOf, pieceCompletionFor, piecePrice
 } from '../public/js/shared/clubsets.js';
 
 process.env.GOLF_DATA_DIR ||= '.test-data-clubsets';
@@ -202,11 +203,12 @@ test('a club case drops ONLY club gear, and a cosmetic case never drops a set', 
       `"${item.id}" is both a cosmetic case item and a club set`);
   }
 
-  // and 400 real club-case rolls must never produce anything but a set
+  // and 400 real club-case rolls must never produce anything but a club
   for (let i = 0; i < 400; i++) {
     const r = rollClubCase({}, Math.random);
-    assert.equal(r.kind, 'set');
+    assert.equal(r.kind, 'piece');
     assert.ok(setById(r.set.id), `club case produced "${r.set?.id}", which is not a club set`);
+    assert.ok(SET_CLUBS.includes(r.clubKey), `club case produced "${r.clubKey}", not a set club`);
   }
 });
 
@@ -251,12 +253,12 @@ test('a duplicate pull can improve a grade but never worsen it', async () => {
   const p = getProfile(pid);
   const id = oneOf('mythic').id;
   // own everything so every pull is a duplicate, and pin one grade at mint
-  p.clubSets = Object.fromEntries(CLUB_SETS.map(s => [s.id, 0]));
+  p.clubPieces = Object.fromEntries(CLUB_SETS.map(s => [s.id, ['DR']]));
   p.clubGrades = { [id]: 1 };
   p.clubCases = 12;
   for (let i = 0; i < 12; i++) openClubCase(pid);
   assert.equal(getProfile(pid).clubGrades[id], 1,
-    'a duplicate rolled a worse grade and overwrote a better one');
+    'a later pull rolled a worse grade and overwrote a better one');
 });
 
 /* ------------------------------------------------------------- the case */
@@ -282,8 +284,8 @@ test('rollClubCase respects its odds over many rolls', () => {
   const rand = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   const counts = {};
   for (let i = 0; i < 4000; i++) {
-    const r = rollClubCase({}, rand);          // owns nothing: always a set
-    assert.equal(r.kind, 'set');
+    const r = rollClubCase({}, rand);          // owns nothing: always a piece
+    assert.equal(r.kind, 'piece');
     counts[r.set.rarity] = (counts[r.set.rarity] || 0) + 1;
   }
   const total = CLUB_CASE_ODDS.reduce((s, r) => s + r.weight, 0);
@@ -294,31 +296,41 @@ test('rollClubCase respects its odds over many rolls', () => {
   }
 });
 
-test('a duplicate pull upgrades an owned set instead of coming back empty', () => {
-  // owns every set, all unupgraded — every roll must land on an upgrade
-  const owned = Object.fromEntries(CLUB_SETS.map(s => [s.id, 0]));
-  for (let i = 0; i < 50; i++) {
+test('a case never hands out a club you already hold', () => {
+  /* The whole reason the roll takes your collection: handing back a club
+     you already have is the empty case this design exists to avoid. */
+  const owned = {};
+  for (let i = 0; i < 300; i++) {
     const r = rollClubCase(owned, Math.random);
-    assert.equal(r.kind, 'upgrade', 'a duplicate should have upgraded something');
-    assert.equal(r.level, 1, 'an upgrade should raise the level by exactly one');
-    // and it should favour the rarest un-maxed set, since that ceiling is highest
-    assert.equal(r.set.rarity, 'mythic', 'the rarest un-maxed set should be upgraded first');
+    if (r.kind !== 'piece') continue;
+    const have = owned[r.set.id] || [];
+    assert.ok(!have.includes(r.clubKey),
+      `rolled ${r.clubKey} for ${r.set.id}, which was already held`);
+    owned[r.set.id] = [...have, r.clubKey];
   }
 });
 
-test('only when everything is owned AND maxed does the case pay gems', () => {
-  const owned = Object.fromEntries(CLUB_SETS.map(s => [s.id, upgradeCount(s.rarity)]));
+test('the case favours finishing a set you have started', () => {
+  /* Fourteen sets at one club each is a collection nobody can finish.
+     Spreading a player thinner the more they open is the opposite of a
+     chase, so a started set outranks an untouched one. */
+  const owned = { [oneOf('standard').id]: ['DR'] };
+  let started = 0;
+  for (let i = 0; i < 40; i++) {
+    const r = rollClubCase(owned, Math.random);
+    if (r.kind !== 'piece') continue;
+    if (r.set.id === oneOf('standard').id) started++;
+    owned[r.set.id] = [...(owned[r.set.id] || []), r.clubKey];
+  }
+  assert.ok(Object.keys(owned).length < 8,
+    `40 opens spread across ${Object.keys(owned).length} sets — it should concentrate`);
+});
+
+test('only when every set is complete does the case pay gems', () => {
+  const owned = Object.fromEntries(CLUB_SETS.map(s => [s.id, [...SET_CLUBS]]));
   const r = rollClubCase(owned, Math.random);
   assert.equal(r.kind, 'gems');
   assert.ok(r.amount > 0, 'a case must never come back with literally nothing');
-});
-
-test('a roll never hands out a set the player already owns', () => {
-  const owned = { [oneOf('standard').id]: 0 };
-  for (let i = 0; i < 200; i++) {
-    const r = rollClubCase(owned, Math.random);
-    if (r.kind === 'set') assert.ok(!(r.set.id in owned), `rolled a duplicate: ${r.set.id}`);
-  }
 });
 
 /* --------------------------------------------------------- the refund */
@@ -330,7 +342,8 @@ test('the migration pays back the retired ladder exactly, and only once', async 
   assert.equal(p.coins, 1000 + ladderRefund(6, 3), 'the refund was not paid in full');
   assert.equal(p.clubTier, undefined, 'a retired field survived the migration');
   assert.equal(p.refine, undefined);
-  assert.deepEqual(p.clubSets, { [STARTER_SET]: 0 }, 'everyone starts on the free set');
+  assert.deepEqual(p.clubPieces, { [STARTER_SET]: [...SET_CLUBS] },
+    'everyone starts with the free set, complete');
   assert.equal(p.clubSet, STARTER_SET);
 
   // idempotent — running it twice must not pay twice
@@ -361,11 +374,11 @@ test('a fresh profile owns the starter set and nothing else', async () => {
   const { getProfile } = await import('../server/profiles.js');
   const pid = 'clubset-fresh-' + Math.random().toString(36).slice(2);
   const p = getProfile(pid);
-  assert.deepEqual(p.clubSets, { [STARTER_SET]: 0 });
+  assert.deepEqual(p.clubPieces, { [STARTER_SET]: [...SET_CLUBS] });
   assert.equal(p.clubSet, STARTER_SET);
   // its own object, never one literal shared by every player at once
   const q = getProfile(pid + '-b');
-  assert.notEqual(p.clubSets, q.clubSets, 'two profiles share one clubSets object');
+  assert.notEqual(p.clubPieces, q.clubPieces, 'two profiles share one clubPieces object');
 });
 
 test('equipping is gated on ownership, server-side', async () => {
@@ -380,7 +393,7 @@ test('equipping is gated on ownership, server-side', async () => {
 
   assert.equal(equipClubSet(pid, 'no-such-set').ok, false);
 
-  p.clubSets = { ...p.clubSets, [mythic]: 0 };
+  p.clubPieces = { ...p.clubPieces, [mythic]: ['DR'] };
   const real = equipClubSet(pid, mythic);
   assert.equal(real.ok, true, JSON.stringify(real));
   assert.equal(getProfile(pid).clubSet, mythic);
@@ -403,22 +416,24 @@ test('opening a Club Case needs one in hand, and spends exactly one', async () =
   if (r.kind === 'item') {
     assert.equal(r.item.kind, 'clubset', 'the reveal needs a kind it can pick an icon for');
     assert.ok(RARITIES.includes(r.rarity));
-    assert.ok(r.item.id in getProfile(pid).clubSets, 'the pulled set did not reach the profile');
+    assert.ok(SET_CLUBS.includes(r.clubKey), 'a pull must name a real club');
+    assert.ok((getProfile(pid).clubPieces[r.item.id] || []).includes(r.clubKey),
+      'the pulled club did not reach the profile');
   }
 });
 
-test('a duplicate pull is reported as an upgrade, not as a fresh set', async () => {
+test('a later pull adds another club and says how far along you are', async () => {
   const { getProfile, openClubCase } = await import('../server/profiles.js');
   const pid = 'clubset-dupe-' + Math.random().toString(36).slice(2);
   const p = getProfile(pid);
   // owns everything unupgraded, so the next pull can only be a duplicate
-  p.clubSets = Object.fromEntries(CLUB_SETS.map(s => [s.id, 0]));
+  p.clubPieces = Object.fromEntries(CLUB_SETS.map(s => [s.id, ['DR', 'W3']]));
   p.clubCases = 1;
 
   const r = openClubCase(pid);
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.kind, 'item');
-  assert.equal(r.upgraded, 1, 'a duplicate should report the level it upgraded to');
-  assert.ok(r.steps > 0, 'the reveal needs to know how long the path is');
-  assert.equal(getProfile(pid).clubSets[r.item.id], 1, 'the upgrade did not reach the profile');
+  assert.equal(r.have, 3, 'the reveal should say how many of the set you now hold');
+  assert.equal(r.of, SET_CLUBS.length);
+  assert.ok((getProfile(pid).clubPieces[r.item.id] || []).includes(r.clubKey));
 });

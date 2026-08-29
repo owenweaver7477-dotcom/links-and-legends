@@ -2,9 +2,10 @@
    clubskins.js — what your clubs LOOK like, separately from what they do
    -------------------------------------------------------------------------
    The club set is one axis: which set you pulled from a Club Case, what
-   rarity it is, and how far you have upgraded it (see clubsets.js). Two
-   players carrying the same Mythic set carry the same-looking clubs, and a
-   player still on the starter set has no way to make theirs theirs.
+   rarity it is, and how many of its fourteen clubs you have collected (see
+   clubsets.js). Two players carrying the same Mythic set carry the
+   same-looking clubs, and a player still on the starter set has no way to
+   make theirs theirs.
 
    A finish is the other axis. It changes nothing about the ball — that is
    the whole point, and it is why these can be given away for things like a
@@ -34,8 +35,8 @@ import { setById, rarityRank } from './clubsets.js';
      { birdies: n }
      { records: n }       n course or hole records held
      { rounds: n }        n complete rounds
-     { setRarity: id }    own a club set of that rarity or better — a
-                          finish only a serious bag can wear
+     { setRarity: id }    hold any club of a set that rare or better —
+                          a finish only a serious bag can wear
    `shaft`, `head` and `grip` are what shopview and the avatar draw. */
 /* One accent colour per RARITY, for the border of a set's shop card. These
    are the same five colours the case system already uses for every other
@@ -147,12 +148,14 @@ export function skinProgress(skin, p) {
   return null;
 }
 
-/** The rarity rank of the best set a profile actually owns, standard=0
- *  through mythic=4. Reads what they OWN rather than what they have
- *  equipped — pulling a Mythic set and then choosing to swing something
- *  prettier should not lock a finish back up. -1 when they own nothing. */
+/** The rarity rank of the best set a profile has any part of, standard=0
+ *  through mythic=4. Reads what they HOLD rather than what they have
+ *  equipped — pulling a Mythic club and then choosing to swing something
+ *  prettier should not lock a finish back up. Holding one club of a set
+ *  counts: the finish is for having got there, not for finishing.
+ *  -1 when they hold nothing. */
 export function bestSetRank(p) {
-  const owned = p?.clubSets;
+  const owned = p?.clubPieces;
   if (!owned) return -1;
   let best = -1;
   for (const id of Object.keys(owned)) {

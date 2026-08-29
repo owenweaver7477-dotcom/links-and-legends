@@ -321,6 +321,9 @@ Net.sellItem = (kind, id, cb) => ask('item:sell', { kind, id }, res => cb?.(res)
 Net.buyClubCase = cb => ask('case:buyClub', null, res => cb?.(res));
 Net.openClubCase = cb => ask('case:openClub', null, res => cb?.(res));
 Net.equipSet = (id, cb) => ask('set:equip', { id }, res => cb?.(res));
+Net.buySetCrate = cb => ask('case:buySet', null, res => cb?.(res));
+Net.openSetCrate = cb => ask('case:openSet', null, res => cb?.(res));
+Net.buyPiece = (set, club, cb) => ask('piece:buy', { set, club }, res => cb?.(res));
 Net.browseMarket = cb => ask('market:browse', null, res => cb?.(res?.listings || []));
 Net.myListings = cb => ask('market:mine', null, res => cb?.(res?.listings || []));
 Net.listItem = (kind, id, price, cb) => ask('market:list', { kind, id, price }, res => cb?.(res));

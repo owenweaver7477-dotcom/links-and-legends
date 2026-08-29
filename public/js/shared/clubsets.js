@@ -27,7 +27,7 @@
    player has learned all still mean what they meant.
    ========================================================================= */
 
-import { CLUBS, CLUB_BY_KEY, BAG_SIZE } from './clubs.js';
+import { CLUBS, CLUB_BY_KEY, BAG_SIZE, DEFAULT_BAG } from './clubs.js';
 
 /* ═════════════════════════════════════════ THE FIVE CLASSES ══════════════
    Clubs were already strictly classed and already carry their own physics —
@@ -64,8 +64,24 @@ export function classOf(clubKey) {
   return null;
 }
 
-/** Every club key in a class, for completion counting and the Locker. */
+/* WHAT A SET IS MADE OF: the fourteen clubs the rules let you carry, which
+   is also what DEFAULT_BAG already is. You collect them one at a time.
+
+   The game has 21 clubs; the other seven (2 iron, 7 wood, the extra
+   hybrids, the flop wedge) are alternates you can swap INTO a bag rather
+   than pieces of a set. A player carrying one still gets their set's line
+   for that club's class — they are just not part of what completes it. */
+export const SET_CLUBS = [...DEFAULT_BAG];
+
+/** Every SET club in a class. This is what completion counts against, so
+ *  it is over the fourteen, not over all twenty-one. */
 export const CLUBS_IN_CLASS = Object.fromEntries(
+  CLUB_CLASSES.map(k => [k, SET_CLUBS.filter(key => classOf(key) === k)])
+);
+
+/** Every club in a class, including the alternates — for the Locker's own
+ *  "what does this class cover" display. */
+export const ALL_CLUBS_IN_CLASS = Object.fromEntries(
   CLUB_CLASSES.map(k => [k, CLUBS.filter(c => classOf(c.key) === k).map(c => c.key)])
 );
 
@@ -457,10 +473,10 @@ export function doneFromLevel(setId, level = 0) {
   return Math.max(0, Math.min(1, (Number(level) || 0) / steps));
 }
 
-/** Completion as a fraction, from the pieces owned of a set. */
+/** Completion of a whole set, 0..1 — what the Locker shows as "6/14". */
 export function completionOf(pieces) {
-  const n = Array.isArray(pieces) ? pieces.length : 0;
-  return Math.max(0, Math.min(1, n / BAG_SIZE));
+  const n = Array.isArray(pieces) ? pieces.filter(k => SET_CLUBS.includes(k)).length : 0;
+  return Math.max(0, Math.min(1, n / SET_CLUBS.length));
 }
 
 /** Completion of ONE class — what fraction of that class's clubs you hold. */
@@ -469,6 +485,24 @@ export function classCompletion(pieces, cls) {
   if (!want.length) return 0;
   const have = new Set(Array.isArray(pieces) ? pieces : []);
   return want.filter(k => have.has(k)).length / want.length;
+}
+
+/**
+ * THE COMPLETION THAT ACTUALLY DRIVES A SHOT: the class the club belongs
+ * to, not the whole set.
+ *
+ * This is what makes collecting mean something specific — finishing your
+ * wedges upgrades your short game, and a bag that is four drivers' worth
+ * of woods and nothing else plays exactly like that.
+ */
+export function pieceCompletionFor(pieces, clubKey) {
+  return classCompletion(pieces, classOf(clubKey) || 'irons');
+}
+
+/** Which of a set's clubs you are still missing. */
+export function missingPieces(pieces) {
+  const have = new Set(Array.isArray(pieces) ? pieces : []);
+  return SET_CLUBS.filter(k => !have.has(k));
 }
 
 /** True when there is nothing left to buy for this set. */
@@ -493,6 +527,34 @@ export const CLUB_CASE_ODDS = [
 ];
 
 export const CLUB_CASE_GEM_COST = 600;
+
+/* THE SET CRATE. One club at a time is the chase; this is the way out of
+   it for somebody who would rather pay than grind — a whole set, complete,
+   in one go. Priced deliberately steep: fourteen Club Cases is 8,400 gems
+   and this is 9,000, so buying the crate is never the CHEAP route, it is
+   the certain one. You are paying for knowing what you get. */
+export const SET_CRATE_GEM_COST = 9000;
+
+/* And the third route: buying ONE NAMED club, for coins, in the Shop.
+   The case is random and the crate is expensive; this is how somebody one
+   club short of a set finishes it deliberately. Coins rather than gems on
+   purpose — it is the sink that replaced the retired upgrade ladder, and
+   it keeps test/cart.mjs's "owning everything takes 200-250 rounds" true.
+
+   THESE NUMBERS ARE LOAD-BEARING FOR THE WHOLE COIN ECONOMY. Buying one
+   set of each rarity outright comes to 1,302,000 coins, which is what the
+   retired UPGRADE_COSTS ladder summed to — that is deliberate, and it is
+   what keeps test/cart.mjs's "owning everything takes 200-250 rounds"
+   true. Retuning one rarity moves that. See economy.js's PAYOUT_SCALE,
+   which is the intended knob for shifting the whole curve at once.
+
+   Rounded to something legible because a price of 3,847 reads as a bug. */
+const PIECE_BASE = { standard: 1200, tour: 3500, pro: 9800, legend: 25000, mythic: 53500 };
+export function piecePrice(setId) {
+  const set = setById(setId);
+  if (!set) return null;
+  return PIECE_BASE[set.rarity] ?? PIECE_BASE.standard;
+}
 
 /** Where a rarity sits on the club-case ladder, standard=0 through
  *  mythic=4 — the same job tierIndex does for the cosmetic table. */
@@ -525,31 +587,38 @@ export function rollClubCase(owned = {}, rand = Math.random) {
     startIdx = i + 1;
   }
 
-  /* Walk UPWARD from the rolled rarity looking for a set this player does
-     not own yet — same fallthrough rollCase uses, and for the same reason:
-     a thin tier should never fail the whole case. Rarer is the direction to
-     walk because falling upward is a gift and falling downward is a
-     downgrade dressed as a reward. */
+  /* Walk UPWARD from the rolled rarity looking for a set with a piece you
+     are still missing — same fallthrough the cosmetic case uses, and for
+     the same reason: a thin tier should never fail a whole case. Rarer is
+     the direction to walk because falling upward is a gift and falling
+     downward is a downgrade dressed as a reward. */
   for (let i = Math.min(startIdx, CLUB_CASE_ODDS.length - 1); i < CLUB_CASE_ODDS.length; i++) {
     const rarity = CLUB_CASE_ODDS[i].id;
-    const pool = CLUB_SETS.filter(s => s.rarity === rarity && !(s.id in owned));
-    if (!pool.length) continue;
-    const set = pool[Math.floor(rand() * pool.length)] || pool[0];
-    return { kind: 'set', set, rarity };
+    const candidates = CLUB_SETS
+      .filter(s => s.rarity === rarity)
+      .map(s => ({ set: s, missing: missingPieces(owned[s.id]) }))
+      .filter(c => c.missing.length);
+    if (!candidates.length) continue;
+    /* Prefer a set already STARTED. Fourteen half-finished sets is a
+       collection nobody can finish; spreading a player thinner the more
+       they open is the opposite of a chase. */
+    const started = candidates.filter(c => (owned[c.set.id] || []).length > 0);
+    const pool = started.length ? started : candidates;
+    const pick = pool[Math.floor(rand() * pool.length)] || pool[0];
+    const clubKey = pick.missing[Math.floor(rand() * pick.missing.length)] || pick.missing[0];
+    return {
+      kind: 'piece', set: pick.set, clubKey, rarity,
+      first: !(owned[pick.set.id] || []).length,
+      have: (owned[pick.set.id] || []).length + 1,
+      of: SET_CLUBS.length
+    };
   }
 
-  /* Everything at or above the rolled rarity is already owned. Upgrade the
-     best un-maxed set instead — "best" meaning rarest, since that is the
-     one whose ceiling is highest and the upgrade worth most. */
-  const upgradable = CLUB_SETS
-    .filter(s => s.id in owned && !isMaxed(s.id, owned[s.id]))
-    .sort((a, b) => rarityRank(b.rarity) - rarityRank(a.rarity));
-  if (upgradable.length) {
-    const set = upgradable[0];
-    return { kind: 'upgrade', set, level: (owned[set.id] || 0) + 1 };
-  }
-
-  // every set owned and every one of them maxed — there is genuinely
-  // nothing left to give but currency
+  // every set at or above the rolled rarity is already complete
   return { kind: 'gems', amount: DUPLICATE_GEMS };
+}
+
+/** Every club in a set, granted at once. What the Set Crate hands over. */
+export function wholeSet() {
+  return [...SET_CLUBS];
 }

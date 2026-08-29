@@ -29,7 +29,7 @@ import { loadFriends, friendState, friendCode, requestFriend, acceptFriend,
          toggleFavourite, friendsOf, areFriends } from './server/friends.js';
 import { loadMarketplace, listItem, cancelListing, buyListing,
          myListings, allListings } from './server/marketplace.js';
-import { STARTER_SET, doneFromLevel } from './public/js/shared/clubsets.js';
+import { STARTER_SET, pieceCompletionFor } from './public/js/shared/clubsets.js';
 
 /* Course rating and slope, computed once per course and kept. The geometry
    is a pure function of the seed, so these cannot change while the process
@@ -218,6 +218,7 @@ import { settleRound, setDifficulty, difficultyOf,
          flushProfiles, claimLogin, openCase, buyCase, openVaultCase, buyVaultCase, openProCase, buyProCase,
          buyUnlockDirect, sellUnlock,
          buyClubCase, openClubCase, equipClubSet,
+         buySetCrate, openSetCrate, buyClubPiece,
          devSetLevel, devGrantTestGems } from './server/profiles.js';
 import { normaliseDifficulty, earnRate, allowsRecords, difficultyById } from './public/js/shared/difficulty.js';
 import * as Activity from './server/activity.js';
@@ -2245,6 +2246,36 @@ io.on('connection', socket => {
     reply(result);
   });
 
+  socket.on('case:buySet', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = buySetCrate(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  socket.on('case:openSet', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = openSetCrate(pid);
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
+  /* Buying ONE NAMED club for coins. The client names a set and a club and
+     nothing else — the price, whether it is already held, and whether the
+     set was ever pulled are all re-derived here. */
+  socket.on('piece:buy', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    const pid = sockets.get(socket.id)?.pid || socket.data.pid;
+    if (!pid) return reply({ ok: false, error: 'Still connecting — try again in a second.' });
+    const result = buyClubPiece(pid, String(d?.set || ''), String(d?.club || ''));
+    if (result.ok) socket.emit('profile', publicProfile(pid));
+    reply(result);
+  });
+
   socket.on('set:equip', (d, ack) => {
     const reply = typeof ack === 'function' ? ack : () => {};
     const pid = sockets.get(socket.id)?.pid || socket.data.pid;
@@ -2415,7 +2446,9 @@ io.on('connection', socket => {
       gear: prof.gear || null,                         // what WE have on file
       crew: prof.crew || null,
       clubSet: prof.clubSet || STARTER_SET,
-      setDone: doneFromLevel(prof.clubSet, (prof.clubSets || {})[prof.clubSet] || 0),
+      /* The completion of the CLASS this club belongs to, not of the whole
+         set — finishing your wedges is meant to improve your wedges. */
+      setDone: pieceCompletionFor((prof.clubPieces || {})[prof.clubSet], club.key),
       setGrade: (prof.clubGrades || {})[prof.clubSet] ?? 1,
       afterBadHole: !!p.afterBad,                      // Grit's moment
       clubKey: club.key,
