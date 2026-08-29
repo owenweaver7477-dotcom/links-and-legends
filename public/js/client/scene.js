@@ -61,8 +61,13 @@ export const QUALITY = {
    Every generator below asks through this, so one tier bumps the whole
    world's silhouette and a low-end machine keeps exactly the counts it has
    always had. Instanced geometry, so the extra triangles are paid once per
-   species rather than once per tree. */
-export const seg = (q, base) => Math.round(base * [1, 1.5, 2.2][q?.detail ?? 1]);
+   species rather than once per tree.
+
+   MEDIUM IS THE DEFAULT, so its step is the conservative one: 1.32 rather
+   than the 1.5 this shipped with, which had put 28% more triangles on every
+   machine that never opens the settings. High is where the budget is meant
+   to be spent, and it is the tier somebody chose. */
+export const seg = (q, base) => Math.round(base * [1, 1.32, 2.1][q?.detail ?? 1]);
 
 /**
  * Make a mostly-horizontal mesh face upward, whatever order its indices came

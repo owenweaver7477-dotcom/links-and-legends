@@ -1395,8 +1395,24 @@ export class Avatar {
     this.legR.rotation.x = P.legRx;
     this.legL.rotation.z = P.legLz + L.legLz;
     this.legR.rotation.z = P.legRz + L.legRz;
-    this.armL.rotation.x = P.armLx + L.armLx;
-    this.armR.rotation.x = P.armRx + L.armRx;
+    /* AN ARM CANNOT CROSS THE CHEST WITHOUT COMING FORWARD OFF IT. A
+       shoulder physically cannot do it — and on a box torso with the
+       shoulder pivots at the same depth as the chest itself, a pure sideways
+       sweep drives the upper arm straight through the ribcage. That is every
+       slap, barge and celebration in the game putting an arm inside the
+       torso, and it is the single thing that most gives away that these are
+       boxes.
+       
+       So the inward part of the sweep is coupled to a forward lift, which is
+       both what a shoulder does and what clears the geometry. Only the
+       INWARD direction: an arm swung outward has nothing to clear.
+       
+       The swing itself is unaffected — `_gripHands` solves both arms after
+       this and overwrites them. */
+    const inL = Math.max(0, -(P.armLz + L.armLz));
+    const inR = Math.max(0, (P.armRz + L.armRz));
+    this.armL.rotation.x = P.armLx + L.armLx - inL * 0.55;
+    this.armR.rotation.x = P.armRx + L.armRx - inR * 0.55;
     this.armL.rotation.z = P.armLz + L.armLz;
     this.armR.rotation.z = P.armRz + L.armRz;
     this.armL.rotation.y = P.armLy;
