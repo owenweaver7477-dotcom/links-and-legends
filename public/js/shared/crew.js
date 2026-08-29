@@ -45,8 +45,17 @@ export const CADDIES = {
   roller: {
     name: 'Roller', emoji: '🥽', stat: 'Putting',
     blurb: 'Treats every putt like a lab experiment. Reads the green for you.',
-    line: lvl => lvl >= 4 ? 'contours + run-out read, steadier putts'
-      : lvl >= 1 ? 'green contours near the hole' : ''
+    /* THE ONLY CADDIE WHOSE CARD USED TO STOP MOVING. Roller has two
+       threshold features — contours at level 1, the run-out read at 4 —
+       and a CONTINUOUS one: crewEffect damps face drift on every putt by
+       3% per level, all the way to ten. The card described only the
+       thresholds, so levelling from 4 to 5 read as "contours + run-out
+       read, steadier putts" both times: 2,600 coins for a line that did
+       not move, on an upgrade that was genuinely a 3% steadier putt.
+       Caught by the shop's own upgrade preview, which asserts that no
+       level buys a description identical to the one before it. */
+    line: lvl => lvl >= 4 ? `contours + run-out read, -${lvl * 3}% putt wobble`
+      : lvl >= 1 ? `green contours, -${lvl * 3}% putt wobble` : ''
   },
   pitstop: {
     name: 'Pitstop', emoji: '🏁', stat: 'Cart speed',
@@ -75,6 +84,64 @@ export const CADDIES = {
 };
 export const CADDIE_KEYS = Object.keys(CADDIES);
 export const CADDIE_MAX = 10;
+
+/* ═══════════════════════════════════════════════════════════ GRADE ══════
+   What tier a caddie reads as, from their level.
+
+   THE GAME ALREADY HAS FIVE RARITY NAMES and they are used by cases, club
+   sets, decals and every badge in the UI: standard / tour / pro / legend /
+   mythic. Inventing a second vocabulary for the shop — Common, Rare, Epic —
+   would mean two words for one idea and a player having to learn which
+   screen speaks which language. So a caddie is graded on the same ladder as
+   everything else, in the same colours.
+
+   Derived from level rather than authored per caddie, because a caddie IS
+   their level — the eight of them are identical in kind and differ only in
+   which stat they govern and how far you have taken them. A level-10 Gale
+   and a level-10 Grit are both Mythic; a fresh hire is Standard whoever
+   they are. That also makes the grade a live readout of investment rather
+   than a label, which is the whole reason to show one. */
+export const CADDIE_GRADES = [
+  { at: 0,  rarity: 'standard' },
+  { at: 3,  rarity: 'tour' },
+  { at: 5,  rarity: 'pro' },
+  { at: 7,  rarity: 'legend' },
+  { at: 10, rarity: 'mythic' }
+];
+
+export function caddieGrade(level) {
+  const lvl = Math.max(0, Math.min(CADDIE_MAX, Math.floor(Number(level) || 0)));
+  let out = CADDIE_GRADES[0];
+  for (const g of CADDIE_GRADES) if (lvl >= g.at) out = g;
+  return out.rarity;
+}
+
+/**
+ * What the next level actually buys, as a before and after.
+ *
+ * THE POINT OF THIS. A shop button that says "Level up · 1,200 coins" is
+ * asking somebody to spend a fifth of a round's earnings on a number they
+ * cannot see. Every caddie already knows how to describe itself at a given
+ * level (`line`), so the card can show the line it has now and the line it
+ * would have — which turns a price into a decision.
+ *
+ * Returns null at max, where there is nothing left to preview.
+ */
+export function caddiePreview(key, level) {
+  const c = CADDIES[key];
+  if (!c) return null;
+  const lvl = Math.max(0, Math.min(CADDIE_MAX, Math.floor(Number(level) || 0)));
+  if (lvl >= CADDIE_MAX) return null;
+  return {
+    stat: c.stat,
+    from: lvl ? c.line(lvl) : null,
+    to: c.line(lvl + 1),
+    level: lvl + 1,
+    cost: caddieCost(lvl),
+    grade: caddieGrade(lvl),
+    nextGrade: caddieGrade(lvl + 1)
+  };
+}
 
 /** Coin cost to move a caddie from level (n-1) to n — straight from the doc. */
 export const CADDIE_COSTS = [500, 800, 1200, 1800, 2600, 3600, 4800, 6200, 8000, 10000];

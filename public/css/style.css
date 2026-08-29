@@ -4559,3 +4559,47 @@ body.navbar-on #gemBal { display: none; }
 .ms-prog { font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .ms-prog em { font-style: normal; color: var(--muted-dim); font-size: 9.5px; }
 .ms-foot .btn { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+
+/* ═══════════════════════════════════════════ THE GRADED SHOP CARD ═══════
+   Every item on the Equipment shelf now says what tier it is, in the same
+   five colours cases, club sets and decals already use. One vocabulary, so
+   a Pro ball and a Pro caddie read as the same word. */
+.shopcard.graded { position: relative; border-color: color-mix(in srgb, var(--rarity-color) 34%, rgba(255,255,255,.09)); }
+.shopcard.graded::before {
+  /* a hairline of the grade's own colour along the top edge — enough to
+     sort a shelf by eye without turning every card into a coloured block */
+  content: ''; position: absolute; top: 0; left: 12px; right: 12px; height: 2px;
+  border-radius: 0 0 2px 2px; background: var(--rarity-color);
+}
+.sc-grade {
+  position: absolute; top: 9px; right: 10px;
+  font-size: 8.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase;
+  color: var(--g, var(--muted)); padding: 2px 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--g, #fff) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g, #fff) 34%, transparent);
+}
+
+/* WHAT THE MONEY BUYS. A price with no visible consequence is not a
+   decision, so every card carries its own stat rows above the button. */
+.sc-gains { display: flex; flex-direction: column; gap: 3px; margin: 7px 0 2px;
+  padding: 7px 9px; border-radius: 9px; background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.07); }
+.sc-gains .gn { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sc-gains .gn i { font-style: normal; font-size: 10px; color: var(--muted); }
+.sc-gains .gn b { font-size: 11.5px; font-weight: 800; color: var(--accent-hi);
+  font-variant-numeric: tabular-nums; }
+/* An upgrade shows where it is coming FROM, dimmed — the delta is the
+   point, and a number with nothing to compare it to is not one. */
+.sc-gains.up { background: rgba(111,206,138,.08); border-color: rgba(111,206,138,.22); }
+.sc-gains .gn.was { display: block; font-size: 9.5px; color: var(--muted-dim);
+  text-align: right; margin-top: 1px; }
+
+/* Section headings inside one shelf. Gear and the Caddie Crew are one tab
+   now — they answer the same question — but they are still two kinds of
+   thing and the shelf should say so. */
+.shop-sec { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px;
+  margin: 6px 0 -2px; padding-top: 6px; flex-wrap: wrap; }
+.shop-sec:first-child { padding-top: 0; }
+.shop-sec h5 { font-size: 11px; font-weight: 800; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--ink-2); margin: 0; }
+.shop-sec span { font-size: 10.5px; color: var(--muted); }

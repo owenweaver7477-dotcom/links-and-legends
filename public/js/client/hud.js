@@ -8,7 +8,7 @@ import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
          HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES, bodiesOf,
          clubDecalFor, normaliseLook } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
-import { CADDIES, CADDIE_MAX, caddieCost } from '../shared/crew.js';
+import { CADDIES, CADDIE_MAX, caddieCost, caddieGrade, caddiePreview } from '../shared/crew.js';
 import { CLUB_SETS, setById, setStats, STARTER_SET, upgradeCost, upgradeCount,
          isMaxed, rarityRank, CLUB_CASE_GEM_COST, CLUB_CASE_ODDS,
          classOf, CLUB_CLASSES, CLASS_LABEL, STAT_KEYS, STAT_LABEL,
@@ -1122,7 +1122,7 @@ HUD.renderRoadmap = (prof) => {
 /* Which tab the Pro Shop is showing. Module-level so it survives the
    re-render that every purchase triggers — a tab that reset itself on each
    buy would bounce the player back to the Caddie Crew every time. */
-let shopTab = 'crew';
+let shopTab = 'equip';
 HUD.setShopTab = id => { shopTab = id; };
 let caddieCompareOn = false;
 
@@ -1521,7 +1521,13 @@ HUD.renderShop = (prof, onBuy) => {
      instead of one grid a filter would have to invent boundaries inside. */
   const tabs = document.createElement('div');
   tabs.className = 'shoptabs';
-  for (const [id, label] of [['clubs', 'Clubs'], ['gear', 'Gear'], ['crew', 'Caddie Crew'], ['cases', 'Cases'], ['items', 'Items']]) {
+  /* EQUIPMENT is one tab, not two. Gear and the Caddie Crew were separate
+     categories that answer the same question — "what can I spend coins on
+     to hit it better" — and splitting them meant a player comparing a 4,500
+     putter against a 4,800 caddie level had to hold one of them in their
+     head while looking at the other. One shelf, two sections, one card
+     design, one grade ladder. */
+  for (const [id, label] of [['clubs', 'Clubs'], ['equip', 'Equipment'], ['cases', 'Cases'], ['items', 'Items']]) {
     const t = document.createElement('button');
     t.className = 'shoptab' + (shopTab === id ? ' on' : '');
     t.textContent = label;
@@ -1534,7 +1540,7 @@ HUD.renderShop = (prof, onBuy) => {
   // specialists is a real "which one do I want" decision every time, in a
   // way a sequential ladder (clubs, gear tiers) is not — there is only
   // ever one next rung on those, nothing to compare it against.
-  if (shopTab === 'crew') {
+  if (shopTab === 'equip') {
     const cmp = document.createElement('button');
     cmp.className = 'btn mini shop-cmp-btn' + (caddieCompareOn ? ' on' : '');
     cmp.textContent = caddieCompareOn ? 'Show cards' : 'Compare';
@@ -1542,7 +1548,7 @@ HUD.renderShop = (prof, onBuy) => {
     el.shopList.appendChild(cmp);
   }
 
-  if (shopTab === 'crew' && caddieCompareOn) {
+  if (shopTab === 'equip' && caddieCompareOn) {
     el.shopList.appendChild(buildCaddieCompare(prof));
     return;
   }
@@ -1572,38 +1578,117 @@ HUD.renderShop = (prof, onBuy) => {
     grid.addEventListener('click', show);
   }
 
-  if (shopTab === 'crew') {
+  if (shopTab === 'equip') {
+    /* ONE SHELF, TWO SECTIONS. Both answer "what can I spend coins on to
+       hit it better", both are graded on the same ladder, and both now show
+       what the money buys before it is spent. */
     const crew = prof?.crew || {};
+    const gear = prof?.gear || {};
+
+    const section = (title, note) => {
+      const h = document.createElement('div');
+      h.className = 'shop-sec';
+      h.innerHTML = `<h5>${escapeHtml(title)}</h5>` +
+        (note ? `<span>${escapeHtml(note)}</span>` : '');
+      grid.appendChild(h);
+    };
+
+    /* ---------------------------------------------------------- gear ---- */
+    section('Gear', 'Bought once. Every one is a permanent change to the ball.');
+    for (const [key, it] of Object.entries(SHOP)) {
+      const owned = (gear[it.slot] || 0) >= it.tier;
+      const blocked = prof ? purchaseBlocked(key, { coins, gear }) : 'Join first.';
+      const rarity = RARITIES.find(r => r.id === (it.rarity || 'standard')) || RARITIES[0];
+      const card = document.createElement('div');
+      card.className = 'shopcard graded' + (owned ? ' owned' : '');
+      card.style.setProperty('--rarity-color', rarity.color);
+      const viewFor = {
+        ball: { kind: 'ball', hex: HUD.myBallHex || '#f6f9f4', finish: HUD.myBallFinish || null },
+        irons: { kind: 'club', key: 'I7' },
+        woods: { kind: 'club', key: 'DR' },
+        putter: { kind: 'club', key: 'PT' },
+        cart: { kind: 'cart', hex: '#7fb6dd' }
+      }[it.slot] || { kind: 'item', hex: '#6fce8a' };
+      card.dataset.view = JSON.stringify({ ...viewFor, tier: it.tier,
+        name: it.name, sub: it.blurb });
+      const art = SLOT_ART[it.slot]?.() || '';
+
+      /* WHAT THE MONEY BUYS, on the card, before it is spent. A price with
+         no visible consequence is not a decision — it is a dare. */
+      const gains = (it.gains || []).map(([label, delta]) =>
+        `<span class="gn"><i>${escapeHtml(label)}</i><b>${escapeHtml(delta)}</b></span>`).join('');
+
+      card.innerHTML =
+        `<span class="sc-grade" style="--g:${rarity.color}">${escapeHtml(rarity.name)}</span>` +
+        `${art ? `<span class="sc-art">${art}</span>` : ''}` +
+        `<b>${escapeHtml(it.name)}</b><span class="sc-blurb">${escapeHtml(it.blurb)}</span>` +
+        (gains ? `<div class="sc-gains">${gains}</div>` : '') +
+        (owned ? '' : tryItLine(it, prof));
+      const btn = document.createElement('button');
+      btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
+      const short = coins < it.cost ? `${icon('coin')} ${it.cost.toLocaleString()} · need ${(it.cost - coins).toLocaleString()} more` : null;
+      btn.innerHTML = owned ? 'In the bag ' + icon('check')
+        : short ? short
+          : blocked ? blocked
+            : icon('coin') + ' ' + it.cost.toLocaleString();
+      btn.disabled = owned || !!blocked;
+      if (!owned && !blocked) btn.addEventListener('click', () => onBuy(key));
+      card.appendChild(btn);
+      grid.appendChild(card);
+    }
+
+    /* -------------------------------------------------------- caddies ---- */
+    section('Caddie Crew', 'Levelled 1 to 10. Each one governs a single stat.');
     for (const [key, c] of Object.entries(CADDIES)) {
       const lvl = crew[key] || 0;
       const cost = caddieCost(lvl);
+      const maxed = lvl >= CADDIE_MAX;
+      const gradeId = caddieGrade(lvl);
+      const rarity = RARITIES.find(r => r.id === gradeId) || RARITIES[0];
+      const prev = caddiePreview(key, lvl);
+
       const card = document.createElement('div');
-      card.className = 'shopcard caddie' + (lvl >= CADDIE_MAX ? ' owned' : '');
-      card.style.setProperty('--rarity-color', CADDIE_HEX[key] || '#e8c15a');
-      /* A colour per caddie, so the six of them are six people on the
-         turntable rather than one gold figure with different captions.
-         Keyed off the caddie id, which is stable — the stat strings are
-         display text and would take the previews with them if reworded. */
+      card.className = 'shopcard caddie graded' + (maxed ? ' owned' : '');
+      /* The RARITY colour, not the caddie's own. A grade that is a different
+         colour per person is not a grade, it is decoration — the whole point
+         of showing one is that a Pro caddie and a Pro ball read as the same
+         word in the same colour. The caddie's own colour survives on the
+         portrait and on the turntable, which is where it was doing its
+         actual job of telling eight people apart. */
+      card.style.setProperty('--rarity-color', rarity.color);
       card.dataset.view = JSON.stringify({ kind: 'caddie', hex: CADDIE_HEX[key] || '#e8c15a',
         name: c.name, sub: c.stat });
       const pips = Array.from({ length: CADDIE_MAX }, (_, i) =>
         `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
-      card.innerHTML = `
-        <div class="cad-head"><span class="cad-face">${caddieSvg(key, 34) || c.emoji}</span>
-          <div><b>${c.name}</b><span class="cad-stat">${c.stat}${lvl >= CADDIE_MAX ? ' · LEGEND' : lvl ? ' · Lv ' + lvl : ''}</span></div>
+
+      /* THE UPGRADE PREVIEW. "Level up · 1,200 coins" asks somebody to spend
+         a fifth of a round's earnings on a number they cannot see. Every
+         caddie already knows how to describe itself at a given level, so
+         the card shows the line it has and the line it would have. */
+      const step = prev
+        ? `<div class="sc-gains up">
+             <span class="gn"><i>${escapeHtml(prev.stat)}</i><b>${escapeHtml(prev.to)}</b></span>
+             ${prev.from ? `<span class="gn was">from ${escapeHtml(prev.from)}</span>` : ''}
+           </div>` : '';
+
+      card.innerHTML =
+        `<span class="sc-grade" style="--g:${rarity.color}">${escapeHtml(rarity.name)}${maxed ? '' : ''}</span>` +
+        `<div class="cad-head"><span class="cad-face">${caddieSvg(key, 34) || c.emoji}</span>
+          <div><b>${c.name}</b><span class="cad-stat">${c.stat}${maxed ? ' · LEGEND' : lvl ? ' · Lv ' + lvl : ' · not hired'}</span></div>
         </div>
         <span class="sc-blurb">${c.blurb}</span>
-        <div class="cad-pips">${pips}</div>
-        ${lvl ? `<span class="cad-now">${c.line(lvl)}</span>` : ''}`;
+        <div class="cad-pips">${pips}</div>` +
+        (maxed ? `<span class="cad-now">${c.line(CADDIE_MAX)}</span>` : step);
+
       const btn = document.createElement('button');
-      if (lvl >= CADDIE_MAX) {
+      if (maxed) {
         btn.className = 'btn'; btn.innerHTML = 'Legend ' + icon('star'); btn.disabled = true;
       } else {
         const can = coins >= cost;
         btn.className = 'btn' + (can ? ' primary' : '');
         btn.innerHTML = can
-          ? (lvl ? 'Level up · ' : 'Hire · ') + icon('coin') + ' ' + cost
-          : `${icon('coin')} ${cost} · need ${cost - coins} more`;
+          ? (lvl ? `Level ${prev.level} · ` : 'Hire · ') + icon('coin') + ' ' + cost.toLocaleString()
+          : `${icon('coin')} ${cost.toLocaleString()} · need ${(cost - coins).toLocaleString()} more`;
         btn.disabled = !can;
         if (can) btn.addEventListener('click', () => onBuy('caddie:' + key));
       }
@@ -1826,53 +1911,6 @@ HUD.renderShop = (prof, onBuy) => {
         row.appendChild(openBtn);
       }
       card.appendChild(row);
-      grid.appendChild(card);
-    }
-  } else if (shopTab === 'gear') {
-    /* EVERY item in the shop.  Three of the six — forged irons, carbon woods
-       and the milled putter — used to be skipped here as "legacy", so they
-       were unbuyable in the UI while still costing coins and changing the
-       ball flight if bought over the wire.  If it is in SHOP it is for sale. */
-    const gear = prof?.gear || {};
-    for (const [key, it] of Object.entries(SHOP)) {
-      const owned = (gear[it.slot] || 0) >= it.tier;
-      const blocked = prof ? purchaseBlocked(key, { coins, gear }) : 'Join first.';
-      const card = document.createElement('div');
-      card.className = 'shopcard' + (owned ? ' owned' : '');
-      /* Which model to turn: a ball for the ball upgrades, the matching club
-         for irons, woods and the putter, a cart for the cart, and a crate
-         for anything else. Driven off the SLOT rather than the item name,
-         so a new item in an existing slot gets a preview without anybody
-         remembering to add one. */
-      const viewFor = {
-        ball: { kind: 'ball', hex: HUD.myBallHex || '#f6f9f4', finish: HUD.myBallFinish || null },
-        irons: { kind: 'club', key: 'I7' },
-        woods: { kind: 'club', key: 'DR' },
-        putter: { kind: 'club', key: 'PT' },
-        cart: { kind: 'cart', hex: '#7fb6dd' }
-      }[it.slot] || { kind: 'item', hex: '#6fce8a' };
-      card.dataset.view = JSON.stringify({ ...viewFor, tier: it.tier,
-        name: it.name, sub: it.blurb });
-      // A static thumbnail too, not just the shared hover turntable — the
-      // gear cards were the one shop category with literally no art at
-      // all, not even a placeholder icon, so nothing distinguished a
-      // ball upgrade from a cart tune-up until you hovered one.
-      const art = SLOT_ART[it.slot]?.() || '';
-      card.innerHTML = `${art ? `<span class="sc-art">${art}</span>` : ''}` +
-        `<b>${escapeHtml(it.name)}</b><span class="sc-blurb">${escapeHtml(it.blurb)}</span>` +
-        (owned ? '' : tryItLine(it, prof));
-      const btn = document.createElement('button');
-      btn.className = 'btn' + (owned ? '' : blocked ? '' : ' primary');
-      // A dead grey button with a price on it tells the player nothing about
-      // WHY they cannot press it.  Say the actual reason.
-      const short = coins < it.cost ? `${icon('coin')} ${it.cost} · need ${it.cost - coins} more` : null;
-      btn.innerHTML = owned ? 'In the bag ' + icon('check')
-        : short ? short
-          : blocked ? blocked
-            : icon('coin') + ' ' + it.cost;
-      btn.disabled = owned || !!blocked;
-      if (!owned && !blocked) btn.addEventListener('click', () => onBuy(key));
-      card.appendChild(btn);
       grid.appendChild(card);
     }
   } else if (shopTab === 'items') {

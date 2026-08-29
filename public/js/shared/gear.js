@@ -27,30 +27,68 @@
    having one.) */
 export const SHOP = {
   ball_tour: {
-    name: 'Tour ball', cost: 3000, slot: 'ball', tier: 1,
-    blurb: '+1% ball speed, +3% spin — holds its line in wind'
+    name: 'Tour ball', cost: 3000, slot: 'ball', tier: 1, rarity: 'standard',
+    blurb: '+1% ball speed, +3% spin — holds its line in wind',
+    /* `gains` is the same promise as `blurb`, in a shape the shop can put
+       on a comparison row. Authored rather than derived from gearEffect
+       below, because that function answers "what does this bag do to this
+       club" and a shop card asks "what would this ONE purchase change" —
+       two questions with different answers on an item that only helps
+       irons. They must agree, and a test holds them to it. */
+    gains: [['Ball speed', '+1%'], ['Spin', '+3%']]
   },
   ball_pro: {
     name: 'Pro ball', cost: 9000, slot: 'ball', tier: 2, requires: 'ball_tour',
-    blurb: '+2% ball speed, +5% spin — checks up hard on the green'
+    rarity: 'pro',
+    blurb: '+2% ball speed, +5% spin — checks up hard on the green',
+    gains: [['Ball speed', '+2%'], ['Spin', '+5%']]
   },
   irons_plus: {
-    name: 'Forged irons', cost: 6000, slot: 'irons', tier: 1,
-    blurb: 'About +3 yards on every iron and wedge'
+    name: 'Forged irons', cost: 6000, slot: 'irons', tier: 1, rarity: 'tour',
+    blurb: 'About +3 yards on every iron and wedge',
+    gains: [['Iron distance', '+1.2%'], ['Carry', '≈ +3 yds']]
   },
   woods_plus: {
-    name: 'Carbon woods', cost: 7500, slot: 'woods', tier: 1,
-    blurb: 'About +5 yards off the tee'
+    name: 'Carbon woods', cost: 7500, slot: 'woods', tier: 1, rarity: 'tour',
+    blurb: 'About +5 yards off the tee',
+    gains: [['Wood distance', '+1.1%'], ['Carry', '≈ +5 yds']]
   },
   putter_pro: {
-    name: 'Milled putter', cost: 4500, slot: 'putter', tier: 1,
-    blurb: 'The green read extends past the cup, showing the run-out'
+    name: 'Milled putter', cost: 4500, slot: 'putter', tier: 1, rarity: 'tour',
+    blurb: 'The green read extends past the cup, showing the run-out',
+    gains: [['Green read', 'past the cup']]
   },
   cart_tune: {
-    name: 'Tuned cart', cost: 5500, slot: 'cart', tier: 1,
-    blurb: '+12% top speed and a stronger motor on your golf cart'
+    name: 'Tuned cart', cost: 5500, slot: 'cart', tier: 1, rarity: 'standard',
+    blurb: '+12% top speed and a stronger motor on your golf cart',
+    gains: [['Cart top speed', '+12%']]
   }
 };
+
+/* Every item carries a `rarity` on the SAME five-rung ladder as cases, club
+   sets and decals — standard / tour / pro / legend / mythic. Not a second
+   vocabulary invented for the shop: a player should not have to learn which
+   screen says "Epic" and which says "Pro" for the same idea.
+
+   Gear tops out at `pro` on purpose. The best thing in this shop is a Pro
+   ball, and the Legend and Mythic rungs belong to the club sets, which come
+   from a case and are the actual chase. A shop that sold a Mythic anything
+   for coins would flatten that. */
+export const GEAR_RARITY_ORDER = ['standard', 'tour', 'pro', 'legend', 'mythic'];
+
+/**
+ * What buying this item would change, as rows a card can show BEFORE the
+ * money is spent. A price with no visible consequence is not a decision.
+ */
+export function gearPreview(key) {
+  const it = Object.hasOwn(SHOP, key) ? SHOP[key] : null;
+  if (!it) return null;
+  return {
+    name: it.name, cost: it.cost, rarity: it.rarity || 'standard',
+    slot: it.slot, tier: it.tier,
+    gains: it.gains || [], requires: it.requires || null
+  };
+}
 
 /** A fresh profile owns nothing. */
 export const NO_GEAR = Object.freeze({ ball: 0, irons: 0, woods: 0, putter: 0, cart: 0 });

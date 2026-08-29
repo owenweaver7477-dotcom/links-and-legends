@@ -239,3 +239,101 @@ test('the streak is a bonus on top of playing, never a substitute for it', () =>
     `a fortnight of logging in pays ${cycleGems} against ${playing} — too small a fraction ` +
     'to be worth the streak');
 });
+
+/* =========================================================================
+   THE SHOP — grades and upgrade previews
+   ------------------------------------------------------------------------- */
+
+test('every shop item carries a grade, on the game\'s own ladder', async () => {
+  /* One vocabulary. The game already grades cases, club sets and decals as
+     standard/tour/pro/legend/mythic; inventing a second set of words for
+     the shop would mean a player learning which screen says "Epic" and
+     which says "Pro" for the same idea. */
+  const { SHOP, GEAR_RARITY_ORDER } = await import('../public/js/shared/gear.js');
+  const { RARITIES } = await import('../public/js/shared/cases.js');
+  const known = new Set(RARITIES.map(r => r.id));
+  assert.deepEqual(GEAR_RARITY_ORDER, RARITIES.map(r => r.id),
+    'the shop ranks rarities differently from the case system');
+  for (const [key, it] of Object.entries(SHOP)) {
+    assert.ok(known.has(it.rarity), `"${key}" has grade "${it.rarity}", which is not one the game uses`);
+  }
+});
+
+test('gear tops out below the club sets, which are the actual chase', async () => {
+  /* A shop that sold a Mythic anything for coins would flatten the thing
+     cases exist for. */
+  const { SHOP, GEAR_RARITY_ORDER } = await import('../public/js/shared/gear.js');
+  const rank = r => GEAR_RARITY_ORDER.indexOf(r);
+  const best = Math.max(...Object.values(SHOP).map(it => rank(it.rarity)));
+  assert.ok(best <= rank('pro'),
+    `the coin shop sells a ${GEAR_RARITY_ORDER[best]} item — the top two rungs belong to ` +
+    'the club sets, which come from a case');
+});
+
+test('what a gear card promises is what the simulation does', async () => {
+  /* `gains` is authored text on a card and `gearEffect` is what the server
+     runs. They are two statements of one fact, which is exactly the shape
+     of thing that drifts. */
+  const { SHOP, gearEffect } = await import('../public/js/shared/gear.js');
+  const pct = s => {
+    const m = String(s).match(/([+-]?[\d.]+)%/);
+    return m ? Number(m[1]) : null;
+  };
+  const iron = { type: 'iron' }, wood = { type: 'wood' };
+
+  const ballOne = gearEffect({ ball: 1 }, iron);
+  assert.equal(pct(SHOP.ball_tour.gains.find(g => g[0] === 'Ball speed')[1]),
+    Math.round((ballOne.speed - 1) * 1000) / 10);
+  assert.equal(pct(SHOP.ball_tour.gains.find(g => g[0] === 'Spin')[1]),
+    Math.round((ballOne.spin - 1) * 100));
+
+  const ballTwo = gearEffect({ ball: 2 }, iron);
+  assert.equal(pct(SHOP.ball_pro.gains.find(g => g[0] === 'Ball speed')[1]),
+    Math.round((ballTwo.speed - 1) * 100), 'the Pro ball card and the simulation disagree');
+  assert.equal(pct(SHOP.ball_pro.gains.find(g => g[0] === 'Spin')[1]),
+    Math.round((ballTwo.spin - 1) * 100));
+
+  assert.equal(pct(SHOP.irons_plus.gains[0][1]),
+    Math.round((gearEffect({ irons: 1 }, iron).speed - 1) * 1000) / 10);
+  assert.equal(pct(SHOP.woods_plus.gains[0][1]),
+    Math.round((gearEffect({ woods: 1 }, wood).speed - 1) * 1000) / 10);
+});
+
+test('a caddie grade is a readout of investment, not a label', async () => {
+  const { caddieGrade, CADDIE_MAX, CADDIE_KEYS } = await import('../public/js/shared/crew.js');
+  const { RARITIES } = await import('../public/js/shared/cases.js');
+  const order = RARITIES.map(r => r.id);
+  let last = -1;
+  for (let l = 0; l <= CADDIE_MAX; l++) {
+    const i = order.indexOf(caddieGrade(l));
+    assert.ok(i >= 0, `level ${l} grades as something the game does not recognise`);
+    assert.ok(i >= last, `level ${l} grades LOWER than level ${l - 1}`);
+    last = i;
+  }
+  assert.equal(caddieGrade(0), 'standard', 'a fresh hire should be the bottom rung');
+  assert.equal(caddieGrade(CADDIE_MAX), 'mythic', 'a maxed caddie should be the top rung');
+  // and it is level, not identity — eight identical ladders
+  for (const k of CADDIE_KEYS) assert.equal(caddieGrade(5), 'pro');
+});
+
+test('an upgrade says what it buys before the money is spent', async () => {
+  /* "Level up · 1,200 coins" asks somebody to spend a fifth of a round's
+     earnings on a number they cannot see. */
+  const { caddiePreview, CADDIES, CADDIE_MAX } = await import('../public/js/shared/crew.js');
+  for (const key of Object.keys(CADDIES)) {
+    const fresh = caddiePreview(key, 0);
+    assert.ok(fresh, `${key} has no preview at level 0`);
+    assert.equal(fresh.from, null, 'a caddie not yet hired should have nothing to compare against');
+    assert.ok(fresh.to && fresh.to.length, `${key} cannot describe what hiring it does`);
+    assert.equal(fresh.level, 1);
+    assert.ok(fresh.cost > 0);
+
+    const mid = caddiePreview(key, 4);
+    assert.ok(mid.from && mid.to, `${key} shows no before/after mid-ladder`);
+    assert.notEqual(mid.from, mid.to,
+      `${key} levelling from 4 to 5 shows the same line twice — the delta is the point`);
+
+    assert.equal(caddiePreview(key, CADDIE_MAX), null, 'a maxed caddie previewed a level that does not exist');
+  }
+  assert.equal(caddiePreview('not-a-caddie', 0), null);
+});
