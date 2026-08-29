@@ -318,11 +318,25 @@ actually travelling.
 ## Performance
 
 Everything is built for the low end: instanced trees (one draw call per species
-part, not per tree), blob shadows rather than a shadow map, no post-processing at
-all, 256–512 px canvas textures, shared geometry across every avatar, and terrain
-built once per hole and left alone. A hole in play costs about **46–52 draw calls
-and 101 k triangles**, which is the number that actually matters on integrated
-graphics.
+part, not per tree), no post-processing at all, 256–512 px canvas textures, shared
+geometry across every avatar, and terrain built once per hole and left alone. A
+hole in play costs about **70 draw calls and 143 k triangles** on the default
+Quality tier, which is the number that actually matters on integrated graphics.
+
+Roughly half those draw calls are the sun's shadow pass. The Performance tier
+drops it — along with the water shader and most of the scenery — and falls back
+to blob shadows, which cost one transparent quad each. (These numbers were 46–52
+and 101 k for a while, which was the *broken* state: the renderer's constructor
+hard-coded shadows off and only the tier turned them back on, so whether you got
+them depended on whether the settings ran before the first hole was built.)
+
+Lighting is physically based, and nothing is downloaded to make it so. Surfaces
+that should reflect — the ball, club heads, the cart — are `MeshStandard`/
+`MeshPhysical` sampling a **prefiltered environment map generated from the game's
+own procedural sky** (`PMREMGenerator`, `scene.js`'s `_buildEnvironment`). So a
+chrome ball reflects the sky it is actually under, and goes silver-blue at noon
+and warm grey at dusk without anything knowing what time it is. The shop
+turntable builds its own studio version of the same thing, per renderer.
 
 A cart costs **4 draw calls and 278 triangles**: the whole vehicle is one merged
 geometry shared by every cart, with the bodywork and the player's livery as two

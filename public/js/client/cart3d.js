@@ -229,9 +229,22 @@ export class Cart3D {
   constructor(tint = '#2f6d3f', decal = null) {
     this.root = new THREE.Group();
 
-    // group 0: bodywork, the same on every cart.  group 1: the livery.
-    this.bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true });
-    this.mat = new THREE.MeshLambertMaterial({ color: liveryColor(tint), vertexColors: true });
+    /* group 0: bodywork, the same on every cart.  group 1: the livery.
+
+       Standard rather than Lambert so both take the scene environment
+       (scene.js's _buildEnvironment). A cart is painted metal and glass
+       under an open sky, and Lambert cannot show that at all — it has no
+       specular term, so the bodywork was the same flat cream whether the
+       sun was on it or behind a cloud. Roughness is high: this is a fleet
+       cart that lives outdoors, not a show car. */
+    this.bodyMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, vertexColors: true, roughness: 0.62, metalness: 0.14,
+      envMapIntensity: 0.75
+    });
+    this.mat = new THREE.MeshStandardMaterial({
+      color: liveryColor(tint), vertexColors: true, roughness: 0.48, metalness: 0.22,
+      envMapIntensity: 0.85
+    });
     this.mats = [this.bodyMat, this.mat];
 
     // tilt carries the suspension; the chassis and wheels hang off it so the
@@ -285,8 +298,8 @@ export class Cart3D {
       return;
     }
     if (!this.decalMesh) {
-      this.decalMesh = new THREE.Mesh(sharedDecalGeo(), new THREE.MeshLambertMaterial({
-        map: tex, transparent: false
+      this.decalMesh = new THREE.Mesh(sharedDecalGeo(), new THREE.MeshStandardMaterial({
+        map: tex, roughness: 0.44, metalness: 0.20, envMapIntensity: 0.9
       }));
       this.tilt.add(this.decalMesh);
     } else {

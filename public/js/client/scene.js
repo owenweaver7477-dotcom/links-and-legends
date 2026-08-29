@@ -13,6 +13,7 @@ import { BALL_RADIUS } from '../shared/ballistics.js';
 import { sharedBlobTexture } from './avatar.js';
 import { crownOf } from '../shared/biomes.js';
 import { lightAt, sunAt, SEASONS } from '../shared/weather.js';
+import { applyBallFinish, makeBallMaterial } from '../shared/ballfinish.js';
 
 const GRID_STEP = 1.8;          // metres between terrain vertices.  2.6 read
                                 // as polygonal on every mound; 1.8 is the
@@ -31,49 +32,25 @@ const _one = new THREE.Vector3(1, 1, 1);   // never mutated — a bird's scale i
    drops the fine chop, and pixelRatio is the one that decides whether a weak
    machine is playable at all — a retina display asks for four times the
    fragments, and capping it is worth more than every other lever combined. */
+/* THE ONE PLACE A TIER IS DESCRIBED. Every lever here has to be read
+   somewhere, or it is a promise the settings screen makes and nothing keeps
+   — and two of them were exactly that:
+
+     `water` was declared by all three tiers and read by nothing, so turning
+     the quality down never simplified the water.
+     `precip` was READ (in the weather build) and declared by no tier, so it
+     always resolved to its `?? 1` default and rain was full density on a
+     machine that had asked for low.
+
+   Both are wired now. `env` is new: the prefiltered environment map (see
+   _environment) is what finally gives a chrome ball and a mythic club head
+   something to reflect, and it is one render of the sky per biome — real,
+   but not free on a machine already struggling. */
 export const QUALITY = {
-  low:    { pixelRatio: 1,   shadows: false, shadowMap: 0,    scenery: 0.35, water: 0 },
-  medium: { pixelRatio: 1.5, shadows: true,  shadowMap: 1024, scenery: 0.75, water: 1 },
-  high:   { pixelRatio: 2,   shadows: true,  shadowMap: 2048, scenery: 1.0,  water: 1 }
+  low:    { pixelRatio: 1,   shadows: false, shadowMap: 0,    scenery: 0.35, water: 0, precip: 0.45, env: 0 },
+  medium: { pixelRatio: 1.5, shadows: true,  shadowMap: 1024, scenery: 0.75, water: 1, precip: 0.8,  env: 128 },
+  high:   { pixelRatio: 2,   shadows: true,  shadowMap: 2048, scenery: 1.0,  water: 1, precip: 1,    env: 256 }
 };
-
-/* The earned ball finishes. A finish is how the ball catches the light, not
-   a replacement for the player's own colour — so `tint` NUDGES that colour
-   toward the finish's own character (chrome cools it toward silver, lava
-   warms it toward ember) rather than overriding it outright. Two players
-   who both picked white still read as "different finish", not "their
-   colour choice got taken away from them". matte has no tint at all — a
-   flat finish shouldn't look recoloured, just less shiny. Was specular-
-   only for a while, which was too subtle to actually read as different
-   finishes under real lighting on a small, fast-moving ball — the exact
-   "can't tell the difference" a finish exists to prevent. Also missing
-   two of the six finishes entirely (opal, lava — added after this table
-   was last touched), silently falling back to BALL_PLAIN, i.e. no visual
-   effect at all despite being real, earnable, paid-for rewards. */
-const BALL_FINISH = {
-  matte:  { shininess: 4,   specular: 0x0d0d0d, emissive: 0x000000 },
-  pearl:  { shininess: 100, specular: 0xb8bfd8, emissive: 0x120f1a, tint: '#f0e6f0' },
-  chrome: { shininess: 240, specular: 0xf2f2f2, emissive: 0x000000, tint: '#e8ecf0' },
-  opal:   { shininess: 110, specular: 0xd8b8d0, emissive: 0x1c1018, tint: '#f4d8ec' },
-  prism:  { shininess: 200, specular: 0xd0b8ff, emissive: 0x1c1028, tint: '#d8e8ff' },
-  lava:   { shininess: 55,  specular: 0xff9060, emissive: 0x3a0e06, tint: '#ff6b3d' }
-};
-const BALL_PLAIN = { shininess: 60, specular: 0x555555, emissive: 0x000000 };
-
-function applyBallFinish(mat, id, color) {
-  const f = BALL_FINISH[id] || BALL_PLAIN;
-  mat.shininess = f.shininess;
-  mat.specular.setHex(f.specular);
-  mat.emissive.setHex(f.emissive);
-  // Re-set from `color` first rather than trusting whatever's already on
-  // the material — the caller (syncBalls) already does this before
-  // calling in, but doing it here too makes the lerp below idempotent
-  // regardless of call order, so a second call can never nudge the tint
-  // further than the first one did.
-  if (color) mat.color.set(color);
-  if (f.tint) mat.color.lerp(new THREE.Color(f.tint), 0.22);
-  mat.needsUpdate = true;
-}
 
 /**
  * Make a mostly-horizontal mesh face upward, whatever order its indices came
@@ -146,15 +123,20 @@ export class GolfScene {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;   // the key light carries it now
-    // Shadow maps are the single most expensive thing here — a whole extra
-    // pass over every caster — so they are OFF by default.  Avatars and balls
-    // carry blob shadows instead, which cost one transparent quad each.
-    // 'quality' turns the real sun shadow on for machines that can take it.
+    /* Shadow maps are the single most expensive thing here — a whole extra
+       pass over every caster — so a tier that does not want them says so and
+       everything follows from that ONE declaration.
+
+       It used to be declared twice and the two disagreed: `this.q` was set
+       to QUALITY.medium, which asks for shadows, while the three lines under
+       it hard-coded them off. Whether the game had shadows therefore
+       depended on whether setQuality happened to run before the first hole
+       was built, which is not a decision anybody made. */
     this.quality = 'medium';
     this.q = QUALITY.medium;
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.shadowMap.enabled = this.q.shadows;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.autoUpdate = this.q.shadows;
 
     /* A lost WebGL context is what "the game crashed" usually means in a
        browser: the GPU resets under load or the driver reclaims the context,
@@ -232,6 +214,14 @@ export class GolfScene {
       this.sun.shadow.map = null;
     }
     if (this.terrainMesh) this.terrainMesh.receiveShadow = Q.shadows;
+    /* The environment is a tier lever like the others, so changing tier has
+       to act on it. Regenerated from the sky already in the scene rather
+       than deferred to the next hole — a player who turns quality up wants
+       to see it now, not after they hole out. */
+    if (this.holeGroup) {
+      const sky = this.holeGroup.children.find(o => o.renderOrder === -1 && o.material?.isShaderMaterial);
+      if (sky) this._buildEnvironment(sky.material);
+    }
     this.scene.traverse(o => {
       if (o.material) {
         const m = Array.isArray(o.material) ? o.material : [o.material];
@@ -376,7 +366,13 @@ export class GolfScene {
     g.add(this.fill);
     g.add(this.fill.target);
 
-    g.add(this._buildSky(skyTop, skyBot, P.sun, bio));
+    const skyMesh = this._buildSky(skyTop, skyBot, P.sun, bio);
+    g.add(skyMesh);
+    /* Everything reflective in the scene now has something to reflect. Built
+       from the sky that is actually overhead on this hole, so a chrome ball
+       goes silver-blue at noon and warm grey at dusk without anything asking
+       what time it is. */
+    this._buildEnvironment(skyMesh.material);
 
     /* ---- terrain ---- */
     g.add(this._buildTerrain(hole, terrain, bio));
@@ -448,6 +444,61 @@ export class GolfScene {
     this.balls.clear();
     this._water.length = 0;
     this._trees.length = 0;
+    /* The environment map is generated FROM the sky material that the loop
+       above has just disposed, so it has to go with it — otherwise the
+       reflection outlives the sky it was taken of, and eighteen holes leave
+       eighteen render targets on the GPU. */
+    this._envRT?.dispose();
+    this._envRT = null;
+    this.scene.environment = null;
+  }
+
+  /* ------------------------------------------------------ environment ---
+     A prefiltered environment map, generated from the game's own sky.
+
+     THE POINT. Until now there was no environment map anywhere, so every
+     "reflective" surface in this game — a chrome ball, a Mythic club head,
+     a foil-weave shirt — was a Phong highlight: a white dot placed where a
+     light is, which knows nothing about what is actually around the object.
+     That is why the shiny cosmetics never looked shiny, only pale.
+
+     AND IT IS STILL PROCEDURAL. Nothing is downloaded. PMREMGenerator
+     renders the existing sky shader into a small cubemap and prefilters it
+     into the roughness mip chain that MeshStandard/Physical sample. The
+     sky material is the one already on screen, shared, so the reflection
+     and the sky can never disagree about the weather.
+
+     The probe sphere is radius 10 rather than the sky's own 2200 because
+     the shader is a pure function of `normalize(position)` — the direction
+     is all it reads — and a small sphere keeps the PMREM camera's near/far
+     sane. Same gradient, no giant frustum. */
+  _buildEnvironment(skyMat) {
+    // dropped first: this runs once per hole, and a leaked render target per
+    // hole is 18 of them by the end of a round
+    this._envRT?.dispose();
+    this._envRT = null;
+    this.scene.environment = null;
+
+    const size = this.q?.env | 0;
+    if (!size || !skyMat) return;
+
+    const probe = new THREE.Scene();
+    const geo = new THREE.SphereGeometry(10, 32, 20);
+    probe.add(new THREE.Mesh(geo, skyMat));
+
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    pmrem.compileCubemapShader();
+    try {
+      const rt = pmrem.fromScene(probe, 0, 0.5, 40);
+      this._envRT = rt;
+      this.scene.environment = rt.texture;
+    } catch (err) {
+      /* A float render target is not guaranteed. Losing the reflections is a
+         downgrade; throwing here would lose the hole. */
+      console.warn('environment map unavailable:', err?.message || err);
+    }
+    pmrem.dispose();
+    geo.dispose();
   }
 
   /* -------------------------------------------------------------- sky --- */
@@ -896,6 +947,18 @@ export class GolfScene {
       shininess: 220, specular: new THREE.Color(0xcfefff),
       side: THREE.DoubleSide
     });
+    /* THE `water` QUALITY LEVER, which every tier declared and nothing read.
+       Everything that makes this water look like water — the swell in the
+       vertex shader, the fresnel, the sun's glitter path, the foam line — is
+       in the injected shader below, and all of it is per-vertex or
+       per-fragment over a surface that can cover a third of the screen. So
+       `water: 0` skips the injection entirely and leaves a plain translucent
+       disc, which is what a machine asking for low quality wants. The waves
+       stop; the pond is still a pond. */
+    if (!this.q?.water) {
+      mat.shininess = 60;
+      return this._placeWater(new THREE.Mesh(geo, mat), w, level, mat);
+    }
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = { value: 0 };
       sh.uniforms.uSky = { value: new THREE.Vector3(sky.r, sky.g, sky.b) };
@@ -963,7 +1026,17 @@ export class GolfScene {
           // and it turns opaque as it deepens — you cannot see through a lake
           gl_FragColor.a = mix(0.99, 0.82, smoothstep(0.55, 1.0, rad));`);
     };
-    const m = new THREE.Mesh(geo, mat);
+    return this._placeWater(new THREE.Mesh(geo, mat), w, level, mat);
+  }
+
+  /* Lie the disc down on the pond. Its own method because the low-quality
+     branch above returns early and both have to land in exactly the same
+     place — a pond that moved when you turned the settings down would be a
+     worse bug than the one the lever fixes. `userData.mat` is what the
+     animate loop reaches through for the time uniform, and it must be set
+     on the plain material too or that lookup throws on a low-quality
+     machine the moment a hole has water on it. */
+  _placeWater(m, w, level, mat) {
     m.rotation.x = -Math.PI / 2;
     m.rotation.z = -w.rot || 0;
     m.position.set(w.x, level, w.z);
@@ -1880,7 +1953,7 @@ export class GolfScene {
       let b = this.balls.get(p.pid);
       if (!b) {
         const geo = new THREE.SphereGeometry(BALL_RADIUS, 18, 14);
-        const mat = new THREE.MeshPhongMaterial({ color: new THREE.Color(p.color), shininess: 60, specular: 0x555555 });
+        const mat = makeBallMaterial(THREE, p.color);
         const mesh = new THREE.Mesh(geo, mat);
         mesh.castShadow = true;
         const shGeo = new THREE.CircleGeometry(BALL_RADIUS * 1.5, 12);
@@ -1893,7 +1966,7 @@ export class GolfScene {
         this.balls.set(p.pid, b);
       }
       b.mesh.material.color.set(p.color);
-      applyBallFinish(b.mesh.material, p.look?.ballFinish, p.color);
+      applyBallFinish(THREE, b.mesh.material, p.look?.ballFinish, p.color);
       b.mesh.visible = !p.spectator;
       b.shadow.visible = !p.spectator;
     }

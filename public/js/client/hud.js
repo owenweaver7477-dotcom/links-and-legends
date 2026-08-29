@@ -721,6 +721,10 @@ HUD.renderTees = (hole, selected, isHost, onPick) => {
 HUD.renderColours = (room, myPid, onPick, rating = 0) => {
   el.ballColours.innerHTML = '';
   const mine = room.players.find(p => p.pid === myPid)?.color;
+  /* Stashed for the finish previews: a finish is how YOUR ball catches the
+     light, so previewing every one of them on a white sphere shows somebody
+     a ball they will never own. */
+  if (mine) HUD.myBallHex = mine;
   for (const c of BALL_COLORS) {
     const taken = room.players.some(p => p.pid !== myPid && p.color === c.hex);
     const locked = !!c.lockRating && rating < c.lockRating;
@@ -1792,7 +1796,7 @@ HUD.renderShop = (prof, onBuy) => {
          so a new item in an existing slot gets a preview without anybody
          remembering to add one. */
       const viewFor = {
-        ball: { kind: 'ball', hex: '#f6f9f4' },
+        ball: { kind: 'ball', hex: HUD.myBallHex || '#f6f9f4', finish: HUD.myBallFinish || null },
         irons: { kind: 'club', key: 'I7' },
         woods: { kind: 'club', key: 'DR' },
         putter: { kind: 'club', key: 'PT' },
@@ -2424,7 +2428,11 @@ HUD.previewOwnedItem = (canvasId, capId, kind, id, opts = {}) => {
     showShopItem(cv, { kind: 'club', key: 'DR', set: id, skin: opts.clubSkin || 'stock',
       name: opts.name, sub: opts.sub });
   } else if (kind === 'ball') {
-    showShopItem(cv, { kind: 'ball', hex: color, name: opts.name, sub: opts.sub });
+    /* `id` is the finish, and the turntable now wears it — a chrome ball
+       reflects, a matte one does not, and the reveal shows the difference
+       the moment somebody pulls one. */
+    showShopItem(cv, { kind: 'ball', hex: opts.ballColor || HUD.myBallHex || '#f6f9f4', finish: id,
+      name: opts.name, sub: opts.sub });
   } else {
     /* trail/title/hat/melee have no 3D model anywhere in the game. Rather
        than spin a coloured cube at somebody, the caption carries it and
@@ -4239,6 +4247,7 @@ HUD.renderWardrobeStats = look => {
 HUD.renderWardrobe = (look, level, name, equipped) => {
   if (!el.screenWardrobe) return;
   const lv = Number(level) || 1;
+  HUD.myBallFinish = look?.ballFinish || null;   // for the shop's ball turntable
 
   /* ---- who this is, and what the outfit does ------------------------- */
   el.wdName.textContent = name || 'Your golfer';

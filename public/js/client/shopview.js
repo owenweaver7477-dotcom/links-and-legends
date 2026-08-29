@@ -11,11 +11,16 @@
    preview built from different parts than the game uses is a promise the
    game then has to keep.
 
-   ITS OWN RENDERER, DELIBERATELY. The main scene is 224,000 triangles of
+   ITS OWN RENDERER, DELIBERATELY. The main scene is ~143,000 triangles of
    golf course; borrowing it would mean either tearing the hole down to show
    a putter or rendering both. This is a 260-pixel canvas with a handful of
    boxes in it, so a second WebGL context is cheaper than either — and it can
    be created lazily, when the shop is first opened, and thrown away with it.
+
+   The cost of that decision is that this renderer has to be given
+   EVERYTHING the main one has, or an item looks different in the shop than
+   it does in your hand. It had neither colour management nor an environment
+   map for a long time, and both are now here (see build and studioEnv).
    ========================================================================= */
 
 import * as THREE from '../../vendor/three.module.js';
@@ -27,6 +32,7 @@ import { setById, rarityRank, STARTER_SET } from '../shared/clubsets.js';
 import { shaftDecalTexture } from './shaftdecals.js';
 import { Avatar } from './avatar.js';
 import { normaliseLook } from '../shared/avatars.js';
+import { applyBallFinish, makeBallMaterial } from '../shared/ballfinish.js';
 
 /* ONE RENDERER PER CANVAS. The shop and the bag are two different canvases
    on two different panes, and a single module-level renderer bound to
@@ -41,6 +47,14 @@ function build(canvas) {
   if (R) return R;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  /* COLOUR MANAGEMENT, which this renderer had none of. The main scene is
+     ACES Filmic into sRGB (scene.js's constructor) and this one was linear
+     into whatever the default is — so the same club, the same colours and
+     the same lights came out visibly different in the shop than in your
+     hand, and the shop is where somebody decides whether to buy it. */
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(34, 0.75, 0.05, 40);
@@ -58,18 +72,83 @@ function build(canvas) {
   rim.position.set(-2.5, 1.2, -2);
   scene.add(rim);
 
+  /* A STUDIO to reflect. The three lights above put highlights on a club;
+     they cannot put the ROOM on it, and a mirror-finish head with nothing
+     around it renders as a flat grey shape whatever you light it with.
+     This is the shop's equivalent of the sky probe the course uses
+     (scene.js's _buildEnvironment): a gradient dome, rendered once into a
+     prefiltered cubemap, shared by every canvas this module drives. */
+  const envRT = studioEnv(renderer);
+  scene.environment = envRT ? envRT.texture : null;
+
   const stage = new THREE.Group();
   scene.add(stage);
 
-  R = { renderer, scene, camera, stage, canvas, spin: 0, current: null };
+  R = { renderer, scene, camera, stage, canvas, spin: 0, current: null, envRT };
   views.set(canvas, R);
   return R;
 }
 
-const M = (hex, shiny = 0) => shiny
-  ? new THREE.MeshPhongMaterial({ color: new THREE.Color(hex), shininess: 40 + shiny * 90,
-                                  specular: new THREE.Color(0xffffff) })
-  : new THREE.MeshLambertMaterial({ color: new THREE.Color(hex) });
+/* A studio environment, PER RENDERER.
+ *
+ * The obvious economy here is to build one and share it — the pixels are
+ * identical for every canvas. It does not work, and the failure is silent
+ * and total: PMREM output is a WebGLRenderTarget, which belongs to the GL
+ * context that made it, and this module gives every canvas its own
+ * WebGLRenderer and therefore its own context. A shared target renders
+ * BLACK on every canvas but the first, and a metal is nothing but its
+ * reflection, so a chrome ball came out as a black circle with one white
+ * dot on it. Which is exactly what it did, until this comment.
+ *
+ * One PMREM per canvas is a 24x16 sphere into a small cubemap, once, and
+ * there are only ever a handful of these canvases alive.
+ */
+function studioEnv(renderer) {
+  const probe = new THREE.Scene();
+  const geo = new THREE.SphereGeometry(10, 24, 16);
+  /* Bright above, dim below, with a warm key patch — the shape of a lit
+     room. Vertex colours rather than a shader, because the only thing this
+     has to be is a plausible surrounding, and PMREM blurs it heavily. */
+  const mat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true });
+  const pos = geo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  const up = new THREE.Color('#e8f1ff'), down = new THREE.Color('#131a16');
+  const key = new THREE.Color('#fff2dc');
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 10, x = pos.getX(i) / 10, z = pos.getZ(i) / 10;
+    c.copy(down).lerp(up, Math.min(1, Math.max(0, y * 0.5 + 0.5)) ** 0.8);
+    // the key light's own patch, up and to the front-right
+    const d = Math.max(0, x * 0.55 + y * 0.65 + z * 0.52);
+    c.lerp(key, Math.pow(d, 5) * 0.9);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  probe.add(new THREE.Mesh(geo, mat));
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  let rt = null;
+  try {
+    rt = pmrem.fromScene(probe, 0, 0.5, 40);
+  } catch (err) {
+    /* Losing the reflections is a downgrade; throwing here would lose the
+       whole preview. */
+    console.warn('shop environment unavailable:', err?.message || err);
+  }
+  pmrem.dispose(); geo.dispose(); mat.dispose();
+  return rt;
+}
+
+/* Standard rather than Lambert/Phong, so `shiny` becomes a real POLISH
+   against the studio above rather than a white dot. A club is metal — what
+   a cheap one lacks is the finish, not the material — so metalness stays
+   high across the range and roughness carries the difference. */
+const M = (hex, shiny = 0) => new THREE.MeshStandardMaterial({
+  color: new THREE.Color(hex),
+  roughness: 0.72 - shiny * 0.60,
+  metalness: 0.55 + shiny * 0.42,
+  envMapIntensity: 0.85 + shiny * 0.85
+});
 
 const box = (mat, w, h, d, x, y, z) => {
   const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
@@ -156,7 +235,9 @@ function buildClub(key, setId = STARTER_SET, skinId = 'stock', decal = null) {
      `headDecal` is filled in by whichever head branch runs below; the shaft
      is wrapped here because every club has one. */
   const decalTex = decal ? shaftDecalTexture(decal.id, decal.color, decal.purity || 0) : null;
-  const decalMat = decalTex ? new THREE.MeshLambertMaterial({ map: decalTex }) : null;
+  const decalMat = decalTex
+    ? new THREE.MeshStandardMaterial({ map: decalTex, roughness: 0.55, metalness: 0.25 })
+    : null;
   if (decalMat) {
     // the whole shaft, a hair proud of it, stopping short of the grip
     g.add(rod(decalMat, 0.0185, 0.0255, shaftLen - 0.02, 0, -0.01, 0));
@@ -382,12 +463,18 @@ function buildDecal(id) {
   return g;
 }
 
-/** A ball, for the ball-finish upgrades. */
-function buildBall(hex = '#f6f9f4') {
+/** A ball, for the ball-finish upgrades — WEARING the finish.
+ *
+ *  It used to be one shiny white sphere whatever finish was being shown, so
+ *  the one screen where somebody decides whether a finish is worth buying
+ *  was the one screen that could not show them what it looked like. Same
+ *  table the ball in flight reads (shared/ballfinish.js), so the two can
+ *  never drift. */
+function buildBall(hex = '#f6f9f4', finish = null) {
   const g = new THREE.Group();
-  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.44, 24, 18),
-    new THREE.MeshPhongMaterial({ color: new THREE.Color(hex), shininess: 70,
-                                  specular: new THREE.Color(0xffffff) })));
+  const mat = makeBallMaterial(THREE, hex);
+  applyBallFinish(THREE, mat, finish, hex);
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.44, 24, 18), mat));
   return g;
 }
 
@@ -622,7 +709,7 @@ export function showItem(canvas, what) {
   let obj;
   if (what?.kind === 'club') obj = buildClub(what.key || 'DR', what.set || STARTER_SET, what.skin || 'stock', what.decal || null);
   else if (what?.kind === 'decal') obj = buildDecal(what.key);
-  else if (what?.kind === 'ball') obj = buildBall(what.hex);
+  else if (what?.kind === 'ball') obj = buildBall(what.hex, what.finish || what.id || null);
   else if (what?.kind === 'caddie') obj = buildCaddie(what.hex);
   else if (what?.kind === 'cart') obj = buildCart(what.hex);
   else if (what?.kind === 'case') {
@@ -957,6 +1044,7 @@ export function disposeShopView() {
     R.scene.traverse(o => {
       if (o.isMesh) { o.geometry.dispose(); if (!o.material.map) o.material.dispose(); }
     });
+    R.envRT?.dispose();      // its own render target, per the note on studioEnv
     R.renderer.dispose();
   }
   views.clear();

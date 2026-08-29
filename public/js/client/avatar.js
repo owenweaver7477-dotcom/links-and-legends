@@ -731,11 +731,18 @@ export class Avatar {
       this.mats.headDark.color.setHex(L.head);
       this.mats.chrome.emissive.setHex(L.glow);
       this.mats.headDark.emissive.setHex(L.glow);
-      /* Lambert has no specular, so a shiny set needs a material that does.
-         Swapped rather than tweaked, and only once per set change. */
-      if (L.shine > 0.3 && !this.mats.chrome.isMeshPhongMaterial) {
+      /* A shiny set needs a material that can BE shiny, and Lambert cannot.
+         Swapped rather than tweaked, and only once per set change.
+
+         Standard rather than the Phong this used to reach for. A club head
+         is metal, and Phong's highlight is a white dot placed where a light
+         is — it does not know the sky is above it or the fairway below, so
+         a "polished" set came out pale rather than reflective. On Standard
+         it samples the scene environment (see scene.js's _buildEnvironment),
+         which is generated from the sky this hole is actually under. */
+      if (L.shine > 0.3 && !this.mats.chrome.isMeshStandardMaterial) {
         const up = m => {
-          const n = new THREE.MeshPhongMaterial({ color: m.color, emissive: m.emissive });
+          const n = new THREE.MeshStandardMaterial({ color: m.color, emissive: m.emissive });
           m.dispose(); return n;
         };
         this.mats.chrome = up(this.mats.chrome);
@@ -743,11 +750,17 @@ export class Avatar {
         this.clubShaft.material = this.mats.chrome;
         this._retintClub();
       }
-      if (this.mats.chrome.isMeshPhongMaterial) {
-        this.mats.chrome.shininess = 30 + L.shine * 170;
-        this.mats.chrome.specular.setRGB(L.shine, L.shine, L.shine);
-        this.mats.headDark.shininess = 20 + L.shine * 120;
-        this.mats.headDark.specular.setRGB(L.shine * 0.8, L.shine * 0.8, L.shine * 0.85);
+      if (this.mats.chrome.isMeshStandardMaterial) {
+        /* Rarity reads as POLISH: a Mythic shaft is a mirror and the free
+           starter set is brushed. Metalness is held high on both because a
+           golf club is metal either way — what a cheap one lacks is the
+           finish, not the material. */
+        this.mats.chrome.roughness = 0.55 - L.shine * 0.46;
+        this.mats.chrome.metalness = 0.72 + L.shine * 0.28;
+        this.mats.chrome.envMapIntensity = 0.7 + L.shine * 0.9;
+        this.mats.headDark.roughness = 0.62 - L.shine * 0.44;
+        this.mats.headDark.metalness = 0.66 + L.shine * 0.30;
+        this.mats.headDark.envMapIntensity = 0.6 + L.shine * 0.8;
       }
     }
 
