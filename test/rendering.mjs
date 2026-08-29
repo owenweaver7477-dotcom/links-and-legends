@@ -269,3 +269,51 @@ test('the type scale has no half-pixel twins left in it', () => {
   // and the scale itself is declared, so the next size is picked not nudged
   assert.ok(/--t-base:\s*\d+px/.test(CSS), 'no type scale declared in :root');
 });
+
+test('every floating surface is the same material', () => {
+  /* Glass is four things at once — a gradient, a lit top edge, a bottom lip
+     and two shadows — and the point of putting them in tokens is that a new
+     panel cannot quietly be a flat fill with a 1px border again. Eleven of
+     those over a fairway is what made this read as a debug overlay. */
+  const CSS = readFileSync(join(__dirname, '../public/css/style.css'), 'utf8');
+  for (const t of ['--glass-bg', '--glass-line', '--glass-lit', '--glass-lip',
+                   '--glass-cast', '--glass-blur']) {
+    assert.ok(new RegExp(t + ':').test(CSS), `no ${t} token`);
+  }
+  /* The old hard-coded panel fill. A handful survive on non-floating
+     surfaces (a swatch border, an inset well), so this is a ceiling rather
+     than a ban — but a jump means somebody built a panel by hand again. */
+  const strays = (CSS.match(/rgba\(10,\s*18,\s*15,/g) || []).length;
+  assert.ok(strays <= 8,
+    `${strays} surfaces still hard-code the old panel fill instead of using --glass-bg`);
+});
+
+test('the page wipe and the confetti both respect reduced motion', () => {
+  /* A full-screen wipe and a burst of ninety flying elements are precisely
+     what that setting exists for. */
+  const CSS = readFileSync(join(__dirname, '../public/css/style.css'), 'utf8');
+  const HUD = readFileSync(join(__dirname, '../public/js/client/hud.js'), 'utf8');
+  assert.ok(/prefers-reduced-motion: reduce\)\s*\{[^}]*\.pagewipe \{ display: none/s.test(CSS),
+    'the page wipe is not disabled under reduced motion');
+  assert.ok(/@media \(prefers-reduced-motion: reduce\) \{ \.burst \{ display: none/.test(CSS),
+    'the confetti is not disabled under reduced motion');
+  assert.ok(/const REDUCED = typeof matchMedia/.test(HUD),
+    'hud.js does not check prefers-reduced-motion at all');
+  assert.ok(/HUD\.burst = \(opts = \{\}\) => \{\s*\n\s*if \(REDUCED\) return;/.test(HUD),
+    'HUD.burst still builds its elements under reduced motion');
+});
+
+test('the confetti allocates nothing per frame', () => {
+  /* It can fire mid-round, so it has to cost one style recalculation and
+     then run on the compositor — not a requestAnimationFrame loop over
+     ninety elements. */
+  const HUD = readFileSync(join(__dirname, '../public/js/client/hud.js'), 'utf8');
+  const fn = HUD.match(/HUD\.burst = \(opts = \{\}\) => \{[\s\S]*?\n\};/);
+  assert.ok(fn, 'no HUD.burst');
+  assert.equal(/requestAnimationFrame/.test(fn[0]), false,
+    'the burst runs a per-frame loop — that is the frame rate of the golf underneath it');
+  assert.ok(/setTimeout\(\(\) => layer\.remove\(\), \d+\)/.test(fn[0]),
+    'the burst never removes its layer, so every celebration leaks one');
+  // capped, or a caller could ask for ten thousand
+  assert.ok(/Math\.min\(\d+, opts\.n/.test(fn[0]), 'the piece count is unbounded');
+});
