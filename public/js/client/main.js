@@ -2885,6 +2885,10 @@ function levelUpMoment(from, to) {
 }
 
 Net.on('levelup', d => { if (d?.to) levelUpMoment(d.from || 1, d.to); });
+/* Held rather than rendered on arrival: the settlement lands while the last
+   putt is still dropping, and the results screen it belongs on does not
+   exist for another few seconds. */
+Net.on('payout', d => { G.lastPayout = d || null; HUD.renderPayout(d); });
 
 /** The wheel's own contents — never the full library. "Own many, carry a
  *  few" is the whole point of the loadout (see celebrations.js), so this is
@@ -3199,6 +3203,7 @@ function route() {
   if (r.state === 'results') {
     HUD.show('results');
     HUD.renderResults(r, G.myPid, G.course);
+    HUD.renderPayout(G.lastPayout);
     /* How it compared. Computed from the same card the table above is drawn
        from, so the two can never disagree about what you shot. */
     const meRow = r.players.find(p => p.pid === G.myPid && !p.spectator);

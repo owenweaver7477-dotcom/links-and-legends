@@ -372,9 +372,13 @@ mid-round puts you in as a spectator until the next hole.
 
 ## Swing Squad: the Caddie Crew and the club ladder
 
-Progression is people, not sliders. The shop in the clubhouse has two tabs:
+Progression is people, not sliders. The shop has four tabs — Clubs,
+Equipment, Cases, Items.
 
-**The Caddie Crew** — eight caddies, each governing one stat, hired and
+**Equipment** is one shelf with two sections, because gear and caddies
+answer the same question: what can I spend coins on to hit it better.
+
+*The Caddie Crew* — eight caddies, each governing one stat, hired and
 levelled 1–10 with coins. Ace tightens your mishit drift, Bruiser adds yards
 to full swings, Steady forgives overswings, Roller reads the greens (his
 contour overlay and run-out line are HIS perk), Pitstop tunes the cart, Lucky
@@ -382,20 +386,41 @@ makes the cup grab harder and the rough sit kinder, Gale leans on the wind,
 and Grit steadies your first shot after a bogey. Levelling one caddie to
 Legend costs 39,500 coins across ten levels — a season goal, not a Tuesday.
 
-**The Pro Shop** — a seven-tier club ladder from the Wooden Starter Set to
-the Signature Set, each with its own look on the club in your hands (rope-
-gripped wood, rusty steel, chrome, carbon, tour white, glowing titanium,
-holographic). Three refinements smooth the cost curve inside each tier and
-are deliberately lost on tier-up. The design document's headline percentages
-are scaled to keep golf being golf: the full Signature Set fully refined is
-+7.9% ball speed — about 20 honest yards on a drive — not the literal +65%.
+*Gear* — six one-off purchases: two balls, forged irons, carbon woods, a
+milled putter and a tuned cart.
 
-**Coins** are earned exactly as the economy document specifies: 20 per hole,
-+15 par, +30 birdie, +60 eagle, +150 ace, −5 per stroke over (never below
-zero), +100 for the round, +10% per hole of a 3+ under-par streak (cap 50%),
-and a one-time 500 for the first clear of each course. Every effect is
-applied INSIDE the server's own simulation from the profile it holds — a
-client cannot claim gear, caddies or coins it does not have.
+Every card on the shelf shows its **grade** on the game's one rarity ladder
+(Standard · Tour · Pro · Legend · Mythic — the same words cases, club sets
+and decals use), and shows **what the money buys before it is spent**: gear
+carries its stat rows, and a caddie card shows the line it has beside the
+line it would have. Gear tops out at Pro deliberately; the top two rungs
+belong to the club sets, which come from a case.
+
+**Clubs** are collected, not bought: a set is fourteen clubs that arrive one
+per Club Case, and how much of a class you hold drives that class's stats.
+See `clubsets.js`.
+
+### Coins and gems are different currencies on purpose
+
+**Coins** reward showing up. 20 per hole, +15 par, +30 birdie, +60 eagle,
++150 ace, −5 per stroke over (never below zero, so the worst hole in the
+game still pays), +100 for the round, +10% per hole of a 3+ under-par streak
+(cap 50%), and a one-time 500 for the first clear of each course.
+
+**Gems** reward golf. A bogey is worth nothing at all, a par is worth 1, a
+birdie 3, an eagle 5, an ace 10 — and finishing the round is worth a flat 50,
+which is most of the payout, so walking off after the two holes you parred
+is never the better move. A round is 60–70 gems; a Club Case is 600.
+
+On top of that, gems come from a daily streak (475 over a full fortnight)
+and from six **repeatable milestone ladders** — fairways in a row, pars in a
+row, birdies, rounds, greens, courses — where the target grows and the
+reward grows slower than the target, so it is a ladder rather than a
+treadmill. Every counter is kept off a shot the server simulated itself.
+
+Every effect is applied INSIDE the server's own simulation from the profile
+it holds — a client cannot claim gear, caddies, coins or gems it does not
+have.
 
 ## Tests
 

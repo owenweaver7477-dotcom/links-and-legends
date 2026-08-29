@@ -221,6 +221,7 @@ Net.connect = async () => {
   Net.socket.on('toast', d => fire('toast', d));
   Net.socket.on('player:emote', d => fire('emote', d));
   Net.socket.on('levelup', d => fire('levelup', d));
+  Net.socket.on('round:payout', d => fire('payout', d));
   Net.socket.on('chat:msg', d => fire('chat', d));
   Net.socket.on('player:shoved', d => fire('shoved', d));
   Net.socket.on('profile', d => fire('profile', d));

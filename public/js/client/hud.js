@@ -3617,6 +3617,43 @@ function scoreName(rel, strokes = null) {
 }
 HUD.scoreName = scoreName;
 
+/* WHAT THE ROUND PAID, on the card rather than in a toast.
+   -------------------------------------------------------------------------
+   The settlement was announced in a toast that scrolls away in two seconds,
+   on its way past the one screen where a player is sitting still and
+   reading. Gems especially: they are now the currency you earn by playing,
+   and a player who never sees where they came from has not learned that
+   playing earns them.
+
+   Broken down rather than totalled, because the breakdown is the teaching:
+   "finishing +50" is the line that explains why walking off a bad round
+   costs you more than the two holes you had left. */
+HUD.renderPayout = rc => {
+  const box = document.getElementById('resPay');
+  if (!box) return;
+  if (!rc) { box.hidden = true; box.innerHTML = ''; return; }
+  const g = rc.gems || null;
+  const row = (label, val, cls = '') =>
+    `<span class="rp${cls ? ' ' + cls : ''}"><i>${escapeHtml(label)}</i><b>${val}</b></span>`;
+
+  const bits = [
+    row('Coins this round', icon('coin') + ' ' + (rc.total || 0).toLocaleString(), 'big')
+  ];
+  if (rc.streakPct) bits.push(row('Under-par streak', '+' + rc.streakPct + '%'));
+  if (rc.firstClearBonus) bits.push(row('First clear', icon('coin') + ' +' + rc.firstClearBonus.toLocaleString()));
+  if (rc.xp) bits.push(row('XP', '+' + rc.xp.toLocaleString()));
+
+  if (g && g.total) {
+    bits.push(row('Gems this round', icon('gem') + ' ' + g.total.toLocaleString(), 'big gem'));
+    if (g.holes) bits.push(row('Pars and better', icon('gem') + ' +' + g.holes));
+    if (g.finish) bits.push(row('Finishing the round', icon('gem') + ' +' + g.finish));
+    if (g.firstClear) bits.push(row('First clear', icon('gem') + ' +' + g.firstClear));
+    if (g.mult && g.mult !== 1) bits.push(row('Difficulty', '×' + g.mult));
+  }
+  box.innerHTML = bits.join('');
+  box.hidden = false;
+};
+
 /* --------------------------------------------------------- full scorecard */
 HUD.renderResults = (room, myPid, course) => {
   const players = room.players.filter(p => !p.spectator);

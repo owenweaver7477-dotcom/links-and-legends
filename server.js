@@ -964,6 +964,13 @@ function nextHole(room) {
         /* Only the server knows what the level was BEFORE this round was
            folded in, so the level-up has to be announced from here. */
         if (rc.leveledUp) sock.emit('levelup', rc.leveledUp);
+        /* The settlement itself, for the results card. The toast above says
+           the same thing and scrolls away in two seconds — on its way past
+           the one screen where somebody is sitting still and reading. */
+        sock.emit('round:payout', {
+          total: rc.total, xp: rc.xp, streakPct: rc.streakPct,
+          firstClearBonus: rc.firstClearBonus, gems: rc.gems || null
+        });
       }
 
       /* THE FEED. Written from the server's own numbers, at the one moment
