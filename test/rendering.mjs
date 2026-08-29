@@ -317,3 +317,57 @@ test('the confetti allocates nothing per frame', () => {
   // capped, or a caller could ask for ten thousand
   assert.ok(/Math\.min\(\d+, opts\.n/.test(fn[0]), 'the piece count is unbounded');
 });
+
+test('detail is a tier lever of its own, separate from scenery density', () => {
+  /* `scenery` is how MANY things there are and `detail` is how many sides
+     they have — two different questions that one number was answering. A
+     tree with a five-sided trunk reads as a paper model however many of
+     them you put on a hill, and the fix for that is not more trees. */
+  const T = tiers();
+  for (const n of ['low', 'medium', 'high']) {
+    assert.ok('detail' in T[n], `tier "${n}" declares no detail level`);
+  }
+  assert.equal(T.low.detail, '0', 'the low tier should keep the counts it always had');
+  assert.ok(Number(T.high.detail) > Number(T.medium.detail));
+
+  const src = SCENE;
+  assert.ok(/export const seg = \(q, base\) =>/.test(src), 'no seg helper');
+  const uses = (src.match(/seg\(this\.q, /g) || []).length;
+  assert.ok(uses >= 8,
+    `only ${uses} generators ask for a segment count — the rest are still fixed`);
+
+  /* A tier change that alters the world's GEOMETRY has to rebuild the hole,
+     the same as a density change does, or the cached geometry stays at the
+     old resolution and the setting silently does nothing. */
+  assert.ok(/wasDetail !== Q\.detail/.test(src),
+    'changing the detail tier does not ask for a rebuild');
+});
+
+test('props are chamfered, and cached per size AND per tier', () => {
+  /* Same reasoning as the avatar: a hard 90-degree edge takes the light in
+     exactly two steps, and every hut, bench and marker post on every hole
+     was made of those. */
+  assert.ok(/function bevelBox\(w, h, d, b\)/.test(SCENE), 'no bevelled box for the props');
+  assert.ok(/cached\(`pbox\$\{w\}_\$\{h\}_\$\{d\}@\$\{D\}`/.test(SCENE),
+    'the prop box cache key omits the detail tier — a tier change would hand ' +
+    'back geometry built for the previous one');
+  /* Proportional to the smallest dimension, or a 0.1m sole plate is eaten
+     by its own bevel while a 4.4m hut wall barely shows one. */
+  assert.ok(/Math\.min\(w, h, d\) \* 0\.\d+/.test(SCENE),
+    'the prop bevel is a fixed distance rather than a proportion');
+  assert.ok(/D > 0 \?/.test(SCENE), 'the low tier does not keep its plain boxes');
+});
+
+test('tree geometry is cached per detail level too', () => {
+  /* treeParts is module level and has no scene to ask, so it is handed the
+     number — and every cache key inside carries it. */
+  assert.ok(/function treeParts\(species, bio, d = 1\)/.test(SCENE),
+    'treeParts does not take a detail level');
+  assert.ok(/const K = key => key \+ '@' \+ d;/.test(SCENE),
+    'tree cache keys do not carry the detail level');
+  const body = SCENE.slice(SCENE.indexOf('function treeParts('));
+  const bare = body.slice(0, body.indexOf('\nfunction ')).match(/cached\('[a-z]/gi);
+  assert.equal(bare, null,
+    `${bare?.length} tree geometries are cached under a bare key — a tier change ` +
+    'would reuse the previous tier\'s mesh');
+});

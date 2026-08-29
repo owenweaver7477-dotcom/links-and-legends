@@ -320,8 +320,15 @@ actually travelling.
 Everything is built for the low end: instanced trees (one draw call per species
 part, not per tree), no post-processing at all, 256–512 px canvas textures, shared
 geometry across every avatar, and terrain built once per hole and left alone. A
-hole in play costs about **70 draw calls and 143 k triangles** on the default
+hole in play costs about **79 draw calls and 184 k triangles** on the default
 Quality tier, which is the number that actually matters on integrated graphics.
+
+Those numbers are the **Quality** tier. `scenery` decides how MANY things
+there are and `detail` decides how many sides they have — two different
+questions that one number used to answer, and a tree with a five-sided trunk
+reads as a paper model however many of them you put on a hill. Performance
+keeps the counts the game has always had; Quality is about half again in
+triangles and the same draw calls, because it is all instanced.
 
 Roughly half those draw calls are the sun's shadow pass. The Performance tier
 drops it — along with the water shader and most of the scenery — and falls back

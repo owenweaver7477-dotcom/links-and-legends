@@ -47,10 +47,22 @@ const _one = new THREE.Vector3(1, 1, 1);   // never mutated — a bird's scale i
    something to reflect, and it is one render of the sky per biome — real,
    but not free on a machine already struggling. */
 export const QUALITY = {
-  low:    { pixelRatio: 1,   shadows: false, shadowMap: 0,    scenery: 0.35, water: 0, precip: 0.45, env: 0 },
-  medium: { pixelRatio: 1.5, shadows: true,  shadowMap: 1024, scenery: 0.75, water: 1, precip: 0.8,  env: 128 },
-  high:   { pixelRatio: 2,   shadows: true,  shadowMap: 2048, scenery: 1.0,  water: 1, precip: 1,    env: 256 }
+  low:    { pixelRatio: 1,   shadows: false, shadowMap: 0,    scenery: 0.35, water: 0, precip: 0.45, env: 0,   detail: 0 },
+  medium: { pixelRatio: 1.5, shadows: true,  shadowMap: 1024, scenery: 0.75, water: 1, precip: 0.8,  env: 128, detail: 1 },
+  high:   { pixelRatio: 2,   shadows: true,  shadowMap: 2048, scenery: 1.0,  water: 1, precip: 1,    env: 256, detail: 2 }
 };
+
+/* `detail` is HOW MANY SIDES a thing has, and `scenery` is how many things
+   there are — two different questions that were being answered by one
+   number. A tree drawn with a five-sided trunk and a six-sided canopy reads
+   as a paper model however many of them you put on a hill, and the fix for
+   that is not more trees.
+
+   Every generator below asks through this, so one tier bumps the whole
+   world's silhouette and a low-end machine keeps exactly the counts it has
+   always had. Instanced geometry, so the extra triangles are paid once per
+   species rather than once per tree. */
+export const seg = (q, base) => Math.round(base * [1, 1.5, 2.2][q?.detail ?? 1]);
 
 /**
  * Make a mostly-horizontal mesh face upward, whatever order its indices came
@@ -201,6 +213,7 @@ export class GolfScene {
   setQuality(q) {
     const Q = QUALITY[q] || QUALITY.medium;
     const wasScenery = this.q?.scenery;
+    const wasDetail = this.q?.detail;
     this.quality = q;
     this.q = Q;
 
@@ -232,7 +245,11 @@ export class GolfScene {
       if (o.isInstancedMesh && o.userData.decor) o.castShadow = Q.shadows;
     });
     this.resize();
-    return wasScenery !== undefined && wasScenery !== Q.scenery;   // rebuild?
+    /* Rebuild when the world's geometry would come out different — which is
+       either how MANY things there are or how many sides they have. Detail
+       was the second half of that and had nowhere to be asked. */
+    return wasScenery !== undefined &&
+           (wasScenery !== Q.scenery || wasDetail !== Q.detail);
   }
 
   resize() {
@@ -785,7 +802,7 @@ export class GolfScene {
       const canopy = new THREE.IcosahedronGeometry(1, 0);
       canopy.scale(1, 1.15, 1);
       canopy.translate(0, 1.05, 0);
-      const stem = new THREE.CylinderGeometry(0.13, 0.2, 0.95, 5);
+      const stem = new THREE.CylinderGeometry(0.13, 0.2, 0.95, seg(this.q, 5));
       stem.translate(0, 0.47, 0);
       return mergeGeos([canopy, stem]);
     });
@@ -864,9 +881,25 @@ export class GolfScene {
     const dark = M('#2c3238');
     const accent = M('#3f8f52');
 
+    /* CHAMFERED, for the same reason the golfer is (see avatar.js): a hard
+       90-degree edge has one normal on each side and nothing in between, so
+       it takes the light in exactly two steps. Every hut, shelter, bench and
+       marker post on every hole was made of those, which is why they read as
+       placeholder boxes standing on a golf course however well lit they
+       were. A chamfer puts a third angled face on every edge to catch a
+       highlight along its length.
+
+       The bevel is a fraction of the SMALLEST dimension rather than a fixed
+       distance, so a 4.4m hut wall and a 0.1m sole plate both get a
+       proportional one instead of the plate being eaten by its own edge.
+
+       Cached per size, as before, and now per detail too — the low tier
+       keeps the plain box it always had. */
+    const D = this.q?.detail ?? 1;
     const box = (mat, w, h, d, x, y, z, ry = 0) => {
-      const m = new THREE.Mesh(cached(`pbox${w}_${h}_${d}`,
-        () => new THREE.BoxGeometry(w, h, d)), mat);
+      const b = D > 0 ? Math.min(w, h, d) * 0.13 : 0;
+      const m = new THREE.Mesh(cached(`pbox${w}_${h}_${d}@${D}`,
+        () => (b > 0.004 ? bevelBox(w, h, d, b) : new THREE.BoxGeometry(w, h, d))), mat);
       m.position.set(x, y, z); m.rotation.y = ry;
       m.castShadow = true; m.receiveShadow = true;
       return m;
@@ -1420,7 +1453,8 @@ export class GolfScene {
     }
 
     /* grass tufts: low cones, the cheapest possible "this is rough" signal */
-    const tuftGeo = cached('fol-tuft', () => new THREE.ConeGeometry(1, 1, 7));
+    const tuftGeo = cached('fol-tuft' + (this.q?.detail ?? 1),
+      () => new THREE.ConeGeometry(1, 1, seg(this.q, 7)));
     const tufts = spots(P.tuft.n, P.tuft.s, ['rough', 'deep', 'waste']);
     for (const d of tufts) d.hex = pick(P.tuft.c);
     put(tufts, tuftGeo, P.tuft.c[0], { sy: 1.6, tilt: 0.5, sink: 0.35 });
@@ -1490,7 +1524,7 @@ export class GolfScene {
     }
     const meshes = [];
     for (const [species, list] of bySpecies) {
-      const parts = normaliseCanopy(species, treeParts(species, bio));
+      const parts = normaliseCanopy(species, treeParts(species, bio, this.q?.detail ?? 1));
       for (const part of parts) {
         // Per-instance colour MULTIPLIES the material colour, so the material
         // has to be white or every tree comes out as its own colour squared —
@@ -1611,7 +1645,7 @@ export class GolfScene {
 
     // flagstick
     const stick = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.016, 0.016, 2.13, 8),
+      new THREE.CylinderGeometry(0.016, 0.016, 2.13, seg(this.q, 8)),
       new THREE.MeshLambertMaterial({ color: 0xf2f2ee })
     );
     stick.position.set(hole.pin.x, y + 1.065, hole.pin.z);
@@ -1647,7 +1681,7 @@ export class GolfScene {
     const grp = new THREE.Group();
     // low discs either side of the tee, set back so they frame the ball rather
     // than sit in the shot line
-    const geo = new THREE.CylinderGeometry(0.085, 0.10, 0.11, 10);
+    const geo = new THREE.CylinderGeometry(0.085, 0.10, 0.11, seg(this.q, 10));
     for (const [off, hex] of [[-2.0, 0xf0f2f0], [2.0, 0xe03b3b]]) {
       const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: hex }));
       const x = hole.tee.x + Math.cos(hole.tee.rot) * off - Math.sin(hole.tee.rot) * 0.5;
@@ -1996,7 +2030,7 @@ export class GolfScene {
       seen.add(p.pid);
       let b = this.balls.get(p.pid);
       if (!b) {
-        const geo = new THREE.SphereGeometry(BALL_RADIUS, 18, 14);
+        const geo = new THREE.SphereGeometry(BALL_RADIUS, seg(this.q, 18), seg(this.q, 14));
         const mat = makeBallMaterial(THREE, p.color);
         const mesh = new THREE.Mesh(geo, mat);
         mesh.castShadow = true;
@@ -2287,7 +2321,7 @@ export class GolfScene {
        twelve-sided mountain and a two-hundred-sided one are the same
        picture, and one of them is free. */
     const peak = (x, z, r, h, colour, sides = 7, tilt = 0) => {
-      const geo = new THREE.ConeGeometry(r, h, sides, 1);
+      const geo = new THREE.ConeGeometry(r, h, seg(this.q, sides), 1);
       const m = new THREE.Mesh(geo, mat(colour));
       m.position.set(x, baseY + h * 0.5 - h * 0.12, z);
       m.rotation.y = rnd() * Math.PI * 2;
@@ -2344,13 +2378,13 @@ export class GolfScene {
         }
       } else if (spec.kind === 'mesa') {
         // flat-topped: a cone with its point cut off is a butte
-        const geo = new THREE.CylinderGeometry(scale * 0.42, scale * 0.66, scale, 6, 1);
+        const geo = new THREE.CylinderGeometry(scale * 0.42, scale * 0.66, scale, seg(this.q, 6), 1);
         const m = new THREE.Mesh(geo, mat(colour));
         m.position.set(x, baseY + scale * 0.5, z);
         m.rotation.y = rnd() * Math.PI * 2;
         g.add(m);
       } else if (spec.kind === 'dune') {
-        const geo = new THREE.SphereGeometry(scale, 9, 5, 0, Math.PI * 2, 0, Math.PI * 0.5);
+        const geo = new THREE.SphereGeometry(scale, seg(this.q, 9), seg(this.q, 5), 0, Math.PI * 2, 0, Math.PI * 0.5);
         const m = new THREE.Mesh(geo, mat(colour));
         m.position.set(x, baseY - scale * 0.12, z);
         m.scale.set(1.6 + rnd() * 0.8, 0.34 + rnd() * 0.2, 1.2);
@@ -2386,9 +2420,9 @@ export class GolfScene {
        fix arriving by rounding. A biome with any trees at all gets some. */
     if (density > 0.01 && (this.q?.scenery ?? 1) >= 0.4) {
       const N = Math.round(340 * Math.min(1, density * 1.35));
-      const trunkGeo = new THREE.CylinderGeometry(0.9, 1.4, 6, 5);
+      const trunkGeo = new THREE.CylinderGeometry(0.9, 1.4, 6, seg(this.q, 5));
       trunkGeo.translate(0, 3, 0);
-      const canopyGeo = new THREE.ConeGeometry(1, 1, 6, 1);
+      const canopyGeo = new THREE.ConeGeometry(1, 1, seg(this.q, 6), 1);
       canopyGeo.translate(0, 0.5, 0);
 
       const P = bio.palette;
@@ -2470,7 +2504,7 @@ export class GolfScene {
     const scrubN = Math.round(260 * Math.min(1, (bio.treeDensity ?? 0.4) * 1.6));
     if (scrubN > 8 && (this.q?.scenery ?? 1) >= 0.4) {
       const P = bio.palette;
-      const bushGeo = new THREE.SphereGeometry(0.5, 7, 5);
+      const bushGeo = new THREE.SphereGeometry(0.5, seg(this.q, 7), seg(this.q, 5));
       const bushMat = new THREE.MeshLambertMaterial({ flatShading: true });
       bushMat.color.setRGB(1, 1, 1);
       const bush = new THREE.InstancedMesh(bushGeo, bushMat, scrubN * 2);
@@ -2742,6 +2776,78 @@ export class GolfScene {
 /* ========================================================================= */
 
 const _geoCache = new Map();
+/**
+ * A box with its twelve edges cut back — six inset faces, twelve edge
+ * strips and eight corner triangles.
+ *
+ * Same shape and the same reasoning as the avatar's chamfered box, in the
+ * other renderer: a hard edge takes the light in two steps and reads as a
+ * primitive. `b` is the cut in world units, so the caller decides
+ * proportionally and a thin sole plate is not eaten by its own bevel.
+ *
+ * 44 triangles against 12. Every prop on a hole together is a few hundred
+ * against the hole's own 143,000, and they are cached per size.
+ */
+function bevelBox(w, h, d, b) {
+  const x = w / 2, y = h / 2, z = d / 2;
+  const xi = x - b, yi = y - b, zi = z - b;
+  const pos = [], idx = [];
+  const V = (a, c, e) => { pos.push(a, c, e); return pos.length / 3 - 1; };
+  const quad = (a, c, e, f) => idx.push(a, c, e, a, e, f);
+
+  const corner = {};
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    corner[`${sx}${sy}${sz}`] = {
+      x: V(sx * x, sy * yi, sz * zi),
+      y: V(sx * xi, sy * y, sz * zi),
+      z: V(sx * xi, sy * yi, sz * z)
+    };
+  }
+  const C = (a, c, e) => corner[`${a}${c}${e}`];
+
+  for (const [axis, pts] of [
+    ['x', [[1,-1,-1],[1,-1,1],[1,1,1],[1,1,-1]]],
+    ['x', [[-1,-1,1],[-1,-1,-1],[-1,1,-1],[-1,1,1]]],
+    ['y', [[-1,1,1],[1,1,1],[1,1,-1],[-1,1,-1]]],
+    ['y', [[-1,-1,-1],[1,-1,-1],[1,-1,1],[-1,-1,1]]],
+    ['z', [[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]]],
+    ['z', [[1,-1,-1],[-1,-1,-1],[-1,1,-1],[1,1,-1]]]
+  ]) {
+    const [a, c, e, f] = pts.map(q => C(q[0], q[1], q[2])[axis]);
+    quad(a, c, e, f);
+  }
+
+  /* The edge strips and corner triangles are written with BOTH windings —
+     which octant an edge faces decides its outward side, and two triangles
+     is cheaper than working out which. */
+  const edges = [
+    ...[[1,1],[1,-1],[-1,-1],[-1,1]].map(([a, c]) => ['z', a, c]),
+    ...[[1,1],[1,-1],[-1,-1],[-1,1]].map(([a, c]) => ['x', a, c]),
+    ...[[1,1],[1,-1],[-1,-1],[-1,1]].map(([a, c]) => ['y', a, c])
+  ];
+  for (const [along, s1, s2] of edges) {
+    let a, c, e, f;
+    if (along === 'z') {
+      a = C(s1, s2, -1).x; c = C(s1, s2, -1).y; e = C(s1, s2, 1).y; f = C(s1, s2, 1).x;
+    } else if (along === 'x') {
+      a = C(-1, s1, s2).y; c = C(-1, s1, s2).z; e = C(1, s1, s2).z; f = C(1, s1, s2).y;
+    } else {
+      a = C(s2, -1, s1).z; c = C(s2, -1, s1).x; e = C(s2, 1, s1).x; f = C(s2, 1, s1).z;
+    }
+    quad(a, c, e, f); quad(f, e, c, a);
+  }
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const c = C(sx, sy, sz);
+    idx.push(c.x, c.y, c.z, c.z, c.y, c.x);
+  }
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 function cached(key, make) {
   let g = _geoCache.get(key);
   if (!g) { g = make(); g.userData.shared = true; _geoCache.set(key, g); }
@@ -2853,7 +2959,19 @@ export const BACKDROPS = {
               sea: '#2b5f7e' }
 };
 
-function treeParts(species, bio) {
+/* `d` is the quality tier's `detail` (see QUALITY). treeParts is module
+   level and has no scene to ask, so it is handed the number — and every
+   cache key below carries it, or a tier change would hand back the
+   geometry built for the previous one. */
+function treeParts(species, bio, d = 1) {
+  const S = base => Math.round(base * [1, 1.5, 2.2][d]);
+  /* Subdivision is not a segment count: each step QUADRUPLES an
+     icosahedron's triangles, so it gets one extra level at the top tier
+     only rather than riding the same multiplier the sides do. A canopy lobe
+     at subdivision 2 is 320 triangles against 80 — worth it once, on a
+     machine that asked for it, and ruinous at every tier. */
+  const SUB = lvl => lvl + (d >= 2 ? 1 : 0);
+  const K = key => key + '@' + d;
   const P = bio.palette;
   const trunkMat = () => new THREE.MeshLambertMaterial({ color: new THREE.Color(P.trunk) });
   const leafMat = (hex, opts = {}) => {
@@ -2873,12 +2991,12 @@ function treeParts(species, bio) {
         const y = 0.34 + t * 0.62;
         const col = lightenHex(dark, t * 0.22);
         return {
-          geo: cached('skirt' + i, () => new THREE.ConeGeometry(r, h, 9)),
+          geo: cached(K('skirt' + i), () => new THREE.ConeGeometry(r, h, S(9))),
           mat: leafMat(col), off: [0, y, 0], scale: [1, 1, 1], color: new THREE.Color(col)
         };
       };
       const parts = [
-        { geo: cached('conitrunk', () => new THREE.CylinderGeometry(0.022, 0.062, 1, 7)), mat: trunkMat(),
+        { geo: cached(K('conitrunk'), () => new THREE.CylinderGeometry(0.022, 0.062, 1, S(7))), mat: trunkMat(),
           off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) }
       ];
       for (let i = 0; i < 5; i++) parts.push(skirt(i, 5));
@@ -2896,7 +3014,7 @@ function treeParts(species, bio) {
            biomes.js) and the trunk has to read as slimmer than that, or a
            26 m tree ends up with a two-and-a-half-metre bole and looks like
            a terracotta pipe with a hat on. */
-        { geo: cached('cedtrunk', () => new THREE.CylinderGeometry(0.012, 0.026, 1, 7)), mat: trunkMat(),
+        { geo: cached(K('cedtrunk'), () => new THREE.CylinderGeometry(0.012, 0.026, 1, S(7))), mat: trunkMat(),
           off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) }
       ];
       for (let i = 0; i < 6; i++) {
@@ -2906,7 +3024,7 @@ function treeParts(species, bio) {
         const y = 0.26 + t * 0.70;
         const col = lightenHex(dark, t * 0.26);
         parts.push({
-          geo: cached('cedskirt' + i, () => new THREE.ConeGeometry(r, hh, 8)),
+          geo: cached(K('cedskirt' + i), () => new THREE.ConeGeometry(r, hh, S(8))),
           mat: leafMat(col), off: [0, y, 0], scale: [1, 1, 1], color: new THREE.Color(col)
         });
       }
@@ -2920,17 +3038,17 @@ function treeParts(species, bio) {
     case 'eucalypt': {
       const leaf = '#7d9464';                       // blue-green, not forest green
       return [
-        { geo: cached('euctrunk', () => new THREE.CylinderGeometry(0.026, 0.058, 1, 7)), mat: trunkMat(),
+        { geo: cached(K('euctrunk'), () => new THREE.CylinderGeometry(0.026, 0.058, 1, S(7))), mat: trunkMat(),
           off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
-        { geo: cached('eucbranch', () => { const g = new THREE.CylinderGeometry(0.012, 0.028, 0.30, 5); g.translate(0, 0.15, 0); g.rotateZ(0.62); return g; }),
+        { geo: cached(K('eucbranch'), () => { const g = new THREE.CylinderGeometry(0.012, 0.028, 0.30, S(5)); g.translate(0, 0.15, 0); g.rotateZ(0.62); return g; }),
           mat: trunkMat(), off: [0, 0.70, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
-        { geo: cached('eucbranch2', () => { const g = new THREE.CylinderGeometry(0.012, 0.026, 0.26, 5); g.translate(0, 0.13, 0); g.rotateZ(-0.7); return g; }),
+        { geo: cached(K('eucbranch2'), () => { const g = new THREE.CylinderGeometry(0.012, 0.026, 0.26, S(5)); g.translate(0, 0.13, 0); g.rotateZ(-0.7); return g; }),
           mat: trunkMat(), off: [0, 0.76, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
-        { geo: cached('euclobeA', () => new THREE.IcosahedronGeometry(0.26, 1)), mat: leafMat(leaf),
+        { geo: cached(K('euclobeA'), () => new THREE.IcosahedronGeometry(0.26, SUB(1))), mat: leafMat(leaf),
           off: [0, 0.90, 0], scale: [1.1, 0.62, 1.1], color: new THREE.Color(leaf) },
-        { geo: cached('euclobeB', () => new THREE.IcosahedronGeometry(0.17, 1)), mat: leafMat(lightenHex(leaf, 0.14)),
+        { geo: cached(K('euclobeB'), () => new THREE.IcosahedronGeometry(0.17, SUB(1))), mat: leafMat(lightenHex(leaf, 0.14)),
           off: [0.19, 0.83, 0.06], scale: [1, 0.66, 1], color: new THREE.Color(lightenHex(leaf, 0.14)) },
-        { geo: cached('euclobeC', () => new THREE.IcosahedronGeometry(0.15, 1)), mat: leafMat(darkenHex(leaf, 0.12)),
+        { geo: cached(K('euclobeC'), () => new THREE.IcosahedronGeometry(0.15, SUB(1))), mat: leafMat(darkenHex(leaf, 0.12)),
           off: [-0.17, 0.86, -0.08], scale: [1, 0.66, 1], color: new THREE.Color(darkenHex(leaf, 0.12)) }
       ];
     }
@@ -2938,9 +3056,9 @@ function treeParts(species, bio) {
     case 'palm': {
       const frond = '#4f9440';
       const parts = [
-        { geo: cached('palmtrunk', () => {
+        { geo: cached(K('palmtrunk'), () => {
             // a gently leaning trunk built from stacked segments
-            const g = new THREE.CylinderGeometry(0.026, 0.055, 1, 9, 6);
+            const g = new THREE.CylinderGeometry(0.026, 0.055, 1, S(9), 6);
             const pos = g.attributes.position;
             for (let i = 0; i < pos.count; i++) {
               const y = pos.getY(i) + 0.5;                    // 0..1 up the trunk
@@ -2954,7 +3072,7 @@ function treeParts(species, bio) {
         const a = (i / 8) * Math.PI * 2;
         const droop = -0.28 - (i % 3) * 0.16;
         parts.push({
-          geo: cached('frond', () => {
+          geo: cached(K('frond'), () => {
             // a tapered, drooping blade rather than a flat rectangle
             const g = new THREE.PlaneGeometry(0.68, 0.20, 8, 1);
             const pos = g.attributes.position;
@@ -2978,21 +3096,21 @@ function treeParts(species, bio) {
     case 'gorse': {
       const c = '#5d6f2e';
       return [
-        { geo: cached('bush', () => new THREE.IcosahedronGeometry(0.5, 1)), mat: leafMat(c),
+        { geo: cached(K('bush'), () => new THREE.IcosahedronGeometry(0.5, SUB(1))), mat: leafMat(c),
           off: [0, 0.40, 0], scale: [1.15, 0.78, 1.15], color: new THREE.Color(c) },
-        { geo: cached('bush2', () => new THREE.IcosahedronGeometry(0.34, 1)), mat: leafMat('#8a8b34'),
+        { geo: cached(K('bush2'), () => new THREE.IcosahedronGeometry(0.34, SUB(1))), mat: leafMat('#8a8b34'),
           off: [0.24, 0.52, 0.10], scale: [1, 0.8, 1], color: new THREE.Color('#8a8b34') },
-        { geo: cached('bush3', () => new THREE.IcosahedronGeometry(0.28, 1)), mat: leafMat(darkenHex(c, 0.16)),
+        { geo: cached(K('bush3'), () => new THREE.IcosahedronGeometry(0.28, SUB(1))), mat: leafMat(darkenHex(c, 0.16)),
           off: [-0.22, 0.44, -0.14], scale: [1, 0.82, 1], color: new THREE.Color(darkenHex(c, 0.16)) },
         // the gorse flower that makes a links course yellow in spring
-        { geo: cached('bushf', () => new THREE.IcosahedronGeometry(0.17, 0)), mat: leafMat('#d8c73c'),
+        { geo: cached(K('bushf'), () => new THREE.IcosahedronGeometry(0.17, SUB(0))), mat: leafMat('#d8c73c'),
           off: [0.05, 0.62, 0.16], scale: [1, 0.7, 1], color: new THREE.Color('#d8c73c') }
       ];
     }
     case 'saguaro': {
       const c = '#4b6b3d';
       const ribbed = (rt, rb, h, seg) => {
-        const g = new THREE.CylinderGeometry(rt, rb, h, seg);
+        const g = new THREE.CylinderGeometry(rt, rb, h, S(seg));
         const pos = g.attributes.position;                    // pinch alternate columns into ribs
         for (let i = 0; i < pos.count; i++) {
           const x = pos.getX(i), z = pos.getZ(i);
@@ -3005,32 +3123,32 @@ function treeParts(species, bio) {
       };
       const cap = (r) => new THREE.SphereGeometry(r, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
       return [
-        { geo: cached('sagbody', () => ribbed(0.085, 0.10, 1, 12)), mat: leafMat(c),
+        { geo: cached(K('sagbody'), () => ribbed(0.085, 0.10, 1, 12)), mat: leafMat(c),
           off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(c) },
-        { geo: cached('sagcap', () => cap(0.085)), mat: leafMat(c),
+        { geo: cached(K('sagcap'), () => cap(0.085)), mat: leafMat(c),
           off: [0, 1.0, 0], scale: [1, 1, 1], color: new THREE.Color(c) },
         // right arm: out, then up
-        { geo: cached('sagout', () => ribbed(0.055, 0.055, 0.20, 10)), mat: leafMat(c),
+        { geo: cached(K('sagout'), () => ribbed(0.055, 0.055, 0.20, 10)), mat: leafMat(c),
           off: [0.11, 0.62, 0], scale: [1, 1, 1], color: new THREE.Color(c), tiltZ: Math.PI / 2 },
-        { geo: cached('sagup', () => ribbed(0.05, 0.055, 0.34, 10)), mat: leafMat(c),
+        { geo: cached(K('sagup'), () => ribbed(0.05, 0.055, 0.34, 10)), mat: leafMat(c),
           off: [0.20, 0.79, 0], scale: [1, 1, 1], color: new THREE.Color(c) },
-        { geo: cached('sagupcap', () => cap(0.05)), mat: leafMat(c),
+        { geo: cached(K('sagupcap'), () => cap(0.05)), mat: leafMat(c),
           off: [0.20, 0.96, 0], scale: [1, 1, 1], color: new THREE.Color(c) },
         // left arm, a little lower
-        { geo: cached('sagout2', () => ribbed(0.05, 0.05, 0.17, 10)), mat: leafMat(c),
+        { geo: cached(K('sagout2'), () => ribbed(0.05, 0.05, 0.17, 10)), mat: leafMat(c),
           off: [-0.10, 0.50, 0.02], scale: [1, 1, 1], color: new THREE.Color(c), tiltZ: Math.PI / 2 },
-        { geo: cached('sagup2', () => ribbed(0.045, 0.05, 0.26, 10)), mat: leafMat(c),
+        { geo: cached(K('sagup2'), () => ribbed(0.045, 0.05, 0.26, 10)), mat: leafMat(c),
           off: [-0.18, 0.63, 0.02], scale: [1, 1, 1], color: new THREE.Color(c) },
-        { geo: cached('sagupcap2', () => cap(0.045)), mat: leafMat(c),
+        { geo: cached(K('sagupcap2'), () => cap(0.045)), mat: leafMat(c),
           off: [-0.18, 0.76, 0.02], scale: [1, 1, 1], color: new THREE.Color(c) }
       ];
     }
     case 'palo': {
       const c = '#7f9350';
       return [
-        { geo: cached('cyl8', () => new THREE.CylinderGeometry(0.035, 0.055, 1, 6)), mat: trunkMat(),
+        { geo: cached(K('cyl8'), () => new THREE.CylinderGeometry(0.035, 0.055, 1, S(6))), mat: trunkMat(),
           off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color('#8d9a5e') },
-        { geo: cached('ico1', () => new THREE.IcosahedronGeometry(0.42, 0)), mat: leafMat(c),
+        { geo: cached(K('ico1'), () => new THREE.IcosahedronGeometry(0.42, SUB(0))), mat: leafMat(c),
           off: [0, 0.92, 0], scale: [1, 0.62, 1], color: new THREE.Color(c) }
       ];
     }
@@ -3038,21 +3156,21 @@ function treeParts(species, bio) {
       const c = species === 'maple' ? '#5c8f3a' : '#43762f';
       // a tapered trunk, two lifted branches, and five overlapping canopy lobes
       return [
-        { geo: cached('btrunk', () => new THREE.CylinderGeometry(0.028, 0.075, 1, 8)), mat: trunkMat(),
+        { geo: cached(K('btrunk'), () => new THREE.CylinderGeometry(0.028, 0.075, 1, S(8))), mat: trunkMat(),
           off: [0, 0.5, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
-        { geo: cached('branchL', () => { const g = new THREE.CylinderGeometry(0.014, 0.032, 0.34, 5); g.translate(0, 0.17, 0); g.rotateZ(0.75); return g; }),
+        { geo: cached(K('branchL'), () => { const g = new THREE.CylinderGeometry(0.014, 0.032, 0.34, S(5)); g.translate(0, 0.17, 0); g.rotateZ(0.75); return g; }),
           mat: trunkMat(), off: [0, 0.50, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
-        { geo: cached('branchR', () => { const g = new THREE.CylinderGeometry(0.014, 0.032, 0.34, 5); g.translate(0, 0.17, 0); g.rotateZ(-0.8); return g; }),
+        { geo: cached(K('branchR'), () => { const g = new THREE.CylinderGeometry(0.014, 0.032, 0.34, S(5)); g.translate(0, 0.17, 0); g.rotateZ(-0.8); return g; }),
           mat: trunkMat(), off: [0, 0.46, 0], scale: [1, 1, 1], color: new THREE.Color(P.trunk) },
-        { geo: cached('lobeA', () => new THREE.IcosahedronGeometry(0.40, 1)), mat: leafMat(c),
+        { geo: cached(K('lobeA'), () => new THREE.IcosahedronGeometry(0.40, SUB(1))), mat: leafMat(c),
           off: [0, 0.82, 0], scale: [1.05, 0.88, 1.05], color: new THREE.Color(c) },
-        { geo: cached('lobeB', () => new THREE.IcosahedronGeometry(0.29, 1)), mat: leafMat(lightenHex(c, 0.16)),
+        { geo: cached(K('lobeB'), () => new THREE.IcosahedronGeometry(0.29, SUB(1))), mat: leafMat(lightenHex(c, 0.16)),
           off: [0.20, 0.96, 0.10], scale: [1, 0.88, 1], color: new THREE.Color(lightenHex(c, 0.16)) },
-        { geo: cached('lobeC', () => new THREE.IcosahedronGeometry(0.26, 1)), mat: leafMat(darkenHex(c, 0.14)),
+        { geo: cached(K('lobeC'), () => new THREE.IcosahedronGeometry(0.26, SUB(1))), mat: leafMat(darkenHex(c, 0.14)),
           off: [-0.22, 0.74, -0.10], scale: [1, 0.9, 1], color: new THREE.Color(darkenHex(c, 0.14)) },
-        { geo: cached('lobeD', () => new THREE.IcosahedronGeometry(0.23, 1)), mat: leafMat(lightenHex(c, 0.07)),
+        { geo: cached(K('lobeD'), () => new THREE.IcosahedronGeometry(0.23, SUB(1))), mat: leafMat(lightenHex(c, 0.07)),
           off: [0.06, 0.68, -0.24], scale: [1, 0.9, 1], color: new THREE.Color(lightenHex(c, 0.07)) },
-        { geo: cached('lobeE', () => new THREE.IcosahedronGeometry(0.21, 1)), mat: leafMat(darkenHex(c, 0.06)),
+        { geo: cached(K('lobeE'), () => new THREE.IcosahedronGeometry(0.21, SUB(1))), mat: leafMat(darkenHex(c, 0.06)),
           off: [-0.10, 1.00, -0.06], scale: [1, 0.9, 1], color: new THREE.Color(darkenHex(c, 0.06)) }
       ];
     }
