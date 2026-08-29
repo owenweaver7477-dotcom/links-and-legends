@@ -641,6 +641,151 @@ export function buildCaseLegendary() {
    centreline in the body so only the curve above the body's top edge is
    visible; that's the same "hide the geometry you don't want read" trick
    the crate's open-top rim uses, just in the other direction. */
+/* ═══════════════════════════════════════════════════ THE CLUB CASE ══════
+   A GOLF BAG, not a crate.
+
+   The Club Case and the Set Crate both fell through to buildCaseCommon —
+   the plain green supply crate — so the two things that hand out the only
+   equipment in the game with real stats looked identical to the one that
+   hands out decals. Three cases had their own model and the two that
+   matter most had none, which reads as the shop not knowing what it is
+   selling.
+
+   A bag is the right object for both, and it is the same object the reward
+   goes INTO, which is most of why it reads instantly. This one is a stand
+   bag: a tapered body, a hood, a strap, and three club heads showing above
+   the rim so what is inside is visible without opening it. */
+/* ONE PLACE THAT DECIDES WHICH CASE IS WHICH. It was written out twice as
+   a chain of ternaries, and both chains ended in `: buildCaseCommon()` —
+   so the Club Case and the Set Crate, added later, silently inherited the
+   plain green supply crate. A table cannot do that quietly: a key with no
+   entry falls back visibly and obviously, in one place. */
+export const CASE_MODEL = {
+  standard: buildCaseCommon,
+  vault:    buildCaseVault,
+  pro:      buildCaseLegendary,
+  club:     buildCaseClub,
+  set:      buildCaseSet
+};
+export const caseModel = key => (CASE_MODEL[key] || CASE_MODEL.standard)();
+
+export function buildCaseClub() {
+  const g = new THREE.Group();
+  const body = M('#1e3b6e', 0.35), panel = M('#2a4d8a', 0.25),
+        trim = M('#5ab8ff', 0.75), strap = M('#111820', 0.2),
+        metal = M('#c9ccd2', 0.9), grip = M('#15181c', 0.1);
+
+  /* The bag: a tapered barrel rather than a cylinder, because a stand bag
+     is narrow at the base and flares to the mouth, and that taper is what
+     stops it reading as a bin. */
+  g.add(rod(body, 0.34, 0.24, 1.05, 0, -0.10, 0));
+  g.add(rod(panel, 0.345, 0.29, 0.30, 0, 0.18, 0));        // the flared mouth
+  g.add(rod(trim, 0.352, 0.352, 0.05, 0, 0.36, 0));        // the rim itself
+
+  /* Dividers across the mouth. A bag with an open top and nothing in it is
+     a tube; the cross reads as the fourteen-way top a real one has. */
+  g.add(box(strap, 0.66, 0.02, 0.05, 0, 0.365, 0));
+  g.add(box(strap, 0.05, 0.02, 0.66, 0, 0.365, 0));
+
+  // a pocket down the side, with its own zip line
+  g.add(box(panel, 0.30, 0.34, 0.16, 0, -0.16, 0.24));
+  g.add(box(trim, 0.26, 0.02, 0.02, 0, 0.02, 0.325));
+
+  // the strap, over the shoulder of the bag and down the back
+  g.add(box(strap, 0.07, 0.62, 0.05, 0.20, 0.05, -0.20));
+  g.add(box(strap, 0.07, 0.05, 0.34, 0.20, -0.26, -0.10));
+
+  /* THREE CLUBS, standing out of it. The whole point of this case is that
+     what comes out is a club, so the model says so before the caption
+     does — a driver, an iron and a putter, the three shapes a player can
+     tell apart at a glance. */
+  const shaft = (x, z, len, headBuild) => {
+    g.add(rod(metal, 0.014, 0.018, len, x, 0.36 + len / 2, z));
+    g.add(rod(grip, 0.022, 0.019, 0.16, x, 0.36 + len - 0.06, z));
+    headBuild(x, 0.36 + 0.02, z);
+  };
+  // the driver: a big rounded crown above the rim
+  shaft(-0.13, -0.06, 0.62, (x, y, z) => g.add(blob(M('#22252a', 0.9), 0.15, 0.11, 0.13, x, y + 0.04, z)));
+  // an iron: a flat blade
+  shaft(0.10, -0.10, 0.54, (x, y, z) => g.add(box(M('#d7dbe0', 0.85), 0.13, 0.09, 0.02, x, y + 0.03, z)));
+  // the putter: a mallet, side on
+  shaft(0.01, 0.12, 0.48, (x, y, z) => g.add(box(M('#8a8f96', 0.7), 0.12, 0.04, 0.07, x, y + 0.02, z)));
+
+  // the stand legs a stand bag actually has, kicked out at the base
+  for (const sx of [-1, 1]) {
+    g.add(rod(metal, 0.012, 0.012, 0.46, sx * 0.14, -0.52, 0.10));
+  }
+  return g;
+}
+
+/* ═══════════════════════════════════════════════════ THE SET CRATE ══════
+   The same idea, told bigger: this one hands over ALL FOURTEEN clubs at
+   once, so it is a tour travel case — a hard flight coffin with the whole
+   bag inside it — rather than a stand bag with three heads showing.
+
+   Gold rather than blue, because it sits at the top of the case shelf and
+   costs more than fourteen Club Cases; the shelf should say which is which
+   before the price does. */
+export function buildCaseSet() {
+  const g = new THREE.Group();
+  const shell = M('#4a4034', 0.45), face = M('#5c5142', 0.35),
+        gold = M('#ffd94a', 0.95),
+        metal = M('#c9ccd2', 0.9), felt = M('#2a1f16', 0.1);
+
+  /* Tipped so you are looking DOWN INTO the tray. Rotating about +X leans
+     the opening toward the camera; leaning it away shows the underside of
+     the lid and hides the entire reason this case is open. */
+  g.rotation.x = 0.62;
+
+  /* THE CASE LIES OPEN, which is the whole design. A closed box the colour
+     of the background is a dark rectangle whatever is written on it — and
+     what is inside is the entire point of this one. So it is a lid hinged
+     back and a tray of clubs facing the camera. */
+  g.add(box(shell, 1.16, 0.16, 0.66, 0, -0.30, 0));           // the tray floor
+  g.add(box(shell, 1.16, 0.30, 0.07, 0, -0.10, 0.30));        // front wall
+  g.add(box(shell, 1.16, 0.30, 0.07, 0, -0.10, -0.30));       // back wall
+  g.add(box(shell, 0.07, 0.30, 0.66, -0.55, -0.10, 0));       // left wall
+  g.add(box(shell, 0.07, 0.30, 0.66, 0.46, -0.10, 0));        // right wall
+  g.add(box(felt, 1.02, 0.03, 0.56, 0, -0.20, 0));            // the lining
+
+  /* The lid, hinged back off the far edge and standing up behind — which
+     is also what stops the whole thing being a shallow tray. */
+  const lid = new THREE.Group();
+  lid.position.set(0, -0.10, -0.33);
+  lid.rotation.x = -1.16;
+  lid.add(box(face, 1.16, 0.06, 0.62, 0, 0, -0.31));
+  lid.add(box(shell, 1.16, 0.10, 0.07, 0, 0.02, -0.60));
+  lid.add(box(gold, 0.20, 0.03, 0.03, 0, 0.05, -0.58));       // a badge on the lid
+  for (const sx of [-1, 1]) lid.add(box(gold, 0.09, 0.09, 0.09, sx * 0.50, 0.02, -0.58));
+  g.add(lid);
+
+  // gold corner caps on the tray, the one place the top-tier colour lands
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    g.add(box(gold, 0.11, 0.11, 0.11, sx * 0.53, -0.22, sz * 0.29));
+  }
+  g.add(box(metal, 0.26, 0.05, 0.07, 0, -0.06, 0.335));       // the handle
+  g.add(box(gold, 0.16, 0.06, 0.05, 0, 0.07, 0.325));         // the catch
+
+  /* FOURTEEN clubs, laid in the tray. The number IS the product — a row of
+     fourteen says "a whole set" in a way three never can — so they are laid
+     across the case facing the camera rather than standing in it, and the
+     heads alternate shape down the row the way a real bag does: woods at
+     one end, irons through the middle, the putter at the other. */
+  const headM = M('#d7dbe0', 0.85), gripM = M('#15181c', 0.1);
+  for (let i = 0; i < 14; i++) {
+    const t = i / 13;
+    const x = -0.48 + t * 0.96;
+    const len = 0.44 - t * 0.10;                    // long at the driver end
+    g.add(rod(metal, 0.009, 0.011, len, x, -0.16, 0.02));
+    g.add(rod(gripM, 0.014, 0.012, 0.09, x, -0.16 + len / 2 - 0.03, 0.02));
+    const hy = -0.16 - len / 2;
+    if (i < 3) g.add(blob(M('#22252a', 0.9), 0.075, 0.055, 0.065, x, hy, 0.02));
+    else if (i > 12) g.add(box(M('#8a8f96', 0.7), 0.075, 0.026, 0.045, x, hy, 0.02));
+    else g.add(box(headM, 0.062, 0.048, 0.013, x, hy, 0.02));
+  }
+  return g;
+}
+
 export function buildCaseVault() {
   const g = new THREE.Group();
   const wood = M('#8a5a2e', 0.2), darkWood = M('#5c3a1a', 0.15),
@@ -713,7 +858,7 @@ export function showItem(canvas, what) {
   else if (what?.kind === 'caddie') obj = buildCaddie(what.hex);
   else if (what?.kind === 'cart') obj = buildCart(what.hex);
   else if (what?.kind === 'case') {
-    obj = what.key === 'pro' ? buildCaseLegendary() : what.key === 'vault' ? buildCaseVault() : buildCaseCommon();
+    obj = caseModel(what.key);
   }
   else obj = buildGeneric(what?.hex);
   r.stage.add(obj);
@@ -777,7 +922,7 @@ export function mountCaseOpener(canvas, kind) {
     c.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (!o.material.map) o.material.dispose(); } });
   }
 
-  const obj = kind === 'pro' ? buildCaseLegendary() : kind === 'vault' ? buildCaseVault() : buildCaseCommon();
+  const obj = caseModel(kind);
   r.stage.add(obj);
   r.current = null;
   r.onFrame = null;

@@ -99,3 +99,73 @@ test('every club in the bag builds without throwing', () => {
     assert.ok(S[c.key].w > 0 && S[c.key].len > 0, `${c.key} built as nothing`);
   }
 });
+
+/* ============================================================== the cases ===
+   Two of the five case types had no model of their own. The dispatch was
+   written out twice as a chain of ternaries and both chains ended in
+   `: buildCaseCommon()`, so the Club Case and the Set Crate — added later —
+   silently inherited the plain green supply crate. The two things that hand
+   out the only equipment in the game with real stats looked identical to the
+   one that hands out decals.
+   ------------------------------------------------------------------------ */
+import { CASE_MODEL, caseModel } from '../public/js/client/shopview.js';
+
+test('every case type has a model of its own', () => {
+  const keys = Object.keys(CASE_MODEL);
+  assert.ok(keys.length >= 5, `only ${keys.length} case models`);
+  const seen = new Map();
+  for (const k of keys) {
+    const fn = CASE_MODEL[k];
+    assert.equal(typeof fn, 'function', `"${k}" has no builder`);
+    assert.equal(seen.has(fn), false,
+      `"${k}" and "${seen.get(fn)}" are the same model — one of them is wearing ` +
+      "the other's box");
+    seen.set(fn, k);
+  }
+});
+
+test('every case shop card names a case that exists', async () => {
+  /* The shop's own list is the source of the keys, so a case added there
+     without a model would fall back to the supply crate exactly as the Club
+     Case did. */
+  const { readFileSync } = await import('node:fs');
+  const hud = readFileSync(new URL('../public/js/client/hud.js', import.meta.url), 'utf8');
+  const block = hud.match(/const cases = \[[\s\S]*?\n    \];/);
+  assert.ok(block, 'could not find the case shelf in hud.js');
+  const keys = [...block[0].matchAll(/\{ key: '([a-z]+)'/g)].map(m => m[1]);
+  assert.ok(keys.length >= 5, `found ${keys.length} case cards`);
+  for (const k of keys) {
+    assert.ok(Object.hasOwn(CASE_MODEL, k),
+      `the shop sells a "${k}" case with no model — it will silently show the supply crate`);
+  }
+});
+
+test('the two equipment cases are visibly not the supply crate', () => {
+  /* Shape assertions, the same kind this file already makes about clubs:
+     the point is not that a bag is 0.7 wide, it is that the three things on
+     the shelf are three different objects. */
+  const size = key => {
+    const g = caseModel(key);
+    g.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(g).getSize(new THREE.Vector3());
+    let tris = 0;
+    g.traverse(o => { if (o.isMesh && o.geometry.index) tris += o.geometry.index.count / 3; });
+    return { w: b.x, h: b.y, d: b.z, tris };
+  };
+  const crate = size('standard'), club = size('club'), set = size('set');
+
+  // a golf bag is TALL: taller than it is wide, unlike every crate here
+  assert.ok(club.h > club.w * 1.6,
+    `the Club Case is ${club.w.toFixed(2)} x ${club.h.toFixed(2)} — that is a box, not a bag`);
+  assert.ok(crate.h < crate.w, 'the supply crate stopped being wider than it is tall');
+
+  // and the Set Crate is the widest thing on the shelf: it holds fourteen
+  assert.ok(set.w > club.w * 1.5,
+    `the Set Crate (${set.w.toFixed(2)} wide) is not visibly bigger than the Club Case`);
+
+  for (const [name, s] of [['Club Case', club], ['Set Crate', set]]) {
+    assert.ok(s.tris > crate.tris * 0.5,
+      `${name} is ${s.tris} triangles against the supply crate's ${crate.tris} — ` +
+      'it cannot be carrying anything worth looking at');
+  }
+});
