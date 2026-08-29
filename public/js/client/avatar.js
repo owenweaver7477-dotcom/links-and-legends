@@ -127,6 +127,26 @@ let _box = null;
 const box = () => (_box || (_box = shared(chamferedBox())));
 /* The contact patch: small and dark, not big and soft. A soft circle the
    width of the figure is a fake shadow, and there is a real one now. */
+/* ══════════════════════════════════════════════════ WHERE THE HANDS ARE ══
+   THE GEOMETRY THAT MADE THIS IMPOSSIBLE. The club hung off the trail
+   SHOULDER, 0.355H below it. The shoulders are 0.262 either side of centre
+   and an arm reaches 0.30H — so that grip was 0.76 from the lead shoulder
+   against a 0.53 reach. No pose could put the lead hand on it, which is why
+   every golfer in this game has swung one-handed with the other arm keeping
+   time somewhere near the chest.
+
+   Two spheres of radius 0.53 centred 0.52 apart intersect in a lens, and
+   the lowest point of that lens is sqrt(0.53² - 0.262²) = 0.465 below the
+   shoulder line, ON THE CENTRELINE. That is the only place two hands on
+   this rig can meet. So the club hangs from there now — from a `hands`
+   group between the shoulders rather than off one of them — and both arms
+   are solved onto it.
+
+   GRIP_RISE is what the grip moved up by, and every shaft grows by exactly
+   that much below, so the head still meets the ball. */
+const GRIP_DROP = AVATAR_HEIGHT * 0.247;    // 0.44 — inside both arms' reach
+const GRIP_RISE = AVATAR_HEIGHT * 0.108;    // 0.355H - 0.247H, given back to the shaft
+
 const CONTACT_SCALE = 0.62;
 const CONTACT_OPACITY = 0.55;
 
@@ -203,6 +223,57 @@ const shadeHex = (hex, amount) => {
   return '#' + c.getHexString();
 };
 
+/* ─────────────────────────────────────────────────── two-bone arm IK ──
+   Scratch objects, module level: this runs on every avatar on every frame
+   and allocating four vectors and two quaternions per call is the kind of
+   thing that shows up as garbage-collection stutter with eight golfers on
+   screen.  */
+const _ikTarget = new THREE.Vector3();
+const _ikDir = new THREE.Vector3();
+const _ikDown = new THREE.Vector3(0, -1, 0);
+const _ikQ = new THREE.Quaternion();
+const _ikBend = new THREE.Quaternion();
+const _ikX = new THREE.Vector3(1, 0, 0);
+
+/**
+ * Point a two-segment limb so its far end lands on `target`, given in the
+ * limb's own parent space.
+ *
+ * WHY THIS EXISTS. Both arms were driven by one number — `P.armLx =
+ * P.armRx` — so they swept two parallel arcs 52 cm apart for the whole
+ * swing. The club hangs off the right arm, which meant the LEFT hand spent
+ * every swing about half a metre from the grip it is supposed to be
+ * holding. On a rig made of boxes that reads as a golfer swinging
+ * one-handed with the other arm keeping time.
+ *
+ * The maths is the standard two-link solve, and it is short because the two
+ * segments are the same length. With links of a = L/2 and an elbow folded
+ * by β, the hand sits at distance 2a·cos(β/2) from the shoulder and at an
+ * angle of β/2 off the upper arm — so aim the shoulder at the target, back
+ * it off by half the fold, and fold the elbow by the rest.
+ *
+ * @param limb   the shoulder group (must expose `.joint`, from limb())
+ * @param len    the limb's full reach
+ * @param target the point to reach, in the limb's PARENT space
+ */
+function reachTo(limb, len, target) {
+  _ikDir.copy(target).sub(limb.position);
+  const d = _ikDir.length();
+  if (d < 1e-4) return;
+  _ikDir.divideScalar(d);
+
+  // how far the elbow has to fold to bring the hand in to `d`
+  const bend = 2 * Math.acos(Math.min(1, Math.max(0, d / len)));
+
+  _ikQ.setFromUnitVectors(_ikDown, _ikDir);          // aim the whole arm
+  _ikBend.setFromAxisAngle(_ikX, -bend / 2);         // then back off half the fold
+  limb.quaternion.copy(_ikQ).multiply(_ikBend);
+  limb.joint.rotation.set(bend, 0, 0);
+  /* The elbow clamp in _apply is `Math.min(0, …)`, which folds the arm the
+     other way — this one is solved, not authored, so it writes the joint
+     directly and _apply leaves a solved arm alone. */
+}
+
 export class Avatar {
   /**
    * @param {object} look  {cap, shirt, skin, trousers} hex strings
@@ -238,9 +309,37 @@ export class Avatar {
     this.build = B;
     const W = 0.42, D = 0.24;                    // the base rig's torso
     this.body = new THREE.Group();
+
+    /* ═══════════════════════════════════ THERE IS A PELVIS NOW ══════════
+       The rig had one group holding the hip box, the waist, the chest, the
+       head and all four limbs. Turning the shoulders therefore turned the
+       LEGS too, so the code faked separation by counter-rotating both legs
+       by the same angle — which holds the feet still but leaves the hip box
+       itself rotating with the chest. A golfer's pelvis and shoulders were
+       welded together, and every swing, slap and barge in the game was one
+       rigid twist with the feet screwed on backwards to hide it.
+
+       Three groups now, nested the way a body is:
+
+         body   the figure — facing, lean, and the hop that lifts it
+          └ hips    the pelvis. The legs hang off THIS, so they follow it.
+             └ torso   waist, chest, head, arms — turns AGAINST the pelvis
+
+       `P.yaw` drives the hips and `P.twist` the torso, which composes to
+       exactly the shoulder angle the old code produced and gives the legs
+       exactly the angle the counter-rotation gave them. Every clip written
+       against the old rig plays identically. What changes is the pelvis,
+       which now turns with the legs instead of with the chest — and the
+       separation between hips and shoulders becomes a real thing the swing
+       can open up rather than a number with nowhere to go. */
+    this.hips = new THREE.Group();
+    this.torso = new THREE.Group();
+    this.body.add(this.hips);
+    this.hips.add(this.torso);
+
     // hips -> waist -> chest, spanning the same H*0.47 .. H*0.79 as before
-    this.body.add(part(this.mats.trousers, W * B.hips, H * 0.075, D * B.depth, 0, H * 0.5075, 0));
-    this.body.add(part(this.mats.shirt, W * B.waist, H * 0.105, D * 0.95 * B.depth, 0, H * 0.5975, 0));
+    this.hips.add(part(this.mats.trousers, W * B.hips, H * 0.075, D * B.depth, 0, H * 0.5075, 0));
+    this.torso.add(part(this.mats.shirt, W * B.waist, H * 0.105, D * 0.95 * B.depth, 0, H * 0.5975, 0));
     // kept, because breathing scales it and nothing else in the rig moves
     // when a golfer is standing still
     this.chest = part(this.mats.shirt, W * B.chest, H * 0.140, D * B.depth, 0, H * 0.7200, 0);
@@ -249,13 +348,13 @@ export class Avatar {
        replaced a 0.42 x 0.25 x 0.24 chest with a one-metre cube — a golfer
        with a slab for a torso, which is exactly what appeared on screen. */
     this._chestBase = this.chest.scale.clone();
-    this.body.add(this.chest);
+    this.torso.add(this.chest);
     if (B.bust > 0) {
       // sits proud of the chest front, so it reads in silhouette rather than
       // only head-on; two boxes rather than one so it is not a shelf
       const bw = W * B.chest * 0.34, by = H * 0.700, bz = D * B.depth * 0.5;
-      this.body.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, bw * 0.52, by, bz));
-      this.body.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, -bw * 0.52, by, bz));
+      this.torso.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, bw * 0.52, by, bz));
+      this.torso.add(part(this.mats.shirt, bw, H * B.bust, D * 0.34 * B.depth, -bw * 0.52, by, bz));
     }
 
     // The head and hat hang off pivots at the neck so a celebration can nod,
@@ -283,7 +382,7 @@ export class Avatar {
     this.accessory = new THREE.Group();
     this.head.add(this.accessory);
     this.buildHeadwear(look);
-    this.body.add(this.head);
+    this.torso.add(this.head);
 
     /* --- limbs, pivoted at the shoulder / hip so they can swing --------- */
     /* A limb is TWO segments with a joint between them.
@@ -339,6 +438,7 @@ export class Avatar {
     this.armL = limb(this.mats.shirt, aw, H * 0.30, 0.262, H * 0.775, this.mats.skin, H * 0.06);
     this.armR = limb(this.mats.shirt, aw, H * 0.30, -0.262, H * 0.775, this.mats.skin, H * 0.06);
     this.elbowL = this.armL.joint; this.elbowR = this.armR.joint;
+    this._armLen = H * 0.30;     // what the IK solver reaches with
     /* The hand block at the end of each arm — built by the same limb()
        helper the legs use, which is why it exists at all, but left
        unrotated until now: the club is parented straight to armR (see
@@ -356,12 +456,15 @@ export class Avatar {
     this.ankleL = this.legL.end; this.ankleR = this.legR.end;
     // the rest position of the knee group, which the foot IK offsets FROM
     this._legHalf = ll / 2;
-    this.body.add(this.armL, this.armR, this.legL, this.legR);
+    /* Arms on the torso, legs on the pelvis. That one line is the whole
+       difference between a body that turns and a body that twists. */
+    this.torso.add(this.armL, this.armR);
+    this.hips.add(this.legL, this.legR);
 
     /* Worn accessories that hang off the body rather than the head.  Built
        after the limbs, because the glove goes ON one of them. */
     this.worn = new THREE.Group();
-    this.body.add(this.worn);
+    this.torso.add(this.worn);
     this.buildWorn(look);
 
     /* --- the club: grip, shaft and an interchangeable head ---------------
@@ -374,7 +477,7 @@ export class Avatar {
     this.mats.chrome = M('#c9ccd2');
     this.mats.headDark = M('#3a3d42');
     this.club = new THREE.Group();
-    this.club.position.set(0, -(H * 0.355), 0.02);      // the right hand
+    this.club.position.set(0, -GRIP_DROP, 0.02);       // in both hands
     this.club.rotation.x = 0.25;                        // shaft leans toward the ball
     this.clubGrip = part(this.mats.shoe, 0.034, 0.16, 0.034, 0, -0.06, 0);
     this.clubShaft = part(this.mats.chrome, 0.020, 0.80, 0.020, 0, -0.54, 0);
@@ -401,7 +504,14 @@ export class Avatar {
     this.club.add(this.clubGrip, this.clubShaft, this.clubHead, this.clubDecal);
     this.setDecal(clubDecalFor(look, 'I7'));   // setClub below refines this per club
     this.club.visible = false;
-    this.armR.add(this.club);
+    /* THE HANDS, between the shoulders — see GRIP_DROP. A group of its own
+       rather than a parent-swap onto the torso, because the hands SWING:
+       this rotates with the arms through the arc, and the club rides it, so
+       the grip is always at a point both arms can be solved onto. */
+    this.hands = new THREE.Group();
+    this.hands.position.set(0, H * 0.775, 0);        // the shoulder line, centred
+    this.torso.add(this.hands);
+    this.hands.add(this.club);
     this.clubKey = null;
     this.clubSetId = null;
     this.setClub('I7', STARTER_SET);
@@ -671,17 +781,17 @@ export class Avatar {
     /* ---- neckwear ------------------------------------------------------- */
     const neckY = H * 0.800;
     if (look.neck === 'collar') {
-      this.body.add(part(this.mats.shirt, 0.250, H * 0.022, 0.190, 0, neckY, 0));
+      this.torso.add(part(this.mats.shirt, 0.250, H * 0.022, 0.190, 0, neckY, 0));
     } else if (look.neck === 'scarf') {
       const nm = mine(look.shirt2 || '#7d2f42');
-      this.body.add(part(nm, 0.238, H * 0.030, 0.200, 0, neckY, 0));
-      this.body.add(part(nm, 0.070, H * 0.090, 0.036, 0.060, neckY - H * 0.055, 0.098));
+      this.torso.add(part(nm, 0.238, H * 0.030, 0.200, 0, neckY, 0));
+      this.torso.add(part(nm, 0.070, H * 0.090, 0.036, 0.060, neckY - H * 0.055, 0.098));
     } else if (look.neck === 'buff') {
-      this.body.add(part(mine(look.shirt2 || '#3a4048'), 0.236, H * 0.060, 0.206, 0, neckY + H * 0.010, 0));
+      this.torso.add(part(mine(look.shirt2 || '#3a4048'), 0.236, H * 0.060, 0.206, 0, neckY + H * 0.010, 0));
     } else if (look.neck === 'chain') {
       const cm = mine('#e8c15a');
-      this.body.add(part(cm, 0.150, H * 0.010, 0.014, 0, neckY - H * 0.012, 0.106));
-      this.body.add(part(cm, 0.030, H * 0.028, 0.018, 0, neckY - H * 0.035, 0.108));
+      this.torso.add(part(cm, 0.150, H * 0.010, 0.014, 0, neckY - H * 0.012, 0.106));
+      this.torso.add(part(cm, 0.030, H * 0.028, 0.018, 0, neckY - H * 0.035, 0.108));
     }
 
     /* ---- the trouser cut. Shorts and plus fours change where the leg
@@ -903,8 +1013,11 @@ export class Avatar {
     }
 
     // shaft length: drivers are long, wedges short, the putter shortest
-    const len = c.putter ? 0.62 : c.type === 'wood' ? 0.92 : c.type === 'hybrid' ? 0.84
-      : 0.82 - (c.loft - 18) * 0.0032;
+    /* GRIP_RISE: the club's grip moved UP to the hand (see the constructor),
+       so every shaft is longer by exactly that much and the head lands
+       precisely where it always did. One constant, three uses, no drift. */
+    const len = (c.putter ? 0.62 : c.type === 'wood' ? 0.92 : c.type === 'hybrid' ? 0.84
+      : 0.82 - (c.loft - 18) * 0.0032) + GRIP_RISE;
     this.clubShaft.scale.y = len;
     this.clubShaft.position.y = -0.14 - len / 2;
     this.clubHead.position.y = -0.14 - len;
@@ -1136,8 +1249,24 @@ export class Avatar {
       const phiArm = phi - (phi > -0.05 ? lag : 0);
       const bA = Math.max(0, -phiArm), fA = Math.max(0, phiArm);
 
-      // hips and shoulders: the turn away is modest, the turn through is full
-      P.yaw = -0.15 - 0.78 * b + 1.35 * f;
+      /* HIPS AND SHOULDERS ARE TWO CURVES NOW, because there is a pelvis to
+         hang the difference off (see the rig). A golfer at the top has the
+         shoulders round about ninety degrees and the hips about forty-five;
+         the difference IS the coil, and until the pelvis existed the rig
+         could only express it as nine degrees of `twist` bolted onto one
+         rigid turn.
+
+         And the pelvis LEADS coming down. That is the single most
+         recognisable thing about a real swing — the hips open toward the
+         target while the shoulders are still closed — and it is the thing
+         one rotation cannot show at all. The exponents are what do it:
+         the hips open on a curve that rises fast and the shoulders on one
+         that rises late, so the separation flips sign through the
+         downswing and both land square at the finish. */
+      const shoulderTurn = -0.15 - 1.30 * b + 1.45 * Math.pow(f, 1.30);
+      const hipTurn      = -0.15 - 0.62 * b + 1.32 * Math.pow(f, 0.70);
+      P.yaw = hipTurn;
+      P.twist = (P.twist || 0) + (shoulderTurn - hipTurn);
       // arms: lift going back, sweep low through impact, wrap high to finish
       const armBack = -0.60 - 1.72 * bA;
       const armThru = -0.60 + fA * (fA < 0.4 ? 2.2 : 2.2 + (fA - 0.4) * 1.4);
@@ -1162,6 +1291,12 @@ export class Avatar {
          owning the TIMING and this only shapes what happens at each beat. */
       this._swinging = true;
       this._swingLay = { f: bA > 0 ? bA : fA, back: bA > 0 };
+      /* THE HANDS RIDE THE ARMS. They used to be the trail shoulder itself,
+         so the club swung on a 0.63 m radius about one shoulder rather than
+         on the arms' own arc from between them. This is the arc, and both
+         arms are solved onto its end (see _gripHands). */
+      this.hands.rotation.x = P.armLx;
+      this.hands.rotation.z = (P.armLz + P.armRz) * 0.5;
       // wrists: hinge going back, release through, rehinge over the shoulder
       this.club.rotation.x = 0.25 - 1.15 * b + wristLag
         + (f > 0.55 ? (f - 0.55) * 1.6 : f * 0.5);
@@ -1171,6 +1306,7 @@ export class Avatar {
       if (g.yawLock != null) this._yaw = g.yawLock;
     } else {
       this.club.rotation.x = 0.25;
+      this.hands.rotation.set(P.armRx || -0.15, 0, 0);
       this.wristL.rotation.x = this.wristR.rotation.x = 0.25;
     }
 
@@ -1217,6 +1353,11 @@ export class Avatar {
     }
 
     this._apply(P, L);
+    /* THE LEAD HAND GOES ONTO THE GRIP, after the pose rather than as part
+       of it: the arm has to be solved against where the trail hand actually
+       ENDED UP, and that is not known until the whole pose is applied.
+       Only while swinging — a walking golfer's arms swing free. */
+    if (this._swinging) this._gripHands();
   }
 
   /** The terrain to stand on. Set once per hole by the scene. */
@@ -1243,21 +1384,28 @@ export class Avatar {
     this.armL.rotation.y = P.armLy;
     this.armR.rotation.y = P.armRy;
     this.body.position.y = P.bodyY + L.bodyY;      // the hop lifts the body, not the root,
-    this.body.rotation.x = P.bodyRx + L.bodyRx;     // so the blob stays on the ground
-    this.body.rotation.z = P.bodyRz + L.bodyRz;
-    /* TWIST vs YAW.
-       The arms and the legs are both children of `body`, so turning body.y
-       turns the whole figure — a pivot on the spot, which is all the rig
-       could ever do. Counter-rotating the legs by the same angle holds the
-       feet where they are and lets the shoulders turn against the hips,
-       which is what every throw, swing and slap is actually made of. */
-    this.body.rotation.y = this._yaw + P.yaw + P.twist + L.twist;
-    if (P.twist || L.twist) {
-      this.legL.rotation.y = -(P.twist + L.twist);
-      this.legR.rotation.y = -(P.twist + L.twist);
-    } else if (this.legL.rotation.y) {
-      this.legL.rotation.y = 0; this.legR.rotation.y = 0;
-    }
+                                                   // so the contact patch stays on the ground
+    /* The SPINE lean, on the torso rather than on the whole figure. Tilting
+       `body` tilted the legs with it, so a golfer bent over the ball had
+       both feet pivoting off the turf — the lean was a figure toppling
+       rather than a spine bending. The pelvis takes a third of it, which is
+       what actually happens: you hinge mostly at the hips, and a little at
+       the pelvis itself. */
+    this.torso.rotation.x = (P.bodyRx + L.bodyRx) * 0.7;
+    this.torso.rotation.z = (P.bodyRz + L.bodyRz) * 0.7;
+    this.hips.rotation.x = (P.bodyRx + L.bodyRx) * 0.3;
+    this.hips.rotation.z = (P.bodyRz + L.bodyRz) * 0.3;
+    /* TWIST vs YAW, through a real pelvis.
+       `yaw` turns the HIPS and `twist` turns the TORSO against them, which
+       composes to the same shoulder angle the rig produced before and gives
+       the legs the same angle the old leg counter-rotation gave them — so
+       every clip plays identically. The difference is the hip box, which
+       used to rotate with the chest and now rotates with the legs, where a
+       pelvis belongs. That is what every throw, swing and slap is actually
+       made of. */
+    this.body.rotation.y = this._yaw;
+    this.hips.rotation.y = P.yaw;
+    this.torso.rotation.y = P.twist + L.twist;
     /* Knees and elbows. Clamped to one direction only, because a knee that
        bends forward is the single most unsettling thing a character rig can
        do and a clip written before these existed has no idea it must not. */
@@ -1288,6 +1436,47 @@ export class Avatar {
     }
   }
 
+  /**
+   * Put the lead hand on the grip.
+   *
+   * Both arms were driven by one number (`P.armLx = P.armRx`), so they swept
+   * two parallel arcs 52 cm apart for the whole swing — and the club hangs
+   * off the trail arm, so the lead hand spent every swing about half a metre
+   * from the grip it is supposed to be holding. On a rig made of boxes that
+   * reads as a golfer swinging one-handed with the other arm keeping time.
+   *
+   * Solved rather than authored, because the answer depends on where the
+   * trail hand ended up, which depends on the whole pose.
+   */
+  _gripHands() {
+    const armL = this.armL, armR = this.armR, club = this.club;
+    if (!club || !armL || !armR) return;
+
+    /* THE GRIP, in the torso's space — the arms' shared parent, and
+       therefore the space the solver wants. The club hangs off the trail
+       shoulder, so where its grip actually IS depends on how that arm is
+       posed; asking the club rather than assuming a point is what keeps
+       this correct through the whole arc.
+
+       updateMatrixWorld is deliberately not called: the renderer does it
+       once per frame for the entire scene, and forcing it per avatar would
+       be hundreds of matrix updates to save one frame of latency on a hand.
+       Composing the two local matrices instead is exact and costs nothing. */
+    const hands = this.hands;
+    club.updateMatrix(); hands.updateMatrix();
+    _ikTarget.set(0, 0, 0)
+      .applyMatrix4(club.matrix)      // grip origin -> hands space
+      .applyMatrix4(hands.matrix);    // -> torso space
+
+    /* BOTH arms. This is only possible because the club hangs off `hands`
+       rather than off one of them — solving an arm that carries its own
+       target moves the target, and the two chase each other forever. With
+       the grip on the centreline both solve cleanly onto the same point,
+       which is what two hands on one club is. */
+    reachTo(armL, this._armLen, _ikTarget);
+    reachTo(armR, this._armLen, _ikTarget);
+  }
+
   /** Static seat pose: knees up, hands forward on the wheel or the rail. */
   _applySeated() {
     const P = blankPose(this._pose);
@@ -1315,17 +1504,22 @@ export class Avatar {
     this.swingAmp = 0;
   }
 
-  /** Face the avatar toward a point, easing rather than snapping. */
+  /** Face the avatar toward a point, easing rather than snapping.
+   *
+   *  Through `_yaw`, which is where facing actually lives: `_apply` writes
+   *  body.rotation.y from it on every frame, so anything that set the
+   *  rotation directly was overwritten before it could be seen. */
   faceToward(x, z, dt, rate = 9) {
     const want = Math.atan2(x - this.root.position.x, z - this.root.position.z);
-    let d = want - this.body.rotation.y;
+    let d = want - this._yaw;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
-    this.body.rotation.y += d * Math.min(1, dt * rate);
+    this._yaw += d * Math.min(1, dt * rate);
+    this.body.rotation.y = this._yaw;
   }
 
-  get heading() { return this.body.rotation.y; }
-  set heading(v) { this.body.rotation.y = v; }
+  get heading() { return this._yaw; }
+  set heading(v) { this._yaw = v; this.body.rotation.y = v; }
 
   setVisible(v) { this.root.visible = v; }
 

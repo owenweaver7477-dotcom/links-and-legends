@@ -1,0 +1,146 @@
+/* =========================================================================
+   rigging.mjs — the skeleton, and the two things that were geometrically
+   impossible before it changed
+   -------------------------------------------------------------------------
+   avatar.js needs a live document to instantiate, which Node has none of,
+   so this reads the source the way test/clubdecal.mjs already does — and
+   re-derives the geometry, which is the part that actually matters here.
+
+   TWO CLAIMS.
+
+   There is a PELVIS. The rig had one group holding the hip box, the chest,
+   the head and all four limbs, so turning the shoulders turned the legs and
+   the code faked separation by counter-rotating both legs — which holds the
+   feet still and leaves the hip box rotating with the chest. A golfer's
+   pelvis and shoulders were welded together.
+
+   And the HANDS CAN REACH THE CLUB. They could not: the club hung 0.355H
+   below the trail shoulder, the shoulders sit 0.262 either side of centre,
+   and an arm reaches 0.30H — so the grip was 0.76 from the lead shoulder
+   against a 0.53 reach. No pose could fix that, which is why every golfer
+   swung one-handed with the other arm keeping time near the chest.
+   ========================================================================= */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { AVATAR_HEIGHT } from '../public/js/shared/avatars.js';
+
+const SRC = readFileSync(new URL('../public/js/client/avatar.js', import.meta.url), 'utf8');
+const num = (re, what) => {
+  const m = SRC.match(re);
+  assert.ok(m, `could not find ${what} in avatar.js`);
+  return Number(m[1]);
+};
+
+/* The three numbers the whole arm/club geometry rests on. */
+const H = AVATAR_HEIGHT;
+const SHOULDER_X = num(/this\.armL = limb\([^,]+,[^,]+,[^,]+,\s*([\d.]+),/, 'the shoulder offset');
+const ARM = H * num(/this\._armLen = H \* ([\d.]+);/, 'the arm length');
+const GRIP_DROP = H * num(/const GRIP_DROP = AVATAR_HEIGHT \* ([\d.]+);/, 'GRIP_DROP');
+const GRIP_RISE = H * num(/const GRIP_RISE = AVATAR_HEIGHT \* ([\d.]+);/, 'GRIP_RISE');
+
+test('the rig has a pelvis, and the legs hang off it', () => {
+  assert.ok(/this\.hips = new THREE\.Group\(\)/.test(SRC), 'no pelvis group');
+  assert.ok(/this\.torso = new THREE\.Group\(\)/.test(SRC), 'no torso group');
+  assert.ok(/this\.body\.add\(this\.hips\)/.test(SRC), 'the pelvis is not on the body');
+  assert.ok(/this\.hips\.add\(this\.torso\)/.test(SRC), 'the torso does not hang off the pelvis');
+  assert.ok(/this\.hips\.add\(this\.legL, this\.legR\)/.test(SRC),
+    'the legs are not on the pelvis — turning the shoulders will turn them');
+  assert.ok(/this\.torso\.add\(this\.armL, this\.armR\)/.test(SRC),
+    'the arms are not on the torso, so they cannot turn against the hips');
+});
+
+test('the leg counter-rotation hack is gone', () => {
+  /* It held the feet still while the hip box rotated with the chest. With a
+     real pelvis the legs simply follow it and there is nothing to cancel. */
+  assert.equal(/legL\.rotation\.y = -\(/.test(SRC), false,
+    'the legs are still being counter-rotated to fake hip separation');
+  assert.ok(/this\.hips\.rotation\.y = P\.yaw/.test(SRC), 'yaw does not drive the pelvis');
+  assert.ok(/this\.torso\.rotation\.y = P\.twist/.test(SRC), 'twist does not drive the torso');
+});
+
+test('the spine leans, rather than the whole figure toppling', () => {
+  /* Tilting `body` tilted the legs with it, so a golfer bent over the ball
+     had both feet pivoting off the turf. */
+  assert.ok(/this\.torso\.rotation\.x = \(P\.bodyRx/.test(SRC), 'the lean is not on the torso');
+  assert.ok(/this\.hips\.rotation\.x = \(P\.bodyRx/.test(SRC), 'the pelvis takes none of the lean');
+  // and the two shares add up to exactly the lean that was authored
+  const t = num(/this\.torso\.rotation\.x = \(P\.bodyRx \+ L\.bodyRx\) \* ([\d.]+)/, 'the torso share');
+  const h = num(/this\.hips\.rotation\.x = \(P\.bodyRx \+ L\.bodyRx\) \* ([\d.]+)/, 'the pelvis share');
+  assert.ok(Math.abs(t + h - 1) < 1e-9,
+    `the lean sums to ${t + h} rather than 1 — every clip's spine angle just changed`);
+});
+
+test('BOTH hands can physically reach the grip', () => {
+  /* The geometry, re-derived rather than asserted from the source. Two
+     spheres of radius ARM centred 2*SHOULDER_X apart intersect in a lens
+     whose lowest point on the centreline is sqrt(ARM² - SHOULDER_X²) below
+     the shoulder line. A grip below that is unreachable by BOTH arms, and a
+     grip off the centreline is unreachable by the far one. */
+  const maxDrop = Math.sqrt(ARM * ARM - SHOULDER_X * SHOULDER_X);
+  assert.ok(GRIP_DROP < maxDrop,
+    `the grip hangs ${GRIP_DROP.toFixed(3)} below the shoulders and the arms can only ` +
+    `reach ${maxDrop.toFixed(3)} on the centreline — no pose can put a hand on it`);
+  // reachable, but not so close that the arms are folded up at the chest
+  assert.ok(GRIP_DROP > maxDrop * 0.8,
+    'the grip is so high the arms would be bent double holding it');
+
+  const reach = Math.hypot(SHOULDER_X, GRIP_DROP);
+  assert.ok(reach <= ARM,
+    `each hand is ${reach.toFixed(3)} from its shoulder against a ${ARM.toFixed(3)} reach`);
+});
+
+test('the club hangs between the shoulders, not off one of them', () => {
+  assert.ok(/this\.hands = new THREE\.Group\(\)/.test(SRC), 'no hands group');
+  assert.ok(/this\.hands\.add\(this\.club\)/.test(SRC), 'the club is not in the hands');
+  assert.equal(/this\.armR\.add\(this\.club\)/.test(SRC), false,
+    'the club still hangs off the trail shoulder — the lead hand can never reach it, ' +
+    'and solving the trail arm would move the target it is aiming at');
+  assert.ok(/this\.club\.position\.set\(0, -GRIP_DROP/.test(SRC),
+    'the club does not hang at GRIP_DROP');
+});
+
+test('every shaft is lengthened by exactly what the grip rose', () => {
+  /* The grip moved up from 0.355H to GRIP_DROP. If the shaft did not gain
+     that back, every club in the game would stop reaching the ball. */
+  const OLD_DROP = H * 0.355;
+  assert.ok(Math.abs((OLD_DROP - GRIP_DROP) - GRIP_RISE) < 0.02,
+    `the grip rose ${(OLD_DROP - GRIP_DROP).toFixed(3)} and the shaft gained ` +
+    `${GRIP_RISE.toFixed(3)} — the club head no longer meets the ball`);
+  assert.ok(/\) \+ GRIP_RISE;/.test(SRC), 'setClub does not add GRIP_RISE to the shaft');
+});
+
+test('both arms are solved onto the grip, and the solver is a real one', () => {
+  assert.ok(/reachTo\(armL, this\._armLen, _ikTarget\)/.test(SRC), 'the lead arm is not solved');
+  assert.ok(/reachTo\(armR, this\._armLen, _ikTarget\)/.test(SRC), 'the trail arm is not solved');
+  // two-link solve: the fold comes from the law of cosines, not from a guess
+  assert.ok(/Math\.acos\(Math\.min\(1, Math\.max\(0, d \/ len\)\)\)/.test(SRC),
+    'reachTo does not solve the elbow fold from the distance');
+  // and the scratch objects are module level, not per-call
+  assert.ok(/^const _ikQ = new THREE\.Quaternion\(\);/m.test(SRC),
+    'the IK allocates per call — that is garbage every frame, per avatar');
+});
+
+test('the swing turns the hips and the shoulders by different amounts', () => {
+  /* Re-derived from the two curves in the source, because the whole point
+     of the pelvis is the difference between them. */
+  const shoulders = (b, f) => -0.15 - 1.30 * b + 1.45 * Math.pow(f, 1.30);
+  const hips = (b, f) => -0.15 - 0.62 * b + 1.32 * Math.pow(f, 0.70);
+  assert.ok(/const shoulderTurn = -0\.15 - 1\.30 \* b \+ 1\.45 \* Math\.pow\(f, 1\.30\)/.test(SRC),
+    'the shoulder curve in avatar.js no longer matches the one asserted here');
+  assert.ok(/const hipTurn      = -0\.15 - 0\.62 \* b \+ 1\.32 \* Math\.pow\(f, 0\.70\)/.test(SRC),
+    'the hip curve in avatar.js no longer matches the one asserted here');
+
+  // at the top: coiled, shoulders well past the hips
+  const coil = shoulders(1, 0) - hips(1, 0);
+  assert.ok(coil < -0.5,
+    `only ${(-coil * 57.3).toFixed(0)} degrees of coil at the top — the pelvis exists to carry more`);
+
+  // through the ball: the HIPS lead, which is the recognisable half
+  const mid = shoulders(0, 0.35) - hips(0, 0.35);
+  assert.ok(mid < 0, 'the shoulders are ahead of the hips through impact — they must trail');
+
+  // and the finish is square
+  assert.ok(Math.abs(shoulders(0, 1) - hips(0, 1)) < 0.25,
+    'the body never squares up at the finish — it ends permanently twisted');
+});
