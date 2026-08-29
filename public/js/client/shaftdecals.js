@@ -1,22 +1,31 @@
 /* =========================================================================
-   shaftdecals.js — the club-shaft decal band, drawn rather than tinted
+   shaftdecals.js — a club's finish, drawn rather than tinted
    -------------------------------------------------------------------------
-   The shaft band (avatar.js's clubDecal) is a real object with eight named
-   designs (unlocks.js, kind:'decal': stripe/chevron/houndstooth/carbonweave/
-   lightning/tartan/goldleaf/signature) — but until now every one of them
-   rendered as the exact same flat rectangle, tinted to the unlock's own
-   `color` field and nothing else. A "Houndstooth" band and a "Racing
-   stripe" band were visually identical.
+   Twenty-three named designs (unlocks.js, kind:'decal') that until recently
+   all rendered as the same flat rectangle tinted to the unlock's `color`
+   field — a "Houndstooth" and a "Racing stripe" were indistinguishable.
+   Same approach as decals.js: draw each pattern once onto a canvas, cache it
+   by id+colour, hand out a THREE.CanvasTexture.
 
-   Same approach as decals.js: draw each pattern once onto a small canvas,
-   cache it by id+colour, hand out a THREE.CanvasTexture. Small (48px) and
-   two-tone — a shaft band occupies a few pixels on screen even up close, so
-   there is nothing to gain from a bigger canvas, only VRAM to spend on it.
+   ON RESOLUTION. This was 48px, and the reasoning was sound while a decal
+   was a two-centimetre BAND round the shaft: a few pixels on screen even up
+   close, so a bigger canvas was VRAM spent on nothing. A decal now covers
+   the whole club — the full shaft and a panel shaped to the head — and it is
+   shown at 200px on a turntable in the shop, in the case reveal and on the
+   inventory card. At 48 that read as a blur, which is the single most
+   visible reason the cosmetics looked cheap. 128 costs 64 KB per cached
+   texture and every one of them is generated once and kept.
+
+   Every DRAW function is written against PX rather than against literals,
+   so raising it re-renders each pattern at the higher resolution rather
+   than scaling a small one up. That was true before this change and it is
+   the reason the change is one number.
    ========================================================================= */
 
 import * as THREE from '../../vendor/three.module.js';
 
-const PX = 48;
+const PX = 128;          // native pattern resolution — see the note above
+const SWATCH = 48;       // what a picker square has always asked for
 const cache = new Map();
 
 const shade = (hex, amt) => {
@@ -57,11 +66,15 @@ const DRAW = {
   },
   carbonweave(g, a, b) {
     g.fillStyle = a; g.fillRect(0, 0, PX, PX);
-    g.strokeStyle = b; g.lineWidth = 1; g.globalAlpha = 0.55;
+    /* The one pattern with pixel literals rather than PX fractions: a weave
+       is a line WEIGHT, and at PX=128 a 1px stroke reads as a faint grid
+       instead of woven cloth. Scaled with everything else. */
+    const w = Math.max(1, PX / 48);
+    g.strokeStyle = b; g.lineWidth = w; g.globalAlpha = 0.55;
     const s = PX / 8;
     for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
       if ((x + y) % 2) continue;
-      g.strokeRect(x * s + 0.5, y * s + 0.5, s - 1, s - 1);
+      g.strokeRect(x * s + w / 2, y * s + w / 2, s - w, s - w);
     }
     g.globalAlpha = 1;
   },
@@ -363,7 +376,7 @@ function applyVignette(g, size) {
  *  that would need re-rendering to stay sharp). */
 const urlCache = new Map();
 
-export function shaftDecalDataUrl(id, color, purity = 0, size = PX) {
+export function shaftDecalDataUrl(id, color, purity = 0, size = SWATCH) {
   const draw = DRAW[id];
   if (!draw) return null;
   /* Cached like shaftDecalTexture above and like both of finishpreview.js's
@@ -386,12 +399,20 @@ export function shaftDecalDataUrl(id, color, purity = 0, size = PX) {
     return url;
   }
 
+  /* The vignette is worth its draw at a size somebody is looking closely at
+     and is only noise at a 20px picker swatch — so it is gated on the size
+     asked for rather than on "did the caller pass one". That distinction
+     used to be the same thing, back when the native resolution and the
+     default swatch size were both 48; now they are not, and a swatch would
+     otherwise get a vignette it never had. */
+  const detail = size >= 64;
+
   const out = document.createElement('canvas');
   out.width = out.height = size;
   const og = out.getContext('2d');
   og.imageSmoothingEnabled = true;
   og.drawImage(native, 0, 0, size, size);
-  applyVignette(og, size);
+  if (detail) applyVignette(og, size);
   const url = out.toDataURL('image/png');
   urlCache.set(key, url);
   return url;

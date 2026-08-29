@@ -22,6 +22,7 @@ export const UNLOCK_KINDS = {
   hat:    { name: 'Headwear',     blurb: 'For the wardrobe' },
   title:  { name: 'Title',        blurb: 'Shown beside your name' },
   melee:  { name: 'Melee',        blurb: 'A new way to lay hands on somebody' },
+  cartdecal: { name: 'Cart livery', blurb: 'Painted down the side of your cart' },
   ball:   { name: 'Ball finish',  blurb: 'How your ball catches the light' },
   /* Not a level unlock — nothing in UNLOCKS below has this kind, and
      nothing may: club sets carry real stats and come from the Club Case
@@ -52,6 +53,7 @@ export const UNLOCKS = [
   { at: 14, kind: 'ball',  id: 'matte',       name: 'Matte finish', color: '#d4d4d0' },
   { at: 15, kind: 'emote', id: 'bow',         name: 'Take a bow' },
   { at: 16, kind: 'trail', id: 'ember',       name: 'Ember',          color: '#ff8a3d' },
+  { at: 17, kind: 'cartdecal', id: 'racer',   name: 'Racing flash',   color: '#ff6b4a' },
   { at: 18, kind: 'decal', id: 'houndstooth', name: 'Houndstooth',    color: '#e8eaee' },
   { at: 19, kind: 'title', id: 'grinder',     name: 'Grinder' },
   { at: 20, kind: 'title', id: 'clubman',     name: 'Clubman' },
@@ -63,6 +65,7 @@ export const UNLOCKS = [
   { at: 28, kind: 'melee', id: 'kick',        name: 'Boot' },
   { at: 29, kind: 'decal', id: 'carbonweave', name: 'Carbon weave',   color: '#2e3136' },
   { at: 30, kind: 'emote', id: 'point',       name: 'Called it' },
+  { at: 31, kind: 'cartdecal', id: 'sidewind', name: 'Sidewinder',    color: '#5ab8ff' },
 
   /* -- thirties to fifties: every four or five, and they get louder -- */
   { at: 33, kind: 'ball',  id: 'pearl',       name: 'Pearlescent', color: '#f0e6f0' },
@@ -74,12 +77,14 @@ export const UNLOCKS = [
   { at: 44, kind: 'emote', id: 'dance',       name: 'Little dance' },
   { at: 45, kind: 'trail', id: 'azure',       name: 'Azure comet',    color: '#38a9ff' },
   { at: 46, kind: 'decal', id: 'spiral',      name: 'Spiral',         color: '#ff8a3d' },
+  { at: 47, kind: 'cartdecal', id: 'flames',  name: 'Flame front',    color: '#ff9f3d' },
   { at: 49,  kind: 'decal', id: 'arrows',     name: 'Arrowhead',      color: '#ff9f4a' },
   { at: 50, kind: 'title', id: 'halfcentury', name: 'Half Century' },
   { at: 55, kind: 'decal', id: 'tartan',      name: 'Tartan',         color: '#7d2f42' },
   { at: 57,  kind: 'decal', id: 'bolt',       name: 'Double bolt',    color: '#ffe066' },
   { at: 58, kind: 'emote', id: 'flex',        name: 'Flex' },
   { at: 60, kind: 'ball',  id: 'chrome',      name: 'Chrome', color: '#e8ecf0' },
+  { at: 61, kind: 'cartdecal', id: 'panels',  name: 'Panel split',    color: '#7fd0a0' },
   { at: 62, kind: 'decal', id: 'diamond',     name: 'Diamond lattice', color: '#3fe0ff' },
   { at: 63, kind: 'trail', id: 'frost',       name: 'Frost trail',    color: '#a6e6ff' },
 
@@ -91,6 +96,7 @@ export const UNLOCKS = [
   { at: 72, kind: 'decal', id: 'goldleaf',    name: 'Gold leaf',      color: '#ffd94a' },
   { at: 74, kind: 'ball',  id: 'opal',        name: 'Opal', color: '#f4d8ec' },
   { at: 76, kind: 'decal', id: 'zigzag',      name: 'Zigzag',         color: '#e8c15a' },
+  { at: 77, kind: 'cartdecal', id: 'chrome',  name: 'Chrome wrap',    color: '#dfe6ec' },
   { at: 78, kind: 'title', id: 'veteran',     name: 'Veteran' },
   { at: 80, kind: 'decal', id: 'wave',        name: 'Wave',           color: '#2f9e8a' },
   { at: 81, kind: 'title', id: 'master',      name: 'Master' },
@@ -100,6 +106,7 @@ export const UNLOCKS = [
   { at: 88, kind: 'emote', id: 'sleep',       name: 'Slow play' },
   { at: 90, kind: 'ball',  id: 'prism',       name: 'Prism', color: '#d8e8ff' },
   { at: 91, kind: 'decal', id: 'ripple',      name: 'Ripple',         color: '#5ab8ff' },
+  { at: 92, kind: 'cartdecal', id: 'checker', name: 'Chequered flag', color: '#f0f2f5' },
   { at: 94,  kind: 'decal', id: 'starfield',  name: 'Starfield',      color: '#c9b8ff' },
   { at: 95, kind: 'decal', id: 'signature',   name: 'Signature holo', color: '#d8c8f0' },
   { at: 96, kind: 'ball',  id: 'lava',        name: 'Lava flow', color: '#ff6b3d' },

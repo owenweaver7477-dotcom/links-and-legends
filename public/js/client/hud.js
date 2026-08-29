@@ -5,7 +5,8 @@
 import { CARRY, CLUBS, CLUB_BY_KEY, BAG_SIZE, DEFAULT_BAG } from '../shared/clubs.js';
 import { HOLES_PER_COURSE, BALL_COLORS, COURSE_ORDER } from '../shared/biomes.js';
 import { CAPS, SHIRTS, SKINS, TROUSERS, HAIR_COLORS, SHOES,
-         HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES, bodiesOf } from '../shared/avatars.js';
+         HAT_STYLES, HAIR_STYLES, ACCESSORIES, BODIES, bodiesOf,
+         clubDecalFor } from '../shared/avatars.js';
 import { SHOP, purchaseBlocked } from '../shared/gear.js';
 import { CADDIES, CADDIE_MAX, caddieCost } from '../shared/crew.js';
 import { CLUB_SETS, setById, setStats, STARTER_SET, upgradeCost, upgradeCount,
@@ -846,8 +847,38 @@ HUD.openClubInspect = () => {
   if (!modal || !cv) return;
   const what = HUD._lastBagView || { kind: 'club', key: 'DR', set: HUD.mySet || STARTER_SET };
   modal.hidden = false;
-  showShopItem(cv, what);
+  HUD.showInspectClub(what.key, what);
   releaseShopOrbit(cv);   // a freshly opened inspect starts turning on its own, same as the bag
+};
+
+/**
+ * Put a club on the inspect turntable WEARING the decal it would actually
+ * wear — the class override if it has one, the bag-wide decal otherwise.
+ *
+ * This modal has always shown a bare club while the decal grid underneath it
+ * was being used, which is a picker with no preview: you chose a pattern,
+ * closed the modal, and found out on the tee. Now the club in front of you
+ * changes as you click, and switching class tab swings a club from that
+ * class onto the stage.
+ */
+HUD.showInspectClub = (clubKey = null, view = null) => {
+  const cv = document.getElementById('inspectCanvas');
+  if (!cv) return;
+  const base = view || HUD._lastBagView || { kind: 'club', key: 'DR', set: HUD.mySet || STARTER_SET };
+  const key = clubKey || base.key || 'DR';
+  const club = CLUB_BY_KEY[key];
+  const look = HUD._decalLook;
+  const id = clubDecalFor(look, key);
+  const u = id ? UNLOCKS.find(x => x.kind === 'decal' && x.id === id) : null;
+
+  const what = { ...base, kind: 'club', key,
+    set: base.set || HUD.mySet || STARTER_SET,
+    skin: base.skin || HUD.mySkin || 'stock',
+    name: club ? (club.name || club.label) : base.name,
+    sub: u ? u.name : (club ? `${club.loft}°` : base.sub),
+    decal: u ? { id: u.id, color: u.color || '#8fe07a',
+                 purity: (HUD._decalPurity || {})[u.id] || 0 } : null };
+  showShopItem(cv, what);
   const cap = document.getElementById('inspectCap');
   if (cap) {
     cap.innerHTML = `<b>${escapeHtml(what.name || '')}</b>` +
@@ -863,22 +894,80 @@ HUD.orbitInspect = (yaw, pitch) => {
   if (cv) setShopOrbit(cv, yaw, pitch);
 };
 
+/* Which club class the decal picker is currently editing. null is the
+   bag-wide default, which is where it opens and where a player who never
+   touches the tabs stays. Module state rather than a look field: it is a
+   view mode, not something anybody wears. */
+HUD.decalClass = null;
+
+/* One club per class for the turntable — the club somebody picturing "my
+   wedges" is actually picturing. */
+const DECAL_SAMPLE = { driver: 'DR', woods: 'W3', irons: 'I7', wedges: 'SW', putter: 'PT' };
+
+const DECAL_TABS = [
+  { id: null,      label: 'All clubs' },
+  { id: 'driver',  label: 'Driver' },
+  { id: 'woods',   label: 'Woods' },
+  { id: 'irons',   label: 'Irons' },
+  { id: 'wedges',  label: 'Wedges' },
+  { id: 'putter',  label: 'Putter' }
+];
+
 /**
- * The shaft decal picker. This is the one cosmetic slot in the whole game
+ * The club decal picker. This is the one cosmetic slot in the whole game
  * that had a working field (`look.decal`, read by Avatar.setDecal) and no
  * UI anywhere that ever wrote to it — earned, stored, applied, and simply
  * unreachable. Shows every decal-kind unlock, earned or not, the same way
  * club finishes already do: owned ones are pressable, others show the
  * level that unlocks them so there is always a next one to want.
+ *
+ * The class tabs are the per-club half. A driver crown, an iron cavity and
+ * a putter flange are three different-shaped surfaces, so one pattern
+ * cannot be right on all of them — and a bag where the driver is loud and
+ * the irons are not is what a real bag looks like. A class with nothing set
+ * falls through to "All clubs", which is why "None" inside a class tab
+ * reads as "use the default" rather than as bare metal.
  */
 HUD.renderClubDecalPicker = (look, level, caseUnlocks = [], decalPurity = {}) => {
   const grid = document.getElementById('inspectDecalGrid');
   if (!grid) return;
+  const cls = HUD.decalClass;
+  /* Stashed so showInspectClub can resolve which decal a club would wear
+     without every caller having to hand it the look again. */
+  HUD._decalLook = look;
+  HUD._decalPurity = decalPurity;
   const decals = UNLOCKS.filter(u => u.kind === 'decal');
   const ownedIds = new Set(ownedOfKind(level, 'decal', caseUnlocks).map(u => u.id));
   const owned = id => ownedIds.has(id);
-  const cur = look?.decal || null;
-  const none = `<button class="none${!cur ? ' on' : ''}" data-decal="" title="No shaft decal">None</button>`;
+  const fallback = look?.decal || null;
+  const cur = cls ? (look?.clubDecals?.[cls] || null) : fallback;
+
+  const tabs = document.getElementById('inspectDecalTabs');
+  if (tabs) {
+    tabs.innerHTML = DECAL_TABS.map(t => {
+      const on = (t.id || null) === cls;
+      // a dot on any class carrying its own override, so five tabs do not
+      // hide four decisions behind the one that happens to be open
+      const set = t.id && look?.clubDecals?.[t.id];
+      return `<button class="dtab${on ? ' on' : ''}" data-dclass="${t.id || ''}"
+        >${escapeHtml(t.label)}${set ? '<i></i>' : ''}</button>`;
+    }).join('');
+    if (!tabs.dataset.wired) {
+      tabs.dataset.wired = '1';
+      tabs.addEventListener('click', e => {
+        const b = e.target.closest('[data-dclass]');
+        if (!b) return;
+        HUD.decalClass = b.dataset.dclass || null;
+        HUD.onDecalClass?.(HUD.decalClass);
+      });
+    }
+  }
+
+  const noneLabel = cls ? 'Default' : 'None';
+  const noneTitle = cls
+    ? `Use the bag-wide decal${fallback ? '' : ' (none set)'}`
+    : 'No club decal';
+  const none = `<button class="none${!cur ? ' on' : ''}" data-decal="" title="${noneTitle}">${noneLabel}</button>`;
   const cells = decals.map(u => {
     const has = owned(u.id);
     const color = u.color || '#8fe07a';
@@ -916,8 +1005,16 @@ HUD.renderClubDecalPicker = (look, level, caseUnlocks = [], decalPurity = {}) =>
     grid.addEventListener('click', e => {
       const b = e.target.closest('button:not([disabled])');
       if (!b || !('decal' in b.dataset)) return;
-      HUD.onWardrobe?.({ __clubDecal: b.dataset.decal || null });
+      HUD.onWardrobe?.({ __clubDecal: b.dataset.decal || null,
+                         __clubDecalClass: HUD.decalClass });
     });
+  }
+
+  /* The club on the stage wears whatever was just picked. Guarded on the
+     modal being open so the wardrobe's own repaint (which also calls this)
+     does not spin up a renderer for a canvas nobody is looking at. */
+  if (!document.getElementById('modalClubInspect')?.hidden) {
+    HUD.showInspectClub(cls ? DECAL_SAMPLE[cls] : null);
   }
 };
 
@@ -929,6 +1026,10 @@ HUD.renderClubDecalPicker = (look, level, caseUnlocks = [], decalPurity = {}) =>
    unlocks.js; `key` is the field in the look. */
 const EARNED_GROUPS = [
   { key: 'decal',      title: 'Club decal',  kind: 'decal' },
+  /* `patch` sends this through applyWardrobe's own branch rather than the
+     generic field path, because a cart livery is not a garment and picking
+     one must not clear the name off an outfit the player chose. */
+  { key: 'cartDecal',  title: 'Cart livery', kind: 'cartdecal', patch: '__cartDecal' },
   { key: 'trail',      title: 'Ball trail',  kind: 'trail' },
   { key: 'title',      title: 'Title',       kind: 'title' },
   { key: 'ballFinish', title: 'Ball finish', kind: 'ball'  }
@@ -977,7 +1078,7 @@ HUD.levelRow = levelRow;
    around a specific level (or just see how much is left) can, without the
    career tab itself growing to fit forty rows every time it renders. */
 const ROADMAP_KIND_ICON = { emote: 'emoteFace', decal: 'decal', trail: 'trail',
-  hat: 'shirt', title: 'title', ball: 'ball' };
+  hat: 'shirt', title: 'title', ball: 'ball', cartdecal: 'cart' };
 
 HUD.renderRoadmap = (prof) => {
   const list = el.roadmapList;
@@ -1882,7 +1983,7 @@ HUD.renderLook = (look, onPick, level = 1, caseUnlocks = []) => {
         b.className = 'lookpill' + ((look[grp.key] || null) === c.id ? ' on' : '');
         b.textContent = c.name;
         if (c.color) b.style.setProperty('--pill', c.color);
-        b.addEventListener('click', () => onPick(grp.key, c.id));
+        b.addEventListener('click', () => onPick(grp.patch || grp.key, c.id));
         row.appendChild(b);
       }
     }
@@ -2020,10 +2121,17 @@ HUD.renderInventory = (prof, look, onPick, onBuy, onSell, onList) => {
       art.className = 'inv-art';
       const purity = kind === 'decal' ? (decalPurity[u.id] || 0) : 0;
       const previewRarity = casePoolItem ? (RARITIES.find(r => r.id === casePoolItem.rarity) || RARITIES[0]) : { color: u.color || '#8fe07a' };
-      const preview = casePoolItem ? itemPreviewUrl(casePoolItem, previewRarity, 40, purity) : null;
+      /* Cart liveries are level rewards only — no case ever drops one — so
+         they have no CASE_POOL entry to preview from. They are still very
+         much visual, and a grey gift box next to "Chequered flag" tells a
+         player nothing about what they have earned, so the art comes off
+         the unlock itself. */
+      const previewSrc = casePoolItem || (kind === 'cartdecal' ? u : null);
+      const preview = previewSrc ? itemPreviewUrl(previewSrc, previewRarity, 40, purity) : null;
       if (preview) {
         const img = document.createElement('img');
         img.width = 40; img.height = 40; img.alt = '';
+        if (kind === 'cartdecal') img.className = 'wide';   // 4:1 art, letterboxed not cropped
         img.src = preview;   // property, not a src="..." string — see renderClubDecalPicker's comment
         art.appendChild(img);
         if (purity) {
@@ -2037,7 +2145,7 @@ HUD.renderInventory = (prof, look, onPick, onBuy, onSell, onList) => {
         // decal/trail/title/ball each have their own icon; emote/hat/melee
         // don't (see icons.js) — a generic gift box stands in rather than
         // an empty box, since icon() silently returns '' for an unknown name
-        art.innerHTML = icon(['decal', 'trail', 'title', 'ball'].includes(kind) ? kind : 'gift', { size: 20 });
+        art.innerHTML = icon(CASE_KIND_ICON[kind] || 'gift', { size: 20 });
       }
       card.appendChild(art);
 
@@ -2903,7 +3011,7 @@ HUD.renderDailyLogin = (profile) => {
 
 /* --------------------------------------------------------- case opening */
 const CASE_KIND_ICON = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ball',
-                         clubset: 'ironHead' };
+                         clubset: 'ironHead', cartdecal: 'cart' };
 
 /** A real preview for the 3 kinds a 2D canvas can fake convincingly — a
  *  shaft decal, a lit-sphere ball finish, a fading particle trail — used
@@ -2916,6 +3024,10 @@ const CASE_KIND_ICON = { decal: 'decal', trail: 'trail', title: 'title', ball: '
 function itemPreviewUrl(item, rarity, size = 64, purity = 0) {
   const color = item.color || rarity.color;
   if (item.kind === 'decal') return shaftDecalDataUrl(item.id, color, purity, size);
+  /* A cart livery is drawn 4:1, the shape of the panel it lands on, so it
+     is asked for by WIDTH and comes back letterboxed rather than cropped
+     square — a chequered flag cropped to its middle is a grey square. */
+  if (item.kind === 'cartdecal') return cartDecalDataUrl(item.id, color, size);
   if (item.kind === 'ball') return ballFinishDataUrl(color, item.id, size);
   if (item.kind === 'trail') return trailPreviewDataUrl(color, size);
   return null;
@@ -4054,6 +4166,7 @@ import {
 } from '../shared/wardrobe.js';
 import { decalTexture } from './decals.js';
 import { shaftDecalDataUrl } from './shaftdecals.js';
+import { cartDecalDataUrl } from './cartdecals.js';
 import { showItem as showShopItem, setUserOrbit as setShopOrbit, releaseUserOrbit as releaseShopOrbit,
          mountCaseOpener, mountAvatarStage } from './shopview.js';
 import { CLUB_SKINS, skinEarned, skinRequirement, skinProgress, RARITY_ACCENT } from '../shared/clubskins.js';

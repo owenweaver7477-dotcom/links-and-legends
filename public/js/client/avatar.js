@@ -9,7 +9,7 @@
    ========================================================================= */
 
 import * as THREE from '../../vendor/three.module.js';
-import { AVATAR_HEIGHT, BODIES } from '../shared/avatars.js';
+import { AVATAR_HEIGHT, BODIES, clubDecalFor } from '../shared/avatars.js';
 import { UNLOCKS } from '../shared/unlocks.js';
 import { CLIPS, EMOTE_CLIPS, SHOVE_CLIPS, POSE_KEYS, blankPose } from './celebrations.js';
 import { CLUB_BY_KEY } from '../shared/clubs.js';
@@ -279,15 +279,24 @@ export class Avatar {
     this.clubFace = part(this.mats.chrome, 0.05, 0.07, 0.03, 0, 0, 0.02);
     this.clubSole = part(this.mats.headDark, 0.05, 0.03, 0.10, 0, -0.04, 0.05);
     this.clubHead.add(this.clubFace, this.clubSole);
-    /* The decal: a band round the shaft, in the colour the level unlocked.
+    /* The decal. It used to be a BAND — one 10cm box round the shaft — and
+       at the distance this game is played from, that is a smudge you have to
+       be told about. It is now the whole club: a sleeve over the full length
+       of the shaft, and a plate on the head shaped to whatever club is in
+       hand (see _shapeDecal). Two meshes with their own material, rather
+       than a map on mats.chrome, because that material is shared with the
+       club face and the putter hosel and mapping it would paint the pattern
+       onto parts of the club that are not the finish.
+
        Levels buy identity and nothing else in this game, so a reward you
-       cannot see is not a reward — and the shaft is the one part of the kit
-       that is in shot for the whole swing, at every camera angle, on every
-       club in the bag. One box, hidden when nothing is equipped. */
-    this.clubDecal = part(M('#8fe07a'), 0.024, 0.10, 0.024, 0, -0.22, 0);
-    this.clubDecal.visible = false;
+       cannot see is not a reward. Both meshes are hidden when nothing is
+       equipped, which is the state every new player is in. */
+    this.clubDecal = part(M('#8fe07a'), 0.023, 0.80, 0.023, 0, -0.54, 0);
+    this.clubDecalHead = part(M('#8fe07a'), 0.05, 0.02, 0.06, 0, 0, 0.02);
+    this.clubDecal.visible = this.clubDecalHead.visible = false;
+    this.clubHead.add(this.clubDecalHead);
     this.club.add(this.clubGrip, this.clubShaft, this.clubHead, this.clubDecal);
-    this.setDecal(look.decal);
+    this.setDecal(clubDecalFor(look, 'I7'));   // setClub below refines this per club
     this.club.visible = false;
     this.armR.add(this.club);
     this.clubKey = null;
@@ -644,19 +653,53 @@ export class Avatar {
     this._decalId = id;
     const u = id ? UNLOCKS.find(x => x.kind === 'decal' && x.id === id) : null;
     if (!this.clubDecal) return;
-    this.clubDecal.visible = !!u;
+    this.clubDecal.visible = this.clubDecalHead.visible = !!u;
     if (!u) return;
     const color = u.color || '#8fe07a';
     // A real pattern per design, not a flat tint every design shared —
     // shaftDecalTexture returns null for an id it doesn't recognise, which
-    // just leaves the band a plain rectangle in its own colour, same as
+    // just leaves the sleeve a plain rectangle in its own colour, same as
     // the flat-tint behaviour this replaces.
-    this.clubDecal.material.color.set(color);
-    this.clubDecal.material.map = shaftDecalTexture(id, color);
-    this.clubDecal.material.needsUpdate = true;
+    const tex = shaftDecalTexture(id, color);
+    for (const m of [this.clubDecal, this.clubDecalHead]) {
+      m.material.color.set(color);
+      m.material.map = tex;
+      m.material.needsUpdate = true;
+    }
+  }
+
+  /* The head plate, shaped to the club in hand. A driver crown, an iron
+     cavity back and a putter flange are three different surfaces and a
+     pattern sized for one reads as a sticker on the others — which is the
+     whole reason the per-class decal slots exist (avatars.js's clubDecals).
+     Sized from the head meshes setClub has just laid out, so this needs no
+     second table of dimensions to keep in step with that one. */
+  _shapeDecal(c) {
+    const d = this.clubDecalHead;
+    if (!d) return;
+    const f = this.clubFace.scale, so = this.clubSole.scale;
+    if (c.putter) {
+      // the flange top: the flat you look down at over the ball
+      d.scale.set(so.x * 0.86, 0.008, so.z * 0.80);
+      d.position.set(0, this.clubSole.position.y + so.y * 0.6, this.clubSole.position.z);
+    } else if (c.type === 'wood' || c.type === 'hybrid') {
+      // the crown: the top of the head, and the only part of a driver
+      // anybody looks at while standing over it
+      d.scale.set(f.x * 0.80, 0.008, f.z * 0.86);
+      d.position.set(0, this.clubFace.position.y + f.y * 0.55, this.clubFace.position.z);
+    } else {
+      // the cavity back: a blade shows its finish from BEHIND, not on top
+      d.scale.set(0.006, f.y * 0.70, f.z * 0.74);
+      d.position.set(-(f.x * 0.62), this.clubFace.position.y, this.clubFace.position.z);
+    }
   }
 
   setClub(key, setId = STARTER_SET) {
+    /* The decal is resolved BEFORE the early return, because a player who
+       runs a loud driver and quiet irons changes finish on every club change
+       even when the set has not moved — and this method's own early-out is
+       keyed on the set and the club, not on the decal. */
+    this.setDecal(clubDecalFor(this.look, key));
     if (key === this.clubKey && setId === this.clubSetId) return;
     const c = CLUB_BY_KEY[key];
     if (!c) return;
@@ -714,6 +757,12 @@ export class Avatar {
     this.clubShaft.scale.y = len;
     this.clubShaft.position.y = -0.14 - len / 2;
     this.clubHead.position.y = -0.14 - len;
+    /* The decal sleeve is the shaft, a hair proud of it — so a decal is the
+       club's FINISH rather than a ring somewhere down it. It has to track
+       the shaft on every club change, because a driver's shaft is half as
+       long again as a putter's. */
+    this.clubDecal.scale.set(0.023, len, 0.023);   // a hair proud of the 0.020 shaft
+    this.clubDecal.position.y = this.clubShaft.position.y;
 
     const H2 = this.clubHead;
     if (c.putter) {
@@ -755,6 +804,8 @@ export class Avatar {
       // the whole blade lies back: at address a lob wedge SHOWS its 58 degrees
       H2.rotation.x = -c.loft * Math.PI / 180 * 0.55;
     }
+
+    this._shapeDecal(c);
   }
 
   /* ---------------------------------------------------------- the swing */

@@ -8,12 +8,19 @@
 
        bodywork 1 + livery 1 + steered front wheels 1 + blob 1  =  4 draw calls
 
+   A cart with a LIVERY DECAL costs a fifth, and only that cart: the panels
+   it is painted on are their own tiny geometry (three quads) with their own
+   material, built once at module load and shared, and the mesh is only added
+   when a player actually has one equipped.
+
    for a whole cart, against fourteen for a golfer.  Eight carts on screen cost
    about two avatars.
    ========================================================================= */
 
 import * as THREE from '../../vendor/three.module.js';
 import { sharedBlobTexture, sharedBlobGeo } from './avatar.js';
+import { cartDecalTexture } from './cartdecals.js';
+import { UNLOCKS } from '../shared/unlocks.js';
 import {
   WHEELBASE, TRACK, WHEEL_R, SEATS, MAX_FWD
 } from '../shared/cart.js';
@@ -132,12 +139,74 @@ const FRONT_BOXES = [
   { w: 0.16, h: WHEEL_R * 2, d: WHEEL_R * 2, x: T2, y: 0, z: 0, c: DARK }
 ];
 
-let _chassisGeo = null, _frontGeo = null;
+/* ----------------------------------------------------------- livery decal ---
+   Where a cart livery is actually painted. Not the merged soup above: that
+   geometry carries no UVs, and adding them for the benefit of three faces
+   would cost every cart on the course the attribute whether or not it wears
+   one. Three quads, floated a few millimetres proud of the panel underneath
+   so there is nothing for the depth buffer to argue about.
+
+   The three surfaces are chosen by what a cart actually shows. The FLANKS
+   are what you see of somebody else's cart for the whole time it is near
+   you, and they are the only part of this shape long enough to carry a
+   directional pattern. The NOSE is what the driver sees over their own
+   bonnet, and it happens to be almost exactly the 4:1 the art is drawn at
+   (TRACK by 0.26). The roof is the obvious fourth candidate and is not
+   here: it is 23:1 along its edge and hidden from every camera angle the
+   game actually uses from above.
+
+   `u` runs nose to tail on both flanks rather than left to right, so a
+   pattern with a direction in it points forward on both sides — which is
+   how a livery is painted on a real vehicle, and it mirrors rather than
+   running backwards down one side. */
+const DECAL_PANELS = [
+  { face: 'x+', x: T2 + 0.075, y: RIDE + 0.20, z: 0.80, len: 2.00, hgt: 0.38 },
+  { face: 'x-', x: -(T2 + 0.075), y: RIDE + 0.20, z: 0.80, len: 2.00, hgt: 0.38 },
+  { face: 'z+', x: 0, y: RIDE + 0.26, z: FRONT + 0.301, len: TRACK - 0.04, hgt: 0.26 }
+];
+
+function decalGeo() {
+  const pos = [], nrm = [], uv = [], idx = [];
+  let base = 0;
+  for (const p of DECAL_PANELS) {
+    const a = p.len / 2, b = p.hgt / 2;
+    let quad, n;
+    if (p.face === 'x+') {
+      n = [1, 0, 0];
+      quad = [[p.x, p.y - b, p.z + a, 0, 1], [p.x, p.y - b, p.z - a, 1, 1],
+              [p.x, p.y + b, p.z - a, 1, 0], [p.x, p.y + b, p.z + a, 0, 0]];
+    } else if (p.face === 'x-') {
+      n = [-1, 0, 0];
+      quad = [[p.x, p.y - b, p.z - a, 1, 1], [p.x, p.y - b, p.z + a, 0, 1],
+              [p.x, p.y + b, p.z + a, 0, 0], [p.x, p.y + b, p.z - a, 1, 0]];
+    } else {
+      n = [0, 0, 1];
+      quad = [[p.x - a, p.y - b, p.z, 0, 1], [p.x + a, p.y - b, p.z, 1, 1],
+              [p.x + a, p.y + b, p.z, 1, 0], [p.x - a, p.y + b, p.z, 0, 0]];
+    }
+    for (const v of quad) { pos.push(v[0], v[1], v[2]); nrm.push(...n); uv.push(v[3], v[4]); }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    base += 4;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.userData.shared = true;
+  return g;
+}
+
+let _chassisGeo = null, _frontGeo = null, _decalGeo = null;
 const chassisGeo = () => (_chassisGeo || (_chassisGeo = boxSoup(CHASSIS_BOXES)));
 const frontGeo = () => (_frontGeo || (_frontGeo = boxSoup(FRONT_BOXES)));
+const sharedDecalGeo = () => (_decalGeo || (_decalGeo = decalGeo()));
 
 /** Triangle count for one cart — used by the perf assertions. */
 export const CART_TRIS = (CHASSIS_BOXES.length + FRONT_BOXES.length) * 12;
+
+/** What a livery adds, for the same assertions. Six triangles. */
+export const CART_DECAL_TRIS = DECAL_PANELS.length * 2;
 
 /* ========================================================================= */
 
@@ -157,7 +226,7 @@ export function liveryColor(hex) {
 }
 
 export class Cart3D {
-  constructor(tint = '#2f6d3f') {
+  constructor(tint = '#2f6d3f', decal = null) {
     this.root = new THREE.Group();
 
     // group 0: bodywork, the same on every cart.  group 1: the livery.
@@ -186,6 +255,14 @@ export class Cart3D {
     this.blob.renderOrder = 1;
     this.root.add(this.blob);            // on root, not tilt — stays on the ground
 
+    /* The livery panels. Built lazily in setDecal so a cart with no decal —
+       which is every cart below level 17 — costs exactly what it always did.
+       On `tilt`, with the chassis, so the livery leans with the body rather
+       than hanging in the air beside a cart that is up on two wheels. */
+    this.decalMesh = null;
+    this._decalId = undefined;
+    this.setDecal(decal);
+
     // suspension state: visual only, and it must never feed back into motion
     this.pitch = 0; this.pitchV = 0;
     this._lastHit = 0;
@@ -195,6 +272,29 @@ export class Cart3D {
   }
 
   setTint(hex) { this.mat.color.copy(liveryColor(hex)); }
+
+  /** Paint (or strip) the livery. Cheap to call every frame — it returns on
+   *  the id it is already wearing, the way Avatar.setDecal does. */
+  setDecal(id) {
+    if (id === this._decalId) return;
+    this._decalId = id;
+    const u = id ? UNLOCKS.find(x => x.kind === 'cartdecal' && x.id === id) : null;
+    const tex = u ? cartDecalTexture(u.id, u.color || '#ff6b4a') : null;
+    if (!tex) {
+      if (this.decalMesh) this.decalMesh.visible = false;
+      return;
+    }
+    if (!this.decalMesh) {
+      this.decalMesh = new THREE.Mesh(sharedDecalGeo(), new THREE.MeshLambertMaterial({
+        map: tex, transparent: false
+      }));
+      this.tilt.add(this.decalMesh);
+    } else {
+      this.decalMesh.material.map = tex;
+      this.decalMesh.material.needsUpdate = true;
+      this.decalMesh.visible = true;
+    }
+  }
 
   /**
    * Put the cart in the world and let the springs settle.
@@ -296,6 +396,10 @@ export class Cart3D {
     this.mat.dispose();
     this.bodyMat.dispose();
     this.blob.material.dispose();
+    /* The livery material is per-cart (its map is a shared cached texture,
+       which is why only the material goes) — without this a course that
+       cycles carts leaks one Lambert per cart that ever wore one. */
+    this.decalMesh?.material.dispose();
     // geometries are shared singletons — leave them alone
   }
 }

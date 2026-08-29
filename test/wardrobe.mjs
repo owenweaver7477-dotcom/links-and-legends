@@ -27,6 +27,7 @@ import {
   DECALS, DECAL_SLOTS, CUSTOM_SHAPES, OUTFITS, outfitStats, wearOutfit
 } from '../public/js/shared/wardrobe.js';
 import { UNLOCKS } from '../public/js/shared/unlocks.js';
+import { CLUB_CLASSES } from '../public/js/shared/clubsets.js';
 import { EMOTES, EMOTE_CLIPS, MELEES, SHOVE_CLIPS, POSE_KEYS, blankPose }
   from '../public/js/client/celebrations.js';
 
@@ -103,6 +104,18 @@ function assertClean(look, why) {
     }
   };
   for (const [k, v] of Object.entries(look)) {
+    /* The per-class club decals: a second map whose KEYS come off the wire,
+       exactly like `decals` below, so it gets walked into for the same
+       reason. The values are club-decal unlock ids and the keys are the five
+       club classes; anything else must have been dropped by now. */
+    if (k === 'clubDecals') {
+      for (const [cls, id] of Object.entries(v)) {
+        assert.ok(CLUB_CLASSES.includes(cls), `${why}: unknown club class "${cls}"`);
+        assert.ok(UNLOCKS.some(u => u.kind === 'decal' && u.id === id),
+          `${why}: unknown club decal "${id}"`);
+      }
+      continue;
+    }
     if (k === 'decals') {
       for (const [slot, id] of Object.entries(v)) {
         assert.ok(DECAL_SLOTS.some(s => s.id === slot), `${why}: unknown decal slot "${slot}"`);
@@ -378,7 +391,8 @@ test('every reward the level table names actually exists and is enforced', () =>
      brim at 23, which was not a hat at all — reaching 23 gave you a line in
      the clubhouse and nothing on your head. A reward table is a promise, and
      nothing in it may be a lie in either direction. */
-  const SLOT = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ballFinish' };
+  const SLOT = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ballFinish',
+                 cartdecal: 'cartDecal' };
   for (const u of UNLOCKS) {
     if (u.kind === 'hat') {
       const hat = HAT_STYLES.find(h => h.id === u.id);

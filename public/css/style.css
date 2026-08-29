@@ -3791,6 +3791,21 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 .inspect-decals { margin-top: 14px; }
 .inspect-decals h5 { margin: 0 0 8px; font-size: 11px; letter-spacing: 1.1px; text-transform: uppercase;
   color: #8fa694; }
+/* The class tabs. Five clubs' worth of surface, and the tab a player is in
+   is the only thing telling them which one they are painting — so the
+   selected state has to be unmistakable rather than a shade of grey. The
+   dot marks a class carrying its own override, so four decisions are not
+   hidden behind whichever tab happens to be open. */
+.inspect-decal-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 10px; }
+.inspect-decal-tabs .dtab { position: relative; padding: 5px 10px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
+  color: #93ad99; font-family: inherit; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .02em; cursor: pointer; transition: .13s; }
+.inspect-decal-tabs .dtab:hover { background: rgba(255,255,255,.1); color: #cfe4d3; }
+.inspect-decal-tabs .dtab.on { background: rgba(70,169,94,.26); border-color: #57bd72; color: #fff; }
+.inspect-decal-tabs .dtab i { position: absolute; top: 2px; right: 3px; width: 5px; height: 5px;
+  border-radius: 50%; background: #8fe07a; }
+
 .inspect-decal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 7px; }
 .inspect-decal-grid button { width: 40px; height: 40px; border-radius: 9px; border: 2px solid transparent;
   background: rgba(255,255,255,.05); cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -3824,6 +3839,10 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 .inv-card:not(.owned) { opacity: .5; }
 .inv-art { position: relative; width: 40px; height: 40px; display: grid; place-items: center; color: #cfe4d3; }
 .inv-art img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; }
+/* A cart livery is drawn 4:1, the shape of the panel it goes on, so it is
+   letterboxed in the square tile rather than cropped to its middle — a
+   chequered flag cropped square is a grey box. */
+.inv-art img.wide { height: 12px; border-radius: 3px; object-fit: fill; }
 .inv-art i { display: block; width: 24px; height: 24px; border-radius: 50%; }
 .inv-card b { font-size: 11px; font-weight: 700; line-height: 1.25; }
 .inv-status { font-size: 9.5px; color: #8fa694; }

@@ -732,9 +732,26 @@ function applyWardrobe(patch) {
     lookDraft = normaliseLook({ ...lookDraft, decals: d, outfit: lookDraft.outfit },
       0, undefined, G.profile?.level ?? 1);
   } else if ('__clubDecal' in patch) {
-    // the shaft band, not a body decal slot — orthogonal to "outfit", so
-    // unlike a garment swap this must NOT clear a named outfit
-    lookDraft = normaliseLook({ ...lookDraft, decal: patch.__clubDecal, outfit: lookDraft.outfit },
+    /* The club's finish, not a body decal slot — orthogonal to "outfit", so
+       unlike a garment swap this must NOT clear a named outfit.
+
+       `cls` names one of the five club classes and writes only that class's
+       override; without it the patch sets the bag-wide default. A player who
+       never opens the class tabs therefore behaves exactly as before, and
+       clearing a class (id null) drops it back to the default rather than
+       leaving that class bare. */
+    const next = { ...lookDraft, outfit: lookDraft.outfit };
+    if (patch.__clubDecalClass) {
+      const cd = { ...(lookDraft.clubDecals || {}) };
+      if (patch.__clubDecal) cd[patch.__clubDecalClass] = patch.__clubDecal;
+      else delete cd[patch.__clubDecalClass];
+      next.clubDecals = cd;
+    } else {
+      next.decal = patch.__clubDecal;
+    }
+    lookDraft = normaliseLook(next, 0, undefined, G.profile?.level ?? 1);
+  } else if ('__cartDecal' in patch) {
+    lookDraft = normaliseLook({ ...lookDraft, cartDecal: patch.__cartDecal, outfit: lookDraft.outfit },
       0, undefined, G.profile?.level ?? 1);
   } else if (patch.__custom) {
     lookDraft = normaliseLook({
@@ -1254,6 +1271,7 @@ function updateAvatars(dt) {
 
 /** Report our position ten times a second — cheap, and only while playing. */
 const tintOf = pid => player(pid)?.color || '#2f6d3f';
+const cartDecalOf = pid => player(pid)?.look?.cartDecal || null;
 
 function pushMyPosition(now) {
   if (!G.room || G.room.state !== 'playing') return;
@@ -1877,7 +1895,7 @@ function frame(now) {
       }
     } else _cartStride = 0;
   }
-  carts.render(dt, G.T, G.myPid, tintOf, now);
+  carts.render(dt, G.T, G.myPid, tintOf, now, cartDecalOf);
   pushMyPosition(now);
   updateAvatars(dt);
 
@@ -3392,7 +3410,8 @@ function renderClubhouse() {
       // rather than leaving lookDraft pointing at something no longer
       // owned. Same kind->look-field mapping HUD's EARNED_GROUPS uses
       // (ball's own look field is called ballFinish, not ball).
-      const lookKey = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ballFinish' }[kind];
+      const lookKey = { decal: 'decal', trail: 'trail', title: 'title', ball: 'ballFinish',
+                        cartdecal: 'cartDecal' }[kind];
       if (lookKey && lookDraft[lookKey] === id) onInventoryPick(lookKey, null);
     });
   }
@@ -4850,6 +4869,14 @@ document.getElementById('mapwrap').addEventListener('click', () => toggleMap());
   document.getElementById('btnInspectClose')?.addEventListener('click', () => {
     document.getElementById('modalClubInspect').hidden = true;
   });
+  /* Switching class tab repaints the grid against that class's own choice,
+     and swings the turntable onto a club from it — picking a wedge decal
+     while looking at a driver is picking blind. */
+  HUD.onDecalClass = () => {
+    // the picker repaints the turntable itself — see renderClubDecalPicker
+    HUD.renderClubDecalPicker(lookDraft, G.profile?.level ?? 1,
+      G.profile?.caseUnlocks || [], G.profile?.decalPurity || {});
+  };
 
   /* --------------------------------------------------------- roadmap --- */
   HUD.onRoadmap = () => {

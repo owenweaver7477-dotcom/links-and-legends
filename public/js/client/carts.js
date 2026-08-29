@@ -417,9 +417,12 @@ export class CartManager {
 
   /**
    * Ease every remote cart toward its target and refresh the meshes.
-   * `tintOf(pid)` supplies the player's colour.
+   * `tintOf(pid)` supplies the player's colour and `decalOf(pid)` their cart
+   * livery, both looked up per frame rather than cached here — a player can
+   * change either mid-round and every other client learns about it through
+   * the same look broadcast, with nothing to invalidate on this side.
    */
-  render(dt, terrain, myPid, tintOf, now) {
+  render(dt, terrain, myPid, tintOf, now, decalOf = () => null) {
     this.myPid = myPid;
     this.reap(now);
 
@@ -429,13 +432,13 @@ export class CartManager {
       r.z += (r.tz - r.z) * kp;
       r.heading += shortestArc(r.heading, r.theading) * kp;
       r.tilt += ((r.ttilt || 0) - (r.tilt || 0)) * kp;
-      this._mesh(pid, tintOf(pid)).update(dt, r, terrain.heightAt(r.x, r.z),
+      this._mesh(pid, tintOf(pid), decalOf(pid)).update(dt, r, terrain.heightAt(r.x, r.z),
         terrain.normalAt(r.x, r.z, 1.15));
     }
 
     if (this.driving && this.body) {
       const b = this.body;
-      const m = this._mesh(myPid, tintOf(myPid));
+      const m = this._mesh(myPid, tintOf(myPid), decalOf(myPid));
       const sinkDepth = this.sinking != null ? Math.min(1.6, this.sinking * 1.5) : 0;
       m.update(dt, b, terrain.heightAt(b.x, b.z) - sinkDepth, terrain.normalAt(b.x, b.z, 1.15));
       if (this.sinking != null) m.tilt.rotation.x = Math.min(0.5, this.sinking * 0.6);
@@ -447,13 +450,16 @@ export class CartManager {
     }
   }
 
-  _mesh(pid, tint) {
+  _mesh(pid, tint, decal = null) {
     let m = this.meshes.get(pid);
     if (!m) {
-      m = new Cart3D(tint);
+      m = new Cart3D(tint, decal);
       this.group.add(m.root);
       this.meshes.set(pid, m);
-    } else if (tint) m.setTint(tint);
+    } else {
+      if (tint) m.setTint(tint);
+      m.setDecal(decal);        // no-ops on the livery it is already wearing
+    }
     return m;
   }
 

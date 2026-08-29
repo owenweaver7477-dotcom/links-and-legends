@@ -142,18 +142,24 @@ function buildClub(key, setId = STARTER_SET, skinId = 'stock', decal = null) {
             gripLen, 0, top + gripLen / 2 - 0.02, 0));
   g.add(rod(M(shaftCol, shine), 0.017, 0.024, shaftLen, 0, 0, 0));
 
-  /* The decal band. A club decal has only ever been visible on the golfer's
-     own club in-round (avatar.js paints this same texture onto a band mesh),
-     so browsing a wardrobe full of them meant reading flat 40px squares and
-     guessing. Same texture source, same wrap — this is the decal actually
-     on a club, which is the whole thing a player is buying. */
-  if (decal) {
-    const tex = shaftDecalTexture(decal.id, decal.color, decal.purity || 0);
-    if (tex) {
-      const band = rod(new THREE.MeshLambertMaterial({ map: tex }),
-                       0.0185, 0.0255, shaftLen * 0.42, 0, shaftLen * 0.10, 0);
-      g.add(band);
-    }
+  /* THE DECAL, and it is the whole club rather than a band on it.
+
+     It used to be a sleeve over 42% of the shaft, which was already better
+     than the 10cm ring the in-round avatar wore — but a decal you have to be
+     told the location of is not a finish, it is a sticker. The shaft is now
+     wrapped end to end, and the head takes a plate shaped to whatever club
+     this is: a crown on a wood, a cavity back on an iron, a flange top on
+     the putter. Those are three genuinely different surfaces, which is the
+     reason a decal can be set per club CLASS at all (see clubDecals in
+     avatars.js) — one pattern is not right on all three.
+
+     `headDecal` is filled in by whichever head branch runs below; the shaft
+     is wrapped here because every club has one. */
+  const decalTex = decal ? shaftDecalTexture(decal.id, decal.color, decal.purity || 0) : null;
+  const decalMat = decalTex ? new THREE.MeshLambertMaterial({ map: decalTex }) : null;
+  if (decalMat) {
+    // the whole shaft, a hair proud of it, stopping short of the grip
+    g.add(rod(decalMat, 0.0185, 0.0255, shaftLen - 0.02, 0, -0.01, 0));
   }
 
   const headY = -top;
@@ -182,6 +188,8 @@ function buildClub(key, setId = STARTER_SET, skinId = 'stock', decal = null) {
     head.add(box(M('#e8eaee'), 0.014, 0.008, 0.20, -0.045, 0.038, 0.14));
     head.add(box(M('#e8eaee'), 0.014, 0.008, 0.20, 0.045, 0.038, 0.14));
     head.add(box(M('#c8382f'), 0.055, 0.009, 0.045, 0, 0.039, 0.225));  // the sightdot
+    // the flange top: the flat a putter shows you while you stand over it
+    if (decalMat) head.add(box(decalMat, 0.24, 0.006, 0.16, 0, 0.036, 0.15));
     // a plumber's-neck hosel, offset forward — the shaft does not meet a
     // putter head in the middle, and that offset is the whole design
     head.add(rod(M(shaftCol, shine), 0.016, 0.016, 0.10, 0, 0.075, -0.02));
@@ -202,6 +210,9 @@ function buildClub(key, setId = STARTER_SET, skinId = 'stock', decal = null) {
       head.add(box(M('#4a4f56'), w * 0.54, 0.005, 0.006,
                    0, h * 0.16 - i * h * 0.11, -d * 0.345));
     }
+    // the crown: the top of a driver head, and the only part of it anybody
+    // sees while standing over the ball
+    if (decalMat) head.add(blob(decalMat, w * 0.80, h * 0.30, d * 0.76, 0, h * 0.30, d * 0.28));
 
   } else if (club.type === 'hybrid') {
     /* Deliberately BETWEEN the two, because that is what a hybrid is: a
@@ -221,6 +232,7 @@ function buildClub(key, setId = STARTER_SET, skinId = 'stock', decal = null) {
                    0, hh * 0.21 - i * hh * 0.105, -hd * 0.30));
     }
     head.add(rod(M(headCol, 0.8), 0.020, 0.024, 0.07, hw * 0.35, hh * 0.37, 0));
+    if (decalMat) head.add(blob(decalMat, hw * 0.78, hh * 0.28, hd * 0.74, 0, hh * 0.32, hd * 0.26));
 
   } else {
     /* IRONS AND WEDGES, and they are not the same club. A 3 iron is a long
@@ -247,6 +259,13 @@ function buildClub(key, setId = STARTER_SET, skinId = 'stock', decal = null) {
       head.add(box(M('#101216'), w * 0.78, h * 0.52, 0.012, 0, 0, faceD * 0.72));
     } else {
       head.add(blob(M(headCol, 0.6), w * 0.72, h * 0.52, 0.055, 0, -h * 0.12, faceD * 0.75));
+    }
+
+    /* The BACK, because a blade shows its finish from behind rather than
+       from above — putting an iron's decal on the crown would put it where
+       nobody looks and leave the one visible face bare. */
+    if (decalMat) {
+      head.add(box(decalMat, w * 0.80, h * 0.66, 0.008, 0, 0, faceD * 0.5 + 0.028));
     }
 
     /* The sole, and its width is the bounce. A wedge's is visibly thick —
@@ -299,20 +318,39 @@ function buildClub(key, setId = STARTER_SET, skinId = 'stock', decal = null) {
      Tilted, too: a club stood straight up is a pole. Leaning it puts the
      sole, the face and the topline all in one view. */
   g.rotation.z = 0.30;
-  /* The shop frames on the HEAD, because the head is what differs between
-     a 7 iron and a driver and it is what the shop exists to show. A decal
-     preview is the exact opposite: the decal is a band on the SHAFT, and
-     framing the head puts it off-screen entirely. So a club wearing one
-     frames on the whole club instead. */
-  if (!decal) g.userData.focus = head;
+  /* WHAT THE CAMERA FRAMES ON. Normally the HEAD, because the head is what
+     differs between a 7 iron and a driver and it is what the shop exists to
+     show.
+
+     A decal preview cannot use that — the pattern runs the whole shaft — but
+     it cannot frame the whole club either: a driver is a metre and a half of
+     mostly-shaft, and pulling back far enough to fit it makes the head a
+     thumbnail and the pattern a texture you have to take on trust. So it
+     frames the BOTTOM HALF: the head, its decal plate, and a good run of
+     shaft above it. An invisible box rather than a real part, because there
+     is no existing mesh with that extent and inventing one would put
+     geometry on screen to move a camera. */
+  if (!decal) {
+    g.userData.focus = head;
+  } else {
+    const fh = 0.24 + shaftLen * 0.46;
+    const frame = box(new THREE.MeshBasicMaterial({ visible: false }),
+                      0.34, fh, 0.34, 0, -top - 0.12 + fh / 2, 0);
+    frame.visible = false;
+    g.add(frame);
+    g.userData.focus = frame;
+  }
   return g;
 }
 
 /* The head geometry is the thing the shop exists to show, so it is worth
    asserting rather than eyeballing — twelve irons that differ by a number
    nobody checked is how they ended up identical in the first place. */
-export const __buildClubForTest = (key, setId = STARTER_SET, skin = 'stock') =>
-  buildClub(key, setId, skin);
+/* The decal argument is only reachable in a browser — shaftDecalTexture
+   needs a canvas — so Node's shape tests call this without one and the
+   in-page check passes one. */
+export const __buildClubForTest = (key, setId = STARTER_SET, skin = 'stock', decal = null) =>
+  buildClub(key, setId, skin, decal);
 export const __buildCartForTest = (hex) => buildCart(hex);
 
 /* -------------------------------------------------------------- decals ---

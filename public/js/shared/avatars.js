@@ -8,6 +8,7 @@
 
 import { UNLOCKS, unlocksAt } from './unlocks.js';
 import { normaliseWardrobe } from './wardrobe.js';
+import { CLUB_CLASSES, classOf } from './clubsets.js';
 
 export const CAPS = [
   { name: 'White',    hex: '#f2f4f0' },
@@ -228,6 +229,8 @@ export function normaliseLook(look, seedIndex = 0, known = UNLOCK_IDS, level = 9
        places to forget. */
     ...normaliseWardrobe(l, level),
     decal: pickUnlock(l.decal, 'decal', known),
+    clubDecals: normaliseClubDecals(l.clubDecals, known),
+    cartDecal: pickUnlock(l.cartDecal, 'cartdecal', known),
     trail: pickUnlock(l.trail, 'trail', known),
     title: pickUnlock(l.title, 'title', known),
     ballFinish: pickUnlock(l.ballFinish, 'ball', known),
@@ -242,6 +245,40 @@ export function normaliseLook(look, seedIndex = 0, known = UNLOCK_IDS, level = 9
     body: pickId(BODIES, l.body, 0),
     shoes: pick(SHOES, l.shoes, 0)
   };
+}
+
+/* ---------------------------------------------------------- club decals ---
+   `decal` is the club finish you wear on everything. `clubDecals` overrides
+   it PER CLASS — driver, woods, irons, wedges, putter — because those are
+   five different-shaped objects and a pattern that looks right wrapped
+   round a driver's crown does not look right on a putter flange. It is also
+   the way a bag stops being uniform: a player can run a loud driver and
+   quiet irons, which is what real bags look like.
+
+   Sparse on purpose. A class with no entry falls through to `decal`, so a
+   player who never opens this picker is unaffected and the look on the wire
+   grows by nothing. Five short ids is about sixty bytes at its very worst.
+
+   `known` is the same earned-ids set every other cosmetic is checked
+   against — per-class placement must not become a way to wear a decal you
+   have not unlocked. */
+export function normaliseClubDecals(map, known = UNLOCK_IDS) {
+  const out = {};
+  if (!map || typeof map !== 'object') return out;
+  for (const cls of CLUB_CLASSES) {
+    const id = map[cls];
+    if (!id) continue;
+    if (!known.has('decal:' + id)) continue;
+    out[cls] = id;
+  }
+  return out;
+}
+
+/** The decal a given club wears: its class's own, or the bag-wide one. */
+export function clubDecalFor(look, clubKey) {
+  if (!look) return null;
+  const cls = classOf(clubKey);
+  return (cls && look.clubDecals?.[cls]) || look.decal || null;
 }
 
 /** Every cosmetic id that exists, as `kind:id`. */
