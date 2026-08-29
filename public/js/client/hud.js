@@ -227,8 +227,14 @@ function wipe(then) {
 HUD.goPage = (page, { push = true } = {}) => {
   const def = PAGES[page];
   if (!def) return;
-  // no wipe when you are already there — pressing Shop twice is not a journey
-  if (HUD.page === page) { HUD.paintNav(); return; }
+  /* No wipe when you are ALREADY THERE — pressing Shop twice is not a
+     journey. But "there" has to mean what is on screen, not what page was
+     last entered: a round calls HUD.show(null) and never touches HUD.page,
+     so after leaving one the remembered page still named a screen that was
+     no longer up. Guarding on the name alone made that tab a dead button —
+     no screen appeared, no error, and to a player every tab looked broken
+     because the one they were on was the one they pressed first. */
+  if (HUD.page === page && HUD.current === def.screen) { HUD.paintNav(); return; }
   wipe(() => HUD._enterPage(page, def, push));
 };
 

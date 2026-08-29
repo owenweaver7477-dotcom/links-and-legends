@@ -371,3 +371,16 @@ test('tree geometry is cached per detail level too', () => {
     `${bare?.length} tree geometries are cached under a bare key — a tier change ` +
     'would reuse the previous tier\'s mesh');
 });
+
+test('a nav tab re-enters its page when the screen it named is gone', () => {
+  /* A round calls HUD.show(null) and never touches HUD.page, so after
+     leaving one the remembered page still named a screen that was no longer
+     up. Guarding the no-wipe shortcut on the page NAME alone made that tab
+     a dead button — no screen appeared, no error, and to a player every tab
+     looked broken because the one they were on was the one they pressed
+     first. "Already there" has to mean what is on screen. */
+  const HUD = readFileSync(join(__dirname, '../public/js/client/hud.js'), 'utf8');
+  assert.ok(/if \(HUD\.page === page && HUD\.current === def\.screen\)/.test(HUD),
+    'goPage short-circuits on the page name alone — a tab whose screen has been ' +
+    'replaced by a round becomes a dead button');
+});
