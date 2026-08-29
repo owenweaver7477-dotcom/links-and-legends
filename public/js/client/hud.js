@@ -2645,6 +2645,30 @@ HUD.previewOwnedItem = (canvasId, capId, kind, id, opts = {}) => {
     return;
   }
 
+  /* A MELEE IS A MOVE, NOT AN OBJECT. Slap and Boot have no model to turn,
+     so they used to fall through to the generic branch and show a coloured
+     cube — which tells you nothing about the one thing you would want to
+     know, which is what it looks like when you do it. The golfer performs
+     it, exactly as an emote does. The clip ids are the animation's, not the
+     unlock's, so they are mapped here rather than assumed equal. */
+  if (kind === 'melee') {
+    hideFlatPlate(canvasId);
+    const st = avatarStage(canvasId);
+    if (st) st.play({ slap: 'slapping', kick: 'kicking' }[id] || 'shoving');
+    setCap(opts.name || id, 'Press B in a round');
+    return;
+  }
+
+  /* A CART LIVERY BELONGS ON A CART. This was a coloured cube too — so the
+     six liveries, which are the whole point of the category, previewed as
+     six identical boxes in six colours. */
+  if (kind === 'cartdecal') {
+    showShopItem(cv, { kind: 'cart', hex: opts.color || '#7fb6dd', decal: id,
+      name: opts.name, sub: opts.sub });
+    setCap(opts.name || id, opts.sub || 'On your cart');
+    return;
+  }
+
   clearAvatarStage(canvasId);
   const rarity = opts.rarity || RARITIES[0];
   const color = opts.color || rarity.color;

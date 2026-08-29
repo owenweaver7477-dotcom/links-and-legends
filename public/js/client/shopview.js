@@ -30,6 +30,7 @@ import { DECALS } from '../shared/wardrobe.js';
 import { skinById } from '../shared/clubskins.js';
 import { setById, rarityRank, STARTER_SET } from '../shared/clubsets.js';
 import { shaftDecalTexture } from './shaftdecals.js';
+import { cartDecalTexture } from './cartdecals.js';
 import { Avatar } from './avatar.js';
 import { normaliseLook } from '../shared/avatars.js';
 import { applyBallFinish, makeBallMaterial } from '../shared/ballfinish.js';
@@ -106,21 +107,51 @@ function build(canvas) {
 function studioEnv(renderer) {
   const probe = new THREE.Scene();
   const geo = new THREE.SphereGeometry(10, 24, 16);
-  /* Bright above, dim below, with a warm key patch — the shape of a lit
-     room. Vertex colours rather than a shader, because the only thing this
-     has to be is a plausible surrounding, and PMREM blurs it heavily. */
+  /* A ROOM WITH SOMETHING IN IT.
+     -------------------------------------------------------------------
+     This was a smooth grey gradient with one soft warm patch, and a smooth
+     gradient is the one thing a mirror cannot show you. A chrome ball
+     reflecting an even grey dome renders as an even grey ball — so all six
+     ball finishes came out as six white spheres with slightly different
+     shading, which is exactly the "I can't see a difference" they earned.
+
+     A finish is only visible when there is STRUCTURE to reflect, so this
+     dome has some: a hard horizon between a cool sky and a dark floor, a
+     bright overhead softbox, a warm key to one side and a cool fill to the
+     other. Chrome now shows a horizon line and two lights; matte shows
+     none of it. That contrast IS the product being sold.
+
+     Still vertex colours on a 24x16 sphere, still one PMREM per renderer —
+     the cost is unchanged, only the picture is. */
   const mat = new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true });
   const pos = geo.attributes.position;
   const col = new Float32Array(pos.count * 3);
-  const up = new THREE.Color('#e8f1ff'), down = new THREE.Color('#131a16');
-  const key = new THREE.Color('#fff2dc');
+  const sky   = new THREE.Color('#93b4d8');   // cool upper wall
+  /* Not black. A true dark floor is what a real mirror shows and it made
+     chrome read as a half-dipped ball at card size — the horizon has to be
+     legible without the lower hemisphere going to nothing. */
+  const floor = new THREE.Color('#39423d');   // dark ground, so there is a horizon
+  const box   = new THREE.Color('#ffffff');   // the overhead softbox
+  const key   = new THREE.Color('#ffd9a8');   // warm key, camera-right
+  const fill  = new THREE.Color('#7fd4ff');   // cool fill, camera-left
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i) / 10, x = pos.getX(i) / 10, z = pos.getZ(i) / 10;
-    c.copy(down).lerp(up, Math.min(1, Math.max(0, y * 0.5 + 0.5)) ** 0.8);
-    // the key light's own patch, up and to the front-right
-    const d = Math.max(0, x * 0.55 + y * 0.65 + z * 0.52);
-    c.lerp(key, Math.pow(d, 5) * 0.9);
+    const x = pos.getX(i) / 10, y = pos.getY(i) / 10, z = pos.getZ(i) / 10;
+
+    /* A HARD-ish horizon rather than a smooth ramp — the single most
+       readable thing in any reflection is the line where the room stops. */
+    const h = 1 / (1 + Math.exp(-y * 14));            // steep sigmoid at y = 0
+    c.copy(floor).lerp(sky, h);
+
+    // overhead softbox: a broad bright cap, the main thing a shiny ball shows
+    c.lerp(box, Math.pow(Math.max(0, y), 2.2) * 0.92);
+    // warm key to camera-right and slightly front
+    const kd = Math.max(0, x * 0.62 + y * 0.34 + z * 0.58);
+    c.lerp(key, Math.pow(kd, 7) * 0.95);
+    // cool fill opposite it, weaker — two lights read as a room, one reads as a lamp
+    const fd = Math.max(0, -x * 0.66 + y * 0.24 + z * 0.44);
+    c.lerp(fill, Math.pow(fd, 9) * 0.55);
+
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -517,11 +548,31 @@ function buildCaddie(hex = '#e8c15a') {
    cart, built from the same box/rod primitives as the caddie above: this
    is a 260px preview canvas, not the actual drivable cart's geometry —
    that has physics and wheels that turn, this only needs to say "cart". */
-function buildCart(hex = '#7fb6dd') {
+/* `decal` is the livery, and without it the six of them previewed as six
+   identical carts — the whole category rendered as one object in one
+   colour, because the flank that carries the pattern was a bare panel.
+   Same texture the real cart uses (cartdecals.js), so what turns here is
+   what drives out there. */
+function buildCart(hex = '#7fb6dd', decal = null) {
   const g = new THREE.Group();
   const body = M(hex, 0.3), trim = M('#1c2420'), wheelM = M('#161616'), glass = M('#bcd6e8', 0.55);
 
   g.add(box(body, 0.60, 0.18, 0.32, 0, -0.06, 0.02));          // chassis
+
+  /* THE LIVERY PANEL, a hair proud of each flank so it reads as painted on
+     rather than z-fighting with the chassis it sits against. */
+  if (decal) {
+    const tex = cartDecalTexture(decal, hex);
+    if (tex) {
+      const skin = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.45, metalness: 0.18 });
+      for (const z of [0.185, -0.145]) {
+        const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.16), skin);
+        panel.position.set(0, -0.06, z);
+        if (z < 0) panel.rotation.y = Math.PI;   // the far flank faces out too
+        g.add(panel);
+      }
+    }
+  }
   g.add(box(trim, 0.54, 0.20, 0.06, 0, 0.10, -0.13));          // seat back
   g.add(box(trim, 0.54, 0.05, 0.20, 0, 0.02, -0.03));          // seat base
 
@@ -856,7 +907,7 @@ export function showItem(canvas, what) {
   else if (what?.kind === 'decal') obj = buildDecal(what.key);
   else if (what?.kind === 'ball') obj = buildBall(what.hex, what.finish || what.id || null);
   else if (what?.kind === 'caddie') obj = buildCaddie(what.hex);
-  else if (what?.kind === 'cart') obj = buildCart(what.hex);
+  else if (what?.kind === 'cart') obj = buildCart(what.hex, what.decal || null);
   else if (what?.kind === 'case') {
     obj = caseModel(what.key);
   }
