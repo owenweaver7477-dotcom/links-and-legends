@@ -185,16 +185,25 @@ html, body {
    inside it — a player's eye now finds a single object at the bottom of the
    screen instead of counting four. It also rises on show rather than only
    fading, which is what makes it read as arriving. */
-.playbar { position: absolute; bottom: 40px; left: 50%; z-index: 6;
+/* `--pbx` is the horizontal centring offset, and it is a VARIABLE because
+   the transform is now doing two jobs at once: centring the bar and lifting
+   it into place on show. Every narrow breakpoint below re-anchors the bar to
+   left/right instead of centring it, and each used to say `transform: none`
+   — which also cancelled the rise, and (worse) lost to `.playbar.show`'s own
+   transform, so on a phone the bar sat half off the left edge with the club
+   selector and half the meter cut off the screen. One variable, zeroed in
+   the places that anchor it, and the two jobs stop fighting. */
+.playbar { --pbx: -50%;
+  position: absolute; bottom: 40px; left: 50%; z-index: 6;
   display: flex; align-items: stretch; gap: 0;
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-line); border-radius: var(--r-lg);
   box-shadow: var(--glass-lit), var(--glass-lip), var(--glass-cast);
   padding: 8px;
-  opacity: 0; transform: translate(-50%, 10px); pointer-events: none;
+  opacity: 0; transform: translate(var(--pbx), 10px); pointer-events: none;
   transition: opacity .24s ease, transform .28s cubic-bezier(.22,1,.36,1); }
-.playbar.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.playbar.show { opacity: 1; transform: translate(var(--pbx), 0); pointer-events: auto; }
 
 /* The sections. No border, no shadow, no background of their own — the
    hairline between them is the whole separation, which is what stops the
@@ -1257,12 +1266,19 @@ h1 em { font-style: normal; color: #7ed492; }
    `.collapsed` is what the fold button sets (see main.js), so the info
    card takes its rounded bottom back when there is no map under it — a
    square corner ending against nothing is worse than either state. */
-.hud { border-radius: var(--r-md) var(--r-md) 0 0; border-bottom: 0; }
-.minimap { top: 100px; left: 14px; padding: 7px;
-  border-radius: 0 0 var(--r-md) var(--r-md);
-  border-top: 1px solid rgba(255,255,255,.06);
-  box-shadow: var(--glass-lip), var(--glass-cast); }
-.minimap.collapsed { border-radius: 0 0 var(--r-md) var(--r-md); }
+/* The joined edges belong to the DESKTOP layout only — on a phone the hole
+   info is a full-width bar across the top and the map is hidden entirely,
+   so squaring off its bottom corners there just gave the top bar a flat
+   edge against nothing. Scoped to the breakpoint that actually joins them
+   (see the min-width: 641px block further down). */
+@media (min-width: 641px) {
+  body.playing .hud { border-radius: var(--r-md) var(--r-md) 0 0; border-bottom: 0; }
+  body.playing .minimap {
+    border-radius: 0 0 var(--r-md) var(--r-md);
+    border-top: 1px solid rgba(255,255,255,.06);
+    box-shadow: var(--glass-lip), var(--glass-cast); }
+}
+.minimap { top: 100px; left: 14px; padding: 7px; }
 .minimap canvas { display: block; width: 132px; height: auto; border-radius: 8px; }
 @media (max-width: 640px) { .minimap { display: none; } }
 
@@ -1898,7 +1914,7 @@ body.side-open .wallethud, body.playing .wallethud, body.inshop .wallethud { dis
     grid-template-areas: 'club power aim' 'club cancel aim';
     gap: 5px 6px;
     left: 6px; right: 6px; bottom: 6px;
-    width: auto; max-width: none; transform: none;
+    width: auto; max-width: none; --pbx: 0;
     padding: 7px;
   }
   .playbar > .clubsel    { grid-area: club; }
@@ -3252,10 +3268,27 @@ body.side-open .lp-play-fixed { opacity: .5; }
 @media (max-width: 560px), (max-height: 480px) and (max-width: 950px) {
 
   /* ---- the top: ONE bar, not six panels ---------------------------- */
+  /* IT HAS TO STOP BEFORE THE SCORECARD. This said `right: 6px` — the full
+     width of the phone — and the scorecard is pinned to the same top edge
+     on top of it, so the hole's own yardage ran underneath it and read
+     "296 yds · Loo". Capped short of the card, with the yardage truncating
+     honestly if a course name is long, rather than disappearing under
+     another panel. */
   body.playing #stage .panel.hud {
-    top: 6px; left: 6px; right: 6px; padding: 7px 11px;
-    display: flex; align-items: baseline; gap: 9px;
-    border-radius: 12px; background: rgba(8,15,12,.74);
+    top: 6px; left: 6px; right: auto; max-width: calc(100% - 176px);
+    padding: 7px 11px;
+    display: flex; align-items: baseline; gap: 8px;
+    border-radius: 12px; background: var(--glass-bg);
+  }
+  /* The hole number and its par never wrap — they are two short words and
+     breaking "Hole 1" across two lines to save eleven pixels makes the bar
+     taller AND harder to read. The yardage is the elastic part: it holds
+     the whole line's width and truncates if the course name is long. */
+  body.playing .panel.hud .h-title { flex: 0 0 auto; white-space: nowrap; }
+  body.playing .panel.hud .h-par { white-space: nowrap; }
+  body.playing .panel.hud .h-meta {
+    flex: 1 1 auto; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   body.playing .panel.hud .h-course { display: none; }   /* you know the course */
   body.playing .panel.hud .h-title { margin: 0; gap: 7px; }
@@ -3308,7 +3341,7 @@ body.side-open .lp-play-fixed { opacity: .5; }
 
   /* ---- the bottom: one block, and the meter owns it ----------------- */
   body.playing .playbar {
-    left: 6px; right: 6px; bottom: 62px; width: auto;
+    left: 6px; right: 6px; bottom: 62px; width: auto; --pbx: 0;
     display: grid; grid-template-columns: 74px 1fr 74px; gap: 7px;
     align-items: end; padding: 8px; border-radius: 15px;
     background: rgba(8,15,12,.80); border: 1px solid rgba(255,255,255,.09);
@@ -3429,10 +3462,17 @@ body.side-open .lp-play-fixed { opacity: .5; }
   body.playing .playbar .clubsel { grid-area: club; }
   body.playing .playbar .meter   { grid-area: meter; }
   body.playing .playbar .aimsel  { grid-area: aim; }
+  /* On a phone this sits ABOVE the bar as its own tab rather than inside
+     it, so it cannot borrow the bar's background the way the desktop one
+     does — without a solid fill of its own it reads as a ghost floating
+     over the fairway. */
   body.playing .playbar .cancelshot {
     position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
-    right: auto; bottom: auto; z-index: 3;
-    padding: 3px 14px; font-size: 11px; border-radius: 9px;
+    right: auto; bottom: auto; z-index: 3; margin: 0;
+    padding: 3px 14px; font-size: 11px; border-radius: 9px 9px 0 0;
+    background: linear-gradient(180deg, rgba(84,26,22,.95), rgba(52,16,14,.95));
+    border: 1px solid rgba(255,120,100,.30); border-bottom: 0;
+    box-shadow: 0 -2px 10px rgba(0,0,0,.35);
   }
 }
 
