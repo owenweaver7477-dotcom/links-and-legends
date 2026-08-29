@@ -144,3 +144,51 @@ test('the swing turns the hips and the shoulders by different amounts', () => {
   assert.ok(Math.abs(shoulders(0, 1) - hips(0, 1)) < 0.25,
     'the body never squares up at the finish — it ends permanently twisted');
 });
+
+test('a melee comes off the ground, not out of the chest', async () => {
+  /* Every clip in SHOVE_CLIPS expressed its whole rotation as `twist`,
+     which — before the rig had a pelvis — meant the torso turned and the
+     legs were counter-rotated to hold the feet. So a barge was a man
+     swivelling his chest at somebody, and there was nowhere to put the
+     part that comes off the ground. */
+  const { SHOVE_CLIPS, blankPose } = await import('../public/js/client/celebrations.js');
+  for (const [name, clip] of Object.entries(SHOVE_CLIPS)) {
+    let sawYaw = false, sawTwist = false, leadFrames = 0, sampled = 0;
+    for (let i = 1; i < 40; i++) {
+      const k = i / 40;
+      const P = blankPose({});
+      clip.pose(P, k);
+      if (Math.abs(P.yaw || 0) > 1e-6) sawYaw = true;
+      if (Math.abs(P.twist || 0) > 1e-6) sawTwist = true;
+      /* Wherever the body is really turning, the PELVIS should be carrying
+         at least its share. Sampled on magnitude rather than sign: half
+         these clips are reactions and drive the other way. */
+      if (Math.abs(P.yaw || 0) > 0.05) {
+        sampled++;
+        if (Math.abs(P.yaw) >= Math.abs(P.twist || 0) * 0.6) leadFrames++;
+      }
+    }
+    assert.ok(sawYaw, `"${name}" never turns the pelvis — it is all chest`);
+    assert.ok(sawTwist, `"${name}" has no shoulder coil over the pelvis at all`);
+    assert.ok(sampled > 0, `"${name}" never turns the pelvis by a meaningful amount`);
+    assert.ok(leadFrames / sampled > 0.8,
+      `"${name}" leaves the pelvis behind through the drive on ` +
+      `${sampled - leadFrames} of ${sampled} frames`);
+  }
+});
+
+test('the club is put down for a melee, and does not whip about otherwise', () => {
+  /* A barge with a driver still held in front of you is a golfer shoving
+     somebody while carrying a club — and on this rig, where the club hangs
+     between the shoulders and the arms swing independently, it reads as the
+     club being flung about rather than held. */
+  assert.ok(/this\._melee = !!SHOVE_CLIPS\[name\]/.test(SRC),
+    'nothing marks a melee clip, so the club cannot be put down for one');
+  assert.ok(/this\.club\.visible = \(!!g \|\| !moving\) && !\(this\._melee && this\.cel\)/.test(SRC),
+    'the club stays in hand through a melee');
+  /* And outside the swing the hands EASE toward a carried rest pose rather
+     than snapping to whatever the arms are doing — an arm thrown to -1.7
+     radians used to swing the club through a horizontal arc like a spear. */
+  assert.ok(/this\.hands\.rotation\.x \+= \(rest - this\.hands\.rotation\.x\)/.test(SRC),
+    'the hands snap to the arm pose instead of easing — the club will whip');
+});

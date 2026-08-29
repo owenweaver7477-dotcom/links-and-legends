@@ -517,7 +517,18 @@ export const SHOVE_CLIPS = {
       const push = k >= 0.28 ? Math.min(1, (k - 0.28) / 0.16) : 0;
       const back = Math.max(0, 1 - (k - 0.44) / 0.56);
       const drive = push * back;
-      P.twist = (0.42 * load - 0.55 * drive);
+      /* THE HIPS DRIVE IT. Every melee clip in this file expressed its whole
+         rotation as `twist`, which before the rig had a pelvis meant the
+         torso turned and the legs were counter-rotated to hold the feet —
+         so a barge was a man swivelling his chest at somebody. A shove
+         comes off the ground: the hips open first and the shoulders arrive
+         after them, which is the same kinematic sequence the golf swing
+         got and the same reason it reads as a body rather than a hinge.
+
+         Split roughly 45/55 between pelvis and coil, with the pelvis
+         slightly ahead into the drive. */
+      P.yaw = (0.20 * load - 0.34 * drive);
+      P.twist = (0.24 * load - 0.24 * drive);
       P.armLx = (-0.4 * load - 1.75 * drive); P.armRx = (-0.4 * load - 1.6 * drive);
       P.armLz = 0.34 * drive; P.armRz = -0.34 * drive;
       P.armLy = -0.35 * drive; P.armRy = 0.28 * drive;   // hands meet in front
@@ -538,7 +549,12 @@ export const SHOVE_CLIPS = {
       const hit = swing * back;
       /* The twist does the work and the arm follows. Written the other way
          round — arm only — it looked like someone shooing a fly. */
-      P.twist = (0.62 * wind - 0.95 * hit);
+      /* Same split as the barge above — the hips wind up and unwind first,
+         and the shoulders carry the rest. A slap driven entirely from the
+         chest is the "shooing a fly" this clip's own comment warns about,
+         one level further up the body than it was thinking about. */
+      P.yaw = (0.26 * wind - 0.44 * hit);
+      P.twist = (0.36 * wind - 0.51 * hit);
       P.armRx = -1.5 * (wind * 0.35 + hit);
       P.armRz = -0.55 * wind + 1.15 * hit;
       P.armRy = 0.85 * wind - 1.25 * hit;         // right across the body
@@ -563,7 +579,13 @@ export const SHOVE_CLIPS = {
       P.legLx = 0.18 * load * back;
       P.legRz = -0.20 * swing * back;                  // the boot turns over
       P.bodyRx = (0.26 * load + 0.34 * swing) * back;  // lean back over the plant
-      P.twist = (-0.34 * load + 0.30 * swing) * back;  // hips open into it
+      /* "hips open into it" is what this line always said it was doing, and
+         `twist` is the SHOULDERS — before the rig had a pelvis there was
+         nowhere else to put it. There is now: the pelvis opens around the
+         plant foot and the shoulders COUNTER-rotate, which is what keeps a
+         kicker upright and is most of why a kick reads as a kick. */
+      P.yaw = (-0.30 * load + 0.46 * swing) * back;    // the pelvis, around the plant
+      P.twist = (-0.14 * load - 0.20 * swing) * back;  // shoulders counter, for balance
       P.armLx = -0.95 * (load + swing) * back;         // arms up for balance
       P.armRx = -0.55 * (load + swing) * back;
       P.armLz = 0.62 * back * (load + swing);
@@ -585,7 +607,12 @@ export const SHOVE_CLIPS = {
       P.armLz = 0.72 * e; P.armRz = -0.62 * e;
       P.legLx = 0.42 * hit; P.legRx = -0.30 * hit;
       P.legLz = 0.24 * e; P.legRz = -0.16 * e;    // feet scrabble wide
-      P.twist = -0.28 * e;
+      /* Being shoved turns the WHOLE body — you are knocked off your line,
+         not swivelled at the chest. The pelvis takes most of it and the
+         shoulders whip a little further, which is the difference between
+         stumbling and shrugging. */
+      P.yaw = -0.34 * e;
+      P.twist = -0.20 * e;
       P.armLy = 0.30 * e; P.armRy = -0.24 * e;
       P.headRx = 0.22 * hit;
       P.bodyY = -0.06 * hit;

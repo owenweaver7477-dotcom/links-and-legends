@@ -583,6 +583,12 @@ export class Avatar {
        and an earned celebration are the same kind of thing to the renderer,
        so there is one code path and one place for it to go wrong. */
     const c = CLIPS[name] || EMOTE_CLIPS[name] || SHOVE_CLIPS[name];
+    /* Melee needs both hands. A barge or a slap with a driver still held in
+       front of you is a golfer shoving somebody while carrying a club, and
+       on this rig — where the club hangs between the shoulders and the arms
+       swing independently — it reads as the club being flung about rather
+       than held. It goes away for the length of the clip. */
+    this._melee = !!SHOVE_CLIPS[name];
     if (!c || this.seated) return 0;      // never celebrate from a cart seat
     this.cel = { name, t: 0, dur: c.dur, in: c.in, out: c.out, clip: c };
     return c.dur;
@@ -1199,7 +1205,7 @@ export class Avatar {
     // cannot see is not a reward." Still hidden while WALKING specifically
     // — that pose was never built with a held club in mind, and this find
     // only asked for it to show while standing still.
-    this.club.visible = !!g || !moving;
+    this.club.visible = (!!g || !moving) && !(this._melee && this.cel);
     if (g && !moving) {
       // The swing is described by one phase value φ:
       //   -1..0  backswing (φ = -k, straight off the power meter)
@@ -1305,8 +1311,20 @@ export class Avatar {
       this.wristL.rotation.x = this.wristR.rotation.x = this.club.rotation.x;
       if (g.yawLock != null) this._yaw = g.yawLock;
     } else {
+      /* NOT SWINGING. The club rides the hands, and the hands used to snap
+         straight to whatever the arms were doing — so a slap or a barge,
+         which throws an arm to -1.7 radians, swung the club through a
+         horizontal arc like a spear. Eased toward a carried rest pose
+         instead: the club stays in front of the golfer through a clip
+         rather than whipping about with one arm.
+
+         Damped rather than pinned, because a walking golfer's club SHOULD
+         swing gently with the stride, and this is the same value that does
+         it — it just no longer follows a melee. */
       this.club.rotation.x = 0.25;
-      this.hands.rotation.set(P.armRx || -0.15, 0, 0);
+      const rest = -0.15 + Math.max(-0.55, Math.min(0.15, (P.armRx || 0) * 0.22));
+      this.hands.rotation.x += (rest - this.hands.rotation.x) * Math.min(1, dt * 9);
+      this.hands.rotation.z = 0;
       this.wristL.rotation.x = this.wristR.rotation.x = 0.25;
     }
 
