@@ -178,7 +178,14 @@ const MENU_SCREENS = new Set(['landing', 'home', 'shop', 'boards', 'wardrobe']);
 const PAGES = {
   play:   { label: 'Play',   screen: 'landing' },
   shop:   { label: 'Shop',   screen: 'shop',   panes: ['shop'] },
-  locker: { label: 'Locker', screen: 'shop',   panes: ['golfer', 'inventory', 'bag'] },
+  /* THREE VIEWS, NOT ONE SCROLL. The Locker showed its golfer, its bag and
+     its inventory stacked on top of each other — 3,200 pixels of page, so
+     reaching your own inventory meant scrolling past every shirt colour in
+     the game. They are three genuinely different questions ("what do I look
+     like", "what am I carrying", "what do I own") and they get three tabs.
+     `sub` is the default; `subs` is what the tab bar offers. */
+  locker: { label: 'Locker', screen: 'shop', panes: ['golfer'], sub: 'golfer',
+            subs: [['golfer', 'Golfer'], ['bag', 'Your bag'], ['inventory', 'Inventory']] },
   market: { label: 'Market', screen: 'shop',   panes: ['market'] },
   social: { label: 'Social', screen: 'boards' },
   career: { label: 'Career', screen: 'shop',   panes: ['career', 'rewards'] }
@@ -242,13 +249,56 @@ HUD._enterPage = (page, def, push) => {
   HUD.page = page;
   HUD.onPageEnter?.(page, def);            // main.js renders what it needs
   HUD.show(def.screen);
-  if (def.panes) HUD.showPanes(def.panes);
+  /* A page with sub-views opens on the one you left it on, which is the
+     whole reason to remember it — coming back to the Locker to change one
+     more club and landing on the wardrobe is the tab bar working against
+     you. */
+  if (def.subs) HUD.showPanes([HUD.subOf(page)]);
+  else if (def.panes) HUD.showPanes(def.panes);
+  HUD.paintSubs(page, def);
   // the header named the screen, which was always "Career" whatever you
   // were actually looking at
   const title = document.getElementById('hkPageTitle');
   if (title) title.textContent = def.label;
   if (push) HUD.pushHash(page);
   HUD.paintNav();
+};
+
+/* Which sub-view each page was last left on. Remembered per page rather
+   than one global, because "the tab I was on" is a different answer for the
+   Locker than it would be for anything else that grows sub-views later. */
+HUD._subs = {};
+HUD.subOf = page => HUD._subs[page] || PAGES[page]?.sub || (PAGES[page]?.panes || [])[0];
+
+/** Paint (or clear) the sub-tab bar for a page. */
+HUD.paintSubs = (page, def) => {
+  const bar = document.getElementById('hkSubs');
+  if (!bar) return;
+  if (!def?.subs) { bar.hidden = true; bar.innerHTML = ''; return; }
+  const cur = HUD.subOf(page);
+  bar.hidden = false;
+  bar.innerHTML = def.subs.map(([id, label]) =>
+    `<button class="hksub${id === cur ? ' on' : ''}" data-sub="${id}">${escapeHtml(label)}</button>`
+  ).join('');
+  if (!bar.dataset.wired) {
+    bar.dataset.wired = '1';
+    bar.addEventListener('click', e => {
+      const b = e.target.closest('[data-sub]');
+      if (!b) return;
+      HUD.goSub(b.dataset.sub);
+    });
+  }
+};
+
+/** Switch sub-view within the page you are already on. */
+HUD.goSub = sub => {
+  const def = PAGES[HUD.page];
+  if (!def?.subs || !def.subs.some(([id]) => id === sub)) return;
+  if (HUD.subOf(HUD.page) === sub) return;
+  HUD._subs[HUD.page] = sub;
+  HUD.showPanes([sub]);
+  HUD.paintSubs(HUD.page, def);
+  HUD.onSubEnter?.(HUD.page, sub);
 };
 
 /** Show exactly these clubhouse panes, hiding the rest. Replaces
@@ -2106,6 +2156,24 @@ HUD.renderLook = (look, onPick, level = 1, caseUnlocks = []) => {
   const earnedGroups = EARNED_GROUPS.filter(g => ownedOfKind(level, g.kind, caseUnlocks).length);
   const pending = EARNED_GROUPS.filter(g => !ownedOfKind(level, g.kind, caseUnlocks).length);
 
+  /* TWO SECTIONS, because these are two kinds of thing. Everything below
+     used to arrive as eighteen identical rows of pills with one "Quick
+     change" label over the lot — so the five things you EARNED sat in the
+     same undifferentiated wall as your trouser colour, and finding the
+     decal you just pulled from a case meant reading every row.
+
+     What you earned comes first and gets said out loud; what you chose
+     comes after. */
+  const sectionHead = (title, note) => {
+    const h = document.createElement('div');
+    h.className = 'look-sec';
+    h.innerHTML = `<h5>${escapeHtml(title)}</h5><span>${escapeHtml(note)}</span>`;
+    el.lookPicker.appendChild(h);
+  };
+  if (earnedGroups.length) {
+    sectionHead('Earned', 'Pulled from cases or unlocked by levelling.');
+  }
+
   for (const grp of earnedGroups) {
     const owned = ownedOfKind(level, grp.kind, caseUnlocks);
     const g = document.createElement('div');
@@ -2129,6 +2197,8 @@ HUD.renderLook = (look, onPick, level = 1, caseUnlocks = []) => {
     g.append(h, row);
     el.lookPicker.appendChild(g);
   }
+
+  sectionHead('Appearance', 'Free, and yours to change whenever you like.');
 
   for (const grp of LOOK_GROUPS) {
     const g = document.createElement('div');

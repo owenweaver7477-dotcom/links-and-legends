@@ -4838,3 +4838,31 @@ body.navbar-on #gemBal { display: none; }
   100% { transform: translate(var(--dx), calc(var(--dy) + 46vh)) rotate(var(--rot)) scale(.85); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .burst { display: none; } }
+
+/* ════════════════════════════════════════════ LOCKER SUB-TABS ═══════════
+   Three questions — what do I look like, what am I carrying, what do I own
+   — that used to be one 3,200px scroll. Bigger and more deliberate than the
+   shop's category chips, because these are ROOMS rather than filters. */
+.hksubs { display: flex; gap: 6px; margin: 4px 0 18px; flex-wrap: wrap; }
+.hksub { padding: 9px 18px; border-radius: var(--r-md); cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  color: var(--muted); background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  transition: background .14s, color .14s, border-color .14s, transform .1s; }
+.hksub:hover { background: rgba(255,255,255,.09); color: var(--ink-2); }
+.hksub.on { background: linear-gradient(180deg, rgba(70,169,94,.34), rgba(47,125,67,.24));
+  border-color: rgba(150,236,172,.44); color: #fff;
+  box-shadow: var(--glass-lit), 0 4px 14px rgba(47,125,67,.28); }
+.hksub:active { transform: translateY(1px); }
+@media (max-width: 560px) {
+  .hksub { flex: 1 1 auto; text-align: center; padding: 9px 10px; font-size: 11px; }
+}
+
+/* The two halves of the wardrobe: what you earned, and what you chose. */
+.look-sec { flex: 1 1 100%; display: flex; align-items: baseline; gap: 10px;
+  margin: 14px 0 2px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.07);
+  flex-wrap: wrap; }
+.look-sec:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.look-sec h5 { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--ink-2); }
+.look-sec span { font-size: 10px; color: var(--muted); }
