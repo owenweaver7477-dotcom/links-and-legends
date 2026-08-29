@@ -11,6 +11,7 @@
    ========================================================================= */
 
 import { clamp } from './rng.js';
+import { PROP_KINDS } from './props.js';
 
 /* ------------------------------------------------------------- geometry */
 export const WHEELBASE = 1.65;    // m, rear axle to front axle
@@ -91,11 +92,44 @@ export const A_LAT_MAX = 7.7;       // m/s² — this alone decides cart vs go-k
                                     // roughly as true as it was before.
 
 /* ------------------------------------------------------------- collision */
-export const HIT_RATE = { tree: 9.0, bank: 5.5, fence: 4.0 };
-export const IMPACT = { tree: 0.45, bank: 0.25, fence: 0.15 };
+export const HIT_RATE = { tree: 9.0, bank: 5.5, fence: 4.0, prop: 7.0 };
+export const IMPACT = { tree: 0.45, bank: 0.25, fence: 0.15, prop: 0.35 };
 export const CRASH_SPEED = 9.5;     // a genuinely head-on hit at speed
-export const RESTITUTION = 0.32;    // how much of the closing speed bounces back
-export const YAW_KICK = 2.6;        // rad/s of spin from a glancing blow
+
+/* ═══════════════════════════════════════════════ ARCADE, NOT SIMULATION ══
+   This used to be a reasonable model of a golf cart hitting a tree: e=0.32,
+   a tangential friction of 0.30 on the trunk, and no vertical motion at all
+   because the chassis was welded to the terrain height. What that produces
+   is a vehicle that stops, grinds, and sits back down — which is realistic
+   and is exactly the "rigid static friction block" complaint. Nobody has
+   ever driven a cart into a bench for realism.
+
+   So the numbers now serve the other goal. A hit PINGS: most of the closing
+   speed comes back, the tangent barely scrubs at all so a clip keeps its
+   momentum, and a square blow launches the thing off the ground. Landing
+   bounces once more and you drive on. Getting it wrong is meant to be the
+   good bit, and recovering from it is meant to be quick.
+
+   RESTITUTION at 0.72 is well past anything physical — a real cart is about
+   0.2 — and that is the point. */
+export const RESTITUTION = 0.72;    // how much of the closing speed bounces back
+export const SCRUB = { tree: 0.06, bank: 0.05, fence: 0.03, prop: 0.02 };
+export const YAW_KICK = 3.4;        // rad/s of spin from a glancing blow
+
+/* ------------------------------------------------------------- airborne ---
+   The chassis was pinned to the terrain, so the most dramatic thing a crash
+   could do was rock the body on a cosmetic spring. A cart that cannot leave
+   the ground cannot do the one thing this kind of driving is played for.
+
+   `air` is height above the terrain and `vy` is the rate. Impacts pop it,
+   gravity brings it back, and it bounces once on landing before settling —
+   which is what stops a landing being a full stop. */
+export const AIR_G = 17.0;          // m/s² — heavier than real gravity, so a
+                                    // launch is a hop rather than a moon jump
+export const LAUNCH = 3.4;          // m/s of pop from a full-speed square hit
+export const LAND_BOUNCE = 0.34;    // of the landing speed, returned upward
+export const AIR_STEER = 0.25;      // how much the wheels bite with none of
+                                    // them on the ground
 
 /* ---------------------------------------------------------------- tipping ---
    A golf cart is a tall, narrow, short-wheelbase thing with no suspension
@@ -109,7 +143,10 @@ export const YAW_KICK = 2.6;        // rad/s of spin from a glancing blow
    are walking until it rights itself. Cosmetic spring on top, unchanged. */
 export const TIP_OVER = 0.95;       // rad of body roll the cart cannot recover
 export const ON_SIDE = 1.42;        // where it settles once it has gone over
-export const RIGHT_AFTER = 3.2;     // seconds before someone hauls it back up
+/* FAST RECOVERY. 3.2 seconds of staring at a cart on its side is a
+   punishment; 1.2 is a beat of comedy and then you are driving again. The
+   crash is the entertainment, not the sentence for it. */
+export const RIGHT_AFTER = 1.2;     // seconds before someone hauls it back up
 /* Soft enough to actually go somewhere. At 34 and 7.2 the body was so stiff
    that a full-speed impact into an oak peaked at 0.56 rad — it twitched and
    sat back down, which is the complaint that started this. 20 and 4.6 is
@@ -204,12 +241,17 @@ export class CartBody {
     this._wasTouching = false;      // edge trigger, so a scrape isn't a crash
     this.odo = 0;                   // m, for spinning the wheels
     this.boost = 1;                 // the shop's cart tune: multiplies top and motor
+    this.air = 0;                   // m above the terrain — see AIR_G
+    this.vy = 0;                    // m/s vertical
+    this.landed = 0;                // one-frame flag: how hard it just landed
+    this.smashed = [];              // prop indices flattened since the last read
   }
 
   set(x, z, heading, speed = 0) {
     this.x = x; this.z = z; this.heading = heading; this.speed = speed;
     this.steer = 0;
     this.tilt = 0; this.tiltV = 0; this.flipped = 0;
+    this.air = 0; this.vy = 0; this.landed = 0;
   }
 
   /** Upside down and going nowhere. */
@@ -292,7 +334,31 @@ export class CartBody {
 
   _sub(dt, input, terrain, hole) {
     // on its side nothing responds — that is the whole point of going over
-    if (this.flipped > 0) { this.speed = 0; this.steer = 0; return; }
+    if (this.flipped > 0) { this.speed = 0; this.steer = 0; this.air = 0; this.vy = 0; return; }
+
+    /* ------------------------------------------------------------- air ---
+       Height above the terrain, integrated here so it happens whether or not
+       the cart is driving. A landing bounces once rather than stopping dead:
+       coming down at speed and immediately sticking is the same "invisible
+       wall" feeling as hitting one, in the vertical. */
+    this.landed = 0;
+    if (this.air > 0 || this.vy > 0) {
+      this.vy -= AIR_G * dt;
+      this.air += this.vy * dt;
+      if (this.air <= 0) {
+        const down = -this.vy;
+        this.air = 0;
+        if (down > 1.4) {
+          this.vy = down * LAND_BOUNCE;      // one bounce, then it settles
+          this.landed = Math.min(1, down / 6);
+          this.hit = Math.max(this.hit, this.landed * 0.55);
+          // a heavy landing rocks the body, which is what sells the weight
+          this.tiltV += (this.tilt >= 0 ? 1 : -1) * this.landed * 2.2;
+        } else {
+          this.vy = 0;
+        }
+      }
+    }
     const surf = surfFor(terrain.surfaceAt(this.x, this.z).id);
     /* How much the ground falls away sideways under the cart. Sampled here
        because this is the only place with the terrain in hand; _roll runs
@@ -388,7 +454,11 @@ export class CartBody {
       // right-handed frame the driver's right hand points along (-cos h, sin h)
       // — which is the direction you reach by DECREASING h.  Turning right is
       // therefore -dh, not +dh; getting this backwards swaps A and D.
-      let dh = -(this.speed * Math.tan(this.steer) / WHEELBASE) * dt;
+      /* Wheels off the ground barely turn anything. Full steering authority
+       mid-flight is the one thing that makes an arcade launch feel like a
+       bug rather than a stunt. */
+    const grip = this.air > 0.05 ? AIR_STEER : 1;
+    let dh = -(this.speed * Math.tan(this.steer) / WHEELBASE) * dt * grip;
       /* Spin left over from a glancing impact, bled off over about a third of
          a second.  This is what makes a clipped tree turn the cart instead of
          just slowing it — steering is the driver's input, this is the world
@@ -439,6 +509,48 @@ export class CartBody {
         nz = t.z + nZ * solid;
         this._deflect(nX, nZ, 'tree');
         touching = true;
+      }
+    }
+
+    /* ------------------------------------------------------- the furniture
+       DESTRUCTIBLE, and the data already said which. props.js splits its
+       eight kinds into `solid` — the hut, the shelter, the toilet block,
+       things with a roof and a floor — and everything else: a bench, a ball
+       washer, a marker post, a bin, a range crate.
+
+       The heavy ones bounce you. The light ones EXPLODE, cost you almost no
+       speed, and stay broken. Driving through a row of range crates at full
+       tilt is the single most arcade thing this game can offer and the
+       geometry for it has been sitting on every hole since props existed —
+       the cart simply never asked about them. */
+    const props = hole.props;
+    if (props) {
+      for (let i = 0; i < props.length; i++) {
+        const pr = props[i];
+        if (pr.broken) continue;
+        const kind = PROP_KINDS[pr.kind];
+        if (!kind) continue;
+        const rad = kind.r + PROBE_R * 0.72;
+        const ddx = nx - pr.x, ddz = nz - pr.z;
+        const d2 = ddx * ddx + ddz * ddz;
+        if (d2 >= rad * rad || d2 <= 1e-9) continue;
+        const d = Math.sqrt(d2);
+        const nX = ddx / d, nZ = ddz / d;
+        if (kind.solid) {
+          nx = pr.x + nX * rad;
+          nz = pr.z + nZ * rad;
+          this._deflect(nX, nZ, 'prop');
+          touching = true;
+        } else if (Math.abs(this.speed) > 1.2) {
+          /* SMASHED. No push-out at all — the cart drives straight through
+             what is now scenery in pieces. It costs a tenth of the speed
+             and a jolt, which is the price of a good noise. */
+          pr.broken = true;
+          this.smashed.push(i);
+          this.speed *= 0.90;
+          this.hit = Math.max(this.hit, 0.45);
+          this.tiltV += (nX * Math.cos(this.heading) - nZ * Math.sin(this.heading)) * 1.1;
+        }
       }
     }
 
@@ -522,9 +634,11 @@ export class CartBody {
     vx -= (1 + e) * into * nX;
     vz -= (1 + e) * into * nZ;
 
-    /* Friction along the surface: a cart scraping a trunk sheds speed on the
-       tangent as well, or a glancing blow would cost nothing at all. */
-    const mu = (what === 'tree' ? 0.30 : what === 'bank' ? 0.20 : 0.12) * (first ? 1 : 0.20);
+    /* A whisper of tangential scrub, and no more. This used to be 0.30 on a
+       tree — enough that a glancing blow ground to a halt against the trunk,
+       which is the "static friction block" this pass exists to remove. A
+       clip should ricochet with its speed mostly intact. */
+    const mu = (SCRUB[what] ?? 0.05) * (first ? 1 : 0.20);
     const tX = -nZ, tZ = nX;
     const along = vx * tX + vz * tZ;
     vx -= along * mu * tX;
@@ -556,6 +670,14 @@ export class CartBody {
          — using `side` for both meant a square hit at full speed, the one
          impact that should absolutely put a cart on its roof, generated
          almost no roll at all because its cross product is near zero. */
+      /* AND IT LEAVES THE GROUND. A square hit at speed launches the cart —
+         which is the single biggest difference between this and the version
+         that stopped dead against an invisible wall. Scaled by how head-on
+         it was and how fast, so a gentle nudge into a bench does nothing and
+         a full-tilt meeting with an oak sends it up. */
+      const launch = LAUNCH * head * Math.min(1, Math.abs(sp) / MAX_FWD);
+      if (launch > 0.4) this.vy = Math.max(this.vy, launch);
+
       const over = Math.sign(side) || (this.tilt >= 0 ? 1 : -1);
       /* Clamped at 1, the same way `hit` just above already is — a full
          square hit at (old) stock top speed already means "roll it", and

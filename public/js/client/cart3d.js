@@ -328,7 +328,10 @@ export class Cart3D {
    * @param normal   terrain normal, for leaning into the hill
    */
   update(dt, body, groundY, normal) {
-    this.root.position.set(body.x, groundY, body.z);
+    /* `air` is the arcade launch (see cart.js): the chassis used to be
+       welded to the terrain height, so the most a crash could do was rock
+       the body on a cosmetic spring. */
+    this.root.position.set(body.x, groundY + (body.air || 0), body.z);
     this.root.rotation.y = body.heading;
     this.front.rotation.y = -(body.steer || 0);
 
@@ -396,6 +399,13 @@ export class Cart3D {
        carry on looking perfectly upright on screen. */
     const bodyTilt = body.tilt || 0;
     this.tilt.rotation.x = this.pitch + slopePitch;
+    /* Nose up on the way out, down on the way in. Without it a launched
+       cart is a box sliding along an invisible ramp — the pitch is what
+       reads as flight. */
+    if ((body.air || 0) > 0.02 || (body.vy || 0) > 0) {
+      this.pitch += (clampN(-(body.vy || 0) * 0.10, -0.42, 0.42) - this.pitch)
+                    * Math.min(1, dt * 6);
+    }
     this.tilt.rotation.z = this.roll + slopeRoll + bodyTilt;
     // once it is over, the chassis rests on its side rather than hovering at
     // wheel height — drop it by roughly half the track
@@ -406,7 +416,7 @@ export class Cart3D {
        vehicle up on two wheels or launched off a bank kept a firm dark
        print on the ground it was nowhere near — which is the exact thing
        contact AO exists to say is not happening. */
-    const lift = Math.max(0, this.heave) + Math.abs(bodyTilt) * 0.9;
+    const lift = Math.max(0, this.heave) + Math.abs(bodyTilt) * 0.9 + (body.air || 0) * 1.2;
     const k = Math.max(0, 1 - lift * 1.6);
     this.blob.scale.set(2.2 * (0.55 + 0.45 * k), 3.1 * (0.55 + 0.45 * k), 1);
     this.blob.material.opacity = 0.5 * k;

@@ -1895,6 +1895,20 @@ function frame(now) {
       }
     } else _cartStride = 0;
   }
+  /* Anything the cart drove through this frame. Drained rather than read,
+     so a prop is toppled exactly once however many frames it took to clear
+     the collision circle — and the cart body stays the one thing that
+     decides what breaks, since it is the only thing that knows how fast it
+     was going. */
+  const body = carts.body;
+  if (body?.smashed?.length) {
+    for (const i of body.smashed) {
+      scene.smashProp(i);
+      const pr = G.hole?.props?.[i];
+      if (pr) scene.fx?.burst('grass', pr.x, G.T.heightAt(pr.x, pr.z) + 0.5, pr.z, 5);
+    }
+    body.smashed.length = 0;
+  }
   carts.render(dt, G.T, G.myPid, tintOf, now, cartDecalOf);
   pushMyPosition(now);
   updateAvatars(dt);

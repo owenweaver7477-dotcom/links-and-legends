@@ -172,6 +172,8 @@ export class GolfScene {
     this.t = 0;
     this._water = [];
     this._trees = [];
+    this._props = new Map();       // prop index -> its node, so one can be smashed
+    this._falling = [];            // props mid-topple, advanced by _fallProps
     this.resize();
   }
 
@@ -444,6 +446,8 @@ export class GolfScene {
     this.balls.clear();
     this._water.length = 0;
     this._trees.length = 0;
+    this._props.clear();
+    this._falling.length = 0;
     /* The environment map is generated FROM the sky material that the loop
        above has just disposed, so it has to go with it — otherwise the
        reflection outlives the sky it was taken of, and eighteen holes leave
@@ -927,9 +931,49 @@ export class GolfScene {
         }
         default: continue;
       }
+      /* Indexed, so a cart can smash one by number. The cart body decides
+         WHAT breaks (see cart.js's prop pass, which splits on props.js's own
+         `solid` flag); this only has to know which node that was. */
+      n.userData.propIndex = list.indexOf(p);
+      this._props.set(n.userData.propIndex, n);
       g.add(n);
     }
     return g;
+  }
+
+  /**
+   * Flatten a prop the cart just drove through.
+   *
+   * Toppled rather than deleted. A bench that vanishes is a rendering bug
+   * and a bench lying on its side is a thing that happened — and it stays
+   * lying there for the rest of the hole, which is the only proof anybody
+   * has that the drive was worth doing.
+   */
+  smashProp(i) {
+    const n = this._props.get(i);
+    if (!n || n.userData.smashed) return;
+    n.userData.smashed = true;
+    /* Fall away from where the cart came from if we know, otherwise pick a
+       side off the index so a row of crates does not go over in unison. */
+    const dir = (i % 2 ? 1 : -1) * (0.9 + (i % 3) * 0.2);
+    n.userData.fall = { t: 0, dir, from: n.rotation.z };
+    this._falling.push(n);
+  }
+
+  /** Advance every prop mid-topple. Called once per frame from update. */
+  _fallProps(dt) {
+    if (!this._falling.length) return;
+    for (let i = this._falling.length - 1; i >= 0; i--) {
+      const n = this._falling[i];
+      const f = n.userData.fall;
+      f.t += dt * 3.4;
+      // overshoot and settle, so it lands with a knock rather than easing to rest
+      const k = Math.min(1, f.t);
+      const over = Math.sin(k * Math.PI) * 0.18 * (1 - k);
+      n.rotation.z = f.from + (Math.PI * 0.5 * f.dir) * (k * k * (3 - 2 * k)) + over * f.dir;
+      n.position.y -= dt * 0.35 * (1 - k);      // sinks a little as it goes over
+      if (k >= 1) this._falling.splice(i, 1);
+    }
   }
 
   /* ------------------------------------------------------------ water --- */
@@ -2627,6 +2671,7 @@ export class GolfScene {
         this.sun.target.position.z + this.sunDir.z * 220);
       this.sun.target.updateMatrixWorld();
     }
+    this._fallProps(dt);
     for (const w of this._water) {
       const sh = w.userData.mat.userData.sh;
       if (sh) sh.uniforms.uTime.value = this.t;

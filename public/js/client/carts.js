@@ -285,12 +285,14 @@ export class CartManager {
       r = {
         x: cart.x, z: cart.z, heading: cart.h, speed: cart.v || 0, steer: 0,
         tilt: cart.t || 0, ttilt: cart.t || 0,
+        air: cart.a || 0, tair: cart.a || 0,
         tx: cart.x, tz: cart.z, theading: cart.h, rider: cart.r || null, seenAt: now
       };
       this.remote.set(pid, r);
     }
     r.tx = cart.x; r.tz = cart.z; r.theading = cart.h;
     r.ttilt = cart.t || 0;
+    r.tair = cart.a || 0;
     r.speed = cart.v || 0;
     r.rider = cart.r || null;
     r.seenAt = now;
@@ -432,6 +434,7 @@ export class CartManager {
       r.z += (r.tz - r.z) * kp;
       r.heading += shortestArc(r.heading, r.theading) * kp;
       r.tilt += ((r.ttilt || 0) - (r.tilt || 0)) * kp;
+      r.air += ((r.tair || 0) - (r.air || 0)) * kp;
       this._mesh(pid, tintOf(pid), decalOf(pid)).update(dt, r, terrain.heightAt(r.x, r.z),
         terrain.normalAt(r.x, r.z, 1.15));
     }
@@ -473,8 +476,12 @@ export class CartManager {
          is worse than not having flips at all — the one thing a crash has to
          be is a thing the whole room saw. Two bytes on a channel that already
          runs ten times a second. */
+      /* `a` is the arcade launch height. A cart sailing over a bunker on
+         the driver's screen and grinding along the turf on everyone else's
+         is the same failure the body roll had before `t` was added, and a
+         launch is the most watchable thing a cart does. */
       return { s: 'd', x: r2(b.x), z: r2(b.z), h: r2(b.heading), v: r2(b.speed),
-               t: r2(b.tilt), r: this.rider || null };
+               t: r2(b.tilt), a: r2(b.air || 0), r: this.rider || null };
     }
     if (this.riding) return { s: 'p', o: this.driver };
     return null;

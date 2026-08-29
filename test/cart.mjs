@@ -8,9 +8,11 @@
    ========================================================================= */
 
 import { CartBody, CART_SURF, surfFor, nearestDrivable, drivable,
-         MAX_FWD, ABS_MAX, WHEELBASE, MAX_BOOST, TOP_SPEED_KMH, BASE_SPEED_KMH } from '../public/js/shared/cart.js';
+         MAX_FWD, ABS_MAX, WHEELBASE, MAX_BOOST, TOP_SPEED_KMH, BASE_SPEED_KMH,
+         RESTITUTION, SCRUB, RIGHT_AFTER, AIR_G, AIR_STEER } from '../public/js/shared/cart.js';
 import { TerrainModel, SURFACES, terrainFor } from '../public/js/shared/terrain.js';
 import { Walker } from '../public/js/client/walker.js';
+import { PROP_KINDS } from '../public/js/shared/props.js';
 import { allCourses } from '../public/js/shared/coursegen.js';
 import { BIOMES } from '../public/js/shared/biomes.js';
 import { CLIPS, POSE_KEYS, blankPose, reactionFor } from '../public/js/client/celebrations.js';
@@ -967,6 +969,130 @@ head('celebrations');
   ok('every clip stays finite across its whole length', finite);
   ok('every clip ends on the neutral pose', endsNeutral,
      `worst residual ${worst.toFixed(4)} on ${worstKey}`);
+}
+
+/* ══════════════════════════════════════════════════ ARCADE COLLISIONS ═════
+   The old model was a reasonable simulation of a golf cart hitting a tree:
+   e=0.32, 0.30 of tangential friction on the trunk, and no vertical motion
+   at all because the chassis was welded to the terrain height. What that
+   produces is a vehicle that stops, grinds and sits back down — realistic,
+   and exactly the "rigid static friction block" this replaced. Nobody has
+   ever driven a cart into a bench for realism. */
+head('arcade collisions — bounce, launch, and things that break');
+{
+  ok('a hit bounces rather than sticking', RESTITUTION > 0.6,
+     `restitution ${RESTITUTION}`);
+  ok('a glancing blow ricochets rather than grinding',
+     Object.values(SCRUB).every(mu => mu < 0.12),
+     Object.entries(SCRUB).map(([k, v]) => k + ' ' + v).join(' '));
+  ok('recovery from a flip is a beat, not a sentence',
+     RIGHT_AFTER <= 1.6 && RIGHT_AFTER > 0.5, `${RIGHT_AFTER}s on its side`);
+  ok('a launch is a hop, not a moon jump', AIR_G > 9.81, `${AIR_G} m/s²`);
+
+  /* Airborne, integrated through the real update rather than by hand. */
+  const T = flat();
+  const b = new CartBody(0, 0, 0);
+  b.vy = 5;
+  let peak = 0;
+  for (let i = 0; i < 60; i++) { b.step(1 / 60, COAST, T, T.hole); peak = Math.max(peak, b.air); }
+  ok('a cart can leave the ground', peak > 0.3, `peaked at ${peak.toFixed(2)} m`);
+  ok('and it comes back down', b.air < 0.6, `${b.air.toFixed(2)} m after a second`);
+
+  /* A landing that sticks dead is the same invisible wall, in the vertical. */
+  const c = new CartBody(0, 0, 0);
+  c.vy = 6;
+  let touchdowns = 0, wasUp = false;
+  for (let i = 0; i < 300; i++) {
+    c.step(1 / 60, COAST, T, T.hole);
+    if (c.air > 0.02) wasUp = true;
+    else if (wasUp) { touchdowns++; wasUp = false; }
+  }
+  ok('a landing bounces before it settles', touchdowns >= 2, `${touchdowns} touchdowns`);
+  ok('and it does settle', c.air === 0 && c.vy === 0,
+     `air ${c.air.toFixed(3)} vy ${c.vy.toFixed(3)}`);
+
+  /* AND A REAL COLLISION HAS TO BE WHAT LAUNCHES IT. Everything above
+     proves the integrator works from a vy somebody set by hand; this is the
+     one that proves a crash sets it, which is the whole feature. */
+  const TL = flat();
+  TL.hole.trees = [{ x: 0, z: 26, r: 6, species: 'gorse' }];   // a wide solid one
+  const runner = new CartBody(0, 0, 0);
+  /* Sampled through the run, not read at the end: the cart bounces, lands,
+     settles and drives off again well inside ten seconds, so the end state
+     says nothing about what happened at the moment of impact. */
+  let peakAir = 0, deepest = 0, hitFrame = -1, retreat = 0;
+  for (let i = 0; i < 600; i++) {
+    runner.step(1 / 60, GO, TL, TL.hole);
+    peakAir = Math.max(peakAir, runner.air);
+    deepest = Math.max(deepest, runner.z);
+    retreat = Math.max(retreat, deepest - runner.z);
+    if (hitFrame < 0 && runner.hit > 0.1) hitFrame = i;
+  }
+  ok('a square hit at speed launches the cart', peakAir > 0.15,
+     `peaked ${peakAir.toFixed(2)} m off the ground`);
+  /* `speed` keeps its sign and the HEADING is what reflects (see _deflect),
+     so a bounce shows up as the cart travelling back the way it came rather
+     than as a negative number. */
+  ok('and it comes back out rather than sticking to it', retreat > 1.5,
+     `retreated ${retreat.toFixed(2)} m from its deepest point`);
+  ok('the hit happens where the trunk is', hitFrame > 0 && deepest > 18 && deepest < 22,
+     `frame ${hitFrame}, closest z ${deepest.toFixed(1)} against a trunk at 26 with a 5.8 m shell`);
+
+  /* Steering with the wheels off the ground. */
+  ok('the wheels barely bite in the air', AIR_STEER < 0.5, `${AIR_STEER}`);
+  const TURN = { throttle: 0, steer: 1, handbrake: false };
+  const onGround = new CartBody(0, 0, 0); onGround.speed = 8;
+  const inAir = new CartBody(0, 0, 0); inAir.speed = 8; inAir.vy = 6;
+  for (let i = 0; i < 30; i++) {
+    onGround.step(1 / 60, TURN, T, T.hole);
+    inAir.step(1 / 60, TURN, T, T.hole);
+  }
+  ok('a launched cart cannot steer like a grounded one',
+     Math.abs(inAir.heading) < Math.abs(onGround.heading) * 0.6,
+     `air ${Math.abs(inAir.heading).toFixed(2)} vs ground ${Math.abs(onGround.heading).toFixed(2)}`);
+}
+
+/* The split between what breaks and what bounces is data props.js already
+   carried: the hut, the shelter and the toilet block are `solid`, and a
+   bench, a ball washer, a marker post, a bin and a range crate are not. */
+head('destructible props — the furniture the cart never asked about');
+{
+  const lightKind = Object.entries(PROP_KINDS).find(([, k]) => !k.solid)[0];
+  const heavyKind = Object.entries(PROP_KINDS).find(([, k]) => k.solid)[0];
+  ok('there is enough breakable furniture to be worth driving at',
+     Object.values(PROP_KINDS).filter(k => !k.solid).length >= 4);
+
+  const T = flat();
+  T.hole.props = [{ kind: lightKind, x: 0, z: 6, rot: 0 }];
+  const b = new CartBody(0, 0, 0);
+  b.speed = 8;
+  // long enough to arrive, hit it, and keep going past where it stood
+  for (let i = 0; i < 120; i++) b.step(1 / 60, GO, T, T.hole);
+  ok('a light prop breaks', T.hole.props[0].broken === true);
+  ok('and the renderer is told which one', b.smashed.length === 1 && b.smashed[0] === 0,
+     JSON.stringify(b.smashed));
+  ok('smashing it barely slows the cart', b.speed > 6, `${b.speed.toFixed(2)} m/s`);
+  ok('and does not stop it', b.z > 8, `drove on to z ${b.z.toFixed(1)}`);
+
+  /* Reported once, not once per frame of contact — the renderer topples on
+     each report, and a prop cannot fall over twice. */
+  const T2 = flat();
+  T2.hole.props = [{ kind: lightKind, x: 0, z: 3, rot: 0 }];
+  const slow = new CartBody(0, 0, 0);
+  slow.speed = 4;
+  for (let i = 0; i < 120; i++) slow.step(1 / 60, GO, T2, T2.hole);
+  ok('a prop is reported smashed exactly once', slow.smashed.length === 1,
+     `${slow.smashed.length} reports`);
+
+  /* And a building is a building. */
+  const T3 = flat();
+  T3.hole.props = [{ kind: heavyKind, x: 0, z: 8, rot: 0 }];
+  const into = new CartBody(0, 0, 0);
+  into.speed = 9;
+  for (let i = 0; i < 240; i++) into.step(1 / 60, GO, T3, T3.hole);
+  ok('a golf cart does not destroy a building', !T3.hole.props[0].broken);
+  ok('it bounces off one instead', into.z < 8,
+     `held out at z ${into.z.toFixed(1)}, driving straight at it`);
 }
 
 console.log(`\n${pass}/${pass + fail} passed`);
