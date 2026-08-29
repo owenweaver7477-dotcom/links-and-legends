@@ -3195,9 +3195,17 @@ body.side-open .lp-play-fixed { opacity: .5; }
    vertical fade, with a warm lamp-glow high and slightly off-centre the
    same way .card's own highlight sits — same LANGUAGE as the rest of the
    UI, different PALETTE, so it reads as "the clubhouse" without reading as
-   a different app. Scoped to #screenShop only: every other screen keeps
-   the cool green that suits a course at dusk. */
-#screenShop.screen {
+   a different app. */
+/* AND #screenBoards, because "every other screen" turned out to be one
+   screen. Shop, Locker, Market and Career all render into #screenShop, so
+   scoping the warm ground to that id gave four of the five menu
+   destinations a warm clubhouse and left Social alone on a cold green
+   LINEAR gradient — a different hue family and a different gradient shape,
+   reached by a tab that sits in the same bar as the other four. It read as
+   a different app, which is the exact thing this ground was introduced to
+   stop. The cool green still belongs to the course screens, where there is
+   an actual course behind it. */
+#screenShop.screen, #screenBoards.screen {
   background:
     radial-gradient(70% 50% at 46% -6%, rgba(255,178,96,.14), rgba(0,0,0,0) 60%),
     repeating-linear-gradient(97deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 37px,
