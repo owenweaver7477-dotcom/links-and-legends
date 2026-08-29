@@ -71,6 +71,15 @@
   /* the two greens, and they are two on purpose — see above */
   --accent:    #6fce8a;   /* an action */
   --accent-hi: #8fe07a;   /* a state: selected, owned, earned */
+
+  /* SELECTED, as one thing. This gradient was written out by hand in five
+     places — the nav tab, the clubhouse tab, the shop tab, the marketplace
+     tab, the settings button and the compare toggle — each time as raw hex
+     that approximates the palette rather than naming it. "Which one am I
+     on" is one idea and it gets one definition. */
+  --on-bg:   linear-gradient(180deg, rgba(70,169,94,.34), rgba(47,125,67,.24));
+  --on-line: rgba(150,236,172,.44);
+  --on-cast: 0 4px 14px rgba(47,125,67,.28);
 }
 
 
@@ -624,8 +633,8 @@ html.touch .fsbtn { display: grid; }
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14);
   color: #b9cabd; transition: background .14s, color .14s; }
 .hk-settings-btn:hover { background: rgba(255,255,255,.12); color: var(--ink); }
-.hk-settings-btn.on { background: linear-gradient(180deg, #2f8a4a, #237038);
-  border-color: transparent; color: #fff; }
+.hk-settings-btn.on { background: var(--on-bg);
+  border-color: var(--on-line); color: #fff; }
 .hk-xp { flex: 1 1 220px; min-width: 180px; max-width: 320px; display: flex;
   flex-direction: column; gap: 5px; }
 .hk-xp-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
@@ -1336,12 +1345,6 @@ input[type=text] { font-size: 16px; padding: 12px 14px; }
 
 /* ---------------------------------------------------- caddie crew shop */
 .shoptabs { display: flex; gap: 8px; margin-bottom: 12px; }
-.shoptab { font: inherit; font-size: 13px; font-weight: 700; color: var(--ink-3);
-  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.10);
-  border-radius: 10px; padding: 8px 14px; cursor: pointer; transition: .15s; }
-.shoptab:hover { background: rgba(255,255,255,.1); }
-.shoptab.on { color: #fff; background: linear-gradient(180deg, rgba(76,180,102,.35), rgba(46,125,67,.25));
-  border-color: rgba(140,230,160,.4); }
 .shop-cmp-btn { margin: -6px 0 12px; }
 .shop-cmp-btn.on { background: rgba(111,206,138,.22); border-color: rgba(111,206,138,.45); }
 
@@ -1485,7 +1488,6 @@ body:not(.playing) .hintbar { display: none; }
 .shopcard:hover { transform: translateY(-2px); border-color: rgba(140,230,160,.4);
   box-shadow: 0 12px 30px rgba(0,0,0,.45); }
 .shopcard.owned { border-color: rgba(140,230,160,.32); }
-.shoptab { border-radius: 12px; }
 
 /* the clubhouse screen itself gets the title screen's depth */
 #screenShop .card { background: linear-gradient(180deg, rgba(16,28,20,.97), rgba(9,16,12,.98));
@@ -2101,13 +2103,50 @@ body.side-open .wallethud, body.playing .wallethud, body.inshop .wallethud { dis
   border: 1px solid rgba(255,255,255,.07);
   overflow-x: auto; scrollbar-width: none; }
 .hktabs::-webkit-scrollbar { display: none; }
-.hktab { flex: 1 0 auto; padding: 9px 15px; border: 0; border-radius: 10px;
-  background: transparent; color: #9fb6a4; font: inherit; font-size: 13px;
-  font-weight: 700; letter-spacing: .2px; cursor: pointer; white-space: nowrap;
-  transition: background .14s, color .14s; }
-.hktab:hover { color: #e6f2e8; background: rgba(255,255,255,.05); }
-.hktab.on { background: linear-gradient(180deg, #2f8a4a, #237038); color: #fff;
-  box-shadow: 0 3px 12px rgba(35,112,56,.42); }
+/* ═════════════════════════════════════════════ ONE TAB, ONE LOOK ════════
+   FOUR BARS WERE DOING THE SAME JOB IN FOUR VISUAL LANGUAGES. `.hktab`
+   (clubhouse), `.shoptab` (shop categories), `.mktsubtab` (marketplace) and
+   `.hksub` (locker sub-views) are all "pick a sub-view" — and they had
+   three different radii, three different font sizes, two of them with no
+   border at all, and two painting their selected state from raw hex
+   (#2f8a4a → #237038) that duplicates the palette by eye rather than
+   naming it. A player crossing from the Shop to the Locker met the same
+   control wearing a different costume each time.
+
+   One base below, and the size is the only thing a bar overrides — because
+   a page-level tab genuinely should be bigger than a filter chip. What must
+   NOT differ is the material: same border, same radius scale, same selected
+   treatment, all from tokens. */
+.hktab, .shoptab, .mktsubtab, .hksub {
+  --tab-py: 9px; --tab-px: 15px; --tab-fs: 13px; --tab-r: var(--r-sm);
+  font: inherit; font-size: var(--tab-fs); font-weight: 700; letter-spacing: .02em;
+  padding: var(--tab-py) var(--tab-px); border-radius: var(--tab-r);
+  color: var(--muted); background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  cursor: pointer; white-space: nowrap;
+  transition: background .14s, color .14s, border-color .14s, transform .1s;
+}
+.hktab:hover, .shoptab:hover, .mktsubtab:hover, .hksub:hover {
+  background: rgba(255,255,255,.09); color: var(--ink-2);
+}
+.hktab.on, .shoptab.on, .mktsubtab.on, .hksub.on {
+  background: var(--on-bg); border-color: var(--on-line); color: #fff;
+  box-shadow: var(--glass-lit), var(--on-cast);
+}
+.hktab:active, .shoptab:active, .mktsubtab:active, .hksub:active { transform: translateY(1px); }
+.hktab:focus-visible, .shoptab:focus-visible,
+.mktsubtab:focus-visible, .hksub:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+/* The size variants, and they MUST come after the base: same specificity,
+   and a custom property is settled by the cascade like any other
+   declaration — declared before it, `--tab-py: 8px` loses to the base's own
+   `--tab-py: 9px` and the override silently does nothing. */
+.hktab     { flex: 1 0 auto; }
+.shoptab   { --tab-py: 8px; --tab-px: 14px; }
+.mktsubtab { --tab-py: 6px; --tab-px: 13px; --tab-fs: 11px; }
+.hksub     { --tab-py: 9px; --tab-px: 18px; --tab-fs: 12px; --tab-r: var(--r-md); }
 .hkpane { margin-top: 0; }
 
 /* --------------------------------------------------------- the ladder --- */
@@ -3181,14 +3220,12 @@ body.side-open .lp-play-fixed { opacity: .5; }
 /* the tab bar: a rail with a lit pill, matching the wardrobe's */
 .hktabs { padding: 5px; border-radius: 15px;
   background: rgba(0,0,0,.34); border-color: rgba(255,255,255,.06); }
-.hktab { border-radius: 11px; font-size: 12px;
-  transition: background .18s, color .18s, transform .18s; }
+/* A FIFTH copy of the selected state used to live here, overriding the
+   shared one with its own gradient, its own glow and its own radius — so
+   the clubhouse tabs were the one bar that still looked different after
+   the other four were unified. Only the scale is its own now. */
+.hktab { --tab-r: 11px; --tab-fs: 12px; }
 .hktab:hover:not(.on) { transform: translateY(-1px); }
-.hktab.on {
-  background: linear-gradient(180deg, rgba(111,206,138,.30), rgba(47,138,74,.42));
-  color: #f2fbf4;
-  box-shadow: 0 4px 16px rgba(35,112,56,.38), 0 0 0 1px rgba(111,206,138,.34) inset;
-}
 
 /* section headings, everywhere: the same small caps the newer panels use */
 .lbl, .section > h4 {
@@ -3232,7 +3269,7 @@ body.side-open .lp-play-fixed { opacity: .5; }
 .shopcard:hover { transform: translateY(-2px); border-color: rgba(111,206,138,.34);
   box-shadow: 0 12px 30px rgba(0,0,0,.35); }
 .shoptabs { gap: 5px; }
-.shoptab { border-radius: 10px; transition: background .16s, transform .16s; }
+.shoptab { transition: background .16s, transform .16s; }
 .shoptab:hover:not(.on) { transform: translateY(-1px); }
 .recrow, .rec-row { border-radius: 11px; transition: background .16s, transform .16s; }
 .recrow:hover, .rec-row:hover { transform: translateX(3px); }
@@ -4079,11 +4116,6 @@ body.playing .walkbar kbd { opacity: .55; font-size: 10px; padding: 1px 4px; }
 .mktsub { display: flex; gap: 4px; margin: 0 0 12px; padding: 3px;
   background: rgba(0,0,0,.22); border-radius: 11px; border: 1px solid rgba(255,255,255,.06);
   width: fit-content; }
-.mktsubtab { padding: 6px 14px; border: 0; border-radius: 8px; background: transparent;
-  color: #9fb6a4; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
-  transition: background .14s, color .14s; }
-.mktsubtab:hover { color: #e6f2e8; }
-.mktsubtab.on { background: linear-gradient(180deg, #2f8a4a, #237038); color: #fff; }
 
 /* ═══════════════════════════════════════ §7.1 — daily rewards ═══════════ */
 .rewardscard { width: min(520px, 100%); }
@@ -4315,10 +4347,11 @@ body.navbar-on .netpill {
   letter-spacing: .2px; cursor: pointer; white-space: nowrap;
   transition: background .14s, color .14s, transform .14s;
 }
-.navtab:hover { color: #e6f2e8; background: rgba(255,255,255,.06); }
+.navtab:hover { color: var(--ink-2); background: rgba(255,255,255,.06); }
 .navtab.on {
-  background: linear-gradient(180deg, #2f8a4a, #237038); color: #fff;
-  box-shadow: 0 3px 14px rgba(35,112,56,.42);
+  background: var(--on-bg); color: #fff;
+  border-color: var(--on-line);
+  box-shadow: var(--glass-lit), var(--on-cast);
 }
 /* The bar floats over the top of every menu screen, so they need room. */
 body.navbar-on #screenShop,
@@ -4519,8 +4552,8 @@ body.navbar-on #gemBal { display: none; }
   color: #9fb6a4; font: inherit; font-size: 9px; font-weight: 700; cursor: pointer;
   white-space: nowrap; transition: background .13s, color .13s;
 }
-.cmp-cls:hover { color: #e6f2e8; background: rgba(255,255,255,.09); }
-.cmp-cls.on { background: linear-gradient(180deg, #2f8a4a, #237038); color: #fff; }
+.cmp-cls:hover { color: var(--ink-2); background: rgba(255,255,255,.09); }
+.cmp-cls.on { background: var(--on-bg); border-color: var(--on-line); color: #fff; }
 
 .cmp-rows { display: flex; flex-direction: column; gap: 7px; }
 .cmp-row { display: grid; grid-template-columns: 86px 1fr 62px; align-items: center; gap: 9px; }
@@ -4844,16 +4877,6 @@ body.navbar-on #gemBal { display: none; }
    — that used to be one 3,200px scroll. Bigger and more deliberate than the
    shop's category chips, because these are ROOMS rather than filters. */
 .hksubs { display: flex; gap: 6px; margin: 4px 0 18px; flex-wrap: wrap; }
-.hksub { padding: 9px 18px; border-radius: var(--r-md); cursor: pointer;
-  font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: .02em;
-  color: var(--muted); background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.08);
-  transition: background .14s, color .14s, border-color .14s, transform .1s; }
-.hksub:hover { background: rgba(255,255,255,.09); color: var(--ink-2); }
-.hksub.on { background: linear-gradient(180deg, rgba(70,169,94,.34), rgba(47,125,67,.24));
-  border-color: rgba(150,236,172,.44); color: #fff;
-  box-shadow: var(--glass-lit), 0 4px 14px rgba(47,125,67,.28); }
-.hksub:active { transform: translateY(1px); }
 @media (max-width: 560px) {
   .hksub { flex: 1 1 auto; text-align: center; padding: 9px 10px; font-size: 11px; }
 }
