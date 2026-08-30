@@ -4,3 +4,14 @@ npm-debug.log*
 .DS_Store
 test
 reference_hole1_course_map.html
+# THE LIVE STORE IS NOT PART OF THE IMAGE. `COPY . .` would otherwise bake
+# every real player profile on this laptop — 348 of them, plus friends,
+# claimed names and two stale backups — into a container image, and boot the
+# deployed server holding a frozen snapshot of somebody's dev machine.
+# The server creates what it needs on first run, or reads DATABASE_URL.
+data
+.test-data
+.test-data-*
+.tdz
+dist
+press
